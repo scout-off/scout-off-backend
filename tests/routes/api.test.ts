@@ -199,3 +199,95 @@ describe('POST /api/validators/milestone', () => {
     expect(res.status).toBe(400);
   });
 });
+
+async function getAdminToken(): Promise<string> {
+  const { Keypair, Transaction, Networks } = await import('@stellar/stellar-sdk');
+  const kp = Keypair.random();
+  const challengeRes = await request(app).get(`/auth/challenge?account=${kp.publicKey()}`);
+  const tx = new Transaction(challengeRes.body.challenge, Networks.TESTNET);
+  tx.sign(kp);
+  const tokenRes = await request(app)
+    .post('/auth/token')
+    .send({ transaction: tx.toXDR(), role: 'admin' });
+  return tokenRes.body.token;
+}
+
+describe('GET /api/admin/events', () => {
+  it('returns 401 when no token is provided', async () => {
+    const res = await request(app).get('/api/admin/events');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns all indexed events for authenticated admin', async () => {
+    const token = await getAdminToken();
+    const res = await request(app)
+      .get('/api/admin/events')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  it('filters events by type query param', async () => {
+    const token = await getAdminToken();
+    const res = await request(app)
+      .get('/api/admin/events?type=player_registered')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    res.body.data.forEach((e: any) => expect(e.type).toBe('player_registered'));
+  });
+});
+
+describe('GET /api/admin/fees', () => {
+  it('returns 401 when no token is provided', async () => {
+    const res = await request(app).get('/api/admin/fees');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns fee withdrawal history for authenticated admin', async () => {
+    const token = await getAdminToken();
+    const res = await request(app)
+      .get('/api/admin/fees')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    // Each entry is a full event envelope with ledger and txHash for accounting
+    res.body.data.forEach((e: any) => {
+      expect(e).toHaveProperty('type', 'fees_withdrawn');
+      expect(e).toHaveProperty('ledger');
+      expect(e).toHaveProperty('txHash');
+      expect(e).toHaveProperty('payload');
+    });
+  });
+});
+
+describe('Error handler middleware', () => {
+  it('returns 400 with details array on validation error', async () => {
+    const res = await request(app).get('/api/players?minTier=99');
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toBe('Validation error');
+    expect(Array.isArray(res.body.details)).toBe(true);
+    expect(res.body.details[0]).toHaveProperty('path');
+    expect(res.body.details[0]).toHaveProperty('message');
+  });
+});
+
+describe('GET /api/players/:playerId/milestones', () => {
+  it('returns milestone history for a player', async () => {
+    const res = await request(app).get('/api/players/player-1/milestones');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  it('returns empty array for unknown player (no milestones)', async () => {
+    const res = await request(app).get('/api/players/nonexistent-player/milestones');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toEqual([]);
+  });
+});

@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
-import { ApiResponse } from '../types';
 
 export function errorHandler(
   err: Error,
@@ -11,11 +10,15 @@ export function errorHandler(
   console.error(err.message);
 
   if (err instanceof ZodError) {
-    const body: ApiResponse = { success: false, error: err.errors[0]?.message ?? 'Validation error' };
-    res.status(400).json(body);
+    res.status(400).json({
+      success: false,
+      error: 'Validation error',
+      details: err.errors.map((e) => ({ path: e.path.join('.'), message: e.message })),
+    });
     return;
   }
 
-  const body: ApiResponse = { success: false, error: err.message };
+  const body: Record<string, unknown> = { success: false, error: err.message };
+  if (process.env.NODE_ENV !== 'production') body.details = err.stack;
   res.status(500).json(body);
 }
