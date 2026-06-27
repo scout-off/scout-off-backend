@@ -1,12 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
-import { getEvents, getLastLedger, setLastLedger } from '../db';
-import { ApiResponse, EventRecord } from '../types';
+import { getEvents, getLastLedger, setLastLedger, getEventsCount } from '../db';
+import { ApiResponse, ContractEventType, EventRecord } from '../types';
 import { logAuditEvent } from '../services/audit';
 import { withdrawFees as stellarWithdrawFees, FeeWithdrawalError, FeeWithdrawalResult } from '../services/stellar';
 import config from '../config';
 import { logger } from '../utils/logger';
+import { buildOffsetPaginationLinks } from '../utils/paginationLinks';
 
 const STELLAR_ADDRESS_RE = /^G[A-Z2-7]{55}$/;
 
@@ -75,7 +76,8 @@ export async function getAllEvents(req: Request, res: Response, next: NextFuncti
     if (endDate) events = events.filter((e: any) => new Date(e.timestamp ?? e.created_at ?? 0) <= endDate!);
 
     const total = getEventsCount(eventTypeFilter);
-    res.json({ success: true, data: events, total, limit, offset });
+    const links = buildOffsetPaginationLinks(req, { limit, offset, total });
+    res.json({ success: true, data: events, total, limit, offset, links });
   } catch (err) {
     next(err);
   }

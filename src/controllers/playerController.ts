@@ -9,6 +9,7 @@ import {
   getPlayerById,
   insertPlayerProfileHistory,
   queryPlayers,
+  countPlayers,
 } from "../db";
 
 import { queryMilestones, updateProfile } from "../services/stellar";
@@ -18,7 +19,9 @@ import { getTierMeta } from "../utils/tier";
 import { validateMinTier } from "../utils/minTierValidator";
 import { normalizePosition } from "../utils/positionAliases";
 import { dispatchEventWebhook } from "../services/webhooks";
+import { recordAudit } from "../utils/audit";
 import { enrichPlayerResult } from "../utils/searchEnrichment";
+import { buildPaginationLinks } from "../utils/paginationLinks";
 
 const baseRegistrationSchema = z.object({
   wallet: z.string().min(56).max(56),
@@ -42,6 +45,8 @@ export const filterSchema = z.object({
   region: z.string().optional(),
   position: z.string().optional(),
   minTier: z.coerce.number().int().min(0).max(3).optional(),
+  /** Keyword search — empty string is treated as no filter. */
+  q: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -138,17 +143,20 @@ export async function filterPlayers(
       return;
     }
     const minTier = tierResult.tier;
-    const { region, position, page, pageSize } = filterSchema.parse(req.query);
+    const { region, position, q, page, pageSize } = filterSchema.parse(req.query);
     const sanitizedRegion = region ? sanitizeInput(region) : undefined;
     const sanitizedPosition = position ? sanitizeInput(position) : undefined;
     const normalizedPosition = sanitizedPosition
       ? normalizePosition(sanitizedPosition)
       : undefined;
+    // Treat blank ?q= as no filter
+    const keyword = q && q.trim() !== '' ? sanitizeInput(q.trim()) : undefined;
 
     const rows = queryPlayers({
       region: sanitizedRegion,
       position: normalizedPosition ?? sanitizedPosition,
       minTier,
+      q: keyword,
       limit: pageSize,
       offset: (page - 1) * pageSize,
     });
@@ -157,6 +165,7 @@ export async function filterPlayers(
       region: sanitizedRegion,
       position: normalizedPosition ?? sanitizedPosition,
       minTier,
+      q: keyword,
     });
     const pages = Math.ceil(total / pageSize);
     const enriched = rows.map((row) => ({
@@ -175,12 +184,14 @@ export async function filterPlayers(
       region: sanitizedRegion ?? null,
       position: normalizedPosition ?? sanitizedPosition ?? null,
       minTier: minTier ?? null,
+      q: keyword ?? null,
       page,
       pageSize,
       resultCount: total,
     });
 
-    res.json({ success: true, data: enriched, total, page, pageSize, pages });
+    const links = buildPaginationLinks(req, { page, pageSize, total });
+    res.json({ success: true, data: enriched, total, page, pageSize, pages, links });
   } catch (err) {
     next(err);
   }

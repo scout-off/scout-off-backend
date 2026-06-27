@@ -4,6 +4,16 @@
  * the native binary (which requires a matching Node ABI).
  */
 
+/**
+ * Case-insensitive LIKE match helper.
+ * Supports '%value%' patterns only (the only pattern used in this codebase).
+ */
+function likeMatch(value, pattern) {
+  if (value == null) return false;
+  const inner = pattern.replace(/^%|%$/g, '').toLowerCase();
+  return String(value).toLowerCase().includes(inner);
+}
+
 class Statement {
   constructor(db, sql) {
     this._db = db;
@@ -46,6 +56,55 @@ class Statement {
     return { changes: 1, lastInsertRowid: 0 };
   }
 
+  _filterPlayers(args) {
+    let rows = [...this._db._players];
+    const sql = this._sql.toUpperCase();
+
+    const whereMatch = sql.match(/WHERE (.+?)(?:ORDER|LIMIT|$)/);
+    if (!whereMatch) return rows;
+
+    // Parse conditions split by ' AND ' — handles nested parens for LIKE group.
+    const rawWhere = whereMatch[1].trim();
+    // Split on ' AND ' but not inside parentheses.
+    const conditions = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < rawWhere.length; i++) {
+      if (rawWhere[i] === '(') depth++;
+      else if (rawWhere[i] === ')') depth--;
+      else if (depth === 0 && rawWhere.slice(i, i + 5) === ' AND ') {
+        conditions.push(rawWhere.slice(start, i).trim());
+        i += 4;
+        start = i + 1;
+      }
+    }
+    conditions.push(rawWhere.slice(start).trim());
+
+    let argIdx = 0;
+    for (const cond of conditions) {
+      if (cond.includes('REGION = ?')) {
+        const val = args[argIdx++];
+        rows = rows.filter((r) => r.region === val);
+      } else if (cond.includes('POSITION = ?')) {
+        const val = args[argIdx++];
+        rows = rows.filter((r) => r.position === val);
+      } else if (cond.includes('PROGRESS_LEVEL >= ?')) {
+        const val = args[argIdx++];
+        rows = rows.filter((r) => r.progress_level >= val);
+      } else if (cond.includes('LOWER(POSITION) LIKE') || cond.includes('LOWER(REGION) LIKE') || cond.includes('LOWER(METADATA_URI) LIKE')) {
+        // LIKE group: (LOWER(position) LIKE LOWER(?) OR LOWER(region) LIKE LOWER(?) OR LOWER(metadata_uri) LIKE LOWER(?))
+        // consumes 3 args, all the same term
+        const term = args[argIdx++];
+        argIdx += 2; // skip the duplicated term args
+        rows = rows.filter((r) =>
+          likeMatch(r.position, term) ||
+          likeMatch(r.region, term) ||
+          likeMatch(r.metadata_uri, term)
+        );
+      }
+    }
+    return { rows, nextArgIdx: argIdx };
+  }
+
   get(...args) {
     const sql = this._sql.toUpperCase();
     if (sql.includes('FROM MIGRATIONS')) {
@@ -67,18 +126,8 @@ class Statement {
       return { count: rows.length };
     }
     if (sql.includes('COUNT(*)') && sql.includes('FROM PLAYERS')) {
-      let rows = [...this._db._players];
-      const whereMatch = sql.match(/WHERE (.+?)(?:ORDER|$)/);
-      if (whereMatch) {
-        const conditions = whereMatch[1].split(' AND ');
-        let argIdx = 0;
-        for (const cond of conditions) {
-          const val = args[argIdx++];
-          if (cond.includes('REGION = ?')) rows = rows.filter((r) => r.region === val);
-          else if (cond.includes('POSITION = ?')) rows = rows.filter((r) => r.position === val);
-          else if (cond.includes('PROGRESS_LEVEL >= ?')) rows = rows.filter((r) => r.progress_level >= val);
-        }
-      }
+      const result = this._filterPlayers(args);
+      const rows = result.rows ?? result;
       return { count: rows.length };
     }
     return undefined;
@@ -105,21 +154,13 @@ class Statement {
       return rows;
     }
     if (sql.includes('FROM PLAYERS')) {
-      let rows = [...this._db._players];
-      const whereMatch = sql.match(/WHERE (.+?)(?:ORDER|$)/);
-      if (whereMatch) {
-        const conditions = whereMatch[1].split(' AND ');
-        let argIdx = 0;
-        for (const cond of conditions) {
-          const val = args[argIdx++];
-          if (cond.includes('REGION = ?')) rows = rows.filter((r) => r.region === val);
-          else if (cond.includes('POSITION = ?')) rows = rows.filter((r) => r.position === val);
-          else if (cond.includes('PROGRESS_LEVEL >= ?')) rows = rows.filter((r) => r.progress_level >= val);
-        }
-      }
+      const result = this._filterPlayers(args);
+      let rows = result.rows ?? result;
+      let nextArgIdx = result.nextArgIdx ?? 0;
+
       if (sql.includes('LIMIT ?')) {
-        const limit = args[args.length - 2];
-        const offset = args[args.length - 1] ?? 0;
+        const limit = args[nextArgIdx++];
+        const offset = args[nextArgIdx++] ?? 0;
         rows = rows.slice(offset, offset + limit);
       }
       return rows;

@@ -148,6 +148,8 @@ export interface QueryPlayersOptions {
   region?: string;
   position?: string;
   minTier?: number;
+  /** Case-insensitive keyword search over position, region, and metadata_uri. */
+  q?: string;
   limit?: number;
   offset?: number;
 }
@@ -233,8 +235,38 @@ function buildPlayerWhereClause(opts: QueryPlayersOptions): { where: string; par
     conditions.push("progress_level >= ?");
     params.push(opts.minTier);
   }
+  if (opts.q && opts.q.trim() !== '') {
+    // Case-insensitive LIKE search across searchable text columns.
+    // SQLite LIKE is case-insensitive for ASCII by default.
+    const term = `%${opts.q.trim()}%`;
+    conditions.push(
+      "(LOWER(position) LIKE LOWER(?) OR LOWER(region) LIKE LOWER(?) OR LOWER(metadata_uri) LIKE LOWER(?))",
+    );
+    params.push(term, term, term);
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const sql = `SELECT * FROM players ${where} ORDER BY created_at ASC`;
-  return timedQuery(sql, () => getDb().prepare(sql).all(...params) as PlayerRow[]);
+  return { where, params };
+}
+
+export function queryPlayers(opts: QueryPlayersOptions = {}): PlayerRow[] {
+  const { where, params } = buildPlayerWhereClause(opts);
+  const { limit, offset } = opts;
+  const hasPagination = limit !== undefined && offset !== undefined;
+
+  const sql = hasPagination
+    ? `SELECT * FROM players ${where} ORDER BY created_at ASC LIMIT ? OFFSET ?`
+    : `SELECT * FROM players ${where} ORDER BY created_at ASC`;
+
+  const allParams = hasPagination ? [...params, limit, offset] : params;
+  return timedQuery(sql, () => getDb().prepare(sql).all(...allParams) as PlayerRow[]);
+}
+
+export function countPlayers(opts: Omit<QueryPlayersOptions, 'limit' | 'offset'> = {}): number {
+  const { where, params } = buildPlayerWhereClause(opts);
+  const sql = `SELECT COUNT(*) AS count FROM players ${where}`;
+  const row = timedQuery(sql, () =>
+    getDb().prepare(sql).get(...params) as { count: number } | undefined
+  );
+  return row?.count ?? 0;
 }
