@@ -78,7 +78,15 @@ export async function getPlayer(req: Request, res: Response, next: NextFunction)
     const payload = events[0].payload;
     const level = Number(payload.progress_level ?? 0);
     const { tierName, tierDescription } = getTierMeta(level);
-    res.json({ success: true, data: { ...payload, tierName, tierDescription } });
+    // updated_at is the timestamp of the most recent event for this player;
+    // fall back to created_at (or now) when no explicit update timestamp exists.
+    const updatedAt =
+      typeof payload.updated_at === 'number'
+        ? payload.updated_at
+        : typeof payload.created_at === 'number'
+        ? payload.created_at
+        : Math.floor(Date.now() / 1000);
+    res.json({ success: true, data: { ...payload, updated_at: updatedAt, tierName, tierDescription } });
   } catch (err) {
     next(err);
   }
@@ -131,7 +139,8 @@ export const updatePlayerSchema = z.object({
 export async function updatePlayer(req: Request, res: Response, next: NextFunction) {
   try {
     updatePlayerSchema.parse(req.body);
-    res.status(202).json({ success: true, message: 'Profile update accepted' });
+    const updatedAt = Math.floor(Date.now() / 1000);
+    res.status(202).json({ success: true, message: 'Profile update accepted', updated_at: updatedAt });
   } catch (err) {
     next(err);
   }

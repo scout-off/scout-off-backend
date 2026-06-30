@@ -9,7 +9,8 @@ export interface Player {
   position: string;
   region: string;
   progressLevel: ProgressLevel;
-  createdAt: number; // ledger timestamp
+  createdAt: number;  // ledger timestamp
+  updatedAt: number;  // unix timestamp of last profile update
 }
 
 export interface PlayerMetadata {

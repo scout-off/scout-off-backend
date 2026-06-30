@@ -1,0 +1,17 @@
+-- Migration 002: player updated_at timestamp
+--
+-- NOTE: The scout-off-backend uses an event-sourced architecture.
+-- Player data is stored as contract events in the `events` table (see 001_initial.sql)
+-- and reconstructed at query time via the indexer service.
+-- There is intentionally no separate `players` table.
+--
+-- This migration is provided as a reference for future SQL-backed player storage.
+-- If a `players` table is introduced, apply this ALTER to add the column:
+
+-- ALTER TABLE players ADD COLUMN updated_at INTEGER;
+--
+-- For the current event-sourced model, `updated_at` is tracked in the Player
+-- interface (src/types/index.ts) and set by the in-memory store
+-- (src/services/store.ts) using Math.floor(Date.now() / 1000) on every
+-- addPlayer / updatePlayer call. The getPlayer API response always includes
+-- an `updated_at` field derived from the event payload or current time.

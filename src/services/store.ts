@@ -33,13 +33,20 @@ export function getPlayer(playerId: string): Player | undefined {
 }
 
 export function addPlayer(player: Player): void {
-  store.players.set(player.playerId, player);
+  store.players.set(player.playerId, {
+    ...player,
+    updatedAt: Math.floor(Date.now() / 1000),
+  });
 }
 
 export function updatePlayer(playerId: string, updates: Partial<Player>): void {
   const player = store.players.get(playerId);
   if (player) {
-    store.players.set(playerId, { ...player, ...updates });
+    store.players.set(playerId, {
+      ...player,
+      ...updates,
+      updatedAt: Math.floor(Date.now() / 1000),
+    });
   }
 }
 
