@@ -9,6 +9,8 @@ import adminRoutes from './routes/admin';
 import { errorHandler } from './middleware/errorHandler';
 import { securityHeaders } from './middleware/securityHeaders';
 import { correlationId } from './middleware/correlationId';
+import { responseTime } from './middleware/responseTime';
+import { idempotencyMiddleware, startIdempotencyPurgeJob } from './middleware/idempotency';
 import { indexEvents } from './services/indexer';
 import { logger } from './utils/logger';
 import { stellarHealth } from './services/stellar';
@@ -21,6 +23,7 @@ app.use(correlationId);
 app.use(securityHeaders);
 app.use(responseTime);
 app.use(express.json());
+app.use(idempotencyMiddleware);
 
 app.get('/health', async (_req, res) => {
   const healthStatus: Record<string, 'ok' | 'error' | 'disabled'> = {};
@@ -118,6 +121,7 @@ app.listen(config.port, () => {
 
   poll();
   setInterval(poll, 5_000);
+  startIdempotencyPurgeJob();
 });
 
 export default app;

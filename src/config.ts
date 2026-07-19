@@ -19,6 +19,14 @@ const ConfigSchema = z.object({
   dbPath: z.string().default('scout-off.db'),
 });
 
+function required(key: string): string {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value;
+}
+
 const config = {
   port: parseInt(process.env.PORT ?? '4000', 10),
   network: (process.env.NETWORK ?? 'testnet') as 'testnet' | 'mainnet',
@@ -46,7 +54,6 @@ const config = {
     xFrameOptions: process.env.SECURITY_X_FRAME_OPTIONS ?? 'DENY',
     referrerPolicy: process.env.SECURITY_REFERRER_POLICY ?? 'no-referrer',
   },
-  logLevel: (process.env.LOG_LEVEL ?? 'info') as 'debug' | 'info' | 'warn' | 'error',
   webhook: {
     enabled: process.env.WEBHOOK_ENABLED === 'true',
     url: process.env.WEBHOOK_URL ?? ''
@@ -55,6 +62,10 @@ const config = {
     enabled: process.env.RATE_LIMIT_ENABLED === 'true',
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? '60000', 10),
     max: parseInt(process.env.RATE_LIMIT_MAX ?? '60', 10),
+  },
+  idempotency: {
+    ttlSeconds: parseInt(process.env.IDEMPOTENCY_TTL_SECONDS ?? '86400', 10),
+    purgeIntervalMs: parseInt(process.env.IDEMPOTENCY_PURGE_INTERVAL_MS ?? '60000', 10),
   },
 };
 
