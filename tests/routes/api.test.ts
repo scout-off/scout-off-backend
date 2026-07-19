@@ -53,9 +53,7 @@ describe('POST /api/players/register', () => {
   });
 
   it('accepts registration payloads with valid metadataUri', async () => {
-    const res = await request(app)
-      .post('/api/players/register')
-      .send(validPlayer);
+    const res = await request(app).post('/api/players/register').send(validPlayer);
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -112,9 +110,7 @@ describe('POST /auth/token', () => {
     const tx = new Transaction(challengeRes.body.challenge, Networks.TESTNET);
     tx.sign(clientKeypair);
 
-    const res = await request(app)
-      .post('/auth/token')
-      .send({ transaction: tx.toXDR() });
+    const res = await request(app).post('/auth/token').send({ transaction: tx.toXDR() });
 
     expect(res.status).toBe(200);
     expect(typeof res.body.token).toBe('string');
@@ -239,25 +235,19 @@ describe('GET /api/admin/events', () => {
 
   it('returns 403 when authenticated as non-admin role', async () => {
     const token = await getPlayerToken();
-    const res = await request(app)
-      .get('/api/admin/events')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/events').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('returns 403 when authenticated as validator role', async () => {
     const token = await getValidatorToken();
-    const res = await request(app)
-      .get('/api/admin/events')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/events').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('returns event list for authenticated admin', async () => {
     const token = await getAdminToken();
-    const res = await request(app)
-      .get('/api/admin/events')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/events').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.data)).toBe(true);
@@ -267,17 +257,13 @@ describe('GET /api/admin/events', () => {
 describe('GET /api/admin/fees', () => {
   it('returns 403 when authenticated as non-admin role', async () => {
     const token = await getValidatorToken();
-    const res = await request(app)
-      .get('/api/admin/fees')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/fees').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('returns fee list for authenticated admin', async () => {
     const token = await getAdminToken();
-    const res = await request(app)
-      .get('/api/admin/fees')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/fees').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.data)).toBe(true);

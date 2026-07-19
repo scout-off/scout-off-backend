@@ -45,7 +45,12 @@ describe('validateBody — player registerSchema', () => {
   const middleware = validateBody(registerSchema);
 
   it('calls next() for a valid body', () => {
-    const req = makeBodyReq({ wallet: 'G'.repeat(56), position: 'striker', region: 'Africa', metadata: {} });
+    const req = makeBodyReq({
+      wallet: 'G'.repeat(56),
+      position: 'striker',
+      region: 'Africa',
+      metadata: {},
+    });
     const res = makeRes();
     const next = jest.fn() as NextFunction;
     middleware(req, res, next);
@@ -72,7 +77,12 @@ describe('validateBody — player registerSchema', () => {
   });
 
   it('returns 400 when wallet is too short', () => {
-    const req = makeBodyReq({ wallet: 'GSHORT', position: 'striker', region: 'Africa', metadata: {} });
+    const req = makeBodyReq({
+      wallet: 'GSHORT',
+      position: 'striker',
+      region: 'Africa',
+      metadata: {},
+    });
     const res = makeRes();
     const next = jest.fn() as NextFunction;
     middleware(req, res, next);
@@ -81,7 +91,12 @@ describe('validateBody — player registerSchema', () => {
   });
 
   it('returns 400 when position is empty string', () => {
-    const req = makeBodyReq({ wallet: 'G'.repeat(56), position: '', region: 'Africa', metadata: {} });
+    const req = makeBodyReq({
+      wallet: 'G'.repeat(56),
+      position: '',
+      region: 'Africa',
+      metadata: {},
+    });
     const res = makeRes();
     const next = jest.fn() as NextFunction;
     middleware(req, res, next);
@@ -107,7 +122,11 @@ describe('validateBody — milestoneSchema', () => {
   const middleware = validateBody(milestoneSchema);
 
   it('calls next() for a valid milestone body', () => {
-    const req = makeBodyReq({ playerId: 'player-1', milestoneType: 'performance', evidenceUri: 'ipfs://Qm123' });
+    const req = makeBodyReq({
+      playerId: 'player-1',
+      milestoneType: 'performance',
+      evidenceUri: 'ipfs://Qm123',
+    });
     const res = makeRes();
     const next = jest.fn() as NextFunction;
     middleware(req, res, next);

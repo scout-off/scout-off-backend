@@ -8,7 +8,14 @@ const TOKEN_TTL_SECONDS = 86400;
 
 const challengeSchema = z.object({
   account: z.string().refine(
-    (val) => { try { Keypair.fromPublicKey(val); return true; } catch { return false; } },
+    (val) => {
+      try {
+        Keypair.fromPublicKey(val);
+        return true;
+      } catch {
+        return false;
+      }
+    },
     { message: 'Invalid Stellar public key' }
   ),
 });
@@ -35,16 +42,16 @@ export function postToken(req: Request, res: Response, next: NextFunction): void
     const { transaction, role } = tokenSchema.parse(req.body);
     // Seed admin: if the authenticated wallet matches ADMIN_WALLET, always issue admin role
     const candidate = extractAccount(transaction);
-    const effectiveRole =
-      config.adminWallet && candidate === config.adminWallet ? 'admin' : role;
+    const effectiveRole = config.adminWallet && candidate === config.adminWallet ? 'admin' : role;
     const { token, account } = verifyAndIssueToken(transaction, effectiveRole);
     const expiresAt = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS;
     res.json({ token, account, expiresAt });
   } catch (err) {
-    if (err instanceof Error && (
-      err.message === 'Invalid challenge signature' ||
-      err.message === 'Missing source account in challenge'
-    )) {
+    if (
+      err instanceof Error &&
+      (err.message === 'Invalid challenge signature' ||
+        err.message === 'Missing source account in challenge')
+    ) {
       res.status(401).json({ success: false, error: err.message });
       return;
     }

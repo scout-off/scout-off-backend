@@ -23,6 +23,9 @@ jobs:
       - name: Validate env example
         run: node scripts/validate-env.js
 
+      - name: Check formatting
+        run: npm run format:check
+
       - name: Lint
         run: npm run lint
 

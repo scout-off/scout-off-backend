@@ -6,9 +6,7 @@ const server = new SorobanRpc.Server(config.sorobanRpcUrl);
 export { server };
 
 export function networkPassphrase(): string {
-  return config.network === 'mainnet'
-    ? Networks.PUBLIC
-    : Networks.TESTNET;
+  return config.network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
 }
 
 /**
@@ -29,7 +27,7 @@ export interface ContactPaymentResult {
 export class PaymentError extends Error {
   constructor(
     message: string,
-    public readonly code: 'INSUFFICIENT_FUNDS' | 'INVALID_ACCOUNT' | 'NETWORK_ERROR' | 'UNKNOWN',
+    public readonly code: 'INSUFFICIENT_FUNDS' | 'INVALID_ACCOUNT' | 'NETWORK_ERROR' | 'UNKNOWN'
   ) {
     super(message);
     this.name = 'PaymentError';
@@ -55,7 +53,7 @@ export async function stellarHealth(): Promise<boolean> {
  */
 export async function submitContactPayment(
   scoutWallet: string,
-  playerId: string,
+  playerId: string
 ): Promise<ContactPaymentResult> {
   if (!scoutWallet || !playerId) {
     throw new PaymentError('Missing scoutWallet or playerId', 'INVALID_ACCOUNT');
@@ -66,4 +64,3 @@ export async function submitContactPayment(
     status: 'submitted',
   };
 }
-

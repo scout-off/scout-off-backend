@@ -7,9 +7,7 @@ async function getToken(role = 'scout'): Promise<string> {
   const challengeRes = await request(app).get(`/auth/challenge?account=${kp.publicKey()}`);
   const tx = new Transaction(challengeRes.body.challenge, Networks.TESTNET);
   tx.sign(kp);
-  const tokenRes = await request(app)
-    .post('/auth/token')
-    .send({ transaction: tx.toXDR(), role });
+  const tokenRes = await request(app).post('/auth/token').send({ transaction: tx.toXDR(), role });
   return tokenRes.body.token;
 }
 

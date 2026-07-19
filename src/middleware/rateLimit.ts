@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 
 interface RateLimitOptions {
   windowMs?: number; // time window in ms (default: 60_000)
-  max?: number;      // max requests per window per IP (default: 10)
+  max?: number; // max requests per window per IP (default: 10)
 }
 
 /**

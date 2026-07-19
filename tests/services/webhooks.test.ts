@@ -13,7 +13,9 @@ describe('postWebhookWithRetry', () => {
   it('returns successfully when the first request succeeds', async () => {
     mockedAxios.post.mockResolvedValue({ status: 200 } as any);
 
-    await expect(postWebhookWithRetry('https://example.com', { eventType: 'test' })).resolves.toBeUndefined();
+    await expect(
+      postWebhookWithRetry('https://example.com', { eventType: 'test' })
+    ).resolves.toBeUndefined();
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
   });
 
@@ -22,7 +24,11 @@ describe('postWebhookWithRetry', () => {
     mockedAxios.post.mockResolvedValue({ status: 200 } as any);
 
     await expect(
-      postWebhookWithRetry('https://example.com', { eventType: 'test' }, { retries: 3, baseDelayMs: 1, maxDelayMs: 2 })
+      postWebhookWithRetry(
+        'https://example.com',
+        { eventType: 'test' },
+        { retries: 3, baseDelayMs: 1, maxDelayMs: 2 }
+      )
     ).resolves.toBeUndefined();
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
@@ -32,7 +38,11 @@ describe('postWebhookWithRetry', () => {
     mockedAxios.post.mockRejectedValue(new Error('network down'));
 
     await expect(
-      postWebhookWithRetry('https://example.com', { eventType: 'test' }, { retries: 2, baseDelayMs: 1, maxDelayMs: 2 })
+      postWebhookWithRetry(
+        'https://example.com',
+        { eventType: 'test' },
+        { retries: 2, baseDelayMs: 1, maxDelayMs: 2 }
+      )
     ).rejects.toThrow('network down');
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);

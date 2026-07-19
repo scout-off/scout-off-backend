@@ -56,7 +56,7 @@ export function getMilestone(milestoneId: string): Milestone | undefined {
 }
 
 export function getPlayerMilestones(playerId: string): Milestone[] {
-  return Array.from(store.milestones.values()).filter(m => m.playerId === playerId);
+  return Array.from(store.milestones.values()).filter((m) => m.playerId === playerId);
 }
 
 export function addMilestone(milestone: Milestone): void {

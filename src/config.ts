@@ -30,12 +30,9 @@ function required(key: string): string {
 const config = {
   port: parseInt(process.env.PORT ?? '4000', 10),
   network: (process.env.NETWORK ?? 'testnet') as 'testnet' | 'mainnet',
-  networkPassphrase:
-    process.env.NETWORK_PASSPHRASE ?? 'Test SDF Network ; September 2015',
-  horizonUrl:
-    process.env.HORIZON_URL ?? 'https://horizon-testnet.stellar.org',
-  sorobanRpcUrl:
-    process.env.SOROBAN_RPC_URL ?? 'https://soroban-testnet.stellar.org',
+  networkPassphrase: process.env.NETWORK_PASSPHRASE ?? 'Test SDF Network ; September 2015',
+  horizonUrl: process.env.HORIZON_URL ?? 'https://horizon-testnet.stellar.org',
+  sorobanRpcUrl: process.env.SOROBAN_RPC_URL ?? 'https://soroban-testnet.stellar.org',
   contractId: required('CONTRACT_ID'),
   jwtSecret: required('JWT_SECRET'),
   pinata: {
@@ -57,7 +54,7 @@ const config = {
   },
   webhook: {
     enabled: process.env.WEBHOOK_ENABLED === 'true',
-    url: process.env.WEBHOOK_URL ?? ''
+    url: process.env.WEBHOOK_URL ?? '',
   },
   rateLimit: {
     enabled: process.env.RATE_LIMIT_ENABLED === 'true',

@@ -39,7 +39,7 @@ if (process.argv.includes('--runtime')) {
   }
 
   if (errors.length) {
-    errors.forEach(e => console.error(`[env] ERROR: ${e}`));
+    errors.forEach((e) => console.error(`[env] ERROR: ${e}`));
     process.exit(1);
   }
 
@@ -50,15 +50,17 @@ if (process.argv.includes('--runtime')) {
 // ─── CI / documentation check ────────────────────────────────────────────────
 const examplePath = path.resolve(__dirname, '../.env.example');
 const exampleKeys = new Set(
-  fs.readFileSync(examplePath, 'utf8')
+  fs
+    .readFileSync(examplePath, 'utf8')
     .split('\n')
-    .filter(l => l && !l.startsWith('#'))
-    .map(l => l.split('=')[0].trim())
+    .filter((l) => l && !l.startsWith('#'))
+    .map((l) => l.split('=')[0].trim())
 );
 
-const srcFiles = fs.readdirSync(path.resolve(__dirname, '../src'), { recursive: true })
-  .filter(f => f.endsWith('.ts'))
-  .map(f => path.resolve(__dirname, '../src', f));
+const srcFiles = fs
+  .readdirSync(path.resolve(__dirname, '../src'), { recursive: true })
+  .filter((f) => f.endsWith('.ts'))
+  .map((f) => path.resolve(__dirname, '../src', f));
 
 const missing = [];
 for (const file of srcFiles) {

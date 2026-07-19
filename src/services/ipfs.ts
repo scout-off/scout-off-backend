@@ -23,11 +23,7 @@ export async function pinJson(body: object): Promise<string> {
 }
 
 /** Pin a file buffer to IPFS via Pinata. Returns the CID. */
-export async function pinFile(
-  buffer: Buffer,
-  filename: string,
-  mimeType: string
-): Promise<string> {
+export async function pinFile(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
   if (config.ipfsStubMode) {
     return 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG';
   }

@@ -12,7 +12,9 @@
  * @param wallet - Stellar account that will sign the challenge
  * @returns object containing a mock XDR challenge and network passphrase
  */
-export async function createChallenge(wallet: string): Promise<{ challenge: string; networkPassphrase: string }>{
+export async function createChallenge(
+  wallet: string
+): Promise<{ challenge: string; networkPassphrase: string }> {
   // Mock deterministic challenge value for tests
   const challenge = `CHALLENGE_FOR_${wallet}_MOCK`;
   const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE || 'Test SDF Network';
@@ -26,9 +28,12 @@ export async function createChallenge(wallet: string): Promise<{ challenge: stri
  * @param signature - client signature over the challenge
  * @returns verified account object when mock verification succeeds
  */
-export async function verifyChallenge(challenge: string, signature: string): Promise<{ account: string }>{
+export async function verifyChallenge(
+  challenge: string,
+  signature: string
+): Promise<{ account: string }> {
   // Mock verification: accept a deterministic signature pattern in tests
-  if (signature === 'MOCK_VALID_SIGNATURE'){
+  if (signature === 'MOCK_VALID_SIGNATURE') {
     // Extract wallet from challenge when possible
     const match = challenge.match(/^CHALLENGE_FOR_(.+?)_MOCK$/);
     const account = match ? match[1] : 'GMOCKACCOUNT';
@@ -53,7 +58,7 @@ import config from '../config';
 
 const SERVER_KEYPAIR = Keypair.random(); // ephemeral; use a persisted key in production
 const CHALLENGE_TTL_SECONDS = 300; // 5 min to sign the challenge
-const TOKEN_TTL_SECONDS = 86400;   // 24 h JWT validity
+const TOKEN_TTL_SECONDS = 86400; // 24 h JWT validity
 
 /**
  * Build a SEP-10 challenge transaction.
@@ -63,8 +68,7 @@ export function buildChallenge(accountId: string): string {
   const serverAccount = new Account(SERVER_KEYPAIR.publicKey(), '-1');
   const tx = new TransactionBuilder(serverAccount, {
     fee: BASE_FEE,
-    networkPassphrase:
-      config.network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET,
+    networkPassphrase: config.network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET,
   })
     .addOperation(
       Operation.manageData({
@@ -86,8 +90,7 @@ export function buildChallenge(accountId: string): string {
  */
 export function extractAccount(xdr: string): string | null {
   try {
-    const network =
-      config.network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
+    const network = config.network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
     const tx = new Transaction(xdr, network);
     return tx.operations[0].source ?? null;
   } catch {
@@ -98,9 +101,11 @@ export function extractAccount(xdr: string): string | null {
 /**
  * Verify the client-signed challenge XDR and issue a JWT.
  */
-export function verifyAndIssueToken(xdr: string, role?: string): { token: string; account: string } {
-  const network =
-    config.network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
+export function verifyAndIssueToken(
+  xdr: string,
+  role?: string
+): { token: string; account: string } {
+  const network = config.network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
 
   const tx = new Transaction(xdr, network);
 

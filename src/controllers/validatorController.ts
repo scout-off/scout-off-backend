@@ -47,17 +47,16 @@ export async function getPendingMilestones(req: Request, res: Response, next: Ne
   try {
     const { region, playerId } = pendingQuerySchema.parse(req.query);
     const submitted = getEvents('milestone_submitted').map((e) => e.payload);
-    const approvedIds = new Set(
-      getEvents('milestone_approved').map((e) => e.payload.milestone_id)
-    );
+    const approvedIds = new Set(getEvents('milestone_approved').map((e) => e.payload.milestone_id));
     let pending = submitted.filter((m) => !approvedIds.has(m.milestone_id));
     if (region) pending = pending.filter((m) => m.region === region);
-    if (playerId) pending = pending.filter((m) => m.playerId === playerId || m.player_id === playerId);
+    if (playerId)
+      pending = pending.filter((m) => m.playerId === playerId || m.player_id === playerId);
     const milestones: PlayerMilestone[] = pending.map((m) => ({
       status: 'pending' as const,
-      approvedBy: m.validator as string || '',
-      submittedAt: m.created_at as number || Math.floor(Date.now() / 1000),
-      evidenceUri: m.evidence_uri as string || m.evidenceUri as string || '',
+      approvedBy: (m.validator as string) || '',
+      submittedAt: (m.created_at as number) || Math.floor(Date.now() / 1000),
+      evidenceUri: (m.evidence_uri as string) || (m.evidenceUri as string) || '',
     }));
     res.json({ success: true, data: milestones });
   } catch (err) {

@@ -25,6 +25,7 @@ Tokens are issued after a successful SEP-10 Stellar wallet challenge/response fl
 Liveness check. No auth required.
 
 **Response `200`**
+
 ```json
 {
   "status": "ok",
@@ -44,11 +45,12 @@ Returns a SEP-10 challenge XDR for the given Stellar account. No auth required.
 
 **Query params**
 
-| Param     | Type   | Required | Description              |
-|-----------|--------|----------|--------------------------|
-| `account` | string | ✅       | Stellar public key (G…)  |
+| Param     | Type   | Required | Description             |
+| --------- | ------ | -------- | ----------------------- |
+| `account` | string | ✅       | Stellar public key (G…) |
 
 **Response `200`**
+
 ```json
 {
   "challenge": "<XDR string>",
@@ -63,6 +65,7 @@ Returns a SEP-10 challenge XDR for the given Stellar account. No auth required.
 Submit a signed SEP-10 XDR to receive a JWT. No auth required.
 
 **Request body**
+
 ```json
 {
   "signedXdr": "<signed XDR string>",
@@ -71,6 +74,7 @@ Submit a signed SEP-10 XDR to receive a JWT. No auth required.
 ```
 
 **Response `200`**
+
 ```json
 {
   "token": "<JWT>",
@@ -88,6 +92,7 @@ Submit a signed SEP-10 XDR to receive a JWT. No auth required.
 Pin player metadata to IPFS and return the content ID. No auth required.
 
 **Request body**
+
 ```json
 {
   "wallet": "GABC...XYZ",
@@ -104,6 +109,7 @@ Pin player metadata to IPFS and return the content ID. No auth required.
 ```
 
 **Response `201`**
+
 ```json
 {
   "success": true,
@@ -122,15 +128,16 @@ Filter players by region, position, and minimum verified tier. No auth required.
 
 **Query params**
 
-| Param      | Type    | Required | Description                          |
-|------------|---------|----------|--------------------------------------|
-| `region`   | string  | ❌       | Filter by region                     |
-| `position` | string  | ❌       | Filter by position                   |
-| `minTier`  | integer | ❌       | Minimum progress level (0–3)         |
-| `page`     | integer | ❌       | Page number (default: 1)             |
+| Param      | Type    | Required | Description                              |
+| ---------- | ------- | -------- | ---------------------------------------- |
+| `region`   | string  | ❌       | Filter by region                         |
+| `position` | string  | ❌       | Filter by position                       |
+| `minTier`  | integer | ❌       | Minimum progress level (0–3)             |
+| `page`     | integer | ❌       | Page number (default: 1)                 |
 | `pageSize` | integer | ❌       | Results per page (default: 20, max: 100) |
 
 **Response `200`**
+
 ```json
 {
   "success": true,
@@ -150,6 +157,7 @@ Filter players by region, position, and minimum verified tier. No auth required.
 ```
 
 **Error `400`** — invalid `minTier`
+
 ```json
 {
   "success": false,
@@ -164,6 +172,7 @@ Filter players by region, position, and minimum verified tier. No auth required.
 Retrieve a single player profile. No auth required.
 
 **Response `200`**
+
 ```json
 {
   "success": true,
@@ -180,6 +189,7 @@ Retrieve a single player profile. No auth required.
 ```
 
 **Error `404`**
+
 ```json
 { "success": false, "error": "Player not found" }
 ```
@@ -191,6 +201,7 @@ Retrieve a single player profile. No auth required.
 Tamper-proof milestone history for a player. No auth required.
 
 **Response `200`**
+
 ```json
 {
   "success": true,
@@ -218,6 +229,7 @@ Tamper-proof milestone history for a player. No auth required.
 Check active subscription status for a scout. **Requires Bearer auth.**
 
 **Response `200`**
+
 ```json
 {
   "success": true,
@@ -237,12 +249,11 @@ Check active subscription status for a scout. **Requires Bearer auth.**
 List players unlocked by a scout. **Requires Bearer auth.**
 
 **Response `200`**
+
 ```json
 {
   "success": true,
-  "data": [
-    { "playerId": "abc123", "unlockedAt": 1700000000 }
-  ]
+  "data": [{ "playerId": "abc123", "unlockedAt": 1700000000 }]
 }
 ```
 
@@ -257,6 +268,7 @@ List players unlocked by a scout. **Requires Bearer auth.**
 Pin milestone evidence to IPFS and return the CID. **Requires Bearer auth (validator role).**
 
 **Request body**
+
 ```json
 {
   "playerId": "abc123",
@@ -269,6 +281,7 @@ Pin milestone evidence to IPFS and return the CID. **Requires Bearer auth (valid
 ```
 
 **Response `201`**
+
 ```json
 {
   "success": true,
@@ -286,6 +299,7 @@ Pin milestone evidence to IPFS and return the CID. **Requires Bearer auth (valid
 List pending milestone approvals. **Requires Bearer auth (validator role).**
 
 **Response `200`**
+
 ```json
 {
   "success": true,
@@ -312,6 +326,7 @@ List pending milestone approvals. **Requires Bearer auth (validator role).**
 Platform-wide counts. **Requires Bearer auth (admin role).**
 
 **Response `200`**
+
 ```json
 {
   "success": true,
@@ -331,6 +346,7 @@ Platform-wide counts. **Requires Bearer auth (admin role).**
 All indexed contract events. **Requires Bearer auth.**
 
 **Response `200`**
+
 ```json
 {
   "success": true,
@@ -352,6 +368,7 @@ All indexed contract events. **Requires Bearer auth.**
 Fee withdrawal history. **Requires Bearer auth.**
 
 **Response `200`**
+
 ```json
 {
   "success": true,
@@ -372,11 +389,11 @@ Fee withdrawal history. **Requires Bearer auth.**
 
 The following routes currently return data sourced entirely from indexed on-chain events and have no corresponding write/mutation endpoint in the backend:
 
-| Route | Reason |
-|-------|--------|
-| `GET /api/scouts/:wallet/subscription` | Subscription state managed on-chain via `subscribe()`; backend is read-only |
-| `GET /api/scouts/:wallet/contacts` | Contact unlocks managed on-chain via `pay_to_contact()`; backend is read-only |
-| `GET /api/validators/milestones/pending` | Milestone approval is an on-chain transaction; backend only indexes events |
+| Route                                    | Reason                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------- |
+| `GET /api/scouts/:wallet/subscription`   | Subscription state managed on-chain via `subscribe()`; backend is read-only   |
+| `GET /api/scouts/:wallet/contacts`       | Contact unlocks managed on-chain via `pay_to_contact()`; backend is read-only |
+| `GET /api/validators/milestones/pending` | Milestone approval is an on-chain transaction; backend only indexes events    |
 
 ---
 
@@ -393,10 +410,10 @@ All error responses follow this shape:
 
 Common HTTP status codes:
 
-| Code | Meaning                        |
-|------|--------------------------------|
-| 400  | Validation error               |
-| 401  | Missing or invalid auth token  |
-| 403  | Insufficient permissions       |
-| 404  | Resource not found             |
-| 500  | Internal server error          |
+| Code | Meaning                       |
+| ---- | ----------------------------- |
+| 400  | Validation error              |
+| 401  | Missing or invalid auth token |
+| 403  | Insufficient permissions      |
+| 404  | Resource not found            |
+| 500  | Internal server error         |

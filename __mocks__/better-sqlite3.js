@@ -20,7 +20,10 @@ class Statement {
       return { changes: 1, lastInsertRowid: 0 };
     }
 
-    if (sql.startsWith('INSERT INTO INDEXER_STATE') || sql.startsWith('INSERT OR REPLACE INTO INDEXER_STATE')) {
+    if (
+      sql.startsWith('INSERT INTO INDEXER_STATE') ||
+      sql.startsWith('INSERT OR REPLACE INTO INDEXER_STATE')
+    ) {
       const [key, value] = args;
       this._db._state.set(key, value);
       return { changes: 1, lastInsertRowid: 0 };

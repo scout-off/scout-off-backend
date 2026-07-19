@@ -7,7 +7,12 @@ function makeReq(headers: Record<string, string> = {}): Request {
 
 function makeRes(): { headers: Record<string, string>; setHeader: jest.Mock } {
   const headers: Record<string, string> = {};
-  return { headers, setHeader: jest.fn((k, v) => { headers[k] = v; }) };
+  return {
+    headers,
+    setHeader: jest.fn((k, v) => {
+      headers[k] = v;
+    }),
+  };
 }
 
 describe('correlationId middleware', () => {

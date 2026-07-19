@@ -16,7 +16,10 @@ describe('idempotency cleanup', () => {
   });
 
   it('removes expired rows while preserving unexpired ones', () => {
-    const { getIdempotencyDatabase, purgeExpiredIdempotencyKeys } = require('../../src/middleware/idempotency');
+    const {
+      getIdempotencyDatabase,
+      purgeExpiredIdempotencyKeys,
+    } = require('../../src/middleware/idempotency');
     const db = getIdempotencyDatabase();
 
     db.prepare(

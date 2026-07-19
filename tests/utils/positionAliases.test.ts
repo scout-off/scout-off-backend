@@ -1,4 +1,8 @@
-import { normalizePosition, normalizePositionOrFallback, defaultPositionAliases } from '../../src/utils/positionAliases';
+import {
+  normalizePosition,
+  normalizePositionOrFallback,
+  defaultPositionAliases,
+} from '../../src/utils/positionAliases';
 
 describe('positionAliases', () => {
   test('normalizes common synonyms (fw -> forward)', () => {

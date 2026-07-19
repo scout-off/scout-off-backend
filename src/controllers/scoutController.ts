@@ -14,7 +14,10 @@ export async function getSubscription(req: Request, res: Response, next: NextFun
     const subs = getEvents('scout_subscribed').filter((e) => e.payload.scout === wallet);
     const latest = subs.at(-1);
     if (!latest) {
-      res.json({ success: true, data: { active: false, tier: null, expiresAt: null, remainingDays: 0 } });
+      res.json({
+        success: true,
+        data: { active: false, tier: null, expiresAt: null, remainingDays: 0 },
+      });
       return;
     }
     const expiresAt = latest.payload.subscriptionExpiry as number;

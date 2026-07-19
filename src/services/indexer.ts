@@ -28,11 +28,15 @@ export function normalizeEventId(contractId: string, ledger: number, txHash: str
 
 // Stub hook — replace with real logic as needed (e.g. metrics, alerting).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-function onBeforeInsert(_eventId: string): void { /* hook */ }
+function onBeforeInsert(_eventId: string): void {
+  /* hook */
+}
 
 // Stub hook — called after a successful insert (INSERT OR IGNORE may be a no-op).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-function onAfterInsert(_eventId: string): void { /* hook */ }
+function onAfterInsert(_eventId: string): void {
+  /* hook */
+}
 
 // ─── DB setup ────────────────────────────────────────────────────────────────
 
@@ -53,9 +57,8 @@ db.exec(`
 `);
 
 function getLastLedger(): number {
-  const row = db
-    .prepare('SELECT value FROM indexer_state WHERE key = ?')
-    .get('last_ledger') as { value: string } | undefined;
+  const row = db.prepare('SELECT value FROM indexer_state WHERE key = ?').get('last_ledger') as
+    { value: string } | undefined;
   return row ? parseInt(row.value, 10) : 0;
 }
 

@@ -42,14 +42,15 @@ export async function registerPlayer(req: Request, res: Response, next: NextFunc
     const parsed = registerSchema.parse(req.body);
     const sanitizedPosition = sanitizeInput(parsed.position);
     const sanitizedRegion = sanitizeInput(parsed.region);
-    const metadataUri = 'metadataUri' in parsed
-      ? parsed.metadataUri
-      : await pinJson({
-          wallet: parsed.wallet,
-          position: sanitizedPosition,
-          region: sanitizedRegion,
-          ...parsed.metadata,
-        });
+    const metadataUri =
+      'metadataUri' in parsed
+        ? parsed.metadataUri
+        : await pinJson({
+            wallet: parsed.wallet,
+            position: sanitizedPosition,
+            region: sanitizedRegion,
+            ...parsed.metadata,
+          });
 
     // Invalidate player search cache so new profile appears in results
     invalidatePlayerCache();
@@ -74,9 +75,7 @@ export async function registerPlayer(req: Request, res: Response, next: NextFunc
 export async function getPlayer(req: Request, res: Response, next: NextFunction) {
   try {
     const playerId = sanitizeInput(req.params.playerId);
-    const events = getEvents('player_registered').filter(
-      (e) => e.payload.player_id === playerId
-    );
+    const events = getEvents('player_registered').filter((e) => e.payload.player_id === playerId);
     if (!events.length) {
       res.status(404).json({ success: false, error: 'Player not found' });
       return;
@@ -113,8 +112,7 @@ export async function filterPlayers(req: Request, res: Response, next: NextFunct
       const match = normalizedPosition ?? sanitizedPosition;
       players = players.filter((p) => p.position === match);
     }
-    if (minTier !== undefined)
-      players = players.filter((p) => Number(p.progress_level) >= minTier);
+    if (minTier !== undefined) players = players.filter((p) => Number(p.progress_level) >= minTier);
     const total = players.length;
     const pages = Math.ceil(total / pageSize);
     const paginated = players.slice((page - 1) * pageSize, page * pageSize);

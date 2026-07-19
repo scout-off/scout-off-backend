@@ -46,14 +46,16 @@ export async function getAllEvents(req: Request, res: Response, next: NextFuncti
 /** GET /api/admin/fees — returns fees_withdrawn event payloads */
 export async function getFeeSummary(req: Request, res: Response, next: NextFunction) {
   try {
-    const adminWallet = (req as any).account as string ?? 'unknown';
+    const adminWallet = ((req as any).account as string) ?? 'unknown';
     logAuditEvent({
       action: 'fee_history_query',
       adminWallet,
       queryParams: req.query as Record<string, unknown>,
       timestamp: new Date().toISOString(),
     });
-    const withdrawals = getEvents('fees_withdrawn').map((e) => e.payload as Record<string, unknown>);
+    const withdrawals = getEvents('fees_withdrawn').map(
+      (e) => e.payload as Record<string, unknown>
+    );
     const body: ApiResponse<Record<string, unknown>[]> = { success: true, data: withdrawals };
     res.json(body);
   } catch (err) {
@@ -68,14 +70,22 @@ export async function registerValidator(req: Request, res: Response, next: NextF
     const { validatorWallet } = req.body as { validatorWallet?: string };
 
     if (!validatorWallet || !STELLAR_ADDRESS_RE.test(validatorWallet)) {
-      console.warn(`[admin] register_validator rejected — invalid address | admin=${adminWallet} target=${validatorWallet}`);
-      res.status(400).json({ success: false, error: 'validatorWallet must be a valid Stellar address' });
+      console.warn(
+        `[admin] register_validator rejected — invalid address | admin=${adminWallet} target=${validatorWallet}`
+      );
+      res
+        .status(400)
+        .json({ success: false, error: 'validatorWallet must be a valid Stellar address' });
       return;
     }
 
-    console.info(`[admin] action=register_validator admin=${adminWallet} target=${validatorWallet}`);
+    console.info(
+      `[admin] action=register_validator admin=${adminWallet} target=${validatorWallet}`
+    );
     // TODO: invoke register_validator on Soroban contract
-    res.status(202).json({ success: true, message: `Validator ${validatorWallet} registration submitted` });
+    res
+      .status(202)
+      .json({ success: true, message: `Validator ${validatorWallet} registration submitted` });
   } catch (err) {
     next(err);
   }
@@ -88,14 +98,20 @@ export async function revokeValidator(req: Request, res: Response, next: NextFun
     const { validatorWallet } = req.body as { validatorWallet?: string };
 
     if (!validatorWallet || !STELLAR_ADDRESS_RE.test(validatorWallet)) {
-      console.warn(`[admin] revoke_validator rejected — invalid address | admin=${adminWallet} target=${validatorWallet}`);
-      res.status(400).json({ success: false, error: 'validatorWallet must be a valid Stellar address' });
+      console.warn(
+        `[admin] revoke_validator rejected — invalid address | admin=${adminWallet} target=${validatorWallet}`
+      );
+      res
+        .status(400)
+        .json({ success: false, error: 'validatorWallet must be a valid Stellar address' });
       return;
     }
 
     console.info(`[admin] action=revoke_validator admin=${adminWallet} target=${validatorWallet}`);
     // TODO: invoke revoke_validator on Soroban contract
-    res.status(202).json({ success: true, message: `Validator ${validatorWallet} revocation submitted` });
+    res
+      .status(202)
+      .json({ success: true, message: `Validator ${validatorWallet} revocation submitted` });
   } catch (err) {
     next(err);
   }

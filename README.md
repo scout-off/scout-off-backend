@@ -97,25 +97,25 @@ graph TB
 
 Tiers are gated by real-world verification and enforced on-chain:
 
-| Level | Name                  | Requirement                                                  |
-|-------|-----------------------|--------------------------------------------------------------|
-| 0     | Unverified            | Player creates profile and uploads data                      |
-| 1     | Verified Identity     | KYC passed or academy confirms active club membership        |
-| 2     | Performance Milestones| Match footage or physical stats verified by approved third party |
-| 3     | Elite Tier            | Scout feedback or trial offer logged on-chain                |
+| Level | Name                   | Requirement                                                      |
+| ----- | ---------------------- | ---------------------------------------------------------------- |
+| 0     | Unverified             | Player creates profile and uploads data                          |
+| 1     | Verified Identity      | KYC passed or academy confirms active club membership            |
+| 2     | Performance Milestones | Match footage or physical stats verified by approved third party |
+| 3     | Elite Tier             | Scout feedback or trial offer logged on-chain                    |
 
 Example: A validator submits "Scored 5 goals in Local Cup" → Soroban contract writes the milestone → player's progress bar updates → scouts see a tamper-proof history of when and how the player progressed.
 
 ## Tech Stack
 
-| Layer            | Technology                        | Purpose                                                                 |
-|------------------|-----------------------------------|-------------------------------------------------------------------------|
-| Smart Contracts  | Rust + Soroban (Stellar)          | Player registration, progress verification, scout subscriptions, contact agreements |
-| Frontend         | Next.js / Flutter                 | Player upload dashboard, scout browse interface, validator approval panel |
-| Backend          | Node.js + Express                 | Event indexing, search caching, REST API for heavy queries              |
-| File Storage     | IPFS / Arweave (via Pinata)       | Highlight reels, photos, and documents; hashes stored on-chain          |
-| Auth             | SEP-10 (Stellar)                  | Secure wallet-based login for players and scouts                        |
-| Payments         | XLM / Platform Token              | Scout subscriptions, pay-to-contact micro-fees                          |
+| Layer           | Technology                  | Purpose                                                                             |
+| --------------- | --------------------------- | ----------------------------------------------------------------------------------- |
+| Smart Contracts | Rust + Soroban (Stellar)    | Player registration, progress verification, scout subscriptions, contact agreements |
+| Frontend        | Next.js / Flutter           | Player upload dashboard, scout browse interface, validator approval panel           |
+| Backend         | Node.js + Express           | Event indexing, search caching, REST API for heavy queries                          |
+| File Storage    | IPFS / Arweave (via Pinata) | Highlight reels, photos, and documents; hashes stored on-chain                      |
+| Auth            | SEP-10 (Stellar)            | Secure wallet-based login for players and scouts                                    |
+| Payments        | XLM / Platform Token        | Scout subscriptions, pay-to-contact micro-fees                                      |
 
 ## Smart Contract Functions
 
@@ -153,22 +153,22 @@ Example: A validator submits "Scored 5 goals in Local Cup" → Soroban contract 
 
 ## Backend API Endpoints
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/health` | — | Liveness check |
-| `GET` | `/auth/challenge?account=G...` | — | Get SEP-10 challenge XDR to sign |
-| `POST` | `/auth/token` | — | Submit signed XDR, receive JWT |
-| `POST` | `/api/players/register` | — | Pin metadata to IPFS, return CID |
-| `GET` | `/api/players` | — | Filter players (`region`, `position`, `minTier`) |
-| `GET` | `/api/players/:playerId` | — | Single player profile |
-| `GET` | `/api/players/:playerId/milestones` | — | Milestone history |
-| `GET` | `/api/scouts/:wallet/subscription` | Bearer | Subscription status |
-| `GET` | `/api/scouts/:wallet/contacts` | Bearer | Unlocked contacts |
-| `POST` | `/api/validators/milestone` | Bearer | Pin evidence, return CID |
-| `GET` | `/api/validators/milestones/pending` | Bearer | Pending milestone approvals |
-| `GET` | `/api/admin/stats` | Bearer (admin) | Platform counts: players, milestones, subscriptions, events |
-| `GET` | `/api/admin/events` | Bearer | All indexed contract events |
-| `GET` | `/api/admin/fees` | Bearer | Fee withdrawal history |
+| Method | Path                                 | Auth           | Description                                                 |
+| ------ | ------------------------------------ | -------------- | ----------------------------------------------------------- |
+| `GET`  | `/health`                            | —              | Liveness check                                              |
+| `GET`  | `/auth/challenge?account=G...`       | —              | Get SEP-10 challenge XDR to sign                            |
+| `POST` | `/auth/token`                        | —              | Submit signed XDR, receive JWT                              |
+| `POST` | `/api/players/register`              | —              | Pin metadata to IPFS, return CID                            |
+| `GET`  | `/api/players`                       | —              | Filter players (`region`, `position`, `minTier`)            |
+| `GET`  | `/api/players/:playerId`             | —              | Single player profile                                       |
+| `GET`  | `/api/players/:playerId/milestones`  | —              | Milestone history                                           |
+| `GET`  | `/api/scouts/:wallet/subscription`   | Bearer         | Subscription status                                         |
+| `GET`  | `/api/scouts/:wallet/contacts`       | Bearer         | Unlocked contacts                                           |
+| `POST` | `/api/validators/milestone`          | Bearer         | Pin evidence, return CID                                    |
+| `GET`  | `/api/validators/milestones/pending` | Bearer         | Pending milestone approvals                                 |
+| `GET`  | `/api/admin/stats`                   | Bearer (admin) | Platform counts: players, milestones, subscriptions, events |
+| `GET`  | `/api/admin/events`                  | Bearer         | All indexed contract events                                 |
+| `GET`  | `/api/admin/fees`                    | Bearer         | Fee withdrawal history                                      |
 
 ## Player Progress Flow
 
@@ -243,10 +243,10 @@ sequenceDiagram
 
 ### Valid Transitions
 
-| From    | To      | Trigger                                                        |
-|---------|---------|----------------------------------------------------------------|
+| From    | To      | Trigger                                                       |
+| ------- | ------- | ------------------------------------------------------------- |
 | Level 0 | Level 1 | Academy or KYC provider calls `approve_milestone` (identity)  |
-| Level 1 | Level 2 | Approved validator submits and approves performance milestone  |
+| Level 1 | Level 2 | Approved validator submits and approves performance milestone |
 | Level 2 | Level 3 | Scout calls `log_trial_offer` — offer recorded on-chain       |
 
 ## Security Features
@@ -308,15 +308,16 @@ npm run dev
 
 **Available npm scripts:**
 
-| Script | Command | Description |
-|--------|---------|-------------|
-| `npm run dev` | `ts-node-dev --respawn --transpile-only src/index.ts` | Start with hot-reload for development |
-| `npm run build` | `tsc` | Compile TypeScript to `dist/` |
-| `npm start` | `node dist/index.js` | Run the compiled server (run `build` first) |
-| `npm test` | `jest --runInBand` | Run the test suite |
-| `npm run lint` | `eslint 'src/**/*.ts' 'tests/**/*.ts' --ext .ts` | Run TypeScript linting |
+| Script          | Command                                               | Description                                 |
+| --------------- | ----------------------------------------------------- | ------------------------------------------- |
+| `npm run dev`   | `ts-node-dev --respawn --transpile-only src/index.ts` | Start with hot-reload for development       |
+| `npm run build` | `tsc`                                                 | Compile TypeScript to `dist/`               |
+| `npm start`     | `node dist/index.js`                                  | Run the compiled server (run `build` first) |
+| `npm test`      | `jest --runInBand`                                    | Run the test suite                          |
+| `npm run lint`  | `eslint 'src/**/*.ts' 'tests/**/*.ts' --ext .ts`      | Run TypeScript linting                      |
 
 On startup the server will:
+
 - Open (or create) a SQLite database at `DB_PATH` (default: `scout-off.db`)
 - Begin polling Soroban for contract events every 5 seconds
 - Fail fast if `CONTRACT_ID` or `JWT_SECRET` are missing
@@ -327,10 +328,10 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions.
 
 The backend exposes two health check endpoints for monitoring and orchestration probes. For detailed instructions on handling external dependency outages (Stellar RPC or IPFS/Pinata), refer to the [Dependency Outages Runbook](docs/runbooks/dependency-outages.md).
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/health` | — | Liveness check — always returns `200 ok` with optional Stellar RPC status |
-| `GET` | `/ready` | — | Readiness probe — returns `200` when all dependencies are reachable, `503` when degraded |
+| Method | Path      | Auth | Description                                                                              |
+| ------ | --------- | ---- | ---------------------------------------------------------------------------------------- |
+| `GET`  | `/health` | —    | Liveness check — always returns `200 ok` with optional Stellar RPC status                |
+| `GET`  | `/ready`  | —    | Readiness probe — returns `200` when all dependencies are reachable, `503` when degraded |
 
 ### GET /health
 
@@ -341,6 +342,7 @@ Optionally includes a Stellar RPC connectivity check, controlled by the `STELLAR
 **Middleware module:** `src/services/stellar.ts` (`stellarHealth`)
 
 **Example response (healthy):**
+
 ```json
 {
   "status": "ok",
@@ -351,6 +353,7 @@ Optionally includes a Stellar RPC connectivity check, controlled by the `STELLAR
 ```
 
 **Example response (Stellar disabled):**
+
 ```json
 {
   "status": "ok",
@@ -371,6 +374,7 @@ Currently checks: **IPFS (Pinata)** storage connectivity.
 **Middleware module:** `src/services/ipfs.ts` (`checkHealth`)
 
 **Example response (ready):**
+
 ```json
 {
   "status": "ok",
@@ -381,6 +385,7 @@ Currently checks: **IPFS (Pinata)** storage connectivity.
 ```
 
 **Example response (degraded):**
+
 ```json
 {
   "status": "degraded",
@@ -394,10 +399,10 @@ Currently checks: **IPFS (Pinata)** storage connectivity.
 
 ### Dependencies
 
-| Endpoint | Dependency | Stub / Module |
-|----------|-----------|---------------|
-| `/health` | Stellar RPC (`SOROBAN_RPC_URL`) | `src/services/stellar.ts` — `stellarHealth()` |
-| `/ready` | IPFS / Pinata (`PINATA_API_KEY`) | `src/services/ipfs.ts` — `checkHealth()` |
+| Endpoint  | Dependency                       | Stub / Module                                 |
+| --------- | -------------------------------- | --------------------------------------------- |
+| `/health` | Stellar RPC (`SOROBAN_RPC_URL`)  | `src/services/stellar.ts` — `stellarHealth()` |
+| `/ready`  | IPFS / Pinata (`PINATA_API_KEY`) | `src/services/ipfs.ts` — `checkHealth()`      |
 
 Both dependency checks are stubbed in tests — see `tests/routes/health.test.ts`.
 
@@ -434,19 +439,19 @@ Both dependency checks are stubbed in tests — see `tests/routes/health.test.ts
 
 ### Key Environment Variables
 
-| Variable                  | Description                                         |
-|---------------------------|-----------------------------------------------------|
-| `CONTRACT_ID`             | Deployed ScoutOff contract address (**required**)   |
-| `JWT_SECRET`              | Secret used to sign SEP-10 JWT tokens (**required**)|
-| `HORIZON_URL`             | Stellar Horizon endpoint                            |
-| `SOROBAN_RPC_URL`         | Soroban RPC endpoint                                |
-| `NETWORK`                 | `testnet` or `mainnet`                              |
-| `PINATA_API_KEY`          | Pinata API key for IPFS uploads                     |
-| `PINATA_SECRET`           | Pinata secret                                       |
-| `PLATFORM_FEE_BPS`        | Platform fee in basis points (default: 500)         |
-| `PORT`                    | Backend API port (default: 4000)                    |
-| `DB_PATH`                 | SQLite database file path (default: `scout-off.db`) |
-| `LOG_LEVEL`               | Log verbosity: `debug`, `info`, `warn`, `error` (default: `info`) |
+| Variable                       | Description                                                                                    |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `CONTRACT_ID`                  | Deployed ScoutOff contract address (**required**)                                              |
+| `JWT_SECRET`                   | Secret used to sign SEP-10 JWT tokens (**required**)                                           |
+| `HORIZON_URL`                  | Stellar Horizon endpoint                                                                       |
+| `SOROBAN_RPC_URL`              | Soroban RPC endpoint                                                                           |
+| `NETWORK`                      | `testnet` or `mainnet`                                                                         |
+| `PINATA_API_KEY`               | Pinata API key for IPFS uploads                                                                |
+| `PINATA_SECRET`                | Pinata secret                                                                                  |
+| `PLATFORM_FEE_BPS`             | Platform fee in basis points (default: 500)                                                    |
+| `PORT`                         | Backend API port (default: 4000)                                                               |
+| `DB_PATH`                      | SQLite database file path (default: `scout-off.db`)                                            |
+| `LOG_LEVEL`                    | Log verbosity: `debug`, `info`, `warn`, `error` (default: `info`)                              |
 | `STELLAR_HEALTH_CHECK_ENABLED` | Include Stellar RPC in `/health` response (default: `true`; set `false` to disable in staging) |
 
 ## Testing
@@ -460,6 +465,7 @@ npm run test
 ```
 
 Contract test coverage includes:
+
 - ✅ Player registration and metadata storage
 - ✅ Milestone submission and approval by validators
 - ✅ Progress tier increments and tamper-proof history
@@ -500,25 +506,25 @@ Everything else (subscriptions, trial offer logging, fractionalized sponsorship)
 
 ## Error Codes
 
-| Code | Error               | Description                              | Resolution                                      |
-|------|---------------------|------------------------------------------|-------------------------------------------------|
-| 1    | AlreadyInitialized  | Contract already initialized             | No action needed; contract is ready             |
-| 2    | NotInitialized      | Contract not initialized                 | Admin must call `initialize` first              |
-| 3    | PlayerNotFound      | Player ID does not exist                 | Verify player_id from registration transaction  |
-| 4    | InvalidValidator    | Caller is not a registered validator     | Admin must register the validator first         |
-| 5    | MilestoneNotFound   | Milestone ID does not exist              | Refresh milestone list                          |
-| 6    | AlreadyVerified     | Milestone already approved               | No duplicate approvals needed                   |
-| 7    | InsufficientFee     | Payment below required contact fee       | Check current fee via `get_contact_fee()`       |
-| 8    | NotSubscribed       | Scout has no active subscription         | Call `subscribe` before browsing premium data   |
-| 9    | Unauthorized        | Caller is not authorized for this action | Confirm you are using the correct Stellar account |
-| 10   | ContractPaused      | Contract is paused                       | Wait for admin to unpause                       |
-| 11   | Overflow            | Arithmetic overflow in fee calculation   | Use amounts within safe u128 range              |
+| Code | Error              | Description                              | Resolution                                        |
+| ---- | ------------------ | ---------------------------------------- | ------------------------------------------------- |
+| 1    | AlreadyInitialized | Contract already initialized             | No action needed; contract is ready               |
+| 2    | NotInitialized     | Contract not initialized                 | Admin must call `initialize` first                |
+| 3    | PlayerNotFound     | Player ID does not exist                 | Verify player_id from registration transaction    |
+| 4    | InvalidValidator   | Caller is not a registered validator     | Admin must register the validator first           |
+| 5    | MilestoneNotFound  | Milestone ID does not exist              | Refresh milestone list                            |
+| 6    | AlreadyVerified    | Milestone already approved               | No duplicate approvals needed                     |
+| 7    | InsufficientFee    | Payment below required contact fee       | Check current fee via `get_contact_fee()`         |
+| 8    | NotSubscribed      | Scout has no active subscription         | Call `subscribe` before browsing premium data     |
+| 9    | Unauthorized       | Caller is not authorized for this action | Confirm you are using the correct Stellar account |
+| 10   | ContractPaused     | Contract is paused                       | Wait for admin to unpause                         |
+| 11   | Overflow           | Arithmetic overflow in fee calculation   | Use amounts within safe u128 range                |
 
 ## Events
 
-| Event               | Emitted When                                              |
-|---------------------|-----------------------------------------------------------|
-| `player_registered` | New player profile created on-chain                       |
+| Event                 | Emitted When                                            |
+| --------------------- | ------------------------------------------------------- |
+| `player_registered`   | New player profile created on-chain                     |
 | `milestone_submitted` | Validator submits a new milestone for review            |
 | `milestone_approved`  | Validator approves milestone; progress tier incremented |
 | `scout_subscribed`    | Scout purchases an active subscription                  |
@@ -550,6 +556,7 @@ MIT
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 Quick checklist:
+
 - All contract tests pass: `cargo test`
 - All backend tests pass: `npm run test`
 - New features include tests and updated documentation

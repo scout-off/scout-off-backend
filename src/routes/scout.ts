@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { getSubscription, getUnlockedContacts, unlockContact, getPaymentHistory } from '../controllers/scoutController';
+import {
+  getSubscription,
+  getUnlockedContacts,
+  unlockContact,
+  getPaymentHistory,
+} from '../controllers/scoutController';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();

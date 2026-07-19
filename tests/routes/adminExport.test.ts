@@ -6,13 +6,21 @@ function makeRes() {
   let body: string | undefined;
   let statusCode = 200;
   const res = {
-    setHeader: (name: string, value: string) => { headers[name.toLowerCase()] = value; },
+    setHeader: (name: string, value: string) => {
+      headers[name.toLowerCase()] = value;
+    },
     status: jest.fn().mockReturnThis(),
-    send: jest.fn((data: string) => { body = data; return res; }),
+    send: jest.fn((data: string) => {
+      body = data;
+      return res;
+    }),
     _headers: headers,
     _body: () => body,
   } as unknown as Response & { _headers: Record<string, string>; _body: () => string | undefined };
-  (res.status as jest.Mock).mockImplementation((code: number) => { statusCode = code; return res; });
+  (res.status as jest.Mock).mockImplementation((code: number) => {
+    statusCode = code;
+    return res;
+  });
   return { res, headers, getBody: () => body, getStatus: () => statusCode };
 }
 

@@ -53,9 +53,13 @@ export async function dispatchEventWebhook(eventType: string, payload: unknown):
   if (!config.webhook.enabled || !config.webhook.url) {
     return;
   }
-  await postWebhookWithRetry(config.webhook.url, { eventType, payload }, {
-    retries: 3,
-    baseDelayMs: 500,
-    maxDelayMs: 5000,
-  });
+  await postWebhookWithRetry(
+    config.webhook.url,
+    { eventType, payload },
+    {
+      retries: 3,
+      baseDelayMs: 500,
+      maxDelayMs: 5000,
+    }
+  );
 }

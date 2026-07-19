@@ -67,7 +67,7 @@ export interface Milestone {
   playerId: string;
   milestoneType: MilestoneType;
   evidenceUri: string; // IPFS CID
-  validator: string;   // Stellar address
+  validator: string; // Stellar address
   approved: boolean;
   createdAt: number;
 }

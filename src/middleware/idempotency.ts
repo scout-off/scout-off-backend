@@ -77,7 +77,10 @@ function buildRequestHash(req: Request): string {
   return `${req.method}:${req.originalUrl || req.url}`;
 }
 
-export function getIdempotencyRecord(key: string, now: number = Math.floor(Date.now() / 1000)): IdempotencyRecord | undefined {
+export function getIdempotencyRecord(
+  key: string,
+  now: number = Math.floor(Date.now() / 1000)
+): IdempotencyRecord | undefined {
   return getDatabase()
     .prepare(
       'SELECT key, expires_at AS expiresAt, request_hash AS requestHash, method, path, status_code AS statusCode, response_body AS responseBody, created_at AS createdAt FROM idempotency_keys WHERE key = ? AND expires_at > ?'
@@ -100,10 +103,13 @@ export function recordIdempotencyKey(
 }
 
 export function purgeExpiredIdempotencyKeys(now: number = Math.floor(Date.now() / 1000)): number {
-  return getDatabase().prepare('DELETE FROM idempotency_keys WHERE expires_at <= ?').run(now).changes;
+  return getDatabase().prepare('DELETE FROM idempotency_keys WHERE expires_at <= ?').run(now)
+    .changes;
 }
 
-export function startIdempotencyPurgeJob(intervalMs: number = getPurgeIntervalMs()): NodeJS.Timeout | undefined {
+export function startIdempotencyPurgeJob(
+  intervalMs: number = getPurgeIntervalMs()
+): NodeJS.Timeout | undefined {
   if (intervalMs <= 0) {
     return undefined;
   }
@@ -113,7 +119,11 @@ export function startIdempotencyPurgeJob(intervalMs: number = getPurgeIntervalMs
   }, intervalMs);
 }
 
-export function idempotencyMiddleware(req: IdempotencyRequest, _res: Response, next: NextFunction): void {
+export function idempotencyMiddleware(
+  req: IdempotencyRequest,
+  _res: Response,
+  next: NextFunction
+): void {
   if (!isMutatingMethod(req.method)) {
     next();
     return;

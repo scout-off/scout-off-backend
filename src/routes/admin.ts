@@ -1,5 +1,12 @@
 import { Router } from 'express';
-import { getStats, getAllEvents, getFeeSummary, registerValidator, revokeValidator, introspectToken } from '../controllers/adminController';
+import {
+  getStats,
+  getAllEvents,
+  getFeeSummary,
+  registerValidator,
+  revokeValidator,
+  introspectToken,
+} from '../controllers/adminController';
 import { requireAuth, requireRole } from '../middleware/auth';
 
 const router = Router();

@@ -16,7 +16,18 @@ const milestoneRateLimit = rateLimit({
   max: Number(process.env.MILESTONE_RATE_MAX) || 10,
 });
 
-router.post('/milestone', milestoneRateLimit, requireRole('validator'), validateBody(milestoneSchema), submitMilestoneEvidence);
-router.get('/milestones/pending', requireRole('validator'), validateQuery(pendingQuerySchema), getPendingMilestones);
+router.post(
+  '/milestone',
+  milestoneRateLimit,
+  requireRole('validator'),
+  validateBody(milestoneSchema),
+  submitMilestoneEvidence
+);
+router.get(
+  '/milestones/pending',
+  requireRole('validator'),
+  validateQuery(pendingQuerySchema),
+  getPendingMilestones
+);
 
 export default router;

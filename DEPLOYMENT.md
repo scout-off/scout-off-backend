@@ -4,19 +4,19 @@
 
 Copy `.env.example` to `.env` and fill in all required values before starting the server.
 
-| Variable | Required | Notes |
-|---|---|---|
-| `CONTRACT_ID` | ✅ | Deployed Soroban contract address |
-| `JWT_SECRET` | ✅ | Min 32 chars; rotate on compromise |
-| `HORIZON_URL` | ✅ | e.g. `https://horizon-testnet.stellar.org` |
-| `SOROBAN_RPC_URL` | ✅ | e.g. `https://soroban-testnet.stellar.org` |
-| `NETWORK` | ✅ | `testnet` or `mainnet` |
-| `PINATA_API_KEY` / `PINATA_SECRET` | ✅ | IPFS upload credentials |
-| `DB_PATH` | — | SQLite file path (default: `scout-off.db`) |
-| `PORT` | — | API port (default: `4000`) |
-| `LOG_LEVEL` | — | `debug` / `info` / `warn` / `error` |
-| `STELLAR_HEALTH_CHECK_ENABLED` | — | Set `false` in staging to skip Stellar RPC check |
-| `TRUSTED_PROXY_COUNT` | — | Number of trusted reverse proxies (default: `1`) |
+| Variable                           | Required | Notes                                            |
+| ---------------------------------- | -------- | ------------------------------------------------ |
+| `CONTRACT_ID`                      | ✅       | Deployed Soroban contract address                |
+| `JWT_SECRET`                       | ✅       | Min 32 chars; rotate on compromise               |
+| `HORIZON_URL`                      | ✅       | e.g. `https://horizon-testnet.stellar.org`       |
+| `SOROBAN_RPC_URL`                  | ✅       | e.g. `https://soroban-testnet.stellar.org`       |
+| `NETWORK`                          | ✅       | `testnet` or `mainnet`                           |
+| `PINATA_API_KEY` / `PINATA_SECRET` | ✅       | IPFS upload credentials                          |
+| `DB_PATH`                          | —        | SQLite file path (default: `scout-off.db`)       |
+| `PORT`                             | —        | API port (default: `4000`)                       |
+| `LOG_LEVEL`                        | —        | `debug` / `info` / `warn` / `error`              |
+| `STELLAR_HEALTH_CHECK_ENABLED`     | —        | Set `false` in staging to skip Stellar RPC check |
+| `TRUSTED_PROXY_COUNT`              | —        | Number of trusted reverse proxies (default: `1`) |
 
 ## Build & Start
 
@@ -52,10 +52,10 @@ Always back up the database file before running migrations in production.
 
 ## Health & Monitoring
 
-| Endpoint | Purpose |
-|---|---|
+| Endpoint      | Purpose                                     |
+| ------------- | ------------------------------------------- |
 | `GET /health` | Liveness check; includes Stellar RPC status |
-| `GET /ready` | Readiness probe; checks IPFS connectivity |
+| `GET /ready`  | Readiness probe; checks IPFS connectivity   |
 
 Configure your load balancer or orchestrator to poll `/health` every 30 seconds.  
 Alert on consecutive failures (≥ 2) to catch Stellar RPC or IPFS outages early.
@@ -63,6 +63,7 @@ Alert on consecutive failures (≥ 2) to catch Stellar RPC or IPFS outages early
 In the event of an outage, refer to the [Dependency Outages Runbook](docs/runbooks/dependency-outages.md) for mitigation and recovery procedures.
 
 Recommended metrics to track:
+
 - HTTP 5xx error rate
 - Event indexer lag (gap between latest on-chain event and last indexed event)
 - SQLite file size growth

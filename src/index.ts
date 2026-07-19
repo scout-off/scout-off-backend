@@ -67,7 +67,7 @@ const readinessHandler = async (_req: express.Request, res: express.Response) =>
     services.stellar = 'disabled';
   }
 
-  const allOk = Object.values(services).every(v => v === 'ok' || v === 'disabled');
+  const allOk = Object.values(services).every((v) => v === 'ok' || v === 'disabled');
   if (allOk) {
     res.json({ status: 'ok', services });
   } else {
