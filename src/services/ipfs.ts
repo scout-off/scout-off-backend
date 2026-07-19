@@ -1,30 +1,3 @@
-// IPFS service (stub)
-// Provides simple deterministic stubs for pinning JSON and retrieving CIDs.
-//
-// Pinata integration notes:
-// - To integrate with Pinata, set PINATA_API_KEY and PINATA_SECRET_API_KEY in env.
-// - Use Pinata's /pinning/pinJSONToIPFS endpoint with a POST containing the JSON body.
-// - Optionally include metadata and options (pinPolicy) as described in Pinata docs.
-// - For production, add retries, content-address verification, and monitor pin status.
-
-export async function pinJson(obj: unknown): Promise<{ cid: string }>{
-  // Deterministic placeholder CID for tests.
-  // Replace with Pinata HTTP call when enabling real integration.
-  const jsonStr = typeof obj === 'string' ? obj : JSON.stringify(obj);
-  // Simple stable hash-like mock using string length and char codes.
-  const seed = String(jsonStr.length + (jsonStr.charCodeAt(0) || 0));
-  const cid = `bafymock${seed}`;
-  return { cid };
-}
-
-export async function getCid(uriOrCid: string): Promise<string>{
-  // If an IPFS URI is provided like ipfs://<cid>, strip the prefix.
-  if (uriOrCid.startsWith('ipfs://')) return uriOrCid.replace('ipfs://','');
-  // Return the input for deterministic behavior in tests.
-  return uriOrCid;
-}
-
-export default { pinJson, getCid };
 import axios from 'axios';
 import FormData from 'form-data';
 import config from '../config';

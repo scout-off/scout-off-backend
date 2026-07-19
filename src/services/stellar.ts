@@ -1,41 +1,3 @@
-/**
- * Stellar helper abstraction (mock)
- *
- * Placeholder implementations for signature verification, transaction building,
- * and payment submission. Designed so controllers can import and use these
- * helpers and later swap in real Stellar Horizon / SDK logic.
- */
-
-/**
- * Verify a message signature against a public key.
- * @returns true when signature matches a mock pattern
- */
-export function verifySignature(message: string, signature: string, publicKey: string): boolean{
-  // Simple deterministic mock used by tests.
-  return signature === `SIG_${publicKey}_${message}` || signature === 'MOCK_VALID_SIGNATURE';
-}
-
-/**
- * Build a payment transaction XDR for submission.
- * Returns a mock XDR string for tests and development.
- */
-export async function buildTransaction(from: string, to: string, amount: string, memo?: string): Promise<string>{
-  // Mock XDR payload
-  return `MOCK_XDR from=${from} to=${to} amt=${amount} memo=${memo||''}`;
-}
-
-/**
- * Submit a payment XDR to the network (mock).
- * Returns a success object with a fake transaction hash.
- */
-export async function submitPayment(xdr: string): Promise<{ success: boolean; txHash?: string; error?: string }>{
-  if (!xdr) return { success: false, error: 'empty xdr' };
-  // deterministic mock hash
-  const txHash = `MOCK_TX_${Math.abs(xdr.length * 31).toString(16)}`;
-  return { success: true, txHash };
-}
-
-export default { verifySignature, buildTransaction, submitPayment };
 import { SorobanRpc, TransactionBuilder, Networks, BASE_FEE } from '@stellar/stellar-sdk';
 import config from '../config';
 
@@ -105,15 +67,3 @@ export async function submitContactPayment(
   };
 }
 
-/**
- * Simple health probe for the Stellar/Soroban RPC.
- * Returns true when the RPC responds; false otherwise.
- */
-export async function stellarHealth(): Promise<boolean> {
-  try {
-    await getLatestLedger();
-    return true;
-  } catch {
-    return false;
-  }
-}

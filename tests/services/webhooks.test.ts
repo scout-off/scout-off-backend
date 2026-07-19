@@ -1,9 +1,9 @@
-import fetch from 'node-fetch';
+import axios from 'axios';
 import { postWebhookWithRetry } from '../../src/services/webhooks';
 
-jest.mock('node-fetch', () => jest.fn());
+jest.mock('axios');
 
-const mockedFetch = fetch as jest.MockedFunction<typeof fetch>;
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('postWebhookWithRetry', () => {
   beforeEach(() => {
@@ -11,30 +11,30 @@ describe('postWebhookWithRetry', () => {
   });
 
   it('returns successfully when the first request succeeds', async () => {
-    mockedFetch.mockResolvedValue({ ok: true, status: 200 } as any);
+    mockedAxios.post.mockResolvedValue({ status: 200 } as any);
 
     await expect(postWebhookWithRetry('https://example.com', { eventType: 'test' })).resolves.toBeUndefined();
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockedAxios.post).toHaveBeenCalledTimes(1);
   });
 
   it('retries on an initial failure and succeeds on a later attempt', async () => {
-    mockedFetch.mockRejectedValueOnce(new Error('network fail'));
-    mockedFetch.mockResolvedValue({ ok: true, status: 200 } as any);
+    mockedAxios.post.mockRejectedValueOnce(new Error('network fail'));
+    mockedAxios.post.mockResolvedValue({ status: 200 } as any);
 
     await expect(
       postWebhookWithRetry('https://example.com', { eventType: 'test' }, { retries: 3, baseDelayMs: 1, maxDelayMs: 2 })
     ).resolves.toBeUndefined();
 
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2);
   });
 
   it('throws after all retries fail', async () => {
-    mockedFetch.mockRejectedValue(new Error('network down'));
+    mockedAxios.post.mockRejectedValue(new Error('network down'));
 
     await expect(
       postWebhookWithRetry('https://example.com', { eventType: 'test' }, { retries: 2, baseDelayMs: 1, maxDelayMs: 2 })
     ).rejects.toThrow('network down');
 
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2);
   });
 });

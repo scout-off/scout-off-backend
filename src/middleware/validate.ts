@@ -7,6 +7,7 @@ interface ValidationOptions {
 }
 
 function getCorrelationId(req: Request): string {
+  if (!req.headers) return 'none';
   return String(req.headers['x-correlation-id'] ?? req.headers['correlation-id'] ?? 'none');
 }
 

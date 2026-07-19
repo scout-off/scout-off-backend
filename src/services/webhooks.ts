@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+import axios from 'axios';
 import config from '../config';
 
 type WebhookRetryOptions = {
@@ -27,13 +27,11 @@ export async function postWebhookWithRetry(
 
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     try {
-      const response = await fetch(url, {
-        method: 'POST',
+      const response = await axios.post(url, payload, {
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
+      if (response.status >= 200 && response.status < 300) {
         return;
       }
 
