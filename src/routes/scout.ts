@@ -4,6 +4,7 @@ import { getScoutRecommendations } from '../controllers/scoutRecommendationsCont
 import { putScoutNote, getScoutNoteHandler, listScoutNotesHandler } from '../controllers/scoutNotesController';
 import { issueApiKey, listApiKeys, revokeApiKey } from '../controllers/apiKeyController';
 import { addBookmark, removeBookmark, listBookmarks } from '../controllers/scoutBookmarksController';
+import { createSavedSearch, listSavedSearches, deleteSavedSearchHandler } from '../controllers/scoutSavedSearchesController';
 import { requireRole } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { walletRateLimit } from '../middleware/rateLimit';
@@ -219,5 +220,33 @@ router.route('/:wallet/bookmarks/:playerId')
 router.route('/:wallet/bookmarks')
   .get(requireRole('scout'), listBookmarks)
   .all(methodNotAllowed(['GET', 'HEAD']));
+
+// ─── Scout saved searches (#486) ──────────────────────────────────────────────
+
+/**
+ * POST /api/scouts/:wallet/saved-searches
+ * Create a new named saved search.  The filter payload is validated against
+ * the same Zod schema used by the live player-filter endpoint.
+ *
+ * GET /api/scouts/:wallet/saved-searches
+ * List all saved searches for the authenticated scout, newest-first.
+ *
+ * @auth Bearer (scout role required; wallet must match authenticated account)
+ */
+router.route('/:wallet/saved-searches')
+  .post(requireRole('scout'), createSavedSearch)
+  .get(requireRole('scout'), listSavedSearches)
+  .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
+
+/**
+ * DELETE /api/scouts/:wallet/saved-searches/:id
+ * Delete a saved search by its row id.
+ * A scout cannot delete another scout's saved searches.
+ *
+ * @auth Bearer (scout role required; wallet must match authenticated account)
+ */
+router.route('/:wallet/saved-searches/:id')
+  .delete(requireRole('scout'), deleteSavedSearchHandler)
+  .all(methodNotAllowed(['DELETE']));
 
 export default router;

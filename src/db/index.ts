@@ -887,3 +887,60 @@ export function getBookmarksByScout(scoutWallet: string): ScoutBookmarkRow[] {
     getDb().prepare(sql).all(scoutWallet) as ScoutBookmarkRow[],
   );
 }
+
+// ─── Scout saved-search helpers (#486) ───────────────────────────────────────
+
+export interface SavedSearchRow {
+  id: number;
+  scout_wallet: string;
+  name: string;
+  filters: string; // JSON string
+  created_at: number;
+}
+
+/**
+ * Insert a new saved search for a scout.
+ * Returns the new row id.
+ */
+export function insertSavedSearch(p: {
+  scout_wallet: string;
+  name: string;
+  filters: string; // pre-serialised JSON
+  created_at: number;
+}): number {
+  const sql = `
+    INSERT INTO scout_saved_searches (scout_wallet, name, filters, created_at)
+    VALUES (?, ?, ?, ?)
+  `;
+  return timedQuery(sql, () => {
+    const info = getDb().prepare(sql).run(p.scout_wallet, p.name, p.filters, p.created_at);
+    return info.lastInsertRowid as number;
+  });
+}
+
+/**
+ * List all saved searches for a scout, ordered newest-first.
+ */
+export function getSavedSearchesByScout(scoutWallet: string): SavedSearchRow[] {
+  const sql = `
+    SELECT * FROM scout_saved_searches
+    WHERE scout_wallet = ?
+    ORDER BY created_at DESC
+  `;
+  return timedQuery(sql, () =>
+    getDb().prepare(sql).all(scoutWallet) as SavedSearchRow[],
+  );
+}
+
+/**
+ * Delete a saved search by id.
+ * Only deletes rows belonging to the given scout wallet for security.
+ * Returns true when a row was deleted, false when it did not exist.
+ */
+export function deleteSavedSearch(id: number, scoutWallet: string): boolean {
+  const sql = `DELETE FROM scout_saved_searches WHERE id = ? AND scout_wallet = ?`;
+  return timedQuery(sql, () => {
+    const info = getDb().prepare(sql).run(id, scoutWallet);
+    return info.changes > 0;
+  });
+}
