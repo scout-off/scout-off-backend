@@ -16,7 +16,7 @@ import {
   type ReferralPanelDeps,
   type ReferralStats,
   type ReferralCode,
-} from '../../../src/frontend/components/scout/ReferralPanel';
+} from '../../../../src/frontend/components/scout/ReferralPanel';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
