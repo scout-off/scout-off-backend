@@ -5,6 +5,8 @@
 
 // Stub the ipfs service before app is imported so the /ready handler
 // uses the mock implementation throughout these tests.
+process.env.STELLAR_HEALTH_CHECK = 'false';
+
 jest.mock('../../src/services/ipfs', () => ({
   pinJson: jest.fn(),
   pinFile: jest.fn(),

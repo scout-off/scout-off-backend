@@ -44,7 +44,7 @@ app.get('/health/liveness', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.get('/health/readiness', async (_req, res) => {
+const readinessHandler = async (_req: express.Request, res: express.Response) => {
   const services: Record<string, 'ok' | 'unavailable' | 'disabled'> = {};
 
   // Check IPFS/Pinata availability
@@ -73,7 +73,10 @@ app.get('/health/readiness', async (_req, res) => {
   } else {
     res.status(503).json({ status: 'degraded', services });
   }
-});
+};
+
+app.get('/health/readiness', readinessHandler);
+app.get('/ready', readinessHandler);
 
 app.use('/auth', authRoutes);
 app.use('/api/players', playerRoutes);

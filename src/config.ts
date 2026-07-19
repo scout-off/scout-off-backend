@@ -47,6 +47,7 @@ const config = {
   dbPath: process.env.DB_PATH ?? 'scout-off.db',
   logLevel: (process.env.LOG_LEVEL ?? 'info') as 'debug' | 'info' | 'warn' | 'error',
   stellarHealthCheckEnabled: process.env.STELLAR_HEALTH_CHECK !== 'false',
+  ipfsStubMode: process.env.IPFS_STUB_MODE === 'true',
   adminWallet: process.env.ADMIN_WALLET ?? '',
   securityHeaders: {
     hsts: process.env.SECURITY_HSTS ?? 'max-age=31536000; includeSubDomains',

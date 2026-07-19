@@ -60,6 +60,8 @@ Always back up the database file before running migrations in production.
 Configure your load balancer or orchestrator to poll `/health` every 30 seconds.  
 Alert on consecutive failures (≥ 2) to catch Stellar RPC or IPFS outages early.
 
+In the event of an outage, refer to the [Dependency Outages Runbook](docs/runbooks/dependency-outages.md) for mitigation and recovery procedures.
+
 Recommended metrics to track:
 - HTTP 5xx error rate
 - Event indexer lag (gap between latest on-chain event and last indexed event)

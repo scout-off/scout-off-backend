@@ -15,6 +15,9 @@ function headers() {
 
 /** Pin a JSON object to IPFS via Pinata. Returns the CID. */
 export async function pinJson(body: object): Promise<string> {
+  if (config.ipfsStubMode) {
+    return 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG';
+  }
   const res = await axios.post(PINATA_PIN_URL, body, { headers: headers() });
   return res.data.IpfsHash as string;
 }
@@ -25,6 +28,9 @@ export async function pinFile(
   filename: string,
   mimeType: string
 ): Promise<string> {
+  if (config.ipfsStubMode) {
+    return 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG';
+  }
   const form = new FormData();
   form.append('file', buffer, { filename, contentType: mimeType });
   const res = await axios.post(PINATA_FILE_URL, form, {
@@ -48,5 +54,8 @@ export function gatewayUrl(cid: string): string {
  * Stub this function in tests to avoid real network calls.
  */
 export async function checkHealth(): Promise<void> {
+  if (config.ipfsStubMode) {
+    return;
+  }
   await axios.get(PINATA_TEST_URL, { headers: headers() });
 }

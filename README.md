@@ -325,7 +325,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions.
 
 ## Health Endpoints
 
-The backend exposes two health check endpoints for monitoring and orchestration probes.
+The backend exposes two health check endpoints for monitoring and orchestration probes. For detailed instructions on handling external dependency outages (Stellar RPC or IPFS/Pinata), refer to the [Dependency Outages Runbook](docs/runbooks/dependency-outages.md).
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
