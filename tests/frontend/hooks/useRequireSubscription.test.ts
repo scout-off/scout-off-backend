@@ -41,7 +41,6 @@ function makeDeps(overrides: Partial<RequireSubscriptionDeps> = {}): RequireSubs
 const ACTIVE_SUB: SubscriptionState = { active: true, isExpired: false };
 const EXPIRED_SUB: SubscriptionState = { active: false, isExpired: true };
 const INACTIVE_SUB: SubscriptionState = { active: false, isExpired: false };
-const PUBLIC_KEY = 'GAAKO6EK5AIJWZH7ITXBFZTPASYKPY3YVMFVFVD5UDG2C6NUIXTT7BE3';
 
 // ─── Loading state ────────────────────────────────────────────────────────────
 

@@ -13,7 +13,6 @@ import {
   listApiKeysByWallet,
   revokeApiKeyById,
   getAllActiveApiKeys,
-  touchApiKeyLastUsed,
   ApiKeyRow,
 } from '../db';
 import { isValidStellarAddress } from '../utils/stellarAddress';
