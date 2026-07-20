@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import express from 'express';
-import { getStats, getAllEvents, getFeeSummary, listValidators, registerValidator, revokeValidator, pauseContract, unpauseContract, withdrawFeesController, introspectToken, revokeTokenController, reindex, getValidatorStatsEndpoint, getAuditLog, importValidators } from '../controllers/adminController';
+import { getStats, getAllEvents, getFeeSummary, listValidators, registerValidator, revokeValidator, pauseContract, unpauseContract, withdrawFeesController, introspectToken, revokeTokenController, reindex, getValidatorStatsEndpoint, getAuditLog, importValidators, getDbDiagnostics } from '../controllers/adminController';
 import { exportEvents } from '../controllers/exportController';
 import { requireRole } from '../middleware/auth';
 import { ipAllowlistMiddleware } from '../middleware/ipAllowlist';
@@ -248,6 +248,18 @@ router.route('/indexer/reindex')
 
 router.route('/validators/:wallet/stats')
   .get(requireRole('admin'), getValidatorStatsEndpoint)
+  .all(methodNotAllowed(['GET', 'HEAD']));
+
+/**
+ * GET /api/admin/db-diagnostics
+ *
+ * Returns database diagnostics: file size, last applied migration, and full PRAGMA integrity_check output.
+ *
+ * @response 200 { success: true, data: { fileSize, lastMigration, integrityCheck } }
+ * @auth Bearer (admin role required)
+ */
+router.route('/db-diagnostics')
+  .get(requireRole('admin'), getDbDiagnostics)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 export default router;

@@ -11,10 +11,14 @@ jest.mock('../../src/services/ipfs', () => ({
   checkHealth: jest.fn(),
 }));
 
-// Partially mock the db module so individual tests can control getDb().
+// Partially mock the db module so individual tests can control getDb and checkDbHealth.
 jest.mock('../../src/db', () => {
   const actual = jest.requireActual<typeof import('../../src/db')>('../../src/db');
-  return { ...actual, getDb: jest.fn(actual.getDb) };
+  return {
+    ...actual,
+    getDb: jest.fn(actual.getDb),
+    checkDbHealth: jest.fn(actual.checkDbHealth),
+  };
 });
 
 import request from 'supertest';
@@ -24,6 +28,7 @@ import * as dbModule from '../../src/db';
 
 const mockCheckHealth = ipfsService.checkHealth as jest.Mock;
 const mockGetDb = dbModule.getDb as jest.Mock;
+const mockCheckDbHealth = dbModule.checkDbHealth as jest.Mock;
 
 // ─── /ready ──────────────────────────────────────────────────────────────────
 
@@ -33,9 +38,13 @@ describe.each(READINESS_PATHS)('%s', (path) => {
   afterEach(() => {
     mockCheckHealth.mockReset();
     mockGetDb.mockReset();
+    mockCheckDbHealth.mockReset();
     // Restore to the real implementation between tests
     mockGetDb.mockImplementation(
       jest.requireActual<typeof import('../../src/db')>('../../src/db').getDb,
+    );
+    mockCheckDbHealth.mockImplementation(
+      jest.requireActual<typeof import('../../src/db')>('../../src/db').checkDbHealth,
     );
   });
 
@@ -66,10 +75,8 @@ describe.each(READINESS_PATHS)('%s', (path) => {
   it('returns 503 with db:unavailable when the database probe throws', async () => {
     mockCheckHealth.mockResolvedValueOnce(undefined);
     // Simulate a locked or corrupted DB
-    mockGetDb.mockImplementation(() => {
-      throw new Error('SQLITE_BUSY: database is locked');
-    });
-    const res = await request(app).get('/ready');
+    mockCheckDbHealth.mockReturnValueOnce({ healthy: false, error: 'SQLITE_BUSY: database is locked' });
+    const res = await request(app).get(path);
     expect(res.status).toBe(503);
     expect(res.body.status).toBe('degraded');
     expect(res.body.services.db).toBe('unavailable');
@@ -81,8 +88,12 @@ describe.each(READINESS_PATHS)('%s', (path) => {
 describe('GET /health', () => {
   afterEach(() => {
     mockGetDb.mockReset();
+    mockCheckDbHealth.mockReset();
     mockGetDb.mockImplementation(
       jest.requireActual<typeof import('../../src/db')>('../../src/db').getDb,
+    );
+    mockCheckDbHealth.mockImplementation(
+      jest.requireActual<typeof import('../../src/db')>('../../src/db').checkDbHealth,
     );
   });
 
@@ -102,9 +113,7 @@ describe('GET /health', () => {
   it('reports db:error in healthStatus but still returns 200 when the DB probe fails', async () => {
     // /health is a liveness probe — it always returns 200.
     // A DB failure is surfaced in healthStatus.db without changing the HTTP status.
-    mockGetDb.mockImplementation(() => {
-      throw new Error('SQLITE_BUSY: database is locked');
-    });
+    mockCheckDbHealth.mockReturnValueOnce({ healthy: false, error: 'SQLITE_BUSY: database is locked' });
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);
     expect(res.body.healthStatus.db).toBe('error');

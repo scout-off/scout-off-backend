@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
-import { getEvents, getEventsCount, getLastLedger, setLastLedger, getValidatorStats, getAuditLogs, getAuditLogsCount } from '../db';
+import { getEvents, getEventsCount, getLastLedger, setLastLedger, getValidatorStats, getAuditLogs, getAuditLogsCount, getDbFileSize, getLastMigration, getDbIntegrityCheck } from '../db';
 import { getAllValidators, insertValidator, revokeValidatorRow, getValidatorByWallet } from '../services/indexer';
 import { isValidStellarAddress } from '../utils/stellarAddress';
 import { ApiResponse, EventRecord, ContractEventType } from '../types';
@@ -785,3 +785,32 @@ export async function importValidators(req: Request, res: Response, next: NextFu
     next(err);
   }
 }
+
+/**
+ * GET /api/admin/db-diagnostics
+ *
+ * Returns database diagnostics information: file size in bytes, last applied migration,
+ * and full PRAGMA integrity_check output.
+ *
+ * @response 200 { success: true, data: { fileSize, lastMigration, integrityCheck } }
+ * @auth Bearer (admin role required)
+ */
+export async function getDbDiagnostics(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const fileSize = getDbFileSize();
+    const lastMigration = getLastMigration();
+    const integrityCheck = getDbIntegrityCheck();
+
+    res.json({
+      success: true,
+      data: {
+        fileSize,
+        lastMigration,
+        integrityCheck,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+

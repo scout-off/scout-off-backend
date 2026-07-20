@@ -1,3 +1,4 @@
+import fs from 'fs';
 import Database from 'better-sqlite3';
 import config from '../config';
 import { EventRecord, ContractEventType } from '../types';
@@ -79,6 +80,10 @@ export function initDb(): void {
       PRIMARY KEY (scout_wallet, player_id)
     );
     CREATE INDEX IF NOT EXISTS idx_contact_unlocks_scout ON contact_unlocks (scout_wallet);
+    CREATE TABLE IF NOT EXISTS _healthcheck (
+      id         INTEGER PRIMARY KEY,
+      updated_at INTEGER NOT NULL
+    );
   `);
   // Run SQL migrations (player_profile_history, idempotency_keys, etc.)
   runMigrations(_db);
@@ -87,6 +92,83 @@ export function initDb(): void {
 export function getDb(): Database.Database {
   if (!_db) throw new Error("Database not initialised — call initDb() first");
   return _db;
+}
+
+export interface DbHealthResult {
+  healthy: boolean;
+  error?: string;
+}
+
+/**
+ * Performs a lightweight DB health check for readiness probes:
+ * 1. Executes a heartbeat row upsert against SQLite to confirm it is writable.
+ * 2. Runs PRAGMA quick_check to confirm structural integrity cheaply.
+ * Returns healthy status or an error message if unhealthy.
+ */
+export function checkDbHealth(): DbHealthResult {
+  try {
+    const db = getDb();
+
+    // 1. Writability check via heartbeat row upsert
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS _healthcheck (
+        id INTEGER PRIMARY KEY,
+        updated_at INTEGER NOT NULL
+      )
+    `).run();
+
+    db.prepare(`
+      INSERT INTO _healthcheck (id, updated_at) VALUES (1, ?)
+      ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at
+    `).run(Date.now());
+
+    // 2. Structural integrity check via PRAGMA quick_check
+    const rows = db.prepare('PRAGMA quick_check').all() as Array<Record<string, string>>;
+    const result = rows.length > 0 ? (rows[0].quick_check ?? Object.values(rows[0])[0]) : 'unknown';
+
+    if (result !== 'ok') {
+      return { healthy: false, error: `quick_check failed: ${result}` };
+    }
+
+    return { healthy: true };
+  } catch (err: any) {
+    return { healthy: false, error: err?.message || String(err) };
+  }
+}
+
+/** Get the SQLite database file size in bytes (returns 0 for :memory: databases). */
+export function getDbFileSize(): number {
+  if (config.dbPath === ':memory:') return 0;
+  try {
+    if (fs.existsSync(config.dbPath)) {
+      return fs.statSync(config.dbPath).size;
+    }
+  } catch {
+    // fallback
+  }
+  return 0;
+}
+
+/** Get the last applied migration ID from the migrations tracking table. */
+export function getLastMigration(): string | null {
+  try {
+    const db = getDb();
+    const row = db.prepare('SELECT id FROM migrations ORDER BY rowid DESC LIMIT 1').get() as { id: string } | undefined;
+    return row?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Execute full PRAGMA integrity_check for admin diagnostics. */
+export function getDbIntegrityCheck(): string[] {
+  try {
+    const db = getDb();
+    const rows = db.prepare('PRAGMA integrity_check').all() as Array<Record<string, string>>;
+    return rows.map((r) => r.integrity_check ?? Object.values(r)[0]);
+  } catch (err: any) {
+    return [err?.message || String(err)];
+  }
 }
 
 // ─── State helpers ────────────────────────────────────────────────────────────

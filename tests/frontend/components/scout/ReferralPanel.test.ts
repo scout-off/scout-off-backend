@@ -225,7 +225,7 @@ describe('generateCode (Generate Invite Link)', () => {
 // ─── copyCode ─────────────────────────────────────────────────────────────────
 
 describe('copyCode (copy to clipboard)', () => {
-  it('sets copiedCodeId to the copied code's id on success', async () => {
+  it("sets copiedCodeId to the copied code's id on success", async () => {
     const panel = new ReferralPanel(makeDeps());
     await panel.copyCode('code-001', 'SCOUT-XYZ-2026');
     expect(panel.getState().copiedCodeId).toBe('code-001');

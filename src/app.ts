@@ -20,9 +20,9 @@ import { API_PREFIX, API_V1_PREFIX } from './config';
 import { metricsMiddleware, createMetricsHandler } from './middleware/metrics';
 import { requestTimeout } from './middleware/timeout';
 import { indexerLedgerLag } from './services/indexer';
-import { getDb } from './db';
+import { checkDbHealth } from './db';
 
-/** Probe the SQLite database with a lightweight SELECT 1.
+/** Probe the SQLite database with writability check & PRAGMA quick_check.
  *  Resolves 'ok' or 'error'; never rejects.
  *  A configurable timeout (default 2 s) guards against a locked DB hanging the health check.
  */
@@ -30,9 +30,9 @@ async function probeDb(timeoutMs = 2_000): Promise<'ok' | 'error'> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve('error'), timeoutMs);
     try {
-      getDb().prepare('SELECT 1').get();
+      const res = checkDbHealth();
       clearTimeout(timer);
-      resolve('ok');
+      resolve(res.healthy ? 'ok' : 'error');
     } catch {
       clearTimeout(timer);
       resolve('error');
