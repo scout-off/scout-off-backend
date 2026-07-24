@@ -52,6 +52,8 @@ function devStubCid(seed: string): string {
 
 // ---------------------------------------------------------------------------
 // pinJson deduplication cache & inflight promise tracker (#466)
+// Implements an idempotency cache to prevent duplicate Pinata API calls
+// by checking a deterministic canonical hash of the JSON metadata payload.
 // ---------------------------------------------------------------------------
 
 /**
