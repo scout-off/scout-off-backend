@@ -27,6 +27,12 @@ function required(key: string): string {
   return value;
 }
 
+function parseDatabaseSsl(value: string): false | { rejectUnauthorized: boolean } {
+  if (value === 'true') return { rejectUnauthorized: true };
+  if (value === 'no-verify') return { rejectUnauthorized: false };
+  return false;
+}
+
 const config = {
   port: parseInt(process.env.PORT ?? '4000', 10),
   network: (process.env.NETWORK ?? 'testnet') as 'testnet' | 'mainnet',
@@ -65,6 +71,10 @@ const config = {
     ttlSeconds: parseInt(process.env.IDEMPOTENCY_TTL_SECONDS ?? '86400', 10),
     purgeIntervalMs: parseInt(process.env.IDEMPOTENCY_PURGE_INTERVAL_MS ?? '60000', 10),
   },
+  databaseUrl: process.env.DATABASE_URL ?? '',
+  databaseSsl: parseDatabaseSsl(process.env.DATABASE_SSL ?? 'false'),
+  dbPoolMin: parseInt(process.env.DB_POOL_MIN ?? '2', 10),
+  dbPoolMax: parseInt(process.env.DB_POOL_MAX ?? '10', 10),
 };
 
 export default config;

@@ -15,6 +15,8 @@ import { indexEvents } from './services/indexer';
 import { logger } from './utils/logger';
 import { stellarHealth } from './services/stellar';
 import { checkHealth } from './services/ipfs';
+import { poolHealth, updatePoolMetrics } from './db/postgres-driver';
+import { register as metricsRegister } from './middleware/metrics';
 
 const app = express();
 
@@ -55,6 +57,18 @@ const readinessHandler = async (_req: express.Request, res: express.Response) =>
     services.ipfs = 'unavailable';
   }
 
+  // Check PostgreSQL availability
+  if (config.databaseUrl) {
+    try {
+      await poolHealth();
+      services.postgres = 'ok';
+    } catch {
+      services.postgres = 'unavailable';
+    }
+  } else {
+    services.postgres = 'disabled';
+  }
+
   // Check Stellar RPC if enabled
   if (config.stellarHealthCheckEnabled) {
     try {
@@ -77,6 +91,11 @@ const readinessHandler = async (_req: express.Request, res: express.Response) =>
 
 app.get('/health/readiness', readinessHandler);
 app.get('/ready', readinessHandler);
+
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', metricsRegister.contentType);
+  res.end(await metricsRegister.metrics());
+});
 
 app.use('/auth', authRoutes);
 app.use('/api/players', playerRoutes);
@@ -125,6 +144,11 @@ app.listen(config.port, () => {
   poll();
   setInterval(poll, 5_000);
   startIdempotencyPurgeJob();
+
+  // Update pool metrics every 10 seconds if PostgreSQL is configured
+  if (config.databaseUrl) {
+    setInterval(updatePoolMetrics, 10_000);
+  }
 });
 
 export default app;

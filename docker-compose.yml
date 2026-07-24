@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: scoutoff_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    environment:
+      DATABASE_URL: postgresql://test:test@postgres:5432/scoutoff_test
+      POOL_MODE: statement
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 20
+      SERVER_IDLE_TIMEOUT: 30
+    ports:
+      - '6432:5432'
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:
