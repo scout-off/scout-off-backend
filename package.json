@@ -55,7 +55,7 @@
     "@types/pg": "8.11.6",
     "@types/supertest": "6.0.2",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
-    "@typescript-eslint/parser": "^6.21.0",
+    "@typescript-eslint/parser": "^8.65.0",
     "autocannon": "^8.0.0",
     "dezalgo": "^1.0.4",
     "eslint": "^8.57.1",
