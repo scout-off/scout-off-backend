@@ -78,7 +78,6 @@ describe('initial state', () => {
 
 describe('loadStats', () => {
   it('sets loading: true synchronously before the request resolves', async () => {
-    let capturedLoading: boolean | undefined;
     const deps = makeDeps({
       getReferralStats: jest.fn().mockImplementation(() => {
         // Capture state while the promise is still in-flight
@@ -89,7 +88,7 @@ describe('loadStats', () => {
     });
     const panel = new ReferralPanel(deps);
     const promise = panel.loadStats();
-    capturedLoading = panel.getState().loading;
+    const capturedLoading = panel.getState().loading;
     await promise;
     expect(capturedLoading).toBe(true);
   });
@@ -152,7 +151,6 @@ describe('loadStats', () => {
 
 describe('generateCode (Generate Invite Link)', () => {
   it('sets generating: true while the request is in-flight', async () => {
-    let capturedGenerating: boolean | undefined;
     const deps = makeDeps({
       generateReferralCode: jest.fn().mockImplementation(() => {
         return new Promise<ReferralCode>((resolve) => {
@@ -162,7 +160,7 @@ describe('generateCode (Generate Invite Link)', () => {
     });
     const panel = new ReferralPanel(deps);
     const promise = panel.generateCode();
-    capturedGenerating = panel.getState().generating;
+    const capturedGenerating = panel.getState().generating;
     await promise;
     expect(capturedGenerating).toBe(true);
   });

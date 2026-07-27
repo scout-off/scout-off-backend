@@ -131,8 +131,8 @@ export function checkDbHealth(): DbHealthResult {
     }
 
     return { healthy: true };
-  } catch (err: any) {
-    return { healthy: false, error: err?.message || String(err) };
+  } catch (err: unknown) {
+    return { healthy: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -166,8 +166,8 @@ export function getDbIntegrityCheck(): string[] {
     const db = getDb();
     const rows = db.prepare('PRAGMA integrity_check').all() as Array<Record<string, string>>;
     return rows.map((r) => r.integrity_check ?? Object.values(r)[0]);
-  } catch (err: any) {
-    return [err?.message || String(err)];
+  } catch (err: unknown) {
+    return [err instanceof Error ? err.message : String(err)];
   }
 }
 

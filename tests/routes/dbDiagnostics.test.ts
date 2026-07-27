@@ -46,14 +46,14 @@ describe('Database Health Check & Diagnostics', () => {
           ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at
         `).run(Date.now());
         fail('Should have thrown read-only error');
-      } catch (err: any) {
-        expect(err.message).toMatch(/readonly/i);
+      } catch (err: unknown) {
+        expect(err instanceof Error ? err.message : String(err)).toMatch(/readonly/i);
       } finally {
         roDb.close();
         fs.chmodSync(tempDbPath, 0o666);
         fs.unlinkSync(tempDbPath);
         if (fs.existsSync(tempDir)) {
-          try { fs.rmdirSync(tempDir); } catch {}
+          try { fs.rmdirSync(tempDir); } catch (_e) { /* ignore cleanup errors */ }
         }
       }
     });
