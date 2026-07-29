@@ -48,9 +48,16 @@ class Statement {
       const threshold = args[0];
       let deleted = 0;
       for (const [key, row] of Array.from(this._db._idempotencyRows.entries())) {
-        if (row.expires_at <= threshold) {
-          this._db._idempotencyRows.delete(key);
-          deleted += 1;
+        if (sql.includes('CREATED_AT')) {
+          if (row.created_at < threshold) {
+            this._db._idempotencyRows.delete(key);
+            deleted += 1;
+          }
+        } else {
+          if (row.expires_at <= threshold) {
+            this._db._idempotencyRows.delete(key);
+            deleted += 1;
+          }
         }
       }
       return { changes: deleted, lastInsertRowid: 0 };

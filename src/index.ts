@@ -10,7 +10,8 @@ import { errorHandler } from './middleware/errorHandler';
 import { securityHeaders } from './middleware/securityHeaders';
 import { correlationId } from './middleware/correlationId';
 import { responseTime } from './middleware/responseTime';
-import { idempotencyMiddleware, startIdempotencyPurgeJob } from './middleware/idempotency';
+import { idempotencyMiddleware, startIdempotencyPurgeJob, cleanupDriver } from './middleware/idempotency';
+import { startIdempotencyCleanupJob } from './services/idempotencyCleanup';
 import { indexEvents } from './services/indexer';
 import { logger } from './utils/logger';
 import { stellarHealth } from './services/stellar';
@@ -144,6 +145,7 @@ app.listen(config.port, () => {
   poll();
   setInterval(poll, 5_000);
   startIdempotencyPurgeJob();
+  startIdempotencyCleanupJob(cleanupDriver);
 
   // Update pool metrics every 10 seconds if PostgreSQL is configured
   if (config.databaseUrl) {

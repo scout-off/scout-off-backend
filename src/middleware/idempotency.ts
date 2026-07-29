@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import type { NextFunction, Request, Response } from 'express';
 import config from '../config';
+import type { IdempotencyCleanupDriver } from '../services/idempotencyCleanup';
 
 export interface IdempotencyRecord {
   key: string;
@@ -42,6 +43,10 @@ function initializeDatabase(): void {
   getDatabase().exec(`
     CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires_at
     ON idempotency_keys (expires_at);
+  `);
+  getDatabase().exec(`
+    CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created_at
+    ON idempotency_keys (created_at);
   `);
 }
 
@@ -152,3 +157,11 @@ export function idempotencyMiddleware(
   req.idempotencyReplay = false;
   next();
 }
+
+export const cleanupDriver: IdempotencyCleanupDriver = {
+  deleteOlderThan(threshold: number): number {
+    return getDatabase()
+      .prepare('DELETE FROM idempotency_keys WHERE created_at < ?')
+      .run(threshold).changes;
+  },
+};

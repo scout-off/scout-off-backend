@@ -19,3 +19,9 @@ export const dbPoolErrorTotal = new Counter({
   help: 'Total number of PostgreSQL pool error events',
   registers: [register],
 });
+
+export const idempotencyKeysDeletedTotal = new Counter({
+  name: 'idempotency_keys_deleted_total',
+  help: 'Total number of expired idempotency keys deleted by the cleanup job',
+  registers: [register],
+});
