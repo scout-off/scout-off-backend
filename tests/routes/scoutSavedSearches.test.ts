@@ -556,7 +556,7 @@ describe('saved searches feature flag (#494)', () => {
   });
 
   it('returns 404 when the saved_searches flag is disabled (POST)', async () => {
-    mockIsFeatureEnabled.mockReturnValue(false);
+    mockIsFeatureEnabled.mockReturnValueOnce(false);
 
     const res = await request(app)
       .post(`/api/scouts/${SCOUT_A}/saved-searches`)
@@ -569,7 +569,7 @@ describe('saved searches feature flag (#494)', () => {
   });
 
   it('returns 404 when the saved_searches flag is disabled (GET)', async () => {
-    mockIsFeatureEnabled.mockReturnValue(false);
+    mockIsFeatureEnabled.mockReturnValueOnce(false);
 
     const res = await request(app)
       .get(`/api/scouts/${SCOUT_A}/saved-searches`)
@@ -581,7 +581,7 @@ describe('saved searches feature flag (#494)', () => {
   });
 
   it('returns 404 when the saved_searches flag is disabled (DELETE)', async () => {
-    mockIsFeatureEnabled.mockReturnValue(false);
+    mockIsFeatureEnabled.mockReturnValueOnce(false);
 
     const res = await request(app)
       .delete(`/api/scouts/${SCOUT_A}/saved-searches/1`)

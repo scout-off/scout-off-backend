@@ -8,6 +8,10 @@ import { getPendingMilestones as getPendingMilestonesFromDb, getDb, removePendin
 import { invalidateMilestoneCache } from '../services/cache';
 import { recordAudit } from '../utils/audit';
 import { isValidMetadataUri, URI_VALIDATION_ERROR } from '../utils/uriValidator';
+
+// Re-exported so callers/tests can import the metadata_uri validator directly
+// from validatorController without reaching into utils/uriValidator.
+export { isValidMetadataUri };
 import { tierForApprovedMilestones } from '../services/tierPromotion';
 import config from '../config';
 

@@ -790,10 +790,12 @@ describe('full migration sequence from scratch (#885)', () => {
       .all() as { id: string }[];
     const appliedIds = new Set(appliedRows.map((r) => r.id));
 
-    // runMigrations skips _postgres files — match its filter exactly
+    // runMigrations() applies every *.sql file under db/ (including _postgres
+    // variants — it converts them cross-driver rather than skipping them), so
+    // match its filter exactly. Same filter as discoverMigrationFiles() above.
     const expectedFiles = fs
       .readdirSync(path.resolve(__dirname, '../../db'))
-      .filter((f) => f.endsWith('.sql') && !f.includes('_postgres'))
+      .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
       .sort();
 
     for (const file of expectedFiles) {

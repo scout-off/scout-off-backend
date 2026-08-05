@@ -144,7 +144,15 @@ describe('Migration 013 — composite indexes (#821)', () => {
   // ── 2. EXPLAIN QUERY PLAN — each index is used (SEARCH, not SCAN) ─────────
 
   describe('EXPLAIN QUERY PLAN confirms index usage', () => {
-    it('players filter query uses idx_players_region_position_tier', () => {
+    it('players filter query uses a composite index covering region/position/progress_level', () => {
+      // Migration 021 (player search ranking) later added idx_players_search
+      // on (region, position, progress_level, registered_at) — a strict
+      // superset of this migration's idx_players_region_position_tier
+      // (region, position, progress_level). Given identical leading columns,
+      // SQLite's planner prefers the broader covering index, so
+      // idx_players_region_position_tier is never chosen for this query even
+      // though it still exists. The acceptance criterion — an index-driven
+      // SEARCH rather than a full table SCAN — still holds via idx_players_search.
       const plan = explainPlan(
         db,
         `SELECT * FROM players WHERE region = ? AND position = ? AND progress_level >= ? AND is_active = 1
@@ -152,7 +160,7 @@ describe('Migration 013 — composite indexes (#821)', () => {
         ['EU', 'FWD', 2]
       );
       const planText = plan.join('\n');
-      expect(planText).toMatch(/SEARCH players USING INDEX idx_players_region_position_tier/i);
+      expect(planText).toMatch(/SEARCH players USING INDEX idx_players_search/i);
       expect(planText).not.toMatch(/SCAN TABLE players(?! USING)/i);
     });
 
@@ -169,14 +177,23 @@ describe('Migration 013 — composite indexes (#821)', () => {
       expect(planText).not.toMatch(/SCAN TABLE subscriptions(?! USING)/i);
     });
 
-    it('hasContactUnlock query uses idx_contact_unlocks_scout_player', () => {
+    it('hasContactUnlock query uses an index scan, not a full table scan', () => {
+      // contact_unlocks has had PRIMARY KEY (scout_wallet, player_id) since
+      // migration 005 — predating this migration's idx_contact_unlocks_scout_player.
+      // That composite primary key already creates an implicit unique
+      // autoindex over the exact same (scout_wallet, player_id) columns, so
+      // SQLite's planner always prefers the unique PK autoindex over the
+      // redundant named index. idx_contact_unlocks_scout_player is therefore
+      // never actually selected here — same PK-vs-named-index ambiguity as
+      // the idempotency_keys case below, so we only assert index usage
+      // (SEARCH, not SCAN) rather than pinning a specific index name.
       const plan = explainPlan(
         db,
         `SELECT 1 FROM contact_unlocks WHERE scout_wallet = ? AND player_id = ? LIMIT 1`,
         ['scout-0', 'player-0']
       );
       const planText = plan.join('\n');
-      expect(planText).toMatch(/SEARCH contact_unlocks USING INDEX idx_contact_unlocks_scout_player/i);
+      expect(planText).toMatch(/SEARCH contact_unlocks USING (COVERING )?INDEX/i);
       expect(planText).not.toMatch(/SCAN TABLE contact_unlocks(?! USING)/i);
     });
 

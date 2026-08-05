@@ -19,6 +19,17 @@ export interface RateLimitOptions {
   windowMs?: number; // time window in ms (default: config.rateLimit.windowMs)
   max?: number;      // max requests per window per IP (default: config.rateLimit.max)
   store?: RateLimitStore; // override default store (useful for tests)
+  /**
+   * Namespace distinguishing this limiter's counters from every other
+   * rateLimit() instance sharing the same default store. Without this,
+   * two differently-configured limiters (e.g. auth vs. milestone
+   * submission) would increment the exact same `ip:<ip>` counter and
+   * enforce whichever limiter's `max` is lowest against ALL of that IP's
+   * traffic, not just the traffic for that specific limiter. Defaults to
+   * 'default' for backward compatibility with any caller that doesn't need
+   * isolation from other limiters.
+   */
+  name?: string;
 }
 
 /**
@@ -29,6 +40,7 @@ export function rateLimit(options: RateLimitOptions = {}) {
   const windowMs = options.windowMs ?? config.rateLimit.windowMs;
   const max = options.max ?? config.rateLimit.max;
   const store = options.store ?? defaultStore;
+  const namespace = options.name ?? 'default';
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (!config.rateLimit.enabled) {
@@ -36,9 +48,9 @@ export function rateLimit(options: RateLimitOptions = {}) {
       return;
     }
     const ip = req.ip ?? 'unknown';
-    
+
     try {
-      const { count, resetAt } = await store.increment(`ip:${ip}`, windowMs);
+      const { count, resetAt } = await store.increment(`${namespace}:ip:${ip}`, windowMs);
 
       if (count > max) {
         const now = Date.now();

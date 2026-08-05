@@ -24,11 +24,11 @@ function injectCorrelationId(args: unknown[]): unknown[] {
 }
 
 export const logger = {
-  debug:    (...args: unknown[]) => shouldLog('debug')    && console.debug('[debug]',    ...args.map(sanitizeLogArg)),
-  info:     (...args: unknown[]) => shouldLog('info')     && console.info('[info]',     ...args.map(sanitizeLogArg)),
-  warn:     (...args: unknown[]) => shouldLog('warn')     && console.warn('[warn]',     ...args.map(sanitizeLogArg)),
-  error:    (...args: unknown[]) => shouldLog('error')    && console.error('[error]',   ...args.map(sanitizeLogArg)),
-  critical: (...args: unknown[]) => console.error('[critical]', ...args.map(sanitizeLogArg)),
+  debug:    (...args: unknown[]) => shouldLog('debug')    && console.debug('[debug]',    ...injectCorrelationId(args).map(sanitizeLogArg)),
+  info:     (...args: unknown[]) => shouldLog('info')     && console.info('[info]',     ...injectCorrelationId(args).map(sanitizeLogArg)),
+  warn:     (...args: unknown[]) => shouldLog('warn')     && console.warn('[warn]',     ...injectCorrelationId(args).map(sanitizeLogArg)),
+  error:    (...args: unknown[]) => shouldLog('error')    && console.error('[error]',   ...injectCorrelationId(args).map(sanitizeLogArg)),
+  critical: (...args: unknown[]) => console.error('[critical]', ...injectCorrelationId(args).map(sanitizeLogArg)),
 };
 
 function sanitizeLogArg(arg: unknown): unknown {

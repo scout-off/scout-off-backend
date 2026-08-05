@@ -10,17 +10,38 @@
  *  - CSV and JSON input formats both work
  *  - Auth guards (401 / 403) are enforced
  */
+// import_validator registers/revokes validators through processBatch(), which
+// signs a real Soroban transaction via src/utils/signer.ts's getPlatformKeypair().
+// That module derives a Keypair from config.platformSecretKey ONCE, at
+// signer.ts's first import, and throws if it isn't a valid Stellar secret key
+// (strkey with a correct checksum).
+//
+// config.platformSecretKey is itself computed once, at src/config.ts's first
+// import — which already happens during tests/setup.ts's initDb() call
+// (setupFiles run before this file's own top-level code), using whatever
+// PLATFORM_SECRET_KEY was set at that point (unset, by default). So merely
+// assigning process.env.PLATFORM_SECRET_KEY here is too late: the module
+// registry already holds a config.ts instance with platformSecretKey frozen
+// to ''. jest.resetModules() + re-initialising src/db from scratch forces a
+// fresh config.ts (and everything built on it, including app/adminController
+// below) that picks up the real value.
+process.env.PLATFORM_SECRET_KEY = 'SDAT3WOW2WIVH5VRHJDRKXZ7I5IAOGFK7CDPT4GKJKW2LDQ3YMJ56QJQ';
+jest.resetModules();
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+require('../../src/db').initDb();
+
 import request from 'supertest';
 import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
 
 // This suite exercises the real indexer/DB layer end-to-end (including a
-// register -> revoke -> re-import round trip), but revoke_validator now
-// performs a real Soroban RPC call in production. Mock only that one
-// function (keeping everything else in the module real via
+// register -> revoke -> re-import round trip), but register_validator/
+// revoke_validator now perform a real Soroban RPC call in production. Mock
+// only those two functions (keeping everything else in the module real via
 // jest.requireActual) so this stays deterministic and offline — same
 // approach as tests/routes/admin.test.ts.
 jest.mock('../../src/services/stellar', () => ({
   ...jest.requireActual('../../src/services/stellar'),
+  registerValidatorOnChain: jest.fn().mockResolvedValue({ transactionId: 'e2e-import-register-txid' }),
   revokeValidatorOnChain: jest.fn().mockResolvedValue({ transactionId: 'e2e-import-revoke-txid' }),
 }));
 
@@ -110,52 +131,52 @@ describe('parseCsvBody()', () => {
 // ─── Unit tests: processBatch ─────────────────────────────────────────────────
 
 describe('processBatch()', () => {
-  it('registers a valid address', () => {
+  it('registers a valid address', async () => {
     const wallet = Keypair.random().publicKey();
-    const results = processBatch([{ wallet }], 'admin-wallet');
+    const results = await processBatch([{ wallet }], 'admin-wallet');
     expect(results).toHaveLength(1);
     expect(results[0].status).toBe('registered');
     expect(results[0].wallet).toBe(wallet);
   });
 
-  it('rejects an invalid address', () => {
-    const results = processBatch([{ wallet: 'NOTVALID' }], 'admin-wallet');
+  it('rejects an invalid address', async () => {
+    const results = await processBatch([{ wallet: 'NOTVALID' }], 'admin-wallet');
     expect(results[0].status).toBe('invalid');
     expect(results[0].reason).toMatch(/invalid Stellar address/i);
   });
 
-  it('marks intra-batch duplicates as duplicate', () => {
+  it('marks intra-batch duplicates as duplicate', async () => {
     const wallet = Keypair.random().publicKey();
-    const results = processBatch([{ wallet }, { wallet }], 'admin-wallet');
+    const results = await processBatch([{ wallet }, { wallet }], 'admin-wallet');
     expect(results[0].status).toBe('registered');
     expect(results[1].status).toBe('duplicate');
     expect(results[1].reason).toMatch(/duplicate within batch/i);
   });
 
-  it('marks already-registered validators as duplicate', () => {
+  it('marks already-registered validators as duplicate', async () => {
     const wallet = Keypair.random().publicKey();
     // First registration
-    processBatch([{ wallet }], 'admin-wallet');
+    await processBatch([{ wallet }], 'admin-wallet');
     // Second batch with same wallet
-    const results = processBatch([{ wallet }], 'admin-wallet');
+    const results = await processBatch([{ wallet }], 'admin-wallet');
     expect(results[0].status).toBe('duplicate');
     expect(results[0].reason).toMatch(/already registered/i);
   });
 
-  it('includes label and region in results', () => {
+  it('includes label and region in results', async () => {
     const wallet = Keypair.random().publicKey();
-    const results = processBatch([{ wallet, label: 'Ali', region: 'Africa' }], 'admin-wallet');
+    const results = await processBatch([{ wallet, label: 'Ali', region: 'Africa' }], 'admin-wallet');
     expect(results[0].label).toBe('Ali');
     expect(results[0].region).toBe('Africa');
   });
 
-  it('processes a mixed batch returning correct statuses for each entry', () => {
+  it('processes a mixed batch returning correct statuses for each entry', async () => {
     const validNew = Keypair.random().publicKey();
     const alreadyRegistered = Keypair.random().publicKey();
     // Pre-register one
-    processBatch([{ wallet: alreadyRegistered }], 'admin-wallet');
+    await processBatch([{ wallet: alreadyRegistered }], 'admin-wallet');
 
-    const results = processBatch(
+    const results = await processBatch(
       [
         { wallet: validNew },
         { wallet: 'BAD_WALLET' },

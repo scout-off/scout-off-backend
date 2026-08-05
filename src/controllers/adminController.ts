@@ -4,9 +4,10 @@ import jwt from 'jsonwebtoken';
 import { queryEvents, countEventsFiltered, getEventsPage, fetchLastIndexedLedger, persistLastIndexedLedger, getValidatorStats, getAuditLogs, getAuditLogsCount, AuditLogRow, getNewPlayersTimeSeries, getMilestonesApprovedTimeSeries, getContactUnlocksTimeSeries, getSubscriptionsStartedTimeSeries, getNewPlayersByRegionTimeSeries, TimeSeriesPoint, RegionBreakdownPoint } from '../db';
 import { getAllValidators, insertValidator, revokeValidatorRow, getValidatorByWallet } from '../services/indexer';
 import { isValidStellarAddress } from '../utils/stellarAddress';
+import { STELLAR_ADDRESS_RE } from '../utils/validators';
 import { logAuditEvent } from '../services/audit';
 import { verifyAuditChain } from '../utils/auditVerify';
-import { withdrawFees as stellarWithdrawFees, FeeWithdrawalError, FeeWithdrawalResult, getFeeBalance, pauseContractOnChain, unpauseContractOnChain, registerValidatorOnChain, ValidatorActionError } from '../services/stellar';
+import { withdrawFees as stellarWithdrawFees, FeeWithdrawalError, FeeWithdrawalResult, getFeeBalance, pauseContractOnChain, unpauseContractOnChain, registerValidatorOnChain, revokeValidatorOnChain, ValidatorActionError } from '../services/stellar';
 import { revokeToken, isTokenRevoked } from '../services/tokenBlocklist';
 import { cacheGet, cacheSet } from '../services/cache';
 import config from '../config';
@@ -57,6 +58,17 @@ export interface AuditEntryResponse {
   metadata: Record<string, unknown>;
   created_at: string;
   hash: string;
+}
+
+/**
+ * Send a consistent 400 response for a failed Zod parse: a generic top-level
+ * `error: 'Validation Error'` label plus a `details` array of per-field
+ * messages (mirrors the shape already produced by validateBody/validateQuery
+ * in src/middleware/validate.ts for routes that use that middleware).
+ */
+function sendValidationError(res: Response, error: z.ZodError): void {
+  const details = error.errors.map((e) => ({ field: e.path.join('.'), message: e.message }));
+  res.status(400).json({ success: false, error: 'Validation Error', details, code: ErrorCode.VALIDATION_ERROR });
 }
 
 /**
@@ -193,13 +205,16 @@ const auditQuerySchema = z.object({
 /** GET /api/admin/audit (legacy #345 endpoint — backward-compatible) */
 export async function getAuditLog(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { startDate, endDate, action, limit, offset } = req.query as {
-      startDate?: string;
-      endDate?: string;
-      action?: string;
-      limit: number;
-      offset: number;
-    };
+    const parsed = auditQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: parsed.error.errors[0]?.message ?? 'Invalid query parameters',
+        code: ErrorCode.VALIDATION_ERROR,
+      });
+      return;
+    }
+    const { startDate, endDate, action, limit, offset } = parsed.data;
     const rows = getAuditLogs({ action, startDate, endDate, limit, offset });
     const total = getAuditLogsCount({ action, startDate, endDate });
     res.json({
@@ -365,6 +380,9 @@ const eventsQuerySchema = z
     // ── modern pagination (page / pageSize) ────────────────────────────────
     page: z.coerce.number().int().min(1).optional(),
     pageSize: z.coerce.number().int().min(1).max(200).optional(),
+    // ── ledger range ────────────────────────────────────────────────────────
+    fromLedger: z.coerce.number().int().min(0).optional(),
+    toLedger: z.coerce.number().int().min(0).optional(),
   })
   .refine(
     (d) => {
@@ -374,6 +392,15 @@ const eventsQuerySchema = z
       return true;
     },
     { message: 'startDate must not be after endDate' },
+  )
+  .refine(
+    (d) => {
+      if (d.fromLedger !== undefined && d.toLedger !== undefined) {
+        return d.fromLedger <= d.toLedger;
+      }
+      return true;
+    },
+    { message: 'fromLedger must not be greater than toLedger' },
   );
 
 /** GET /api/admin/events */
@@ -381,11 +408,7 @@ export async function getAllEvents(req: Request, res: Response, next: NextFuncti
   try {
     const parsed = eventsQuerySchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({
-        success: false,
-        error: parsed.error.errors[0]?.message ?? 'Invalid query parameters',
-        code: ErrorCode.VALIDATION_ERROR,
-      });
+      sendValidationError(res, parsed.error);
       return;
     }
 
@@ -435,9 +458,34 @@ export async function getAllEvents(req: Request, res: Response, next: NextFuncti
   }
 }
 
+const feesQuerySchema = z
+  .object({
+    startDate: z
+      .string()
+      .refine((v) => !isNaN(Date.parse(v)), { message: 'startDate must be a valid ISO 8601 date' })
+      .optional(),
+    endDate: z
+      .string()
+      .refine((v) => !isNaN(Date.parse(v)), { message: 'endDate must be a valid ISO 8601 date' })
+      .optional(),
+  })
+  .refine(
+    (d) => {
+      if (d.startDate && d.endDate) return new Date(d.startDate) <= new Date(d.endDate);
+      return true;
+    },
+    { message: 'startDate must not be after endDate' },
+  );
+
 /** GET /api/admin/fees — returns fees_withdrawn event payloads */
 export async function getFeeSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const parsed = feesQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      sendValidationError(res, parsed.error);
+      return;
+    }
+
     const adminWallet = req.account ?? 'unknown';
     logAuditEvent({
       action: 'fee_history_query',
@@ -475,7 +523,12 @@ export async function registerValidator(req: Request, res: Response, next: NextF
 
   if (!validatorWallet || !isValidStellarAddress(validatorWallet)) {
     logger.warn(`[admin] register_validator rejected — invalid address | admin=${adminWallet} target=${validatorWallet}`);
-    res.status(400).json({ success: false, error: 'validatorWallet must be a valid Stellar address', code: ErrorCode.VALIDATION_ERROR });
+    res.status(400).json({
+      success: false,
+      error: 'Validation Error',
+      details: [{ field: 'validatorWallet', message: 'Invalid Stellar address' }],
+      code: ErrorCode.VALIDATION_ERROR,
+    });
     return;
   }
 
@@ -875,7 +928,7 @@ export async function introspectToken(req: Request, res: Response, next: NextFun
 export const withdrawFeesSchema = z.object({
   recipient: z
     .string()
-    .refine(isValidStellarAddress, 'recipient must be a valid Stellar public key'),
+    .refine((v) => STELLAR_ADDRESS_RE.test(v), 'Invalid Stellar address'),
 });
 
 /**
@@ -908,19 +961,24 @@ export async function withdrawFeesController(req: Request, res: Response, next: 
     res.status(403).json({ success: false, error: 'Insufficient permissions' });
     return;
   }
+  // Validate the request body up front — this must happen before the
+  // threshold branch below, since the single-admin path used to skip
+  // validation entirely and hand an unvalidated `recipient` straight to
+  // stellarWithdrawFees().
+  const parsed = withdrawFeesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logAuditEvent({
+      action: 'fee_withdrawal_attempt',
+      adminWallet,
+      queryParams: { error: 'validation_failed', reason: parsed.error.errors[0]?.message },
+      timestamp: new Date().toISOString(),
+    });
+    sendValidationError(res, parsed.error);
+    return;
+  }
+
   // Check threshold for high-value operations
   if (config.adminThreshold > 1) {
-    const parsed = withdrawFeesSchema.safeParse(req.body);
-    if (!parsed.success) {
-      logAuditEvent({
-        action: 'fee_withdrawal_attempt',
-        adminWallet,
-        queryParams: { error: 'validation_failed', reason: parsed.error.errors[0]?.message },
-        timestamp: new Date().toISOString(),
-      });
-      res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid request body', code: ErrorCode.VALIDATION_ERROR });
-      return;
-    }
     const proposal = proposeAction('withdraw_fees', { recipient: parsed.data.recipient }, adminWallet);
     res.status(202).json({
       success: true,
@@ -930,7 +988,7 @@ export async function withdrawFeesController(req: Request, res: Response, next: 
     return;
   }
 
-  const { recipient } = req.body as { recipient: string };
+  const { recipient } = parsed.data;
 
   // Concurrency guard: reject duplicate simultaneous withdrawals.
   if (withdrawalInProgress) {
@@ -1061,7 +1119,7 @@ export async function reindex(req: Request, res: Response, next: NextFunction): 
   try {
     const parsed = reindexSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'fromLedger must be a non-negative integer', code: ErrorCode.VALIDATION_ERROR });
+      sendValidationError(res, parsed.error);
       return;
     }
     const { fromLedger } = parsed.data;

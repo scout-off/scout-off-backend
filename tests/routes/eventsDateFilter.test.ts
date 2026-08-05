@@ -67,6 +67,18 @@ jest.mock('../../src/db', () => ({
   getAuditLogs: jest.fn().mockReturnValue([]),
   getAuditLogsCount: jest.fn().mockReturnValue(0),
   getAllAuditLogRows: jest.fn().mockReturnValue([]),
+  // tokenBlocklist.ts is not mocked here, so requireRole()'s revocation check
+  // hits the real checkDb() path via getDriver(); without this, getDriver()
+  // is undefined and checkDb()'s fail-safe treats every token as revoked.
+  getDriver: jest.fn(() => ({
+    run: () => ({ changes: 0, lastId: 0 }),
+    get: () => undefined,
+    all: () => [],
+    value: () => undefined,
+    exec: () => {},
+    transaction: (fn: () => unknown) => fn(),
+    close: async () => {},
+  })),
 }));
 
 jest.mock('../../src/services/indexer', () => ({

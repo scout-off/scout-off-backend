@@ -34,11 +34,12 @@ describe('listDeadLetters', () => {
   it('returns a paginated list including a freshly inserted dead letter', async () => {
     const url = uniqueUrl('list');
     const sub = createWebhookSubscription(url, 'list-secret');
+    const rawPayload = JSON.stringify({ eventType: 'trial_offer_logged', payload: { a: 1 } });
     insertWebhookDeadLetter({
       subscriptionId: sub.id,
       url,
       eventType: 'trial_offer_logged',
-      payload: JSON.stringify({ eventType: 'trial_offer_logged', payload: { a: 1 } }),
+      payload: rawPayload,
       failureReason: 'Webhook dispatch failed with status 500',
       attempts: 3,
     });
@@ -64,8 +65,11 @@ describe('listDeadLetters', () => {
     expect(match.subscriptionId).toBe(sub.id);
     expect(match.eventType).toBe('trial_offer_logged');
     expect(match.status).toBe('pending');
-    expect(match.attempts).toBe(3);
-    expect(match.payload).toEqual({ eventType: 'trial_offer_logged', payload: { a: 1 } });
+    // The controller maps the DB row's `attempts` column to the API field
+    // `retryCount` (see listDeadLetters()'s doc comment), and exposes only a
+    // 200-char `payloadPreview` slice, not the full parsed payload.
+    expect(match.retryCount).toBe(3);
+    expect(match.payloadPreview).toBe(rawPayload.slice(0, 200));
   });
 
   it('returns 400 for an invalid pageSize', async () => {
@@ -149,7 +153,9 @@ describe('replayDeadLetter', () => {
       const body = res.json.mock.calls[0][0] as any;
       expect(body.success).toBe(false);
       expect(body.data.status).toBe('pending');
-      expect(body.data.attempts).toBe(6); // 3 original + 3 replay attempts
+      // The response body's data.retryCount mirrors the DB's `attempts` column
+      // (see requeueDeadLetter()'s error branch, which sends `retryCount: attempts`).
+      expect(body.data.retryCount).toBe(6); // 3 original + 3 replay attempts
 
       const stored = getWebhookDeadLetterById(deadLetter.id);
       expect(stored!.status).toBe('pending');

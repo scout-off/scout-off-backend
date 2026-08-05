@@ -83,3 +83,23 @@ export function isValidMetadataUri(uri: string): boolean {
 export function isValidEvidenceUri(uri: string): boolean {
   return isValidMetadataUri(uri);
 }
+
+/**
+ * Validator for fields that (unlike metadata_uri/evidence_uri) still accept
+ * the ipfs:// scheme by convention — e.g. a scout's free-form trial-offer
+ * detailsUri. Accepts `ipfs://` or `https://` URIs with meaningful content
+ * after the scheme; does not require the ipfs:// content to be a well-formed
+ * CID (this predates the stricter bare-CID policy introduced for
+ * metadata_uri/evidence_uri — see isValidMetadataUri above).
+ */
+const IPFS_OR_HTTPS_SCHEMES = ['ipfs://', 'https://'];
+const IPFS_OR_HTTPS_MIN_CONTENT_LENGTH = 3;
+
+export function isValidIpfsOrHttpsUri(uri: string): boolean {
+  if (!uri || typeof uri !== 'string') return false;
+
+  const scheme = IPFS_OR_HTTPS_SCHEMES.find((s) => uri.startsWith(s));
+  if (!scheme) return false;
+
+  return uri.slice(scheme.length).trim().length >= IPFS_OR_HTTPS_MIN_CONTENT_LENGTH;
+}

@@ -13,6 +13,11 @@ const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+// In-memory stand-in for the `revoked_tokens` table so tokenBlocklist.ts's
+// real (unmocked) getDriver()-based checkDb/writeToDb round-trips work —
+// this exercises the real revocation logic used by refresh-token rotation.
+const revokedTokensTable = new Map<string, number>(); // jti -> expires_at (unix seconds)
+
 jest.mock('../../src/db', () => ({
   queryEvents: jest.fn().mockReturnValue([]),
   queryPlayers: jest.fn().mockReturnValue([]),
@@ -28,6 +33,33 @@ jest.mock('../../src/db', () => ({
   getAuditLogs: jest.fn().mockReturnValue([]),
   getAuditLogsCount: jest.fn().mockReturnValue(0),
   getAllAuditLogRows: jest.fn().mockReturnValue([]),
+  getDriver: jest.fn(() => ({
+    run: (sql: string, params: unknown[] = []) => {
+      if (/INSERT INTO revoked_tokens/i.test(sql)) {
+        const [jti, , expiresAt] = params as [string, number, number];
+        revokedTokensTable.set(jti, expiresAt);
+      } else if (/DELETE FROM revoked_tokens/i.test(sql)) {
+        const [now] = params as [number];
+        for (const [jti, exp] of revokedTokensTable) {
+          if (exp <= now) revokedTokensTable.delete(jti);
+        }
+      }
+      return { changes: 1, lastId: 0 };
+    },
+    get: (sql: string, params: unknown[] = []) => {
+      if (/SELECT jti FROM revoked_tokens/i.test(sql)) {
+        const [jti, now] = params as [string, number];
+        const exp = revokedTokensTable.get(jti);
+        if (exp !== undefined && exp > now) return { jti };
+      }
+      return undefined;
+    },
+    all: () => [],
+    value: () => undefined,
+    exec: () => {},
+    transaction: (fn: () => unknown) => fn(),
+    close: async () => {},
+  })),
 }));
 
 jest.mock('../../src/services/indexer', () => ({

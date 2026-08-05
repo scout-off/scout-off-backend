@@ -32,6 +32,13 @@ export function validateMinTier(raw: unknown): TierValidationResult {
     };
   }
 
+  if (typeof normalizedRaw === 'string' && /^-?\d+\.\d+$/.test(normalizedRaw)) {
+    return {
+      valid: false,
+      error: 'minTier must be an integer between 0 and 3',
+    };
+  }
+
   if (typeof normalizedRaw === 'string' && !/^-?\d+$/.test(normalizedRaw)) {
     return {
       valid: false,

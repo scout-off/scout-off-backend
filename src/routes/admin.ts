@@ -14,9 +14,14 @@ import { ipAllowlistMiddleware } from '../middleware/ipAllowlist';
 import { methodNotAllowed } from '../middleware/methodNotAllowed';
 import { rateLimit } from '../middleware/rateLimit';
 import { createTimeout } from '../middleware/timeout';
+import config from '../config';
 
-/** Stricter rate limit for bulk import — 5 requests per minute per IP. */
-const importRateLimit = rateLimit({ windowMs: 60_000, max: 5 });
+/** Stricter rate limit for bulk import — 5 requests per minute per IP (relaxed in tests). */
+const importRateLimit = rateLimit({
+  name: 'admin-import',
+  windowMs: config.playerImportRateLimit.windowMs,
+  max: config.playerImportRateLimit.max,
+});
 
 const router = Router();
 

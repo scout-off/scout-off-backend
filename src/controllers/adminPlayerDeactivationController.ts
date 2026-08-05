@@ -36,7 +36,7 @@ import { sanitizeInput } from '../utils/sanitizer';
 
 const deactivateBodySchema = z.object({
   reason: z
-    .string()
+    .string({ required_error: 'reason is required' })
     .min(1, 'reason is required')
     .max(500, 'reason must be 500 characters or fewer')
     .transform((s) => s.trim()),

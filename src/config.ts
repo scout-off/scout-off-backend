@@ -220,9 +220,23 @@ const config = {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? '60000', 10),
     max: parseInt(process.env.RATE_LIMIT_MAX ?? (process.env.NODE_ENV === 'test' ? '1000' : '60'), 10),
   },
+  ipReputation: {
+    // Disabled by default in tests: supertest sends every request from the
+    // same loopback IP, so the many negative-path (401/403) assertions a
+    // single test file exercises would otherwise accumulate enough
+    // AUTH_FAILURE/ERROR_4XX points within one process to trip the
+    // 'blocked' tier and 429 unrelated, later requests in the same file.
+    enabled: process.env.IP_REPUTATION_ENABLED !== undefined
+      ? process.env.IP_REPUTATION_ENABLED !== 'false'
+      : process.env.NODE_ENV !== 'test',
+  },
   authRateLimit: {
     windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS ?? '60000', 10),
     max: parseInt(process.env.AUTH_RATE_LIMIT_MAX ?? (process.env.NODE_ENV === 'test' ? '1000' : '5'), 10),
+  },
+  playerImportRateLimit: {
+    windowMs: parseInt(process.env.PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS ?? '60000', 10),
+    max: parseInt(process.env.PLAYER_IMPORT_RATE_LIMIT_MAX ?? (process.env.NODE_ENV === 'test' ? '1000' : '5'), 10),
   },
   bodyLimit: {
     // Maximum JSON payload size (default: 1MB)

@@ -15,6 +15,16 @@ jest.mock('../../src/db', () => ({
   removePendingMilestone: jest.fn(),
   incrementValidatorApproved: jest.fn(),
   updatePlayerProgress: jest.fn(),
+  insertAuditLog: jest.fn().mockReturnValue({
+    id: 1,
+    action: 'milestone_submitted',
+    admin_wallet: '',
+    query_params: '{}',
+    created_at: new Date().toISOString(),
+    prev_hash: '0'.repeat(64),
+    hash: 'mock-hash-1',
+    event_source: 'app_event',
+  }),
 }));
 
 jest.mock('../../src/services/indexer', () => ({
@@ -59,7 +69,7 @@ describe('POST /api/validators/milestone', () => {
   const validPayload = {
     playerId: 'player-123',
     milestoneType: 'performance',
-    evidenceUri: 'ipfs://QmEvidenceCid',
+    evidenceUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
   };
 
   it('returns 401 when no token is provided', async () => {

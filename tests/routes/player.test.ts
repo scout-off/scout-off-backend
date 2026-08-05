@@ -8,13 +8,23 @@ jest.mock('../../src/db', () => ({
   queryEvents: jest.fn().mockReturnValue([]),
   queryPlayers: jest.fn().mockReturnValue([]),
   countPlayers: jest.fn().mockReturnValue(0),
+  searchPlayers: jest.fn().mockReturnValue({ data: [], nextCursor: null }),
   getPlayerById: jest.fn().mockReturnValue(null),
   insertPlayerProfileHistory: jest.fn(),
   getPlayerProfileHistory: jest.fn().mockReturnValue([]),
   getLatestSubscription: jest.fn().mockReturnValue(null),
   insertSubscription: jest.fn().mockReturnValue(1),
   insertOrUpdatePlayer: jest.fn(),
-  insertAuditLog: jest.fn(),
+  insertAuditLog: jest.fn().mockReturnValue({
+    id: 1,
+    action: 'player_search',
+    admin_wallet: '',
+    query_params: '{}',
+    created_at: new Date().toISOString(),
+    prev_hash: '0'.repeat(64),
+    hash: 'mock-hash-1',
+    event_source: 'app_event',
+  }),
   deactivatePlayer: jest.fn(),
   reactivatePlayer: jest.fn(),
   countTrialOffersByPlayer: jest.fn().mockReturnValue(0),
@@ -249,8 +259,8 @@ describe('GET /api/players/:playerId — progress_tier_name field', () => {
 
 describe('GET /api/players — progress_tier_name field in list', () => {
   it('includes progress_tier_name for each player in the list response', async () => {
-    const { queryPlayers, countPlayers } = require('../../src/db');
-    (queryPlayers as jest.Mock).mockReturnValue([
+    const { searchPlayers, countPlayers } = require('../../src/db');
+    (searchPlayers as jest.Mock).mockReturnValue({ data: [
       {
         player_id: 'player-001',
         wallet: PLAYER_WALLET,
@@ -271,7 +281,7 @@ describe('GET /api/players — progress_tier_name field in list', () => {
         created_at: 1700000000,
         is_active: 1,
       },
-    ]);
+    ], nextCursor: null });
     (countPlayers as jest.Mock).mockReturnValue(2);
 
     const res = await request(app).get('/api/players');
@@ -300,7 +310,9 @@ describe('POST /api/players/register — immediate DB write (#282)', () => {
     expect(insertOrUpdatePlayer).toHaveBeenCalledTimes(1);
     const call = (insertOrUpdatePlayer as jest.Mock).mock.calls[0][0];
     expect(call.wallet).toBe(PLAYER_WALLET);
-    expect(call.position).toBe('striker');
+    // Registration normalizes position aliases to their canonical form
+    // (#816) — 'striker' is an alias for 'forward'.
+    expect(call.position).toBe('forward');
     expect(call.region).toBe('europe');
     expect(call.metadata_uri).toBeDefined();
     expect(call.player_id).toBeDefined();
@@ -357,8 +369,8 @@ describe('GET /api/players/:playerId — offerCount field', () => {
 
 describe('GET /api/players — ?fields= query parameter', () => {
   beforeEach(() => {
-    const { queryPlayers, countPlayers } = require('../../src/db');
-    (queryPlayers as jest.Mock).mockReturnValue([
+    const { searchPlayers, countPlayers } = require('../../src/db');
+    (searchPlayers as jest.Mock).mockReturnValue({ data: [
       {
         player_id: 'player-fields-001',
         wallet: PLAYER_WALLET,
@@ -369,7 +381,7 @@ describe('GET /api/players — ?fields= query parameter', () => {
         created_at: 1700000000,
         is_active: 1,
       },
-    ]);
+    ], nextCursor: null });
     (countPlayers as jest.Mock).mockReturnValue(1);
   });
 

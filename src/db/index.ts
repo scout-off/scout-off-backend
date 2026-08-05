@@ -669,6 +669,13 @@ export function getPlayerById(playerId: string): PlayerRow | null {
   );
 }
 
+export function getPlayerByWallet(wallet: string): PlayerRow | null {
+  const sql = 'SELECT * FROM players WHERE wallet = ?';
+  return timedQuery(sql, () =>
+    (getDb().prepare(sql).get(wallet) as PlayerRow | undefined) ?? null
+  );
+}
+
 export function deactivatePlayer(playerId: string): void {
   const sql = 'UPDATE players SET is_active = 0 WHERE player_id = ?';
   timedQuery(sql, () => getDb().prepare(sql).run(playerId));

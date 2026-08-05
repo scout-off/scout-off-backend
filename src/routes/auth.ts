@@ -8,6 +8,7 @@ import config from '../config';
 const router = Router();
 
 const authRateLimit = rateLimit({
+  name: 'auth',
   windowMs: config.authRateLimit.windowMs,
   max: config.authRateLimit.max,
 });

@@ -197,15 +197,16 @@ export async function getPlayer(
       return;
     }
     res.set("ETag", etag);
-    res.json({ success: true, data });
+    // offerCount is computed fresh on every request and merged in below, but
+    // deliberately excluded from the ETag digest above so submitting a new
+    // offer doesn't bust the cache / invalidate conditional GETs for the
+    // rest of the (slower-changing) profile fields.
+    const offerCount = countTrialOffersByPlayer(String(data.player_id));
+    res.json({ success: true, data: { ...data, offerCount } });
 
     // Record profile view (non-blocking, after response is sent)
     // This is synchronous but happens after the response is queued
     recordProfileViewForRequest(req);
-    // offerCount is appended after the ETag digest so it doesn't bust the cache
-    // every time an offer is submitted, while still being fresh on each request.
-    const offerCount = countTrialOffersByPlayer(String(data.player_id));
-    res.json({ success: true, data: { ...data, offerCount } });
   } catch (err) {
     next(err);
   }

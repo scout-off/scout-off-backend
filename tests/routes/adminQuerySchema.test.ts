@@ -1,23 +1,32 @@
 import request from 'supertest';
-import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
+import jwt from 'jsonwebtoken';
+import { Keypair } from '@stellar/stellar-sdk';
+
+// register_validator performs a real Soroban RPC round-trip in production —
+// mock just this one function (matching admin.test.ts's approach) so the
+// "valid wallet" success-path assertion below doesn't depend on a live RPC
+// endpoint being reachable from the test environment.
+jest.mock('../../src/services/stellar', () => ({
+  ...jest.requireActual('../../src/services/stellar'),
+  registerValidatorOnChain: jest.fn().mockResolvedValue({ transactionId: 'e2e-register-txid' }),
+}));
+
 import app from '../../src/app';
 
-async function getAuthToken(role: string): Promise<string> {
-  const kp = Keypair.random();
-  const challengeRes = await request(app).get(`/auth/challenge?account=${kp.publicKey()}`);
-  const tx = new Transaction(challengeRes.body.challenge, Networks.TESTNET);
-  tx.sign(kp);
-  const tokenRes = await request(app)
-    .post('/auth/token')
-    .send({ transaction: tx.toXDR(), role });
-  return tokenRes.body.token;
-}
+const SECRET = process.env.JWT_SECRET ?? 'test-secret';
+// Same wallet tests/setup.ts wires up as ADMIN_WALLET — several endpoints
+// exercised below (validators/register, fees withdrawal) gate on
+// config.adminWallets.includes(req.account) in addition to role:'admin', so
+// the token must be issued for that exact wallet rather than a freshly
+// generated SEP-10 keypair (which can self-declare role:'admin' but will
+// never satisfy the wallet-identity check).
+const ADMIN_WALLET = process.env.ADMIN_WALLET ?? 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
 
 describe('Admin query schema date filtering (#30)', () => {
   let token: string;
 
-  beforeAll(async () => {
-    token = await getAuthToken('admin');
+  beforeAll(() => {
+    token = jwt.sign({ sub: ADMIN_WALLET, role: 'admin' }, SECRET, { expiresIn: '1h' });
   });
 
   describe('GET /api/admin/events', () => {
@@ -147,9 +156,12 @@ describe('Admin query schema date filtering (#30)', () => {
     });
 
     it('returns 400 for invalid pageSize (exceeds max)', async () => {
+      // Max pageSize is 200 (see adminPagination.test.ts's "exceeding max
+      // (200)" case, which pins this boundary against the same endpoint) —
+      // 201 is the smallest value that exceeds it.
       const res = await request(app)
         .get('/api/admin/events')
-        .query({ pageSize: 101 })
+        .query({ pageSize: 201 })
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
@@ -209,7 +221,7 @@ describe('Admin query schema date filtering (#30)', () => {
     });
 
     it('returns 202 for valid wallet address', async () => {
-      const validWallet = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+      const validWallet = Keypair.random().publicKey();
       const res = await request(app)
         .post('/api/admin/validators/register')
         .set('Authorization', `Bearer ${token}`)

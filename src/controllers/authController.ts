@@ -156,7 +156,7 @@ export function postToken(req: Request, res: Response, next: NextFunction): void
  * Accepts a valid refresh token, verifies it, checks it is not revoked,
  * issues a new access + refresh token pair, and revokes the old refresh jti.
  */
-export function postRefresh(req: Request, res: Response, next: NextFunction): void {
+export async function postRefresh(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const parsed = refreshSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -196,7 +196,7 @@ export function postRefresh(req: Request, res: Response, next: NextFunction): vo
     }
 
     // Check revocation blocklist.
-    if (isTokenRevoked(jti)) {
+    if (await isTokenRevoked(jti)) {
       logger.warn('[auth] refresh_token_revoked', { jti });
       res.status(401).json({ success: false, error: 'Refresh token has been revoked' });
       return;

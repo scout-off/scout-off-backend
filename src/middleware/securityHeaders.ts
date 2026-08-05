@@ -8,6 +8,11 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
   // accidentally pinning localhost or CI environments.
   if (isProduction() || isStaging()) {
     res.setHeader('Strict-Transport-Security', h.hsts);
+  } else {
+    // helmet() (mounted earlier in app.ts) sets this header by default
+    // regardless of environment — explicitly strip it here so it's absent
+    // outside production/staging regardless of middleware ordering.
+    res.removeHeader('Strict-Transport-Security');
   }
 
   res.setHeader('Content-Security-Policy', h.csp);

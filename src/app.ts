@@ -27,6 +27,7 @@ import { getVersionInfo } from './version';
 import { apiVersion } from './middleware/apiVersion';
 import { versionRouting } from './middleware/versionRouting';
 import docsRouter from './routes/docs';
+import eventsRoutes from './routes/events';
 import { logger } from './utils/logger';
 import {
   playerRoutes as playerRoutesV2,
@@ -166,7 +167,11 @@ app.use(compression({
 app.use((req, res, next) => {
   const originalEnd = res.end;
   res.end = function (chunk?: any, encoding?: any) {
-    if (res.getHeader('content-encoding')) {
+    // Streaming responses (e.g. CSV export) call res.write() before
+    // res.end(), which flushes headers immediately — by the time this
+    // wrapped end() runs, headers may already be sent, and setHeader()
+    // throws ERR_HTTP_HEADERS_SENT. Only set Vary while it's still safe to.
+    if (!res.headersSent && res.getHeader('content-encoding')) {
       res.setHeader('Vary', 'Accept-Encoding');
       if (config.logLevel === 'debug') {
         logger.debug(`[compression] ${req.method} ${req.path} - encoding: ${res.getHeader('content-encoding')}`);
@@ -322,6 +327,7 @@ for (const prefix of prefixes) {
   app.use(`${prefix}/scouts`, scoutRoutes);
   app.use(`${prefix}/validators`, validatorRoutes);
   app.use(`${prefix}/admin`, adminRoutes);
+  app.use(`${prefix}/events`, eventsRoutes);
 }
 
 // /api/v2 routes — currently identical to v1 handlers; new v2-only routes added here

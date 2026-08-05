@@ -53,8 +53,13 @@ describe('metricsMiddleware', () => {
   });
 
   it('tracks different routes separately', () => {
+    // req.route.path must be set to simulate an Express-matched route —
+    // otherwise both requests collapse into the shared UNMATCHED_ROUTE_LABEL
+    // bucket by design (see the cardinality guard below).
     const a = makeReqRes('/api/players');
+    (a.req as Record<string, unknown>).route = { path: '/api/players' };
     const b = makeReqRes('/api/scouts');
+    (b.req as Record<string, unknown>).route = { path: '/api/scouts' };
     metricsMiddleware(a.req, a.res, a.next);
     metricsMiddleware(b.req, b.res, b.next);
     a.emit('finish');

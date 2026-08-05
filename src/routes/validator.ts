@@ -15,6 +15,7 @@ import { methodNotAllowed } from '../middleware/methodNotAllowed';
 const router = Router();
 
 const milestoneRateLimit = rateLimit({
+  name: 'validator-milestone',
   windowMs: Number(process.env.MILESTONE_RATE_WINDOW_MS) || 60_000,
   max: Number(process.env.MILESTONE_RATE_MAX) || 10,
 });

@@ -10,6 +10,7 @@ jest.mock('../../src/db', () => ({
   insertOrUpdatePlayer: jest.fn(),
   insertPlayerProfileHistory: jest.fn(),
   getPlayerProfileHistory: jest.fn().mockReturnValue([]),
+  countTrialOffersByPlayer: jest.fn().mockReturnValue(0),
 }));
 
 jest.mock('../../src/services/ipfs', () => ({

@@ -35,7 +35,11 @@ const reindexBodySchema = z
     path: ['fromLedger'],
   })
   .refine((d) => d.toLedger - d.fromLedger <= MAX_REINDEX_RANGE, {
-    message: `Ledger range must not exceed ${MAX_REINDEX_RANGE} ledgers`,
+    // Formatted with a space thousands separator ("10 000") to match the
+    // classification check below, which looks for that exact substring to
+    // tell a range-too-large error (→ 422) apart from other validation
+    // failures (→ 400).
+    message: 'Ledger range must not exceed 10 000 ledgers',
     path: ['toLedger'],
   });
 

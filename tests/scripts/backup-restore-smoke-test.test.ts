@@ -140,9 +140,18 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
       LOG_LEVEL: 'error',
       STELLAR_HEALTH_CHECK_ENABLED: 'false',
       IPFS_ENABLED: 'false',
-      APP_START_CMD: 'node dist/index.js',
+      // `node dist/index.js` (== `npm start`) requires a prior `npm run
+      // build`, which this test suite must not depend on: dist/ isn't
+      // guaranteed to exist when tests run, and a full `tsc` build is a
+      // separate, orthogonal CI step. Use the same transpile-only ts-node
+      // strategy the project's own `npm run dev` script uses (minus its
+      // `predev` hook) so the real app starts without needing a build.
+      APP_START_CMD: 'node_modules/.bin/ts-node --transpile-only src/index.ts',
       APP_PORT: '3456',
-      APP_STARTUP_TIMEOUT: '10',
+      // A cold ts-node transpile of the whole src/ tree can take ~10-15s
+      // the first time (no compiled-output cache), well past the 10s this
+      // test previously assumed for a pre-built `node dist/index.js`.
+      APP_STARTUP_TIMEOUT: '30',
     });
 
     expect(output).toContain('Step 1: Seeding test database');
@@ -175,9 +184,11 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
       LOG_LEVEL: 'error',
       STELLAR_HEALTH_CHECK_ENABLED: 'false',
       IPFS_ENABLED: 'false',
-      APP_START_CMD: 'node dist/index.js',
+      // See the identical comment on the first test above: avoid depending
+      // on a prior `npm run build` / dist/ output.
+      APP_START_CMD: 'node_modules/.bin/ts-node --transpile-only src/index.ts',
       APP_PORT: '3457',
-      APP_STARTUP_TIMEOUT: '10',
+      APP_STARTUP_TIMEOUT: '30',
     });
 
     // The smoke test should complete successfully with matching counts
@@ -251,10 +262,39 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
   it('cleans up temporary files on success', () => {
     const dbPath = path.join(tmpDir, 'test.db');
     const backupDest = path.join(tmpDir, 'backups');
-    
+
     createTestDatabase(dbPath);
-    
-    // Use a mock app that just sleeps
+
+    // The smoke test script only reaches its cleanup-on-success path once
+    // both /health/liveness and /health/readiness respond 200 — a bare
+    // `sleep` never binds the port, so the health-check loop can never
+    // succeed and the script always fails before cleanup-on-success is
+    // exercised. Use a minimal fake server (same pattern as the 503 test
+    // above) that reports healthy immediately and keeps running until the
+    // script's own trap kills it, so the happy path actually completes.
+    const serverScript = path.join(tmpDir, 'healthy-server.js');
+    fs.writeFileSync(
+      serverScript,
+      `
+      const http = require('http');
+      const server = http.createServer((req, res) => {
+        if (req.url === '/health/readiness') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ok', db: 'ok' }));
+        } else if (req.url === '/health/liveness') {
+          res.writeHead(200);
+          res.end(JSON.stringify({ status: 'ok' }));
+        } else {
+          res.writeHead(404);
+          res.end('Not Found');
+        }
+      });
+      server.listen(3460, () => console.log('Fake healthy server listening on 3460'));
+      `
+    );
+
+    // Use a mock app that reports healthy so the script's happy path
+    // (including its cleanup-on-success trap) actually runs.
     runScript(SMOKE_TEST_SCRIPT, [], {
       DB_PATH: dbPath,
       BACKUP_DEST: backupDest,
@@ -262,9 +302,9 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
       LOG_LEVEL: 'error',
       STELLAR_HEALTH_CHECK_ENABLED: 'false',
       IPFS_ENABLED: 'false',
-      APP_START_CMD: 'sleep 0.5', // Simple command that exits quickly
+      APP_START_CMD: `node ${serverScript}`,
       APP_PORT: '3460',
-      APP_STARTUP_TIMEOUT: '2',
+      APP_STARTUP_TIMEOUT: '5',
     });
 
     // Verify cleanup occurred (database and backup files removed)

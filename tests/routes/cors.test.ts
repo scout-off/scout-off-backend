@@ -14,20 +14,29 @@ describe('CORS origin allowlist', () => {
     jest.setTimeout(15000);
   });
 
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
     jest.resetModules();
-    // config.ts requires ADMIN_WALLET in production/staging and PLATFORM_SECRET_KEY
-    // in every non-test NODE_ENV; these tests reload config under various NODE_ENV
-    // values, so both must be present regardless of which env a given test sets.
+    // config.ts requires ADMIN_WALLET in production/staging, PLATFORM_SECRET_KEY
+    // in every non-test NODE_ENV, and SEP10_SERVER_SECRET in production; these
+    // tests reload config under various NODE_ENV values, so all must be present
+    // regardless of which env a given test sets.
     process.env.ADMIN_WALLET = 'GADMINWALLET1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     process.env.PLATFORM_SECRET_KEY = 'SPLATFORMSECRETKEY1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    process.env.SEP10_SERVER_SECRET = 'SAHWESRQAKN33CWRZ5AEZW2QYGD2XHOS4HL6CEEH775SXYFZDTD33TMA';
   });
 
   afterEach(() => {
     delete process.env.ADMIN_WALLET;
     delete process.env.PLATFORM_SECRET_KEY;
+    delete process.env.SEP10_SERVER_SECRET;
     delete process.env.CORS_ALLOWED_ORIGINS;
     delete process.env.ALLOWED_ORIGINS;
+    // NODE_ENV is mutated per-test (production/development) to exercise
+    // config.ts's env-conditional branches; it must be restored so later
+    // test files in the same --runInBand process see the correct 'test' env.
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   it('allows requests from an origin allowed via CORS_ALLOWED_ORIGINS', async () => {

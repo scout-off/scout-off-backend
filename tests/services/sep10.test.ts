@@ -261,8 +261,8 @@ describe('sep10', () => {
    */
   describe('cross-instance challenge verification (horizontal scaling fix)', () => {
     // A real Stellar secret key used as the shared SEP10_SERVER_SECRET.
-    // This keypair was generated offline and is safe to use in tests only.
-    const SHARED_SERVER_SECRET = 'SCZANGBA5YELQU3PXKSFPKPJ6ENOGJHQJZ4AP7ZUZY7OVKOL4GFXO3Q';
+    // Generated fresh per test run — safe to use in tests only.
+    const SHARED_SERVER_SECRET = Keypair.random().secret();
 
     function loadSep10WithSharedSecret(): Promise<{
       buildChallenge: (account: string) => string;

@@ -19,11 +19,11 @@ const KEEPALIVE_INTERVAL_MS = parseInt(
   10,
 );
 
-/** Maximum number of concurrent SSE connections (0 = unlimited). */
-const MAX_SSE_CONNECTIONS = parseInt(
-  process.env.SSE_MAX_CONNECTIONS ?? '0',
-  10,
-);
+/** Maximum number of concurrent SSE connections (0 = unlimited). Read live
+ *  (not cached at module load) so tests can flip it per-case. */
+function getMaxSseConnections(): number {
+  return parseInt(process.env.SSE_MAX_CONNECTIONS ?? '0', 10);
+}
 
 // ─── Valid event type set (for query param validation) ────────────────────────
 
@@ -98,7 +98,8 @@ router.get('/stream', requireAuth, (req: Request, res: Response) => {
   const wallet = req.account!;
 
   // ── Connection limit guard ─────────────────────────────────────────────────
-  if (MAX_SSE_CONNECTIONS > 0 && broadcaster.subscriberCount >= MAX_SSE_CONNECTIONS) {
+  const maxSseConnections = getMaxSseConnections();
+  if (maxSseConnections > 0 && broadcaster.subscriberCount >= maxSseConnections) {
     res.status(503).json({
       success: false,
       error: 'SSE connection limit reached. Please try again later.',

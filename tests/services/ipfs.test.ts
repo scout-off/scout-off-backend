@@ -23,9 +23,20 @@ jest.mock('../../src/services/webhooks', () => ({
   dispatchEventWebhook: jest.fn().mockResolvedValue(undefined),
 }));
 
-// ── mock db (registerPlayer writes via insertOrUpdatePlayer) ──────────────────────────
+// ── mock db (registerPlayer writes via insertOrUpdatePlayer; submitMilestoneEvidence
+// writes a hash-chained audit_log row via recordAudit() → insertAuditLog()) ───────────
 jest.mock('../../src/db', () => ({
   insertOrUpdatePlayer: jest.fn(),
+  insertAuditLog: jest.fn((p: { action: string; adminWallet?: string; queryParams?: Record<string, unknown>; createdAt: string; eventSource?: string }) => ({
+    id: 1,
+    action: p.action,
+    admin_wallet: p.adminWallet ?? '',
+    query_params: JSON.stringify(p.queryParams ?? {}),
+    created_at: p.createdAt,
+    prev_hash: null,
+    hash: 'test-hash',
+    event_source: p.eventSource ?? 'admin_action',
+  })),
 }));
 
 import { registerPlayer } from '../../src/controllers/playerController';
@@ -73,8 +84,10 @@ describe('registerPlayer – IPFS pinning', () => {
     await registerPlayer(req, res, next);
 
     expect(mockPinJson).toHaveBeenCalledTimes(1);
+    // 'striker' is normalized to the canonical position 'forward' by
+    // normalizePositionOrFallback() before the metadata is pinned.
     expect(mockPinJson).toHaveBeenCalledWith(
-      expect.objectContaining({ wallet: 'G'.repeat(56), position: 'striker', region: 'africa' })
+      expect.objectContaining({ wallet: 'G'.repeat(56), position: 'forward', region: 'africa' })
     );
     expect(res.status).toHaveBeenCalledWith(201);
     const body = (res.json as jest.Mock).mock.calls[0][0];
@@ -164,7 +177,14 @@ describe('submitMilestoneEvidence – IPFS pinning', () => {
 
   it('calls pinJson with evidence payload and returns evidenceCid', async () => {
     const req = {
-      body: { playerId: 'player-1', milestoneType: 'performance', evidenceUri: 'ipfs://QmTest' },
+      // isValidMetadataUri() explicitly rejects ipfs:// scheme URIs — callers
+      // must pass a bare CID (or an https:// URL) — so this must be a
+      // well-formed CIDv0, not an 'ipfs://' string.
+      body: {
+        playerId: 'player-1',
+        milestoneType: 'performance',
+        evidenceUri: 'QmHQXemt18FNVcjry6DLTahpw4BJRYfnu29GPWdksz7EMU',
+      },
     } as Request;
     const res = makeRes();
 
@@ -181,7 +201,11 @@ describe('submitMilestoneEvidence – IPFS pinning', () => {
 
   it('returned evidenceCid matches expected CID format', async () => {
     const req = {
-      body: { playerId: 'player-2', milestoneType: 'identity', evidenceUri: 'ipfs://QmEvidence' },
+      body: {
+        playerId: 'player-2',
+        milestoneType: 'identity',
+        evidenceUri: 'QmWdksz7EMUbiqx5CKSZgov3AHQXemt18FNVcjry6DLTah',
+      },
     } as Request;
     const res = makeRes();
 
@@ -193,7 +217,11 @@ describe('submitMilestoneEvidence – IPFS pinning', () => {
 
   it('calls invalidateMilestoneCache with playerId after successful pin', async () => {
     const req = {
-      body: { playerId: 'player-3', milestoneType: 'trial_offer', evidenceUri: 'ipfs://QmX' },
+      body: {
+        playerId: 'player-3',
+        milestoneType: 'trial_offer',
+        evidenceUri: 'Qmjry6DLTahpw4BJRYfnu29GPWdksz7EMUbiqx5CKSZgov',
+      },
     } as Request;
     const res = makeRes();
 
@@ -205,7 +233,13 @@ describe('submitMilestoneEvidence – IPFS pinning', () => {
   it('calls next(err) when pinJson throws (maps to 503)', async () => {
     mockPinJson.mockRejectedValue(new Error('IPFS unavailable'));
     const req = {
-      body: { playerId: 'player-1', milestoneType: 'performance', evidenceUri: 'ipfs://QmTest' },
+      // Must be a valid evidenceUri (bare CID) so the request actually
+      // reaches pinJson() instead of failing zod validation first.
+      body: {
+        playerId: 'player-1',
+        milestoneType: 'performance',
+        evidenceUri: 'QmHQXemt18FNVcjry6DLTahpw4BJRYfnu29GPWdksz7EMU',
+      },
     } as Request;
     const res = makeRes();
     const localNext = jest.fn();

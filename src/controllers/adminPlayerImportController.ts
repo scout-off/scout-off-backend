@@ -145,14 +145,14 @@ async function prepareEntry(
 /**
  * Process a batch of raw player entries.
  *
- * allowPartial=false (default):
+ * allowPartial=true (default, per #483):
+ *   Valid rows are committed row-by-row; a failing row is reported but does
+ *   not abort the batch or block the other rows.
+ *
+ * allowPartial=false:
  *   All-or-nothing. If any row fails validation, zero rows are inserted
  *   and HTTP 422 is returned. If all rows are valid, they are inserted in
  *   a single DB transaction; any DB error also rolls everything back.
- *
- * allowPartial=true:
- *   Valid rows are committed row-by-row; failed rows are reported but do
- *   not block others. Returns 207 Multi-Status with per-row outcomes.
  *
  * IPFS pin calls happen BEFORE the DB transaction to avoid holding the
  * write lock during network I/O. Pinned CIDs are content-addressed and
@@ -160,7 +160,7 @@ async function prepareEntry(
  */
 export async function processPlayerImportBatch(
   entries: unknown[],
-  allowPartial = false,
+  allowPartial = true,
 ): Promise<ImportPlayerResult[]> {
   const now = Math.floor(Date.now() / 1000);
 
@@ -261,14 +261,14 @@ export async function processPlayerImportBatch(
  *   - CSV body:   Content-Type: text/csv or text/plain
  *
  * Query params:
- *   ?allowPartial=true  — commit successful rows, return 207 with per-row results
+ *   ?allowPartial=false  — opt into all-or-nothing rollback semantics instead
+ *                          of the default per-row isolation (see #483)
  *
  * HTTP status codes:
- *   200  — all rows succeeded
- *   207  — allowPartial=true, mixed results
+ *   200  — request processed (per-row results report any individual failures)
  *   400  — empty/unparseable body
  *   413  — batch exceeds PLAYER_IMPORT_MAX_BATCH
- *   422  — transactional rollback, per-row error report
+ *   422  — allowPartial=false and at least one row failed (nothing inserted)
  *
  * @auth Bearer (admin role required)
  */
@@ -276,7 +276,7 @@ export async function importPlayers(req: Request, res: Response, next: NextFunct
   try {
     const adminWallet = req.account ?? 'unknown';
     const contentType = (req.headers['content-type'] ?? '').toLowerCase();
-    const allowPartial = req.query['allowPartial'] === 'true';
+    const allowPartial = req.query['allowPartial'] !== 'false';
 
     let entries: unknown[];
 
@@ -309,7 +309,7 @@ export async function importPlayers(req: Request, res: Response, next: NextFunct
         });
         return;
       }
-      entries = jsonBody.players;
+      entries = parsed.data.players;
     }
 
     if (entries.length === 0) {
@@ -349,14 +349,11 @@ export async function importPlayers(req: Request, res: Response, next: NextFunct
     });
 
     // HTTP status rules:
-    //   allowPartial + any failure  → 207 Multi-Status
-    //   no partial + any failure    → 422 Unprocessable Entity
-    //   all success                 → 200 OK
+    //   allowPartial (default) → 200, regardless of per-row failures
+    //   allowPartial=false + any failure → 422 Unprocessable Entity
     let httpStatus = 200;
     let overallSuccess = true;
-    if (allowPartial && failed > 0) {
-      httpStatus = 207;
-    } else if (!allowPartial && failed > 0) {
+    if (!allowPartial && failed > 0) {
       httpStatus = 422;
       overallSuccess = false;
     }

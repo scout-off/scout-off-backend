@@ -130,8 +130,8 @@ describe('idempotent re-indexing', () => {
     );
 
     const before = queryEvents().length;
-    insert.run('scout_subscribed', 200, 'hash', hash1, '{}', Date.now());
-    insert.run('scout_subscribed', 200, 'hash', hash2, '{}', Date.now());
+    insert.run('scout_subscribed', 200, hash1, '{}');
+    insert.run('scout_subscribed', 200, hash2, '{}');
     const after = queryEvents().length;
 
     expect(after).toBe(before + 2);

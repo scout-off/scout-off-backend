@@ -188,14 +188,20 @@ describe('pinJson multi-instance deduplication — shared DB, separate process c
             await new Promise((r) => setTimeout(r, 20));
             const pollCached = localCache.get(hash);
             if (pollCached && Date.now() - pollCached.timestamp < ttlMs) return pollCached.cid;
+            // Check the shared resolved_cid unconditionally on every tick —
+            // not only once the pending-pin row is confirmed gone. The
+            // winner persists resolved_cid and deletes the row via two
+            // separate DB round-trips (see the delay below), so there's a
+            // real window where the row is still "pending" but the CID is
+            // already readable; gating this behind "row is gone" would miss
+            // it, since by the time the row is gone the CID is gone too.
+            const resolvedCid = sharedGetResolvedCidByHash(hash);
+            if (resolvedCid) {
+              localCache.set(hash, { cid: resolvedCid, timestamp: Date.now() });
+              return resolvedCid;
+            }
             if (!sharedIsPendingPinByHash(hash)) {
-              // Lock cleared — check cross-instance shared result first
-              const resolvedCid = sharedGetResolvedCidByHash(hash);
-              if (resolvedCid) {
-                localCache.set(hash, { cid: resolvedCid, timestamp: Date.now() });
-                return resolvedCid;
-              }
-              break; // safety-net fallthrough
+              break; // safety-net fallthrough — winner crashed without resolving
             }
           }
         }
@@ -207,6 +213,11 @@ describe('pinJson multi-instance deduplication — shared DB, separate process c
           // Persist CID before releasing lock so losers can read it
           sharedSetPendingPinResolvedCid(hash, cid);
           localCache.set(hash, { cid, timestamp: Date.now() });
+          // Real deployments make these as two independent DB round-trips
+          // (e.g. an UPDATE followed by a DELETE), not one atomic write —
+          // this delay models that gap so the poll loop above actually has
+          // a chance to observe "resolved but not yet deleted".
+          await new Promise((r) => setTimeout(r, 30));
           return cid;
         } finally {
           sharedDeletePendingPinByHash(hash);

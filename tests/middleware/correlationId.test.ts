@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { correlationId } from '../../src/middleware/correlationId';
 import { getCorrelationId, requestContext } from '../../src/utils/requestContext';
+import config from '../../src/config';
 
 function makeReq(headers: Record<string, string> = {}): Request {
   return { headers, method: 'GET', path: '/test' } as unknown as Request;
@@ -124,6 +125,12 @@ describe('requestContext store (direct)', () => {
 
 describe('logger correlationId injection', () => {
   it('prepends correlationId to log messages inside a request context', () => {
+    // config.logLevel defaults to 'warn' under NODE_ENV=test (to keep test
+    // output quiet), which makes logger.info() a no-op. Temporarily lower it
+    // so we can observe info-level output for this assertion — this test is
+    // about the correlationId-injection formatting, not level filtering.
+    const originalLevel = config.logLevel;
+    config.logLevel = 'debug';
     const spy = jest.spyOn(console, 'info').mockImplementation(() => {});
     try {
       requestContext.run({ correlationId: 'logger-cid' }, () => {
@@ -136,10 +143,13 @@ describe('logger correlationId injection', () => {
       );
     } finally {
       spy.mockRestore();
+      config.logLevel = originalLevel;
     }
   });
 
   it('does not inject correlationId in log messages outside a request context', () => {
+    const originalLevel = config.logLevel;
+    config.logLevel = 'debug';
     const spy = jest.spyOn(console, 'info').mockImplementation(() => {});
     try {
       // Ensure we are outside any requestContext by running directly.
@@ -148,6 +158,7 @@ describe('logger correlationId injection', () => {
       expect(spy).toHaveBeenCalledWith('[info]', '[indexer] background job tick');
     } finally {
       spy.mockRestore();
+      config.logLevel = originalLevel;
     }
   });
 });

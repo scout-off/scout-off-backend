@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { getPlayerProfileHistory, getPlayerProfileHistoryVersioned, getPlayerById } from "../db";
+import { getPlayerProfileHistory, getPlayerProfileHistoryVersioned, getPlayerById, getPlayerByWallet } from "../db";
 import { sanitizeInput } from "../utils/sanitizer";
 import { z } from "zod";
 import { ApiResponse } from "../types";
@@ -72,6 +72,17 @@ function rowToSnapshot(metadataUri: string): Record<string, unknown> {
   return { metadataUri };
 }
 
+/**
+ * These history routes are owner-gated by requireOwner, which compares the
+ * authenticated wallet directly against :playerId — so self-service callers
+ * address their profile by wallet. Admin callers, however, typically arrive
+ * with the profile's actual player_id (e.g. from an events/audit listing).
+ * Try both so either caller's identifier resolves to the same profile.
+ */
+function findPlayerByIdOrWallet(playerId: string) {
+  return getPlayerById(playerId) ?? getPlayerByWallet(playerId);
+}
+
 // ─── Controllers ──────────────────────────────────────────────────────────────
 
 /**
@@ -101,7 +112,7 @@ export function getPlayerHistory(
 
     const playerId = sanitizeInput(req.params.playerId);
 
-    const player = getPlayerById(playerId);
+    const player = findPlayerByIdOrWallet(playerId);
     if (!player) {
       res.status(404).json({
         success: false,
@@ -169,7 +180,7 @@ export function getPlayerHistoryVersion(
     const playerId = sanitizeInput(req.params.playerId);
     const version = versionResult.data;
 
-    const player = getPlayerById(playerId);
+    const player = findPlayerByIdOrWallet(playerId);
     if (!player) {
       res.status(404).json({
         success: false,
@@ -246,7 +257,7 @@ export function getPlayerHistoryDiff(
     const playerId = sanitizeInput(req.params.playerId);
     const version = versionResult.data;
 
-    const player = getPlayerById(playerId);
+    const player = findPlayerByIdOrWallet(playerId);
     if (!player) {
       res.status(404).json({
         success: false,

@@ -31,7 +31,7 @@ import config from '../config';
 import { ErrorCode } from '../utils/errorCodes';
 import { insertTrialOffer, getTrialOffers } from '../services/indexer';
 import { invokeContract, strVal } from '../utils/contract';
-import { isValidEvidenceUri } from '../utils/uriValidator';
+import { isValidIpfsOrHttpsUri } from '../utils/uriValidator';
 
 // ─── Validation schemas ────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ export const trialOfferSchema = z.object({
   detailsUri: z
     .string()
     .min(1)
-    .refine(isValidEvidenceUri, 'detailsUri must be a valid IPFS (ipfs://) or HTTPS URI'),
+    .refine(isValidIpfsOrHttpsUri, 'detailsUri must be a valid IPFS (ipfs://) or HTTPS URI'),
 });
 
 /**
@@ -704,19 +704,29 @@ export async function getPaymentHistory(req: Request, res: Response, next: NextF
         if (toDate && new Date(ts) > toDate) continue;
         const txHash = (e.payload.tx_hash as string | undefined) ?? null;
         const playerId = (e.payload.player_id as string | undefined) ?? (e.payload.playerId as string | undefined) ?? null;
-        // Check if we already added a DB row for this tx; avoid duplicates
-        const alreadyAdded = payments.some((p) => p.type === 'contact_unlock' && p.tx_hash === txHash && txHash !== null);
-        if (!alreadyAdded) {
+        const fee = (e.payload.fee ?? '0') as string;
+        // A DB row for this tx may already be in the list (pushed above,
+        // always with amount '0' since the contact_unlocks table doesn't
+        // store fee). Enrich it with the event's fee instead of skipping —
+        // otherwise the fee info this loop exists to attach never reaches
+        // the DB-sourced entry.
+        const existing = txHash
+          ? payments.find((p) => p.type === 'contact_unlock' && p.tx_hash === txHash)
+          : undefined;
+        if (existing) {
+          existing.amount = fee;
+          existing.amount_xlm = fee;
+        } else {
           payments.push({
             id: txHash,
             type: 'contact_unlock',
-            amount_xlm: (e.payload.fee ?? '0') as string,
+            amount_xlm: fee,
             player_id: playerId,
             tier: null,
             tx_hash: txHash,
             created_at: ts,
             transactionId: txHash,
-            amount: (e.payload.fee ?? '0') as string,
+            amount: fee,
             token: 'XLM',
             timestamp: ts,
           });

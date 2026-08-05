@@ -1,4 +1,5 @@
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
 
 // This file exercises the real indexer/DB layer end-to-end, but
@@ -14,6 +15,20 @@ jest.mock('../../src/services/stellar', () => ({
 }));
 
 import app from '../../src/app';
+
+const SECRET = process.env.JWT_SECRET ?? 'test-secret';
+// Same wallet tests/setup.ts wires up as ADMIN_WALLET — config.adminWallets is
+// computed once at module load, so this is the only wallet the multi-sig
+// gate in adminController.ts (config.adminWallets.includes(...)) accepts.
+// A freshly-generated SEP-10 keypair can self-declare role:'admin' (enough
+// to pass the requireRole('admin') middleware) but will never satisfy that
+// wallet-identity check, so tests exercising the privileged register/revoke
+// success paths need a token issued directly for the real admin wallet.
+const ADMIN_WALLET = process.env.ADMIN_WALLET ?? 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
+
+function makeAdminToken(): string {
+  return jwt.sign({ sub: ADMIN_WALLET, role: 'admin' }, SECRET, { expiresIn: '1h' });
+}
 
 async function getToken(role: string): Promise<string> {
   const kp = Keypair.random();
@@ -33,7 +48,9 @@ const VALID_WALLET = Keypair.random().publicKey();
 describe('Security headers', () => {
   it('sets required security headers on all responses', async () => {
     const res = await request(app).get('/health');
-    expect(res.headers['strict-transport-security']).toBeDefined();
+    // Strict-Transport-Security is intentionally omitted outside production/
+    // staging — see tests/middleware/securityHeaders.test.ts for coverage of
+    // that env-conditional behavior.
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['x-frame-options']).toBe('DENY');
     expect(res.headers['referrer-policy']).toBeDefined();
@@ -74,7 +91,7 @@ describe('POST /api/admin/validators/register', () => {
   });
 
   it('returns 400 for invalid wallet address', async () => {
-    const token = await getToken('admin');
+    const token = makeAdminToken();
     const res = await request(app)
       .post('/api/admin/validators/register')
       .set('Authorization', `Bearer ${token}`)
@@ -83,7 +100,7 @@ describe('POST /api/admin/validators/register', () => {
   });
 
   it('returns 202 with a transactionId for valid admin request', async () => {
-    const token = await getToken('admin');
+    const token = makeAdminToken();
     const res = await request(app)
       .post('/api/admin/validators/register')
       .set('Authorization', `Bearer ${token}`)
@@ -94,7 +111,7 @@ describe('POST /api/admin/validators/register', () => {
   });
 
   it('does not insert the local row and returns an error status when the chain call fails', async () => {
-    const token = await getToken('admin');
+    const token = makeAdminToken();
     const wallet = Keypair.random().publicKey();
 
     const { registerValidatorOnChain, ValidatorActionError } = jest.requireMock('../../src/services/stellar') as {
@@ -141,7 +158,7 @@ describe('POST /api/admin/validators/revoke', () => {
   });
 
   it('returns 202 with a transactionId for valid admin request', async () => {
-    const token = await getToken('admin');
+    const token = makeAdminToken();
     const res = await request(app)
       .post('/api/admin/validators/revoke')
       .set('Authorization', `Bearer ${token}`)
@@ -152,7 +169,7 @@ describe('POST /api/admin/validators/revoke', () => {
   });
 
   it('returns 409 without calling the chain when the wallet is already revoked locally', async () => {
-    const token = await getToken('admin');
+    const token = makeAdminToken();
     const wallet = Keypair.random().publicKey();
 
     await request(app)
@@ -180,7 +197,7 @@ describe('POST /api/admin/validators/revoke', () => {
   });
 
   it('does not update the local row and returns an error status when the chain call fails', async () => {
-    const token = await getToken('admin');
+    const token = makeAdminToken();
     const wallet = Keypair.random().publicKey();
 
     await request(app)
@@ -230,7 +247,7 @@ describe('GET /api/admin/validators', () => {
   });
 
   it('returns 200 with a data array for admin', async () => {
-    const token = await getToken('admin');
+    const token = makeAdminToken();
     const res = await request(app)
       .get('/api/admin/validators')
       .set('Authorization', `Bearer ${token}`);
@@ -240,7 +257,7 @@ describe('GET /api/admin/validators', () => {
   });
 
   it('includes a registered validator after registration', async () => {
-    const token = await getToken('admin');
+    const token = makeAdminToken();
     // Register first
     await request(app)
       .post('/api/admin/validators/register')
@@ -258,7 +275,7 @@ describe('GET /api/admin/validators', () => {
   });
 
   it('marks a validator as revoked after revocation', async () => {
-    const token = await getToken('admin');
+    const token = makeAdminToken();
     // Register then revoke
     await request(app)
       .post('/api/admin/validators/register')

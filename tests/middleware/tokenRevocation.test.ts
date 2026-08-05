@@ -7,7 +7,7 @@ const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 // ─── Mock the tokenBlocklist so tests control revocation state ────────────────
 jest.mock('../../src/services/tokenBlocklist', () => ({
   revokeToken: jest.fn(),
-  isTokenRevoked: jest.fn().mockReturnValue(false),
+  isTokenRevoked: jest.fn().mockResolvedValue(false),
   pruneExpiredTokens: jest.fn(),
 }));
 
@@ -35,7 +35,7 @@ function makeAdminToken(jti?: string): string {
 describe('requireAuth — blocklist check', () => {
   beforeEach(() => {
     mockIsRevoked.mockReset();
-    mockIsRevoked.mockReturnValue(false);
+    mockIsRevoked.mockResolvedValue(false);
   });
 
   it('calls next() for a valid, non-revoked JWT', async () => {
@@ -52,7 +52,7 @@ describe('requireAuth — blocklist check', () => {
     const token = makeToken('GSCOUT', 'scout', jti);
 
     // Simulate this jti being in the blocklist
-    mockIsRevoked.mockImplementation((id: string) => id === jti);
+    mockIsRevoked.mockImplementation((id: string) => Promise.resolve(id === jti));
 
     // Use a protected scout endpoint
     const WALLET = 'GSCOUT';
@@ -68,7 +68,7 @@ describe('requireAuth — blocklist check', () => {
   it('does not reject a token without a jti claim', async () => {
     // Token without jti — should not be blocked (no jti to look up)
     const token = makeToken('GTEST', 'player'); // no jti
-    mockIsRevoked.mockReturnValue(false);
+    mockIsRevoked.mockResolvedValue(false);
 
     const res = await request(app)
       .get('/health')
@@ -82,7 +82,7 @@ describe('POST /api/admin/tokens/revoke', () => {
   beforeEach(() => {
     mockRevoke.mockReset();
     mockIsRevoked.mockReset();
-    mockIsRevoked.mockReturnValue(false);
+    mockIsRevoked.mockResolvedValue(false);
   });
 
   it('returns 401 when no token is provided', async () => {
@@ -166,7 +166,7 @@ describe('POST /api/admin/tokens/revoke', () => {
     expect(revokeRes.status).toBe(200);
 
     // Step 2: simulate the blocklist now returning true for this jti
-    mockIsRevoked.mockImplementation((id: string) => id === jti);
+    mockIsRevoked.mockImplementation((id: string) => Promise.resolve(id === jti));
 
     // Step 3: use revoked token on a protected route
     const WALLET = 'GVICTIM';

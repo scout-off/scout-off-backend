@@ -79,11 +79,22 @@ export function getAppliedMigrations(
     }
   } catch (error) {
     // If the migrations table doesn't exist, catch the error and return empty Map
-    // This handles fresh databases where runMigrations() hasn't been called yet
+    // This handles fresh databases where runMigrations() hasn't been called yet.
+    //
+    // NOTE: deliberately duck-type on `.message` instead of gating with
+    // `error instanceof Error`. better-sqlite3's SqliteError is a native-addon
+    // error class; under test runners (e.g. Jest) that isolate each test file
+    // in its own VM realm, an error constructed against one realm's Error
+    // prototype can legitimately fail `instanceof Error` when observed from
+    // another realm, even though it is a bona fide error with a `.message`.
+    const message =
+      typeof (error as { message?: unknown })?.message === 'string'
+        ? (error as { message: string }).message
+        : undefined;
     if (
-      error instanceof Error &&
-      (error.message.includes('no such table') ||
-        error.message.includes('SQLITE_NOTFOUND'))
+      message !== undefined &&
+      (message.includes('no such table') ||
+        message.includes('SQLITE_NOTFOUND'))
     ) {
       return result;
     }

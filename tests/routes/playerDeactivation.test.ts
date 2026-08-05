@@ -19,6 +19,7 @@ jest.mock('../../src/db', () => ({
   insertSubscription: jest.fn().mockReturnValue(1),
   deactivatePlayer: jest.fn(),
   reactivatePlayer: jest.fn(),
+  countTrialOffersByPlayer: jest.fn().mockReturnValue(0),
 }));
 
 jest.mock('../../src/services/indexer', () => ({

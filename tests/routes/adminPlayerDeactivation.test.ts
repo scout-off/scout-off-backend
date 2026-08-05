@@ -53,6 +53,7 @@ jest.mock('../../src/db', () => ({
   queryEvents: jest.fn().mockReturnValue([]),
   queryPlayers: jest.fn().mockReturnValue([]),
   countPlayers: jest.fn().mockReturnValue(0),
+  searchPlayers: jest.fn().mockReturnValue({ data: [], nextCursor: null }),
   getEventsCount: jest.fn().mockReturnValue(0),
   fetchLastIndexedLedger: jest.fn().mockReturnValue(0),
   persistLastIndexedLedger: jest.fn(),

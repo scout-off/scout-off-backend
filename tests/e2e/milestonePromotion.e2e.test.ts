@@ -90,7 +90,7 @@ describe('E2E Milestone Promotion Flow', () => {
       .send({
         playerId,
         milestoneType: 'performance',
-        evidenceUri: 'ipfs://QmTestEvidence',
+        evidenceUri: VALID_CID,
       });
 
     expect(milestoneRes.status).toBe(201);

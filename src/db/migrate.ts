@@ -266,14 +266,19 @@ function getAppliedMigrations(driver: DbDriver): Map<string, number> {
 }
 
 function isNoSuchTableError(error: unknown): boolean {
-  const err = error as Error;
+  // Deliberately duck-type on `.message` instead of gating with
+  // `error instanceof Error` — see the identical note in
+  // migration-status.ts's getAppliedMigrations(). Native-addon error classes
+  // (e.g. better-sqlite3's SqliteError) can fail `instanceof Error` across
+  // VM realms (as Jest creates per test file) despite being real errors.
+  const message = (error as { message?: unknown })?.message;
 
   return (
-    err instanceof Error &&
-    (err.message.includes('no such table') ||
-      err.message.includes('SQLITE_NOTFOUND') ||
-      err.message.includes('relation "migrations" does not exist') ||
-      err.message.includes('undefined table "migrations"'))
+    typeof message === 'string' &&
+    (message.includes('no such table') ||
+      message.includes('SQLITE_NOTFOUND') ||
+      message.includes('relation "migrations" does not exist') ||
+      message.includes('undefined table "migrations"'))
   );
 }
 

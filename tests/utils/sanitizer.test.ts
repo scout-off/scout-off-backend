@@ -61,19 +61,19 @@ describe('sanitizeInput', () => {
   });
 
   describe('SQL metacharacters', () => {
-    it('passes through single quotes', () => {
+    it('HTML-escapes single quotes (still HTML-encoded for XSS safety)', () => {
       const input = "It's a player's profile";
-      expect(sanitizeInput(input)).toBe("It's a player's profile");
+      expect(sanitizeInput(input)).toBe("It&#x27;s a player&#x27;s profile");
     });
 
-    it('passes through double quotes', () => {
+    it('HTML-escapes double quotes (still HTML-encoded for XSS safety)', () => {
       const input = 'Player said "I am the best"';
-      expect(sanitizeInput(input)).toBe('Player said "I am the best"');
+      expect(sanitizeInput(input)).toBe('Player said &quot;I am the best&quot;');
     });
 
-    it('passes through common SQL metacharacters', () => {
+    it('passes through non-quote SQL metacharacters while escaping quotes', () => {
       const input = "SELECT * FROM players WHERE id = '123';";
-      expect(sanitizeInput(input)).toBe("SELECT * FROM players WHERE id = '123';");
+      expect(sanitizeInput(input)).toBe("SELECT * FROM players WHERE id = &#x27;123&#x27;;");
     });
 
     it('passes through semicolons', () => {

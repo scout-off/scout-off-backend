@@ -19,6 +19,8 @@ const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 jest.mock('../../src/db', () => ({
   // existing mocks required by scout router
   queryEvents: jest.fn(),
+  getEventsPage: jest.fn().mockReturnValue([]),
+  countEventsFiltered: jest.fn().mockReturnValue(0),
   getPlayerById: jest.fn(),
   getLatestSubscription: jest.fn().mockReturnValue(null),
   insertSubscription: jest.fn(),
@@ -46,6 +48,8 @@ jest.mock('../../src/db', () => ({
   insertBookmark: jest.fn(),
   deleteBookmark: jest.fn(),
   getBookmarksByScout: jest.fn().mockReturnValue([]),
+  // events export (needed by GET /api/admin/events/export)
+  getEventsIterable: jest.fn(function* () {}),
 }));
 
 jest.mock('../../src/services/stellar', () => ({

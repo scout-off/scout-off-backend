@@ -106,7 +106,8 @@
           }]
         },
         "moduleNameMapper": {
-          "^@paralleldrive/cuid2$": "<rootDir>/__mocks__/@paralleldrive/cuid2.js"
+          "^@paralleldrive/cuid2$": "<rootDir>/__mocks__/@paralleldrive/cuid2.js",
+          "^multiformats/cid$": "<rootDir>/__mocks__/multiformats/cid.js"
         },
         "transform": {
           "^.+\\.tsx?$": ["ts-jest", {

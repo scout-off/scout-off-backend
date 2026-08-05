@@ -96,6 +96,30 @@ const sdk = require('@stellar/stellar-sdk') as any;
 
 const WALLET = 'G' + 'A'.repeat(55);
 
+/**
+ * Every `server.*` RPC call in src/services/stellar.ts is wrapped by
+ * `stellarBreaker` (src/utils/circuitBreaker.ts), which retries a rejected
+ * call up to 3 times with real exponential backoff (~7s total) before
+ * giving up and letting the error propagate. Tests that mock an RPC method
+ * to reject exercise that retry path, so we fake timers around the call and
+ * fast-forward through the backoff instead of burning real wall-clock time
+ * and blowing past Jest's default 5000ms per-test timeout.
+ */
+async function expectRejectionAfterRetries<T>(
+  promiseFactory: () => Promise<T>,
+  assert: (promise: Promise<T>) => Promise<void>,
+): Promise<void> {
+  jest.useFakeTimers();
+  const promise = promiseFactory();
+  const assertion = assert(promise);
+  try {
+    await jest.runAllTimersAsync();
+    await assertion;
+  } finally {
+    jest.useRealTimers();
+  }
+}
+
 // ─── Shared setup ─────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -148,7 +172,10 @@ describe('isSubscribed', () => {
 
   it('throws PaymentError NETWORK_ERROR when simulateTransaction rejects', async () => {
     mockSimulate.mockRejectedValue(new Error('connection timeout'));
-    await expect(isSubscribed(WALLET)).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+    await expectRejectionAfterRetries(
+      () => isSubscribed(WALLET),
+      (p) => expect(p).rejects.toMatchObject({ code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError for empty wallet without calling the RPC', async () => {
@@ -270,10 +297,10 @@ describe('queryMilestones', () => {
   it('throws PaymentError NETWORK_ERROR when simulateTransaction rejects', async () => {
     mockSimulate.mockRejectedValue(new Error('connection timeout'));
 
-    await expect(queryMilestones(PLAYER_ID)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => queryMilestones(PLAYER_ID),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 });
 
@@ -415,7 +442,10 @@ describe('cancelSubscriptionOnChain', () => {
   it('propagates errors from getAccount (RPC unreachable)', async () => {
     mockGetAccount.mockRejectedValue(new Error('network unreachable'));
 
-    await expect(cancelSubscriptionOnChain(WALLET)).rejects.toThrow('network unreachable');
+    await expectRejectionAfterRetries(
+      () => cancelSubscriptionOnChain(WALLET),
+      (p) => expect(p).rejects.toThrow('network unreachable'),
+    );
   });
 });
 
@@ -513,7 +543,10 @@ describe('pauseContractOnChain', () => {
   it('propagates errors from getAccount (RPC unreachable)', async () => {
     mockGetAccount.mockRejectedValue(new Error('network unreachable'));
 
-    await expect(pauseContractOnChain()).rejects.toThrow('network unreachable');
+    await expectRejectionAfterRetries(
+      () => pauseContractOnChain(),
+      (p) => expect(p).rejects.toThrow('network unreachable'),
+    );
   });
 });
 
@@ -631,7 +664,10 @@ describe('registerValidatorOnChain', () => {
   it('propagates errors from getAccount (RPC unreachable)', async () => {
     mockGetAccount.mockRejectedValue(new Error('network unreachable'));
 
-    await expect(registerValidatorOnChain(WALLET)).rejects.toThrow('network unreachable');
+    await expectRejectionAfterRetries(
+      () => registerValidatorOnChain(WALLET),
+      (p) => expect(p).rejects.toThrow('network unreachable'),
+    );
   });
 });
 
@@ -721,19 +757,19 @@ describe('updateProfile', () => {
   it('throws PaymentError NETWORK_ERROR when getAccount fails', async () => {
     mockGetAccount.mockRejectedValue(new Error('rpc unreachable'));
 
-    await expect(updateProfile(PLAYER_ID, METADATA_URI)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => updateProfile(PLAYER_ID, METADATA_URI),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR when simulateTransaction rejects', async () => {
     mockSimulate.mockRejectedValue(new Error('connection timeout'));
 
-    await expect(updateProfile(PLAYER_ID, METADATA_URI)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => updateProfile(PLAYER_ID, METADATA_URI),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR when sendTransaction returns ERROR status', async () => {
@@ -858,10 +894,10 @@ describe('logTrialOffer', () => {
   it('throws PaymentError NETWORK_ERROR when getAccount fails', async () => {
     mockGetAccount.mockRejectedValue(new Error('rpc unreachable'));
 
-    await expect(logTrialOffer(WALLET, PLAYER_ID, DETAILS_URI)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => logTrialOffer(WALLET, PLAYER_ID, DETAILS_URI),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR on simulation error response', async () => {
@@ -878,10 +914,10 @@ describe('logTrialOffer', () => {
   it('throws PaymentError NETWORK_ERROR when simulateTransaction rejects', async () => {
     mockSimulate.mockRejectedValue(new Error('connection timeout'));
 
-    await expect(logTrialOffer(WALLET, PLAYER_ID, DETAILS_URI)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => logTrialOffer(WALLET, PLAYER_ID, DETAILS_URI),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR when sendTransaction returns ERROR status', async () => {
@@ -901,10 +937,10 @@ describe('logTrialOffer', () => {
   it('throws PaymentError NETWORK_ERROR when sendTransaction rejects', async () => {
     mockSendTransaction.mockRejectedValue(new Error('submit unreachable'));
 
-    await expect(logTrialOffer(WALLET, PLAYER_ID, DETAILS_URI)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => logTrialOffer(WALLET, PLAYER_ID, DETAILS_URI),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR when the confirmed transaction has FAILED status', async () => {
@@ -921,10 +957,10 @@ describe('logTrialOffer', () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'poll-fail-hash' });
     mockGetTransaction.mockRejectedValue(new Error('poll unreachable'));
 
-    await expect(logTrialOffer(WALLET, PLAYER_ID, DETAILS_URI)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => logTrialOffer(WALLET, PLAYER_ID, DETAILS_URI),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 });
 
@@ -1087,38 +1123,38 @@ describe('renewSubscription', () => {
   it('throws PaymentError NETWORK_ERROR when getAccount fails (RPC unreachable) — distinct from an on-chain rejection', async () => {
     mockGetAccount.mockRejectedValue(new Error('network unreachable'));
 
-    await expect(renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR when simulateTransaction rejects — distinct from an on-chain rejection', async () => {
     mockSimulate.mockRejectedValue(new Error('connection timeout'));
 
-    await expect(renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR when sendTransaction rejects — distinct from an on-chain rejection', async () => {
     mockSendTransaction.mockRejectedValue(new Error('submit unreachable'));
 
-    await expect(renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR when getTransaction polling rejects — distinct from an on-chain rejection', async () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'renew-poll-fail' });
     mockGetTransaction.mockRejectedValue(new Error('poll unreachable'));
 
-    await expect(renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 });
 
@@ -1219,29 +1255,29 @@ describe('submitContactPayment', () => {
   it('throws PaymentError NETWORK_ERROR when getAccount rejects', async () => {
     mockGetAccount.mockRejectedValue(new Error('account unreachable'));
 
-    await expect(submitContactPayment(WALLET, PLAYER_ID)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => submitContactPayment(WALLET, PLAYER_ID),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR when sendTransaction rejects', async () => {
     mockSendTransaction.mockRejectedValue(new Error('submit unreachable'));
 
-    await expect(submitContactPayment(WALLET, PLAYER_ID)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => submitContactPayment(WALLET, PLAYER_ID),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 
   it('throws PaymentError NETWORK_ERROR when getTransaction polling rejects', async () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'unlock-poll-fail' });
     mockGetTransaction.mockRejectedValue(new Error('poll unreachable'));
 
-    await expect(submitContactPayment(WALLET, PLAYER_ID)).rejects.toMatchObject({
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-    });
+    await expectRejectionAfterRetries(
+      () => submitContactPayment(WALLET, PLAYER_ID),
+      (p) => expect(p).rejects.toMatchObject({ name: 'PaymentError', code: 'NETWORK_ERROR' }),
+    );
   });
 });
 

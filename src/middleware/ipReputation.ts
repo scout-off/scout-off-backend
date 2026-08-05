@@ -15,6 +15,7 @@
  * (see the response-finish hook below for error-rate tracking).
  */
 import { Request, Response, NextFunction } from 'express';
+import config from '../config';
 import { extractClientIp } from '../utils/ipExtractor';
 import { logger } from '../utils/logger';
 import {
@@ -45,6 +46,10 @@ function sleep(ms: number): Promise<void> {
  * 4. Hooks into res.finish to record error-rate points after the response.
  */
 export function ipReputationMiddleware(req: Request, res: Response, next: NextFunction): void {
+  if (!config.ipReputation.enabled) {
+    next();
+    return;
+  }
   const ip = extractClientIp(req);
   const ua = req.headers['user-agent'];
 

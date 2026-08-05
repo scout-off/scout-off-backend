@@ -41,6 +41,16 @@ jest.mock('../../src/db', () => ({
   getLatestSubscription: jest.fn().mockReturnValue(null),
   insertSubscription: jest.fn().mockReturnValue(1),
   insertOrUpdatePlayer: jest.fn(),
+  insertAuditLog: jest.fn().mockReturnValue({
+    id: 1,
+    action: 'player_search',
+    admin_wallet: '',
+    query_params: '{}',
+    created_at: new Date().toISOString(),
+    prev_hash: '0'.repeat(64),
+    hash: 'mock-hash-1',
+    event_source: 'app_event',
+  }),
 }));
 
 import { searchPlayers, countPlayers } from '../../src/db';

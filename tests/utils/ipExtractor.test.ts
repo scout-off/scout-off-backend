@@ -31,9 +31,13 @@ describe('extractClientIp', () => {
     expect(extractClientIp(req)).toBe('203.0.113.5');
   });
 
-  it('handles single IP in x-forwarded-for', () => {
+  it('falls back to socket address for a single-entry x-forwarded-for (fail-safe: chain shorter than TRUSTED_PROXY_COUNT+1)', () => {
+    // TRUSTED_PROXY_COUNT=1 requires 2 entries (client + 1 proxy hop). A lone
+    // entry is indistinguishable from an attacker-supplied header, so
+    // extractClientIp must not trust it — see the dedicated fail-safe
+    // describe block below for the documented behaviour this mirrors.
     const req = makeReq({ 'x-forwarded-for': '203.0.113.5' });
-    expect(extractClientIp(req)).toBe('203.0.113.5');
+    expect(extractClientIp(req)).toBe('10.0.0.1');
   });
 
   it('returns unknown when no address available', () => {

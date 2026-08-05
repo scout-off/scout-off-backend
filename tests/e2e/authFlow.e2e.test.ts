@@ -10,11 +10,22 @@ import request from 'supertest';
 import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
 import app from '../../src/app';
 
+// In-memory stand-in for the `revoked_tokens` table so tokenBlocklist.ts's
+// real (unmocked) getDriver()-based checkDb round-trip works — without it,
+// isTokenRevoked() fails closed (treats every token as revoked) whenever it
+// can't reach the DB, which would reject every freshly-issued JWT below.
+const revokedTokensTable = new Map<string, number>(); // jti -> expires_at (unix seconds)
+
 jest.mock('../../src/db', () => ({
   queryEvents: jest.fn().mockReturnValue([]),
   getPlayerById: jest.fn().mockReturnValue(null),
   queryPlayers: jest.fn().mockReturnValue([]),
   countPlayers: jest.fn().mockReturnValue(0),
+  searchPlayers: jest.fn().mockReturnValue({ data: [], nextCursor: null }),
+  insertAuditLog: jest.fn().mockReturnValue({
+    id: 1, hash: 'aaa', prev_hash: 'bbb', action: '',
+    admin_wallet: '', query_params: '{}', created_at: '', event_source: '',
+  }),
   getEventsCount: jest.fn().mockReturnValue(0),
   fetchLastIndexedLedger: jest.fn().mockReturnValue(0),
   persistLastIndexedLedger: jest.fn(),
@@ -26,6 +37,33 @@ jest.mock('../../src/db', () => ({
   getContactUnlocksByScout: jest.fn().mockReturnValue([]),
   hasContactUnlock: jest.fn().mockReturnValue(false),
   insertContactUnlock: jest.fn(),
+  getDriver: jest.fn(() => ({
+    run: (sql: string, params: unknown[] = []) => {
+      if (/INSERT INTO revoked_tokens/i.test(sql)) {
+        const [jti, , expiresAt] = params as [string, number, number];
+        revokedTokensTable.set(jti, expiresAt);
+      } else if (/DELETE FROM revoked_tokens/i.test(sql)) {
+        const [now] = params as [number];
+        for (const [jti, exp] of revokedTokensTable) {
+          if (exp <= now) revokedTokensTable.delete(jti);
+        }
+      }
+      return { changes: 1, lastId: 0 };
+    },
+    get: (sql: string, params: unknown[] = []) => {
+      if (/SELECT jti FROM revoked_tokens/i.test(sql)) {
+        const [jti, now] = params as [string, number];
+        const exp = revokedTokensTable.get(jti);
+        if (exp !== undefined && exp > now) return { jti };
+      }
+      return undefined;
+    },
+    all: () => [],
+    value: () => undefined,
+    exec: () => {},
+    transaction: (fn: () => unknown) => fn(),
+    close: async () => {},
+  })),
 }));
 
 jest.mock('../../src/services/ipfs', () => ({
