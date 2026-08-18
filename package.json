@@ -41,7 +41,7 @@
     "@opentelemetry/auto-instrumentations-node": "^0.78.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
     "@opentelemetry/sdk-node": "^0.221.0",
-    "@stellar/stellar-sdk": "12.1.0",
+    "@stellar/stellar-sdk": "16.2.0",
     "axios": "1.18.1",
     "better-sqlite3": "^11.10.0",
     "compression": "^1.8.1",
