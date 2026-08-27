@@ -10,6 +10,44 @@ Scout-Off supports two database drivers:
 
 The migration is reversible within a maintenance window.
 
+## Configuration Reference
+
+The following environment variables control the database driver and connection
+behaviour. All four must be correctly configured when switching from SQLite to
+PostgreSQL.
+
+| Variable | Accepted values | Default | Description |
+| -------- | --------------- | ------- | ----------- |
+| `DB_DRIVER` | `sqlite`, `postgres` | `sqlite` | Database driver. **No silent fallback**: a typo (e.g. `postgresql`, `pgsql`) causes the process to exit with a configuration error on startup rather than silently falling back to SQLite. Case-insensitive. |
+| `DATABASE_URL` | PostgreSQL connection string | *(required when `DB_DRIVER=postgres`)* | Full connection URI: `postgresql://user:password@host:5432/database`. Optional when `DB_DRIVER=sqlite`. When using connection pooling (PgBouncer), point this at the pooler's port. |
+| `DATABASE_SSL` | `true`, `1`, `yes`, `no-verify`, `false`, *(unset)* | `false` | TLS mode for PostgreSQL connections. See [SSL / TLS Configuration](#ssl--tls-configuration) below for per-provider guidance. `true` = full certificate verification (recommended for production). `no-verify` = encrypt but skip cert check (dev/staging with self-signed certs). `false` = no TLS (local or private-network Postgres). |
+| `DATABASE_POOL_SIZE` | Integer 1-100 | `10` | Maximum concurrent connections per backend instance. Set this based on your PostgreSQL server's `max_connections` minus overhead for admin tools and other services. A pool of 10 works for most single-instance deployments; 25-50 for high-traffic multi-replica setups. Values outside 1-100 are clamped. |
+
+### Applying configuration changes
+
+After changing any of these variables, restart the backend. The driver and pool
+are initialised once at startup; runtime changes are not picked up without a
+restart.
+
+### DB_DRIVER validation
+
+On startup, `config.ts` reads `DB_DRIVER`, lowercases it, and checks it against
+the known set (`sqlite`, `postgres`). An unrecognised value — including common
+typos like `postgresql`, `pgsql`, or `PostgreSQL` — halts the process
+immediately with a clear error message rather than silently defaulting to
+SQLite:
+
+```
+Invalid DB_DRIVER: "postgresql". Expected "sqlite" or "postgres".
+```
+
+This strict validation prevents the scenario where an operator believes they
+are running against PostgreSQL but the backend has fallen back to a local
+SQLite file — a configuration error that is extremely hard to diagnose from
+application behaviour alone.
+
+
+
 > **Helm chart default:** the `helm/scout-off-backend` chart ships with a
 > single-replica, SQLite-backed default topology (`replicaCount: 1`, HPA and
 > PDB disabled). Horizontal scaling (multiple replicas or the HPA) requires
