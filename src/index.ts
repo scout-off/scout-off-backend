@@ -16,9 +16,16 @@ import {
   closeCacheInvalidationSubscriber,
 } from "./services/cache";
 import { closeRedisClients } from "./services/redis";
+import { runTierDivergenceCheck } from "./services/tierDivergenceJob";
+import { getTierDivergenceTotal } from "./services/tierDivergenceJob";
+import { setTierDivergenceGetter } from "./middleware/metrics";
 
 // Database initialization is now async - must be awaited
 async function start() {
+  // Register the tier-divergence counter getter so the metrics endpoint can
+  // expose scout_off_tier_divergence_total without a circular import (#1132).
+  setTierDivergenceGetter(getTierDivergenceTotal);
+
   try {
     await initDb();
   } catch (err) {
@@ -121,6 +128,20 @@ async function startServer() {
   reconcilePins();
   const reconcileInterval = setInterval(reconcilePins, config.ipfsReconcileIntervalMs);
 
+  // Scheduled tier divergence check (#1132): compare derived (off-chain) tier
+  // against stored progress_level; emits scout_off_tier_divergence_total metric
+  // and structured log per mismatch. Interval configurable via TIER_DIVERGENCE_INTERVAL_MS.
+  const runDivergenceCheck = async () => {
+    try {
+      await runTierDivergenceCheck();
+    } catch (err) {
+      logger.error("Tier divergence check error:", (err as Error).message);
+    }
+  };
+
+  runDivergenceCheck();
+  const divergenceInterval = setInterval(runDivergenceCheck, config.tierDivergence.intervalMs);
+
   const SHUTDOWN_TIMEOUT_MS = 10_000;
   let isShuttingDown = false;
 
@@ -140,6 +161,7 @@ async function startServer() {
     clearInterval(pollInterval);
     clearInterval(retryInterval);
     clearInterval(reconcileInterval);
+    clearInterval(divergenceInterval);
 
     server.close(async (err) => {
       if (err) {

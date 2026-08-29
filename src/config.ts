@@ -484,6 +484,19 @@ const config = {
   /** Minimum response size in bytes to trigger compression (default: 1024 bytes). */
   compressionThresholdBytes: parseNumericEnv('COMPRESSION_THRESHOLD', process.env.COMPRESSION_THRESHOLD ?? process.env.COMPRESSION_THRESHOLD_BYTES, 1024, { min: 1, integer: true }),
 
+  /**
+   * Tier divergence reconciliation job config (#1132).
+   * Compares derived (off-chain) tier against stored progress_level and
+   * emits scout_off_tier_divergence_total + structured log per mismatch.
+   *
+   * TIER_DIVERGENCE_INTERVAL_MS  — how often to run (default: 5 min)
+   * TIER_DIVERGENCE_SAMPLE_SIZE  — max players to check per run (default: 100)
+   */
+  tierDivergence: {
+    intervalMs: parseNumericEnv('TIER_DIVERGENCE_INTERVAL_MS', process.env.TIER_DIVERGENCE_INTERVAL_MS, 300_000, { min: 1000, integer: true }),
+    sampleSize: parseNumericEnv('TIER_DIVERGENCE_SAMPLE_SIZE', process.env.TIER_DIVERGENCE_SAMPLE_SIZE, 100, { min: 1, integer: true }),
+  },
+
 };
 
 export default config;

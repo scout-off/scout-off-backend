@@ -223,3 +223,47 @@ curl -X POST -H "Authorization: Bearer $ADMIN_JWT" \
 3. Spot-check affected entities via the API (tier, milestones, webhooks).
 4. If you used the runbook to fix something the docs didn't predict, update
    this file — and add any new doc to [docs/README.md](README.md).
+
+## Tier divergence alert (#1132)
+
+**Symptom:** `scout_off_tier_divergence_total` in `GET /metrics` is non-zero or
+growing. Scouts may see stale progress tiers for one or more players.
+
+**Cause:** The indexer missed one or more `milestone_approved` events. The
+off-chain derived tier (from the `milestone_approved` event count) no longer
+matches the stored `progress_level`.
+
+**Diagnosis:**
+
+```bash
+# 1. Check the current mismatch count
+curl -s http://localhost:4000/metrics | grep scout_off_tier_divergence
+
+# 2. Find which players are affected in the structured logs
+# Look for entries with msg "tier-divergence mismatch detected"
+# Each entry contains: player_id, onchain (stored), derived, approved_milestone_count
+```
+
+**Resolution:**
+
+Run a full reindex to replay events from the last known-good ledger:
+
+```bash
+# Reset the indexer to replay from a safe ledger (e.g. 1000 ledgers back)
+INDEXER_BACKFILL_FROM_LEDGER=<safe_ledger> npm start
+# or trigger via the admin endpoint:
+curl -X POST http://localhost:4000/api/admin/reindex \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+```
+
+After reindexing completes, `scout_off_tier_divergence_total` should stop
+growing and the next reconciliation pass (every `TIER_DIVERGENCE_INTERVAL_MS`,
+default 5 min) should log zero mismatches.
+
+**Configuration:**
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `TIER_DIVERGENCE_INTERVAL_MS` | `300000` (5 min) | How often to run the reconciliation pass |
+| `TIER_DIVERGENCE_SAMPLE_SIZE` | `100` | Max players sampled per pass |
+
