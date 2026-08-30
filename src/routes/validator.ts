@@ -6,8 +6,10 @@ import {
   pendingQuerySchema,
   approveBulkMilestones,
   bulkApproveSchema,
+  getValidatorDashboardStats,
 } from '../controllers/validatorController';
 import { requireRole } from '../middleware/auth';
+import { requireWalletOwner } from '../middleware/requireOwner';
 import { validateBody, validateQuery } from '../middleware/validate';
 import { rateLimit, playerRateLimit } from '../middleware/rateLimit';
 import { methodNotAllowed } from '../middleware/methodNotAllowed';
@@ -97,5 +99,23 @@ router.route('/:wallet/milestones/pending')
 router.route('/milestones/approve-bulk')
   .post(requireRole('validator'), validateBody(bulkApproveSchema), approveBulkMilestones)
   .all(methodNotAllowed(['POST']));
+
+/**
+ * GET /api/validators/:wallet/stats
+ *
+ * Dashboard summary for a validator: pending count, all-time approved/rejected
+ * totals, approvals in the last 30 days, and up to 20 recent activity events.
+ *
+ * Counts are derived from indexed milestone events — no separate write path.
+ *
+ * @param wallet {string} - Validator's Stellar public key
+ * @response 200 { success: true, data: { wallet, pending, approvedTotal, rejectedTotal, approvedLast30d, recent: [...] } }
+ * @response 401 { success: false, error: string } - Missing or invalid token
+ * @response 403 { success: false, error: string } - Insufficient permissions or wallet mismatch
+ * @auth Bearer (validator role required; own wallet only — admins may query any wallet)
+ */
+router.route('/:wallet/stats')
+  .get(requireRole('validator'), requireWalletOwner(), getValidatorDashboardStats)
+  .all(methodNotAllowed(['GET', 'HEAD']));
 
 export default router;
