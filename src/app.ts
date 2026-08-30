@@ -268,12 +268,9 @@ export interface ProbeResult {
 async function checkReadiness(): Promise<Record<string, ProbeResult>> {
   const timeouts = getReadinessTimeouts();
 
-  const [dbResult, ipfsResult, stellarResult] = await Promise.all([
-    // DB probe — writable heartbeat upsert
-    (async (): Promise<ProbeResult> => {
-      const t0 = Date.now();
-      const outcome = await withTimeout(() => probeDbWritable(timeouts.db), timeouts.db);
-      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
+  const [dbResult, ipfsResult, stellarResult, indexerResult] = await Promise.all([
+    (async (): Promise<'ok' | 'unavailable'> => {
+      return (await probeDbWritable()) === 'ok' ? 'ok' : 'unavailable';
     })(),
 
     // IPFS probe — Pinata connectivity
@@ -319,7 +316,12 @@ async function checkReadiness(): Promise<Record<string, ProbeResult>> {
     })(),
   ]);
 
-  return { db: dbResult, ipfs: ipfsResult, stellar: stellarResult };
+  services.db = dbResult;
+  services.ipfs = ipfsResult;
+  services.stellar = stellarResult;
+  services.indexer = indexerResult;
+
+  return services;
 }
 
 app.get('/ready', async (_req, res) => {
