@@ -5,6 +5,7 @@ import { getEvents, getLastLedger, setLastLedger } from '../db';
 import { ApiResponse, EventRecord } from '../types';
 import { logAuditEvent } from '../services/audit';
 import { withdrawFees as stellarWithdrawFees, FeeWithdrawalError, FeeWithdrawalResult } from '../services/stellar';
+import { executeAdminAction } from '../services/adminMultiSig';
 import config from '../config';
 import { logger } from '../utils/logger';
 
@@ -377,6 +378,50 @@ export async function reindex(req: Request, res: Response, next: NextFunction) {
     const previous = getLastLedger();
     setLastLedger(fromLedger);
     res.json({ success: true, data: { fromLedger, previous } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export const updatePlatformFeeSchema = z.object({
+  actionId: z.string().min(1),
+  newFeeBps: z.number().int().min(0).max(10000),
+});
+
+/**
+ * POST /api/admin/fees/config
+ *
+ * Propose an update_platform_fee multi-sig action and execute it.
+ * Routes through the existing admin multi-sig action dispatcher.
+ */
+export async function updatePlatformFeeController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const adminWallet = req.account ?? 'unknown';
+    const parsed = updatePlatformFeeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid request body' });
+      return;
+    }
+
+    const { actionId, newFeeBps } = parsed.data;
+    logger.info(`[admin] action=update_platform_fee actionId=${actionId} newFeeBps=${newFeeBps} admin=${adminWallet}`);
+
+    const result = await executeAdminAction(
+      actionId,
+      'update_platform_fee',
+      { newFeeBps },
+      adminWallet,
+    );
+
+    if (!result.success) {
+      res.status(400).json({ success: false, error: result.error });
+      return;
+    }
+
+    res.status(202).json({
+      success: true,
+      data: { actionId, transactionId: result.transactionId, newFeeBps: result.newFeeBps },
+    });
   } catch (err) {
     next(err);
   }

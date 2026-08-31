@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getStats, getAllEvents, getFeeSummary, registerValidator, revokeValidator, pauseContract, unpauseContract, withdrawFeesController, introspectToken, reindex } from '../controllers/adminController';
+import { getStats, getAllEvents, getFeeSummary, registerValidator, revokeValidator, pauseContract, unpauseContract, withdrawFeesController, introspectToken, reindex, updatePlatformFeeController } from '../controllers/adminController';
 import { exportEvents } from '../controllers/exportController';
 import { requireRole } from '../middleware/auth';
 
@@ -147,5 +147,19 @@ router.post('/introspect', requireRole('admin'), introspectToken);
  * @auth Bearer (admin role required)
  */
 router.post('/indexer/reindex', requireRole('admin'), reindex);
+
+/**
+ * POST /api/admin/fees/config
+ *
+ * Propose and execute an update_platform_fee multi-sig action.
+ * Updates the on-chain platform fee in basis points (0–10000).
+ *
+ * @body actionId {string} - Unique multi-sig action identifier
+ * @body newFeeBps {number} - New fee in basis points (0–10000)
+ * @response 202 { success: true, data: { actionId, transactionId, newFeeBps } }
+ * @response 400 { success: false, error: string }
+ * @auth Bearer (admin role required)
+ */
+router.post('/fees/config', requireRole('admin'), updatePlatformFeeController);
 
 export default router;

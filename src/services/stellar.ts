@@ -209,6 +209,25 @@ export interface UpdateProfileResult {
   metadataUri: string;
 }
 
+export interface UpdatePlatformFeeResult {
+  transactionId: string;
+  newFeeBps: number;
+}
+
+/**
+ * Stub: invoke the contract's `set_platform_fee_bps(new_bps: u32)` entrypoint.
+ * Admin-only on-chain call. Valid range: 0–10000 bps.
+ * Replace with a real Soroban invocation when ready.
+ */
+export async function updatePlatformFee(newFeeBps: number): Promise<UpdatePlatformFeeResult> {
+  if (newFeeBps < 0 || newFeeBps > 10000) {
+    throw new Error('newFeeBps must be between 0 and 10000');
+  }
+  // TODO: invoke set_platform_fee_bps on the Soroban register contract
+  // Example: await invokeContract(adminKeypair, 'set_platform_fee_bps', [u32Val(newFeeBps)]);
+  return { transactionId: `stub-fee-txid-${Date.now()}`, newFeeBps };
+}
+
 /**
  * Stub: invoke the contract's `update_profile(player_id, metadata_uri)` method.
  * Replace with a real Soroban invocation via invokeContract() when the RPC integration is ready.

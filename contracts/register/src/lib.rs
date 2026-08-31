@@ -68,6 +68,38 @@ impl RegisterContract {
         Ok(())
     }
 
+    /// Update the platform fee in basis points. Admin-only.
+    /// Valid range: 0–10000 (0% to 100%). Emits a fee_upd event.
+    pub fn set_platform_fee_bps(env: Env, new_bps: u32) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        if new_bps > 10000 {
+            return Err(Error::InvalidInput);
+        }
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+        env.storage()
+            .instance()
+            .set(&DataKey::PlatformFeeBps, &new_bps);
+        env.events()
+            .publish((symbol_short!("fee_upd"),), (new_bps,));
+        bump_instance(&env);
+        Ok(())
+    }
+
+    /// Return the current platform fee in basis points.
+    pub fn get_platform_fee_bps(env: Env) -> Result<u32, Error> {
+        env.storage()
+            .instance()
+            .get(&DataKey::PlatformFeeBps)
+            .ok_or(Error::NotInitialized)
+    }
+
     /// Register a new player. Each wallet may only register once.
     /// Returns the generated player_id.
     pub fn register_player(
@@ -428,5 +460,33 @@ mod tests {
             &String::from_str(&env, "europe"),
         );
         assert_eq!(id2, id1 + 1);
+    }
+
+    #[test]
+    fn set_platform_fee_bps_succeeds_for_admin() {
+        let env = Env::default();
+        let (client, admin, token) = setup(&env);
+        client.initialize(&admin, &token, &100);
+        client.set_platform_fee_bps(&250u32);
+        assert_eq!(client.get_platform_fee_bps(), 250u32);
+    }
+
+    #[test]
+    fn set_platform_fee_bps_rejects_out_of_range() {
+        let env = Env::default();
+        let (client, admin, token) = setup(&env);
+        client.initialize(&admin, &token, &100);
+        assert!(client.try_set_platform_fee_bps(&10001u32).is_err());
+    }
+
+    #[test]
+    fn set_platform_fee_bps_allows_zero_and_max() {
+        let env = Env::default();
+        let (client, admin, token) = setup(&env);
+        client.initialize(&admin, &token, &100);
+        client.set_platform_fee_bps(&0u32);
+        assert_eq!(client.get_platform_fee_bps(), 0u32);
+        client.set_platform_fee_bps(&10000u32);
+        assert_eq!(client.get_platform_fee_bps(), 10000u32);
     }
 }
