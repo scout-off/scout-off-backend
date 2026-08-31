@@ -14,6 +14,21 @@ import axios from 'axios';
 import FormData from 'form-data';
 import config from '../config';
 import { logger } from '../utils/logger';
+import { CircuitBreaker, CircuitBreakerOpenError } from '../utils/circuitBreaker';
+
+/**
+ * Circuit breaker for all outbound Pinata / IPFS calls.
+ * Thresholds are configurable via:
+ *   IPFS_BREAKER_FAILURE_THRESHOLD  (default: 5)
+ *   IPFS_BREAKER_RESET_TIMEOUT_MS   (default: 30000)
+ */
+export const ipfsBreaker = new CircuitBreaker({
+  name: 'ipfs',
+  failureThreshold: parseInt(process.env.IPFS_BREAKER_FAILURE_THRESHOLD ?? '5', 10),
+  resetTimeoutMs: parseInt(process.env.IPFS_BREAKER_RESET_TIMEOUT_MS ?? '30000', 10),
+});
+
+export { CircuitBreakerOpenError };
 
 const PINATA_PIN_JSON_URL = 'https://api.pinata.cloud/pinning/pinJSONToIPFS';
 const PINATA_PIN_FILE_URL = 'https://api.pinata.cloud/pinning/pinFileToIPFS';
@@ -48,8 +63,10 @@ export async function pinJson(body: object): Promise<string> {
     logger.warn('[ipfs] Pinata not configured — returning dev stub CID for pinJson');
     return devStubCid(JSON.stringify(body));
   }
-  const res = await axios.post(PINATA_PIN_JSON_URL, body, { headers: pinataHeaders() });
-  return res.data.IpfsHash as string;
+  return ipfsBreaker.execute(async () => {
+    const res = await axios.post(PINATA_PIN_JSON_URL, body, { headers: pinataHeaders() });
+    return res.data.IpfsHash as string;
+  });
 }
 
 /** Pin a file buffer to IPFS via Pinata. Returns the CID. */
@@ -59,13 +76,15 @@ export async function pinFile(buffer: Buffer, filename: string, mimeType: string
     logger.warn('[ipfs] Pinata not configured — returning dev stub CID for pinFile');
     return devStubCid(filename);
   }
-  const form = new FormData();
-  form.append('file', buffer, { filename, contentType: mimeType });
-  const res = await axios.post(PINATA_PIN_FILE_URL, form, {
-    headers: { ...pinataHeaders(), ...form.getHeaders() },
-    maxBodyLength: Infinity,
+  return ipfsBreaker.execute(async () => {
+    const form = new FormData();
+    form.append('file', buffer, { filename, contentType: mimeType });
+    const res = await axios.post(PINATA_PIN_FILE_URL, form, {
+      headers: { ...pinataHeaders(), ...form.getHeaders() },
+      maxBodyLength: Infinity,
+    });
+    return res.data.IpfsHash as string;
   });
-  return res.data.IpfsHash as string;
 }
 
 /** Build a public gateway URL for a CID. */
@@ -82,14 +101,18 @@ export async function getCid(uriOrCid: string): Promise<string> {
  * Health check for the Pinata/IPFS dependency.
  * Resolves immediately (with a warning) when credentials are absent in non-production.
  * Rejects with a clear error in production without credentials.
+ * Also reports breaker state — if open, reports unavailable immediately.
  */
 export async function checkHealth(): Promise<void> {
+  if (ipfsBreaker.isOpen()) {
+    throw new Error('IPFS circuit breaker is open — Pinata unavailable');
+  }
   if (!isPinataConfigured()) {
     if (process.env.NODE_ENV === 'production') assertPinataConfigured();
     logger.warn('[ipfs] Pinata not configured — skipping IPFS health check in dev');
     return;
   }
-  await axios.get(PINATA_TEST_URL, { headers: pinataHeaders() });
+  await ipfsBreaker.execute(() => axios.get(PINATA_TEST_URL, { headers: pinataHeaders() }));
 }
 
 export default { pinJson, pinFile, gatewayUrl, getCid, checkHealth };

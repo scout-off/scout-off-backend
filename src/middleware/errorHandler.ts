@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { ApiResponse } from '../types';
 import { logger } from '../utils/logger';
+import { CircuitBreakerOpenError } from '../utils/circuitBreaker';
 
 interface HttpError extends Error {
   type?: string;
@@ -44,6 +45,15 @@ export function errorHandler(
       ...(correlationId !== undefined && { correlationId }),
     };
     res.status(400).json(body);
+    return;
+  }
+
+  if (err instanceof CircuitBreakerOpenError) {
+    res.status(503).json({
+      success: false,
+      error: err.message,
+      ...(correlationId !== undefined && { correlationId }),
+    });
     return;
   }
 
