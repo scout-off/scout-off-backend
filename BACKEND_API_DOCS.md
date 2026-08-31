@@ -283,7 +283,20 @@ Pin milestone evidence to IPFS and return the CID. **Requires Bearer auth (valid
 
 #### `GET /api/validators/milestones/pending`
 
-List pending milestone approvals. **Requires Bearer auth (validator role).**
+List pending milestone approvals with pagination and optional filters. **Requires Bearer auth (validator role).**
+
+**Query params**
+
+| Param             | Type    | Required | Description                                           |
+|-------------------|---------|----------|-------------------------------------------------------|
+| `page`            | integer | ❌       | Page number (default: 1)                              |
+| `pageSize`        | integer | ❌       | Results per page (default: 20, max: 100)              |
+| `region`          | string  | ❌       | Filter by player region                               |
+| `position`        | string  | ❌       | Filter by player position                             |
+| `submittedAfter`  | integer | ❌       | Unix timestamp — only milestones submitted after this |
+| `submittedBefore` | integer | ❌       | Unix timestamp — only milestones submitted before this|
+
+Default (no params) returns the first page of 20 results. Max page size is 100.
 
 **Response `200`**
 ```json
@@ -291,13 +304,16 @@ List pending milestone approvals. **Requires Bearer auth (validator role).**
   "success": true,
   "data": [
     {
-      "milestoneId": "m001",
-      "playerId": "abc123",
-      "milestoneType": "performance",
-      "evidenceUri": "QmEvidence...",
-      "submittedAt": 1700000000
+      "status": "pending",
+      "approvedBy": "",
+      "submittedAt": 1700000000,
+      "evidenceUri": "QmEvidence..."
     }
-  ]
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20,
+  "hasMore": false
 }
 ```
 

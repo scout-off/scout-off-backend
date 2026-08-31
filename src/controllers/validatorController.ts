@@ -23,9 +23,16 @@ export const milestoneSchema = z.object({
   evidenceUri: z.string().min(1).refine(isValidEvidenceUri, 'evidenceUri must be a valid IPFS (ipfs://) or HTTPS URI'),
 });
 
+export const MAX_PAGE_SIZE = 100;
+
 export const pendingQuerySchema = z.object({
   region: z.string().optional(),
   playerId: z.string().optional(),
+  position: z.string().optional(),
+  submittedBefore: z.coerce.number().int().optional(),
+  submittedAfter: z.coerce.number().int().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(20),
 });
 
 /** POST /api/validators/milestone */
@@ -57,15 +64,28 @@ export async function submitMilestoneEvidence(req: Request, res: Response, next:
 /** GET /api/validators/milestones/pending */
 export async function getPendingMilestones(req: Request, res: Response, next: NextFunction) {
   try {
-    const { region, playerId } = pendingQuerySchema.parse(req.query);
+    const { region, playerId, position, submittedBefore, submittedAfter, page, pageSize } =
+      pendingQuerySchema.parse(req.query);
+
     const submitted = getEvents('milestone_submitted').map((e) => e.payload);
     const approvedIds = new Set(
       getEvents('milestone_approved').map((e) => e.payload.milestone_id)
     );
+
     let pending = submitted.filter((m) => !approvedIds.has(m.milestone_id));
     if (region) pending = pending.filter((m) => m.region === region);
     if (playerId) pending = pending.filter((m) => m.player_id === playerId);
-    const milestones: PlayerMilestone[] = pending.map((m) => ({
+    if (position) pending = pending.filter((m) => m.position === position);
+    if (submittedAfter !== undefined)
+      pending = pending.filter((m) => (m.created_at as number) >= submittedAfter);
+    if (submittedBefore !== undefined)
+      pending = pending.filter((m) => (m.created_at as number) <= submittedBefore);
+
+    const total = pending.length;
+    const offset = (page - 1) * pageSize;
+    const paginated = pending.slice(offset, offset + pageSize);
+
+    const milestones: PlayerMilestone[] = paginated.map((m) => ({
       status: 'pending' as const,
       approvedBy: m.validator as string || '',
       submittedAt: m.created_at as number || Math.floor(Date.now() / 1000),
@@ -73,9 +93,16 @@ export async function getPendingMilestones(req: Request, res: Response, next: Ne
     }));
 
     const validatorWallet = req.account ?? 'unknown';
-    recordAudit(validatorWallet, 'milestone_approved', { region: region ?? null, playerId: playerId ?? null, pendingCount: milestones.length }, 'pending milestones viewed');
+    recordAudit(validatorWallet, 'milestone_approved', { region: region ?? null, playerId: playerId ?? null, pendingCount: total }, 'pending milestones viewed');
 
-    res.json({ success: true, data: milestones });
+    res.json({
+      success: true,
+      data: milestones,
+      total,
+      page,
+      pageSize,
+      hasMore: offset + pageSize < total,
+    });
   } catch (err) {
     next(err);
   }
