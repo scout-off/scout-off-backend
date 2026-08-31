@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getStats, getAllEvents, getFeeSummary, registerValidator, revokeValidator, pauseContract, unpauseContract, withdrawFeesController, introspectToken, reindex } from '../controllers/adminController';
+import { getStats, getAllEvents, getFeeSummary, registerValidator, revokeValidator, pauseContract, unpauseContract, withdrawFeesController, introspectToken, reindex, bulkValidatorImport } from '../controllers/adminController';
 import { exportEvents } from '../controllers/exportController';
 import { requireRole } from '../middleware/auth';
 
@@ -80,6 +80,21 @@ router.post('/fees', requireRole('admin'), withdrawFeesController);
  * @auth Bearer (admin role required)
  */
 router.post('/validators/register', requireRole('admin'), registerValidator);
+
+/**
+ * POST /api/admin/validators/bulk-import
+ *
+ * Atomically import a batch of validators as a single multi-sig action.
+ * Returns a per-wallet manifest; partial failures return 207 for targeted retry.
+ *
+ * @body actionId {string} - Unique identifier for this multi-sig action
+ * @body wallets {string[]} - Array of Stellar public keys (max 100)
+ * @response 202 { success: true, data: { actionId, manifest } }
+ * @response 207 { success: false, error, data: { manifest } } - Partial failure
+ * @response 400 { success: false, error: string } - Validation error
+ * @auth Bearer (admin role required)
+ */
+router.post('/validators/bulk-import', requireRole('admin'), bulkValidatorImport);
 
 /**
  * POST /api/admin/validators/revoke

@@ -5,6 +5,7 @@ import { getEvents, getLastLedger, setLastLedger } from '../db';
 import { ApiResponse, EventRecord } from '../types';
 import { logAuditEvent } from '../services/audit';
 import { withdrawFees as stellarWithdrawFees, FeeWithdrawalError, FeeWithdrawalResult } from '../services/stellar';
+import { executeAdminAction } from '../services/adminMultiSig';
 import config from '../config';
 import { logger } from '../utils/logger';
 
@@ -377,6 +378,53 @@ export async function reindex(req: Request, res: Response, next: NextFunction) {
     const previous = getLastLedger();
     setLastLedger(fromLedger);
     res.json({ success: true, data: { fromLedger, previous } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const STELLAR_ADDRESS_RE_BULK = /^G[A-Z2-7]{55}$/;
+
+export const bulkValidatorImportSchema = z.object({
+  actionId: z.string().min(1),
+  wallets: z
+    .array(z.string().regex(STELLAR_ADDRESS_RE_BULK, 'Each wallet must be a valid Stellar address'))
+    .min(1, 'wallets must contain at least one address')
+    .max(100, 'wallets may contain at most 100 addresses per batch'),
+});
+
+/**
+ * POST /api/admin/validators/bulk-import
+ *
+ * Propose and execute an atomic bulk validator import as a single multi-sig action.
+ * All wallets are processed together; partial success is reported via a manifest.
+ */
+export async function bulkValidatorImport(req: Request, res: Response, next: NextFunction) {
+  try {
+    const adminWallet = req.account ?? 'unknown';
+    const parsed = bulkValidatorImportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid request body' });
+      return;
+    }
+
+    const { actionId, wallets } = parsed.data;
+    logger.info(`[admin] action=bulk_validator_import actionId=${actionId} count=${wallets.length} admin=${adminWallet}`);
+
+    const result = await executeAdminAction(
+      actionId,
+      'bulk_validator_import',
+      { wallets },
+      adminWallet,
+    );
+
+    if (!result.success) {
+      // Partial failure — 207 Multi-Status with manifest for retry
+      res.status(207).json({ success: false, error: result.error, data: { manifest: result.manifest } });
+      return;
+    }
+
+    res.status(202).json({ success: true, data: { actionId, manifest: result.manifest } });
   } catch (err) {
     next(err);
   }
