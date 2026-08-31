@@ -14,7 +14,7 @@ members = [
 # soroban-sdk's own compile_error!), so it must only be enabled by the
 # non-wasm dev-dependencies declarations in each member crate below, not
 # inherited into every crate's default (wasm-targeted) [dependencies].
-soroban-sdk = { version = "21.7.7" }
+soroban-sdk = { version = "27.0.6" }
 proptest = { version = "1", default-features = false, features = ["std"] }
 
 [profile.release]
