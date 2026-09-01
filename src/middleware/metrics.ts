@@ -1,6 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
 import { ipReputationCounters, resetIpReputationCounters } from '../services/ipReputation';
 
+// ── Tier divergence counter injection (#1132) ──────────────────────────────────
+//
+// The actual counter lives in src/services/tierDivergenceJob.ts to avoid a
+// circular import chain (metrics ← tierDivergenceJob ← db ← metrics).
+// The getter is registered at startup by src/index.ts via
+// `setTierDivergenceGetter`; until then it defaults to () => 0 so the metric
+// is always present in Prometheus output (just zero).
+
+let _getTierDivergenceTotal: () => number = () => 0;
+
+/** Register the live counter getter. Called once at startup by src/index.ts. */
+export function setTierDivergenceGetter(fn: () => number): void {
+  _getTierDivergenceTotal = fn;
+}
+
+function getTierDivergenceForMetrics(): number {
+  return _getTierDivergenceTotal();
+}
+
 export interface RouteMetric {
   count: number;
   totalLatencyMs: number;
@@ -558,6 +577,14 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# HELP ip_reputation_penalised_total Total number of requests that received a reputation penalty (delay or rate restriction)');
   lines.push('# TYPE ip_reputation_penalised_total counter');
   lines.push(`ip_reputation_penalised_total ${ipReputationCounters.penalised}`);
+
+  // Tier divergence counter (#1132) — counts mismatches between derived off-chain
+  // tier and the stored progress_level detected by the reconciliation job.
+  // A sustained non-zero value indicates the indexer has missed milestone_approved
+  // events; run a reindex to resolve (see docs/runbook.md).
+  lines.push('# HELP scout_off_tier_divergence_total Total number of player tier divergence events detected since process start');
+  lines.push('# TYPE scout_off_tier_divergence_total counter');
+  lines.push(`scout_off_tier_divergence_total ${getTierDivergenceForMetrics()}`);
 
   return lines.join('\n') + '\n';
 }
