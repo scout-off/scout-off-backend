@@ -91,6 +91,60 @@ export function rateLimit(options: RateLimitOptions = {}) {
 }
 
 /**
+ * Rate limiter keyed by a `player_id` extracted from the validated request
+ * body (`req.body.playerId`).  Designed for POST /api/validators/milestone to
+ * prevent a single player from accumulating spam submissions even from
+ * multiple validators or different IPs (#1137).
+ *
+ * If `req.body.playerId` is absent the middleware falls through without
+ * incrementing any counter — the IP and wallet limiters that precede this one
+ * in the middleware stack still apply.
+ *
+ * Inherits the same fail-open policy as `rateLimit` — see above.
+ */
+export function playerRateLimit(options: RateLimitOptions = {}) {
+  const windowMs = options.windowMs ?? config.milestonePlayerRateLimit.windowMs;
+  const max = options.max ?? config.milestonePlayerRateLimit.max;
+  const store = options.store ?? defaultStore;
+  const namespace = options.name ?? 'milestone-submit:player';
+
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!config.rateLimit.enabled) {
+      next();
+      return;
+    }
+
+    // playerId must already be present in the parsed body (after validateBody)
+    const body = req.body as Record<string, unknown>;
+    const playerId = body?.playerId as string | undefined;
+    if (!playerId || typeof playerId !== 'string') {
+      // No playerId — fall through; other limiters handle this request
+      next();
+      return;
+    }
+
+    try {
+      const { count, resetAt } = await store.increment(`${namespace}:${playerId}`, windowMs);
+
+      if (count > max) {
+        const now = Date.now();
+        const retryAfterSec = Math.ceil(Math.max(0, resetAt - now) / 1000);
+        res.set('Retry-After', String(retryAfterSec || 1));
+        res.status(429).json({
+          success: false,
+          error: 'Too many milestone submissions for this player, please try again later',
+        });
+        return;
+      }
+      next();
+    } catch (err) {
+      logger.warn('[rate-limit] store error (player limiter), failing open', { playerId, err });
+      next();
+    }
+  };
+}
+
+/**
  * Simple in-process or Redis-backed wallet-based rate limiter.
  * Configurable via windowMs and max; excess requests return HTTP 429.
  * If req.account is not present, it calls next().

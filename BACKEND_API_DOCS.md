@@ -8,6 +8,8 @@ All endpoints are served from the base URL configured via `PORT` (default: `4000
 
 - [API Versioning](#api-versioning)
 - [Authentication](#authentication)
+- [Idempotency](#idempotency)
+- [Response Headers](#response-headers)
 - [Endpoints](#endpoints) — generated OpenAPI spec, see [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)
 - [Saved Search Run Endpoint](#saved-search-run-endpoint-get-apiscoutswalletsaved-searchesidrun)
 - [Stubbed Routes](#stubbed-routes)
@@ -120,6 +122,220 @@ mutating endpoints require the matching scope and return `403` with
 
 REST and GraphQL share the same scope contract (`src/utils/apiKeyScopes.ts`).
 See `docs/auth.md` for the full vocabulary and legacy-compatibility rules.
+
+---
+
+## Idempotency
+
+Clients writing retry logic against mutating operations (`subscribe`, `unlock`, `trial-offer` creation, fee withdrawals) should send an `Idempotency-Key` header to ensure that network failures do not cause duplicate submissions.
+
+### Overview
+
+The backend maintains a 24-hour cache of idempotent request responses keyed by the `Idempotency-Key` header value. Repeated requests with the same key within the cache window return the exact cached response — including any error responses — without re-executing the underlying operation.
+
+### How to use it
+
+**Send a stable, unique key:**
+
+```bash
+# Example: a UUID or derived value that remains the same across retries
+curl -X POST http://localhost:4000/api/scouts/GSCOUT.../subscribe \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json" \
+  -d '{"tier":"premium","duration":30}'
+```
+
+**On success or any error, replay the same key to get the same response:**
+
+```bash
+# Same key = same response, even if this is a retry
+curl -X POST http://localhost:4000/api/scouts/GSCOUT.../subscribe \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json" \
+  -d '{"tier":"premium","duration":30}'
+# → Returns the exact same response as the first request (cached)
+```
+
+### Idempotent endpoints
+
+The following endpoints accept and honour the `Idempotency-Key` header:
+
+| Endpoint | Description |
+|---|---|
+| `POST /api/scouts/:wallet/subscribe` | Scout subscription purchase |
+| `POST /api/scouts/:wallet/contacts/:playerId/unlock` | Pay-to-contact fee |
+| `POST /api/scouts/:wallet/trial-offers` | Trial offer creation |
+| `DELETE /api/scouts/:wallet/trial-offers/:offerId` | Trial offer cancellation |
+| `POST /api/admin/fees/withdraw` | Fee withdrawal (admin) |
+| Any `POST /api/scouts/:wallet/webhooks/:id/test` | Webhook delivery test (admin) |
+
+**Note:** Endpoints *without* an `Idempotency-Key` header in the request are processed independently on each call — no caching is applied.
+
+### Behavior
+
+#### Success (2xx)
+
+A successful response is cached with its status code and body. Repeating the same key returns the cached response:
+
+```json
+{ "success": true, "data": { "transactionId": "abc123...", "expiresAt": 1735689600000 } }
+```
+
+#### Error (4xx / 5xx)
+
+Error responses are cached equally. Repeating the same key returns the same error:
+
+```json
+{ "success": false, "error": "Scout has no active on-chain subscription", "code": "NOT_SUBSCRIBED" }
+```
+
+This is intentional — retries with the same key should never trigger a new operation, even if the initial attempt failed.
+
+#### Fingerprint conflict (409)
+
+If the same `Idempotency-Key` is used with a **materially different request body**, the API returns `409 Conflict`:
+
+```bash
+# First request
+curl -X POST http://localhost:4000/api/scouts/GSCOUT.../subscribe \
+  -H "Idempotency-Key: same-key" \
+  -d '{"tier":"premium","duration":30}'
+# → 201 { success: true, … }
+
+# Replay with DIFFERENT tier
+curl -X POST http://localhost:4000/api/scouts/GSCOUT.../subscribe \
+  -H "Idempotency-Key: same-key" \
+  -d '{"tier":"basic","duration":30}'
+# → 409 Conflict { error: "Idempotency key was already used with a different request" }
+```
+
+This prevents silent data corruption from typos or accidental parameter changes.
+
+#### In-flight duplicate (409 with wait)
+
+If a second request arrives with the same `Idempotency-Key` *while the first is still being processed*, the second request waits for the first to complete (up to 5 seconds). If the first completes within that window, the second receives the same response. If it times out:
+
+```json
+{ "error": "Request already in progress for this idempotency key" }
+```
+
+with HTTP status `409`.
+
+This bounds the time the second caller must wait and prevents indefinite hangs.
+
+### TTL and expiry
+
+Idempotency cache entries expire after **24 hours** (configured via `IDEMPOTENCY_TTL_MS` in the database layer). After expiry, a repeated key is treated as a new request:
+
+```bash
+# Hour 0: First request with key "my-key"
+# → Processed normally
+
+# Hour 1: Repeat with same key
+# → Cached response returned
+
+# Hour 25: Repeat with same key
+# → Key has expired, treated as NEW request (no cache hit)
+```
+
+### Best practices
+
+1. **Generate a stable key per logical operation**, not per request attempt. A UUID known to your client is ideal:
+   ```typescript
+   const idempotencyKey = generateUUID(); // Once per user action
+   for (let attempt = 0; attempt < 3; attempt++) {
+     try {
+       const res = await fetch('/api/scouts/.../subscribe', {
+         headers: { 'Idempotency-Key': idempotencyKey },
+         // ... body
+       });
+       break; // Success
+     } catch (err) {
+       if (attempt === 2) throw err; // Last attempt failed
+     }
+   }
+   ```
+
+2. **Treat 409 responses as unrecoverable** within a single logical operation. The key may have been used differently or a concurrent request is still in progress. Generate a new key for a new attempt:
+   ```typescript
+   if (res.status === 409) {
+     // Scenario 1: fingerprint conflict — never retry with this key
+     // Scenario 2: in-flight timeout — may retry after 5+ seconds
+     // For safety: request a new operation with a new key instead.
+   }
+   ```
+
+3. **Always send the same key for all retries of the same operation**, even if errors occur. This prevents duplicate charges / subscriptions if an error response was cached.
+
+### Limitations
+
+- Idempotency keys are scoped per `POST` endpoint; a key used on `POST /subscribe` has no meaning on `POST /unlock`.
+- The cache window is fixed at 24 hours and cannot be extended per-request.
+- If the database backing the idempotency cache is unavailable, requests proceed without idempotency protection (graceful degradation).
+
+---
+
+## Response Headers
+
+Every API response includes custom headers that provide metadata about the request and response:
+
+### `X-Correlation-ID`
+
+**Type:** String (UUID)  
+**Sent on:** Every response  
+**Purpose:** Correlate logs across client, API, and backend services.
+
+The API either echoes the `X-Correlation-ID` request header (if present) or generates a new UUID. Use this value to track a request through your observability pipeline:
+
+```bash
+curl -X GET http://localhost:4000/api/players/player-001 \
+  -H "X-Correlation-ID: 550e8400-e29b-41d4-a716-446655440000"
+# Response includes: X-Correlation-ID: 550e8400-e29b-41d4-a716-446655440000
+
+# All logs from this request will include the correlation ID for easy filtering
+```
+
+### `X-API-Version`
+
+**Type:** Integer (major version)  
+**Sent on:** Every response  
+**Purpose:** Indicate which API major version handled the request.
+
+The value is the major component of the version in `package.json` (e.g., `1` for version `1.2.3`):
+
+```
+X-API-Version: 1
+```
+
+Use this to detect version mismatches or version-specific behaviour in production:
+
+```typescript
+const apiVersion = parseInt(response.headers['x-api-version'], 10);
+if (apiVersion !== expectedVersion) {
+  console.warn(`Expected API v${expectedVersion}, got v${apiVersion}`);
+}
+```
+
+**Related:** See [API Versioning](#api-versioning) for request-side version selection via `/api/v1` or `/api/v2` URL prefixes and the `API-Version` request header.
+
+### `X-Response-Time`
+
+**Type:** String with milliseconds suffix (e.g., `"42ms"`)  
+**Sent on:** Every response  
+**Purpose:** Measure backend processing latency.
+
+The time represents the interval from when the request arrived at the API to when the response headers were about to be sent. Network latency is not included:
+
+```
+X-Response-Time: 142ms
+```
+
+Use this to:
+- Monitor endpoint performance
+- Detect slow routes that may need optimization
+- Correlate with alerting thresholds
 
 ---
 
@@ -441,6 +657,42 @@ curl "http://localhost:4000/api/scouts/${WALLET}/saved-searches/7/run?page=2&pag
 
 ---
 
+#### `POST /api/admin/fees/config`
+
+Propose and execute an `update_platform_fee` multi-sig action to update the on-chain platform fee. **Requires Bearer auth (admin role).**
+
+**Request body**
+```json
+{
+  "actionId": "action-uuid-001",
+  "newFeeBps": 300
+}
+```
+
+| Field       | Type    | Required | Description                            |
+|-------------|---------|----------|----------------------------------------|
+| `actionId`  | string  | ✅       | Unique identifier for this action      |
+| `newFeeBps` | integer | ✅       | New fee in basis points (0–10000)      |
+
+**Response `202`**
+```json
+{
+  "success": true,
+  "data": {
+    "actionId": "action-uuid-001",
+    "transactionId": "stub-fee-txid-...",
+    "newFeeBps": 300
+  }
+}
+```
+
+**Error `400`** — out-of-range value
+```json
+{ "success": false, "error": "newFeeBps must be between 0 and 10000" }
+```
+
+---
+
 ## Stubbed Routes
 
 The following routes currently return data sourced entirely from indexed on-chain events and have no corresponding write/mutation endpoint in the backend:
@@ -513,6 +765,58 @@ router.get('/slow-endpoint', createTimeout(60_000), requireRole('admin'), myHand
 
 ---
 
+## Pagination
+
+Paginated list endpoints consistently cap page size to prevent resource exhaustion and provide predictable response times. A shared constant (`MAX_PAGE_SIZE`) is enforced across all REST and GraphQL endpoints.
+
+### Limits
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| **Default page size** | `20` | Results returned when `pageSize` is omitted |
+| **Maximum page size** | `100` | Hard cap applied to all list endpoints; requests exceeding this are clamped |
+
+### Behavior
+
+When a client requests a `pageSize` greater than the maximum:
+- The request is **clamped** to `100` results
+- The response includes the actual `pageSize` used (not the requested value)
+- No error is returned — the clamp is silent (by design, to simplify client retry logic)
+
+**Example:**
+```bash
+# Request 500 results
+curl "http://localhost:4000/api/v1/players?pageSize=500"
+
+# Response contains pageSize: 100 (not 500)
+# Client must inspect the response to detect the clamp
+{
+  "success": true,
+  "data": [...],
+  "total": 50000,
+  "page": 1,
+  "pageSize": 100,
+  "pages": 500
+}
+```
+
+### Affected endpoints
+
+**REST endpoints:**
+- `GET /api/players` (filter/search)
+- `GET /api/scouts/:wallet/saved-searches/:id/run`
+
+**GraphQL queries:**
+- `players(region, position, minTier, page, pageSize)`
+
+All of these use the shared `MAX_PAGE_SIZE = 100` constant defined in `src/utils/pagination.ts`. The clamp is applied consistently whether the endpoint is called via REST query parameters or GraphQL arguments.
+
+### Rationale
+
+Inconsistent or undocumented page-size caps surprise clients — asking for 500 results and silently getting 100 with no indication creates debugging confusion. A single shared constant plus documentation in responses makes the contract predictable and reduces client-side surprises.
+
+---
+
 ## Error Format
 
 All error responses follow this shape:
@@ -541,44 +845,75 @@ The `code` field provides a machine-readable error classification for programmat
 
 **Note:** When an error is thrown with an explicit `code` property already set, that code takes precedence over the status-based mapping.
 
+### Error Code Reference
+
+All error codes used in REST and GraphQL responses are defined in `src/utils/errorCodes.ts` and documented below. Each code indicates when it occurs and what the client should do.
+
+#### Generic Errors
+
+| Code | HTTP Status | When It Occurs | Client Action |
+|------|------------|-------------|--------------|
+| `INTERNAL_SERVER_ERROR` | 500 | Unexpected server error | Retry with exponential backoff; contact support if persists |
+| `NOT_FOUND` | 404 | Requested resource does not exist | Verify the resource ID/path is correct; check if it was deleted |
+| `VALIDATION_ERROR` | 400 | Request validation failed (Zod schema, required fields, etc.) | Fix the request payload; check field names and types against API docs |
+| `MALFORMED_JSON` | 400 | Request body contains invalid JSON syntax | Verify JSON syntax; ensure Content-Type is application/json |
+| `PAYLOAD_TOO_LARGE` | 413 | Request body size exceeds the server limit | Reduce payload size; split into multiple requests if needed |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | Request Content-Type is not supported | Set Content-Type: application/json in request headers |
+
+#### Authentication & Authorization
+
+| Code | HTTP Status | When It Occurs | Client Action |
+|------|------------|-------------|--------------|
+| `UNAUTHORIZED` | 401 | Request lacks valid authentication (missing/invalid JWT or API key) | Provide a valid Bearer token or X-API-Key header; refresh expired tokens |
+| `FORBIDDEN` | 403 | Request is authenticated but lacks permission | Verify your account role/scope; contact support to request access |
+| `TOKEN_INVALID` | 401 | JWT token is invalid (malformed, signed with wrong key) | Re-authenticate and obtain a fresh token |
+| `TOKEN_EXPIRED` | 401 | JWT token has expired | Refresh the token or re-authenticate |
+
+#### Resource-Specific Errors
+
+| Code | HTTP Status | When It Occurs | Client Action |
+|------|------------|-------------|--------------|
+| `PLAYER_NOT_FOUND` | 404 | The specified player was not found or is hidden from this user | Verify the player_id is correct; check if the player is deactivated |
+| `WALLET_MISMATCH` | 400 | The wallet/account in the request does not match the authenticated user | Use your own wallet address in the request path |
+| `FEATURE_DISABLED` | 403 | A requested feature is disabled (feature flag not enabled) | Contact support to enable the feature; check docs for availability |
+
+#### Subscription & Access Control
+
+| Code | HTTP Status | When It Occurs | Client Action |
+|------|------------|-------------|--------------|
+| `NOT_SUBSCRIBED` | 402 | Scout has no active subscription (required for this operation) | Subscribe first via /api/scouts/:wallet/subscribe |
+| `SUBSCRIPTION_REQUIRED` | 403 | An active subscription is required to perform this action | Subscribe first via /api/scouts/:wallet/subscribe |
+
+#### Payment & Blockchain Errors
+
+| Code | HTTP Status | When It Occurs | Client Action |
+|------|------------|-------------|--------------|
+| `INSUFFICIENT_FUNDS` | 402 | Account balance is insufficient to complete the payment | Check account balance; deposit funds or reduce transaction amount |
+| `INVALID_ACCOUNT` | 400 | The specified account does not exist or is invalid | Verify the account identifier is valid and exists |
+| `NETWORK_ERROR` | 503 | A network error occurred (blockchain RPC unreachable, etc.) | Retry after a short delay; check if the blockchain is operational |
+| `PAYMENT_UNKNOWN` | 500 | A payment operation failed for an unknown reason | Retry; if it persists, contact support with transaction details |
+| `NO_FEES` | 400 | No accumulated fees are available to withdraw | Check again after platform fees accrue from transactions |
+| `INVALID_RECIPIENT` | 400 | The withdrawal recipient address is invalid or not supported | Verify the recipient wallet/account format |
+| `CONTRACT_PAUSED` | 503 | The subscription contract is paused (emergency maintenance) | Retry after a delay; operations will resume when unpaused |
+
+#### Conflict & Concurrency Errors
+
+| Code | HTTP Status | When It Occurs | Client Action |
+|------|------------|-------------|--------------|
+| `CONFLICT` | 409 | A resource conflict occurred (duplicate key, state mismatch, etc.) | Check the current state; retry with updated data or a different key |
+| `PRECONDITION_FAILED` | 412 | If-Match header supplied but does not match current resource version | Fetch the current resource, get the new ETag, and retry with new ETag |
+| `PRECONDITION_REQUIRED` | 428 | Request requires an If-Match header (conditional request) that was not supplied | Include the If-Match header with the current ETag from a prior GET request |
+
+#### Administrative Actions
+
+| Code | HTTP Status | When It Occurs | Client Action |
+|------|------------|-------------|--------------|
+| `EXPIRED_ACTION` | 410 | A multi-sig admin action has expired and can no longer be approved | Propose the action again to create a fresh request |
+| `ACTION_EXECUTED` | 409 | A multi-sig admin action has already been executed | Check the action status; cannot re-approve completed actions |
+
 ---
 
-## Error Codes
 
-When a request triggers a Soroban contract error, the API translates the on-chain error code into an appropriate HTTP status and returns a human-readable message. The `code` field in the response body will contain the snake_case `ErrorCode` constant (e.g. `PLAYER_NOT_FOUND`).
-
-| Code | Error              | HTTP Status              | Description                                    | Resolution                                                      |
-| ---- | ------------------ | ------------------------ | ---------------------------------------------- | --------------------------------------------------------------- |
-| 1    | AlreadyInitialized | 409 Conflict             | Contract already initialized                   | No action needed; contract is ready                             |
-| 2    | NotInitialized     | 503 Service Unavailable  | Contract not initialized                       | Admin must call `initialize` first                              |
-| 3    | PlayerNotFound     | 404 Not Found            | Player ID does not exist                       | Verify `player_id` from the registration transaction            |
-| 4    | InvalidValidator   | 403 Forbidden            | Caller is not a registered validator           | Admin must register the validator address first                 |
-| 5    | MilestoneNotFound  | 404 Not Found            | Milestone ID does not exist                    | Refresh the milestone list and verify the ID                    |
-| 6    | AlreadyVerified    | 409 Conflict             | Milestone already approved                     | No duplicate approvals needed; check milestone status           |
-| 7    | InsufficientFee    | 402 Payment Required     | Payment is below the required contact fee      | Fetch the current fee via `get_contact_fee()` and retry         |
-| 8    | NotSubscribed      | 402 Payment Required     | Scout has no active subscription               | Call `subscribe` before browsing premium data; or attempting to cancel an already-cancelled or expired subscription |
-| 9    | Unauthorized       | 401 Unauthorized         | Caller is not authorized for this action       | Confirm you are signing with the correct Stellar account        |
-| 10   | ContractPaused     | 503 Service Unavailable  | Contract is paused by the admin                | Wait for admin to call `unpause_contract()`                     |
-| 11   | Overflow           | 500 Internal Server Error| Arithmetic overflow in fee calculation         | Use amounts within the safe u128 range                          |
-
-### Endpoint Error Code Cross-Reference
-
-| Endpoint | Possible Error Codes |
-| -------- | -------------------- |
-| `POST /api/players/register` | 2 (NotInitialized), 10 (ContractPaused) |
-| `GET /api/players/:playerId` | 3 (PlayerNotFound) |
-| `GET /api/players/:playerId/milestones` | 3 (PlayerNotFound), 5 (MilestoneNotFound) |
-| `POST /api/validators/milestone` | 2 (NotInitialized), 4 (InvalidValidator), 10 (ContractPaused) |
-| `POST /api/scouts/:wallet/contacts/:playerId/unlock` | 7 (InsufficientFee), 8 (NotSubscribed), 9 (Unauthorized), 10 (ContractPaused) |
-| `GET /api/scouts/:wallet/subscription` | 8 (NotSubscribed) |
-| `DELETE /api/scouts/:wallet/subscription` | 8 (NotSubscribed — no active subscription or already cancelled), 9 (Unauthorized), 10 (ContractPaused) |
-| `GET /api/admin/fees` | 10 (ContractPaused) |
-| `POST /api/admin/contract/pause` | 9 (Unauthorized), 2 (NotInitialized) |
-| `POST /api/admin/contract/unpause` | 9 (Unauthorized), 2 (NotInitialized) |
-
-### Cancel Subscription
-
-`DELETE /api/scouts/:wallet/subscription` — Cancels a scout's active on-chain subscription.
 
 **On-chain semantics:**
 - The `cancel_subscription(scout)` entrypoint on the `subscription` contract marks the subscription as expired at the current ledger (no refund).

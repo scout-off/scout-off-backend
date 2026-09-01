@@ -1,5 +1,6 @@
 import config from '../config';
 import { getCorrelationId } from './requestContext';
+import { redactLogArg } from './logRedaction';
 
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3, critical: 4 } as const;
 
@@ -24,11 +25,11 @@ function injectCorrelationId(args: unknown[]): unknown[] {
 }
 
 export const logger = {
-  debug:    (...args: unknown[]) => shouldLog('debug')    && console.debug('[debug]',    ...injectCorrelationId(args).map(sanitizeLogArg)),
-  info:     (...args: unknown[]) => shouldLog('info')     && console.info('[info]',     ...injectCorrelationId(args).map(sanitizeLogArg)),
-  warn:     (...args: unknown[]) => shouldLog('warn')     && console.warn('[warn]',     ...injectCorrelationId(args).map(sanitizeLogArg)),
-  error:    (...args: unknown[]) => shouldLog('error')    && console.error('[error]',   ...injectCorrelationId(args).map(sanitizeLogArg)),
-  critical: (...args: unknown[]) => console.error('[critical]', ...injectCorrelationId(args).map(sanitizeLogArg)),
+  debug:    (...args: unknown[]) => shouldLog('debug')    && console.debug('[debug]',    ...injectCorrelationId(args).map(redactLogArg).map(sanitizeLogArg)),
+  info:     (...args: unknown[]) => shouldLog('info')     && console.info('[info]',     ...injectCorrelationId(args).map(redactLogArg).map(sanitizeLogArg)),
+  warn:     (...args: unknown[]) => shouldLog('warn')     && console.warn('[warn]',     ...injectCorrelationId(args).map(redactLogArg).map(sanitizeLogArg)),
+  error:    (...args: unknown[]) => shouldLog('error')    && console.error('[error]',   ...injectCorrelationId(args).map(redactLogArg).map(sanitizeLogArg)),
+  critical: (...args: unknown[]) => console.error('[critical]', ...injectCorrelationId(args).map(redactLogArg).map(sanitizeLogArg)),
 };
 
 function sanitizeLogArg(arg: unknown): unknown {

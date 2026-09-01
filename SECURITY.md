@@ -104,3 +104,15 @@ for the full checklist.
 We thank all responsible security researchers who help keep ScoutOff safe.
 Reporters who follow this policy will be credited in the relevant release notes
 (unless they request anonymity).
+
+## Incident Response & Audit Trails
+
+When a security incident or audit occurs, the platform provides a tamper-evident audit trail for investigation and compliance:
+
+**See [docs/audit-log.md](docs/audit-log.md)** for:
+- Complete audit schema and what actions are logged
+- Hash-chain verification procedures to detect tampering
+- Using `GET /api/admin/audit/verify` to validate chain integrity
+- Interpreting verification failures and remediation steps
+
+The audit log is designed for compliance workflows (SOC 2, GDPR incident response) and post-incident forensics.

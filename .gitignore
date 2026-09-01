@@ -12,6 +12,7 @@ backups/
 contracts/target/
 contracts/**/test_snapshots/
 coverage/
+scripts/soroban-sandbox/.env.contracts
 BUILD_COMMIT
 .husky/_
 .kiro/

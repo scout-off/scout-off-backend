@@ -4,7 +4,7 @@
  * async interface so callers are portable across SqliteDriver/PostgresDriver.
  */
 
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import { DbDriver, DbTxHandle } from './driver';
 
 export class SqliteDriver implements DbDriver {

@@ -7,7 +7,8 @@ This document provides a reference for all application tables, their purposes, a
 | Table | Purpose | Populated By |
 |-------|---------|--------------|
 | **players** | Core player profiles with position, region, tier. Canonical source for player metadata. | API write (`POST /api/players/register`), indexer (progress updates from contract events) |
-| **events** | Append-only ledger of all Soroban contract events (PlayerRegistered, MilestoneApproved, etc.). Used by indexer to detect new on-chain state changes. | Indexer (polls Soroban RPC every 5s, deduped by tx_hash) |
+| **events** | Append-only ledger of Soroban contract events. Deduped by `(tx_hash, event_index)`. Ordered by `(ledger, tx_application_order, event_index, contract_id)`. | Indexer (polls Soroban RPC every 5s) |
+| **tx_correlations** | Off-chain bridge from `tx_hash` → request `correlation_id` for end-to-end tracing (#1113). | Written on Soroban submit; read by indexer |
 | **indexer_state** | Tracks indexer progress (last_ledger indexed, reorg detection state). | Indexer on startup and after each sync cycle |
 | **player_profile_history** | Versioned snapshots of player metadata_uri updates (append-only history). Used for audit and rollback queries. | Indexer when a PlayerMetadataUpdated event is indexed |
 
@@ -84,7 +85,7 @@ Soroban Contract → Event Emitted
   ↓
 Indexer polls Soroban RPC (every 5s)
   ↓
-INSERT events (deduped by tx_hash)
+INSERT events (deduped by tx_hash + event_index, ordered by ledger/tx/event)
   ↓
 Normalize payload (camelCase → snake_case)
   ↓

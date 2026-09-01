@@ -34,7 +34,8 @@ import { getFeatureFlags, updateFeatureFlag, toggleFeatureFlag, updateFeatureFla
 import { exportEvents } from '../controllers/exportController';
 import { listDeadLetters, replayDeadLetter, purgeOldDeadLetters, requeueDeadLetter, purgeDeadLetter } from '../controllers/webhookAdminController';
 import { setIpReputationController, getIpReputationController, setIpReputationSchema } from '../controllers/ipReputationController';
-import { triggerReindex, reindexStatusHandler, reindexBodySchema } from '../controllers/reindexController';
+import { triggerReindex, reindexStatusHandler, reindexBodySchema, cancelReindexHandler } from '../controllers/reindexController';
+import { triggerReplay, replayStatusHandler, replayBodySchema } from '../controllers/replayController';
 import { requireRole } from '../middleware/auth';
 import { idempotency } from '../middleware/idempotency';
 import { ipAllowlistMiddleware } from '../middleware/ipAllowlist';
@@ -231,6 +232,21 @@ router.route('/validators')
 router.route('/validators/register')
   .post(requireRole('admin'), validateBody(validatorWalletSchema), registerValidator)
   .all(methodNotAllowed(['POST']));
+
+/**
+ * POST /api/admin/validators/bulk-import
+ *
+ * Atomically import a batch of validators as a single multi-sig action.
+ * Returns a per-wallet manifest; partial failures return 207 for targeted retry.
+ *
+ * @body actionId {string} - Unique identifier for this multi-sig action
+ * @body wallets {string[]} - Array of Stellar public keys (max 100)
+ * @response 202 { success: true, data: { actionId, manifest } }
+ * @response 207 { success: false, error, data: { manifest } } - Partial failure
+ * @response 400 { success: false, error: string } - Validation error
+ * @auth Bearer (admin role required)
+ */
+router.post('/validators/bulk-import', requireRole('admin'), bulkValidatorImport);
 
 /**
  * POST /api/admin/validators/revoke
@@ -591,6 +607,52 @@ router.route('/reindex/cancel')
   .all(methodNotAllowed(['POST']));
 
 /**
+ * POST /api/admin/events/replay
+ *
+ * Trigger a targeted event replay for a small ledger range without modifying
+ * the main indexer cursor. This is a surgical tool for fixing narrow historical
+ * gaps (e.g., "we think ledgers 500123-500130 were missed") while the indexer
+ * is live near tip.
+ *
+ * Maximum range is 200 ledgers. Events are upserted using INSERT OR IGNORE,
+ * so duplicates are silently skipped. Returns a count of newly inserted events.
+ *
+ * @body { fromLedger: number, toLedger: number }
+ * @response 200 { success: true, data: { fromLedger, toLedger, eventsInserted } }
+ * @response 409 { success: false, error: string } - job already running
+ * @response 422 { success: false, error: string } - range ≥ 200 or invalid range
+ * @auth Bearer (admin role required)
+ */
+router.route('/events/replay')
+  .post(requireRole('admin'), validateBody(replayBodySchema), triggerReplay)
+  .all(methodNotAllowed(['POST']));
+
+/**
+ * GET /api/admin/events/replay/status
+ *
+ * Return the current state of the replay job.
+ *
+ * @response 200 {
+ *   success: true,
+ *   data: {
+ *     status: 'idle' | 'running' | 'complete' | 'error',
+ *     from_ledger: number,
+ *     to_ledger: number,
+ *     ledgers_processed: number,
+ *     ledgers_total: number,
+ *     events_inserted: number,
+ *     started_at: string | null,
+ *     completed_at: string | null,
+ *     error_message: string | null
+ *   }
+ * }
+ * @auth Bearer (admin role required)
+ */
+router.route('/events/replay/status')
+  .get(requireRole('admin'), replayStatusHandler)
+  .all(methodNotAllowed(['GET', 'HEAD']));
+
+/**
  * GET /api/admin/webhooks/dead-letters
  *
  * Paginated list of dead-lettered webhook deliveries.
@@ -721,5 +783,19 @@ router.get('/webhooks/:id/deliveries', requireRole('admin'), getWebhookDeliverie
  * @auth Bearer (admin role required)
  */
 router.get('/webhooks/:id/summary', requireRole('admin'), getWebhookDeliverySummaryEndpoint);
+
+/**
+ * POST /api/admin/fees/config
+ *
+ * Propose and execute an update_platform_fee multi-sig action.
+ * Updates the on-chain platform fee in basis points (0–10000).
+ *
+ * @body actionId {string} - Unique multi-sig action identifier
+ * @body newFeeBps {number} - New fee in basis points (0–10000)
+ * @response 202 { success: true, data: { actionId, transactionId, newFeeBps } }
+ * @response 400 { success: false, error: string }
+ * @auth Bearer (admin role required)
+ */
+router.post('/fees/config', requireRole('admin'), updatePlatformFeeController);
 
 export default router;

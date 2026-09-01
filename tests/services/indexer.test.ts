@@ -29,14 +29,18 @@ describe('indexer', () => {
   });
 
   describe('normalizeEventId', () => {
-    it('produces a stable canonical ID', () => {
-      const id = normalizeEventId('CONTRACT_A', 100, '0xabc');
-      expect(id).toBe('CONTRACT_A:100:0xabc');
+    it('produces a stable canonical ID including event index', () => {
+      const id = normalizeEventId('CONTRACT_A', 100, '0xabc', 2);
+      expect(id).toBe('CONTRACT_A:100:0xabc:2');
+    });
+
+    it('defaults event index to 0', () => {
+      expect(normalizeEventId('C', 1, 'hash1')).toBe('C:1:hash1:0');
     });
 
     it('produces different IDs for different inputs', () => {
-      const a = normalizeEventId('C', 1, 'hash1');
-      const b = normalizeEventId('C', 1, 'hash2');
+      const a = normalizeEventId('C', 1, 'hash1', 0);
+      const b = normalizeEventId('C', 1, 'hash2', 0);
       expect(a).not.toBe(b);
     });
   });
@@ -95,21 +99,42 @@ describe('player table helpers', () => {
 describe('idempotent re-indexing', () => {
   const TX_HASH = 'tx-reindex-test-' + Math.random().toString(36).slice(2);
 
-  it('INSERT OR IGNORE deduplicates events with the same tx_hash', () => {
+  it('INSERT OR IGNORE deduplicates events with the same (tx_hash, event_index)', () => {
     const db = getDb();
     const insert = db.prepare(
-      'INSERT OR IGNORE INTO events (type, ledger, ledger_hash, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      `INSERT OR IGNORE INTO events
+        (type, ledger, ledger_hash, tx_hash, payload, created_at, tx_application_order, event_index, contract_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
-    // Insert once
-    insert.run('player_registered', 100, 'hash', TX_HASH, '{}', Date.now());
+    insert.run('player_registered', 100, 'hash', TX_HASH, '{}', Date.now(), 0, 0, 'C');
     const countAfterFirst = queryEvents('player_registered').length;
 
-    // Replay — same tx_hash must be silently ignored
-    insert.run('player_registered', 100, 'hash', TX_HASH, '{}', Date.now());
+    insert.run('player_registered', 100, 'hash', TX_HASH, '{}', Date.now(), 0, 0, 'C');
     const countAfterReplay = queryEvents('player_registered').length;
 
     expect(countAfterReplay).toBe(countAfterFirst);
+  });
+
+  it('retains co-transaction events that share a tx_hash but differ in event_index', () => {
+    const db = getDb();
+    const tx = 'tx-co-' + Math.random().toString(36).slice(2);
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO events
+        (type, ledger, ledger_hash, tx_hash, payload, created_at, tx_application_order, event_index, contract_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    insert.run('player_registered', 50, 'h', tx, '{"player_id":"p1"}', Date.now(), 0, 0, 'register');
+    insert.run('milestone_submitted', 50, 'h', tx, '{"player_id":"p1"}', Date.now(), 0, 1, 'progress');
+    const rows = db
+      .prepare(
+        'SELECT type, event_index FROM events WHERE tx_hash = ? ORDER BY event_index ASC',
+      )
+      .all(tx) as Array<{ type: string; event_index: number }>;
+    expect(rows).toEqual([
+      { type: 'player_registered', event_index: 0 },
+      { type: 'milestone_submitted', event_index: 1 },
+    ]);
   });
 
   it('persistLastIndexedLedger / fetchLastIndexedLedger round-trips correctly', () => {

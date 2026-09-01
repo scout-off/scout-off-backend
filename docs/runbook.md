@@ -17,7 +17,7 @@ Start every investigation with the health and metrics endpoints:
 | -------- | ----------------- |
 | `GET /health` | Process liveness, Stellar RPC reachability (`healthStatus.stellar`), DB probe (`healthStatus.db`) |
 | `GET /ready`  | Readiness: `ipfs`, `db`, `stellar` — returns `503`/`degraded` when any dependency is down |
-| `GET /metrics`| Prometheus metrics: `indexer_ledger_lag`, `http_requests_total`, `http_errors_total`, `db_query_duration_seconds`, `soroban_rpc_duration_seconds`, `webhook_delivery_total`, `ip_reputation_blocked_total`, `sse_connections_active`, … |
+| `GET /metrics`| Prometheus metrics: `indexer_ledger_lag`, `http_requests_total`, `http_errors_total`, `db_query_duration_seconds`, `soroban_rpc_duration_seconds`, `webhook_delivery_total`, `scout_off_webhook_dead_letters_total`, `ip_reputation_blocked_total`, `sse_connections_active`, … |
 
 **`indexer_ledger_lag`** is the single most useful indexer signal: ledgers
 behind the chain tip after the last poll. It is exposed as
@@ -117,6 +117,10 @@ node scripts/backfill.js --backfill 4520000
 ## Draining the dead-letter queue
 
 Webhook deliveries that exhaust their retries land in the dead-letter queue
+(`webhook_dead_letters`). Watch `scout_off_webhook_dead_letters_total` on
+`/metrics` and the critical log `webhook_dead_letter_threshold_crossed` (see
+[docs/webhooks.md](webhooks.md#alerting-and-metrics-1131)) — the log line names
+the top culprit subscriptions.
 (see [docs/webhooks.md](webhooks.md) for delivery/retry mechanics).
 
 ```bash

@@ -13,6 +13,7 @@ import {
   trialOfferSchema,
   unlockContactSchema,
   subscribeSchema,
+  getScoutDashboard,
 } from '../controllers/scoutController';
 import { cancelTrialOfferHandler } from '../controllers/trialOfferController';
 import { getScoutRecommendations } from '../controllers/scoutRecommendationsController';
@@ -735,5 +736,28 @@ router.route('/:wallet/webhooks/:id')
 router.route('/:wallet/webhooks/:id/test')
   .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), webhookTestRateLimit, validateBody(emptyBodySchema), testWebhook)
   .all(methodNotAllowed(['POST']));
+
+/**
+ * GET /api/scouts/:wallet/dashboard
+ *
+ * Consolidated home-screen dashboard for a scout. Returns four independently
+ * bounded sections in a single authenticated call:
+ *   - subscription: current subscription status
+ *   - contacts:     first 10 unlocked contacts (with `_links.full` for pagination)
+ *   - bookmarks:    first 10 bookmarked players (with `_links.full` for pagination)
+ *   - savedSearches: first 10 saved searches (with `_links.full` for pagination)
+ *
+ * Each section is fetched via the existing per-resource service functions —
+ * no duplicated queries.
+ *
+ * @param wallet {string} - Scout's Stellar public key
+ * @response 200 { success: true, data: { wallet, subscription, contacts, bookmarks, savedSearches } }
+ * @response 401 { success: false, error: string } - Missing or invalid token
+ * @response 403 { success: false, error: string } - Wallet mismatch
+ * @auth Bearer (scout role required; own wallet or admin)
+ */
+router.route('/:wallet/dashboard')
+  .get(requireRole('scout'), requireWalletOwner(), getScoutDashboard)
+  .all(methodNotAllowed(['GET', 'HEAD']));
 
 export default router;

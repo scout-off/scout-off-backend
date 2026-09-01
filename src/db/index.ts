@@ -1,8 +1,9 @@
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import crypto from 'crypto';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
 import { EventRecord, ContractEventType } from '../types';
+import { EVENTS_ORDER_BY_SQL } from '../services/eventOrdering';
 import { runMigrations } from './migrate';
 import { logger } from '../utils/logger';
 import { computeChainHash, auditChainContent, GENESIS_HASH } from '../utils/hashChain';
@@ -11,6 +12,10 @@ import { DbDriver } from './driver';
 import { SqliteDriver } from './sqlite-driver';
 import { PostgresDriver } from './postgres-driver';
 import { observeDbQueryDuration } from '../middleware/metrics';
+import {
+  createBetterSqlite3LoadError,
+  isBetterSqlite3LoadFailure,
+} from './betterSqlite3Error';
 
 const dbTracer = trace.getTracer('scout-off-backend');
 
@@ -112,29 +117,58 @@ export async function initDb(): Promise<void> {
 
     logger.info(`[db] Connected to PostgreSQL (pool size ${config.databasePoolSize})`);
   } else {
-    // SQLite initialization (default)
-    _db = new Database(config.dbPath);
+    // SQLite initialization (default). Load the native addon lazily so a
+    // missing/wrong-ABI binding becomes a clear startup error instead of an
+    // opaque require failure at module import time.
+    let BetterSqlite3: typeof import('better-sqlite3');
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      BetterSqlite3 = require('better-sqlite3');
+    } catch (err) {
+      throw createBetterSqlite3LoadError(err);
+    }
+
+    let sqliteDb: Database.Database;
+    try {
+      sqliteDb = new BetterSqlite3(config.dbPath);
+    } catch (err) {
+      if (isBetterSqlite3LoadFailure(err)) {
+        throw createBetterSqlite3LoadError(err);
+      }
+      throw err;
+    }
     // WAL mode lets readers and a writer proceed concurrently instead of
     // blocking each other on the default rollback journal, and busy_timeout
     // makes a writer that does contend for the single write lock retry for
     // up to 5s instead of failing immediately with SQLITE_BUSY.
-    _db.pragma('journal_mode = WAL');
-    _db.pragma('busy_timeout = 5000');
-    _driver = new SqliteDriver(_db);
+    sqliteDb.pragma('journal_mode = WAL');
+    sqliteDb.pragma('busy_timeout = 5000');
+    _db = sqliteDb;
+    _driver = new SqliteDriver(sqliteDb);
 
     // Create initial schema inline (for backwards compatibility with in-memory test databases)
     _driver.exec(`
       CREATE TABLE IF NOT EXISTS events (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        type       TEXT NOT NULL,
-        ledger     INTEGER NOT NULL,
-        ledger_hash TEXT,
-        tx_hash    TEXT NOT NULL UNIQUE,
-        payload    TEXT NOT NULL,
-        created_at INTEGER
+        id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+        type                 TEXT NOT NULL,
+        ledger               INTEGER NOT NULL,
+        ledger_hash          TEXT,
+        tx_hash              TEXT NOT NULL,
+        payload              TEXT NOT NULL,
+        created_at           INTEGER,
+        tx_application_order INTEGER NOT NULL DEFAULT 0,
+        event_index          INTEGER NOT NULL DEFAULT 0,
+        contract_id          TEXT NOT NULL DEFAULT ''
       );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_events_tx_event ON events (tx_hash, event_index);
       CREATE INDEX IF NOT EXISTS idx_events_ledger ON events (ledger);
       CREATE INDEX IF NOT EXISTS idx_events_type_ledger ON events (type, ledger);
+      CREATE INDEX IF NOT EXISTS idx_events_ordinal ON events (ledger, tx_application_order, event_index, contract_id);
+      CREATE TABLE IF NOT EXISTS tx_correlations (
+        tx_hash        TEXT PRIMARY KEY,
+        correlation_id TEXT NOT NULL,
+        created_at     INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS indexer_state (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -257,16 +291,16 @@ export function queryEvents(
   let sql: string;
   let rows: EventRow[];
   if (type && hasPagination) {
-    sql = 'SELECT * FROM events WHERE type = ? ORDER BY ledger ASC LIMIT ? OFFSET ?';
+    sql = `SELECT * FROM events WHERE type = ? ORDER BY ${EVENTS_ORDER_BY_SQL} LIMIT ? OFFSET ?`;
     rows = timedQuery(sql, () => db.prepare(sql).all(type, limit, offset) as EventRow[]);
   } else if (type) {
-    sql = 'SELECT * FROM events WHERE type = ? ORDER BY ledger ASC';
+    sql = `SELECT * FROM events WHERE type = ? ORDER BY ${EVENTS_ORDER_BY_SQL}`;
     rows = timedQuery(sql, () => db.prepare(sql).all(type) as EventRow[]);
   } else if (hasPagination) {
-    sql = 'SELECT * FROM events ORDER BY ledger ASC LIMIT ? OFFSET ?';
+    sql = `SELECT * FROM events ORDER BY ${EVENTS_ORDER_BY_SQL} LIMIT ? OFFSET ?`;
     rows = timedQuery(sql, () => db.prepare(sql).all(limit, offset) as EventRow[]);
   } else {
-    sql = 'SELECT * FROM events ORDER BY ledger ASC';
+    sql = `SELECT * FROM events ORDER BY ${EVENTS_ORDER_BY_SQL}`;
     rows = timedQuery(sql, () => db.prepare(sql).all() as EventRow[]);
   }
 
@@ -306,6 +340,122 @@ export interface EventsPageFilter {
   type?: ContractEventType;
   startDate?: Date;
   endDate?: Date;
+}
+
+/**
+ * Opaque cursor used by the keyset-pagination variant of the events listing.
+ * Encodes the (ledger, id) position of the last row returned on the previous
+ * page so that the next page starts immediately after it, independent of
+ * concurrent inserts.
+ */
+export interface EventsCursor {
+  ledger: number;
+  id: number;
+}
+
+/**
+ * Encode a (ledger, id) pair into a URL-safe opaque cursor string.
+ */
+export function encodeEventsCursor(cursor: EventsCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
+/**
+ * Decode a cursor string produced by {@link encodeEventsCursor}.
+ * Returns `null` when the value is missing, malformed, or contains
+ * non-integer fields — callers should treat `null` as "start from the
+ * beginning".
+ */
+export function decodeEventsCursor(raw: string | undefined): EventsCursor | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as unknown;
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      'ledger' in parsed &&
+      'id' in parsed &&
+      Number.isInteger((parsed as Record<string, unknown>).ledger) &&
+      Number.isInteger((parsed as Record<string, unknown>).id)
+    ) {
+      return parsed as EventsCursor;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch one page of events using a stable keyset cursor over (ledger DESC, id DESC).
+ * When `afterCursor` is supplied only rows with (ledger, id) < (cursor.ledger, cursor.id)
+ * are returned, making pagination stable under concurrent inserts.
+ *
+ * Returns up to `limit` rows and, when there are more rows beyond the page, a
+ * `nextCursor` value ready to be encoded and returned to the client.
+ */
+export function getEventsPageKeyset(
+  filter: EventsPageFilter,
+  limit: number,
+  afterCursor: EventsCursor | null,
+): { rows: EventExportRow[]; nextCursor: EventsCursor | null } {
+  const db = getDb();
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+
+  if (filter.type) {
+    clauses.push('type = ?');
+    params.push(filter.type);
+  }
+  if (filter.startDate) {
+    clauses.push('created_at >= ?');
+    params.push(filter.startDate.getTime());
+  }
+  if (filter.endDate) {
+    clauses.push('created_at <= ?');
+    params.push(filter.endDate.getTime());
+  }
+  if (afterCursor) {
+    // Keyset condition: rows that come before the cursor in DESC order
+    clauses.push('(ledger < ? OR (ledger = ? AND id < ?))');
+    params.push(afterCursor.ledger, afterCursor.ledger, afterCursor.id);
+  }
+
+  const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
+  // Fetch one extra row to know whether a next page exists
+  const fetchLimit = limit + 1;
+  params.push(fetchLimit);
+
+  const sql =
+    'SELECT id, type, ledger, payload, created_at FROM events ' +
+    where +
+    ' ORDER BY ledger DESC, id DESC LIMIT ?';
+
+  const rawRows = timedQuery(sql, () => db.prepare(sql).all(...(params as unknown[]))) as Array<{
+    id: number;
+    type: string;
+    ledger: number;
+    payload: string;
+    created_at: number | null;
+  }>;
+
+  const hasMore = rawRows.length > limit;
+  const pageRows = hasMore ? rawRows.slice(0, limit) : rawRows;
+
+  const rows: EventExportRow[] = pageRows.map((r) => ({
+    type: r.type as ContractEventType,
+    ledger: r.ledger,
+    createdAt: r.created_at,
+    payload: JSON.parse(r.payload) as Record<string, unknown>,
+  }));
+
+  let nextCursor: EventsCursor | null = null;
+  if (hasMore && pageRows.length > 0) {
+    const last = pageRows[pageRows.length - 1]!;
+    nextCursor = { ledger: last.ledger, id: last.id };
+  }
+
+  return { rows, nextCursor };
 }
 
 /** A single row read directly off the `events` table, including `ledger`, for CSV export. */
@@ -376,7 +526,10 @@ export function getEventsPage(filter: EventsPageFilter, limit: number, offset: n
   }
 
   const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
-  const sql = 'SELECT type, ledger, payload, created_at FROM events ' + where + ' ORDER BY ledger ASC, id ASC LIMIT ? OFFSET ?';
+  const sql =
+    'SELECT type, ledger, payload, created_at FROM events ' +
+    where +
+    ` ORDER BY ${EVENTS_ORDER_BY_SQL} LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
   const rows = timedQuery(sql, () => db.prepare(sql).all(...(params as unknown[]))) as Array<{
@@ -422,7 +575,10 @@ export function* getEventsIterable(filter: EventsPageFilter): Generator<EventExp
   }
 
   const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
-  const sql = 'SELECT type, ledger, payload, created_at FROM events ' + where + ' ORDER BY ledger ASC, id ASC';
+  const sql =
+    'SELECT type, ledger, payload, created_at FROM events ' +
+    where +
+    ` ORDER BY ${EVENTS_ORDER_BY_SQL}`;
 
   const stmt = db.prepare(sql);
   const iterator = stmt.iterate(...(params as unknown[])) as IterableIterator<{
@@ -2798,6 +2954,23 @@ export function countWebhookDeadLetters(): number {
     const row = getDb().prepare(sql).get() as { count: number } | undefined;
     return row?.count ?? 0;
   });
+}
+
+/**
+ * Dead-letter counts grouped by subscription_id for metrics and alerting (#1131).
+ */
+export function countWebhookDeadLettersBySubscription(): Array<{
+  subscription_id: number | null;
+  count: number;
+}> {
+  const sql = `SELECT subscription_id, COUNT(*) AS count
+               FROM webhook_dead_letters
+               WHERE status IN ('pending', 'in_progress')
+               GROUP BY subscription_id
+               ORDER BY count DESC`;
+  return timedQuery(sql, () =>
+    getDb().prepare(sql).all() as Array<{ subscription_id: number | null; count: number }>,
+  );
 }
 
 export function getWebhookDeadLetterById(id: number): WebhookDeadLetter | undefined {

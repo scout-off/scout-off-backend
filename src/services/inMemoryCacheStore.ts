@@ -6,16 +6,42 @@ interface Entry {
   expiresAt?: number;
 }
 
-/**
- * Process-local cache backend. Default when no REDIS_URL is configured —
- * suitable for local dev, CI, and single-instance deployments. State is not
- * shared across processes, which is exactly the limitation Redis mode fixes.
- */
+const DEFAULT_MAX_SIZE = 1000;
+
+function resolveMaxSize(explicit?: number): number {
+  if (explicit !== undefined && explicit > 0) return explicit;
+  const fromEnv = Number(process.env.CACHU_MAX_ENTRIES);
+  return fromEnv > 0 ? fromEnv : DEFAULT_MAX_SIZE;
+}
+
 export class InMemoryCacheStore implements CacheStore {
   private store = new Map<string, Entry>();
+  private readonly maxSize: number;
+
+  constructor(maxSize?: number) {
+    this.maxSize = resolveMaxSize(maxSize);
+  }
 
   private isExpired(entry: Entry): boolean {
     return entry.expiresAt !== undefined && entry.expiresAt <= Date.now();
+  }
+
+  private evictIfNeeded(): void {
+    if (this.store.size > this.maxSize) {
+      const oldestKey = this.store.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.store.delete(oldestKey);
+        recordCacheEviction();
+      }
+    }
+  }
+
+  private touch(key: string): void {
+    const entry = this.store.get(key);
+    if (entry) {
+      this.store.delete(key);
+      this.store.set(key, entry);
+    }
   }
 
   async get<T>(key: string): Promise<T | undefined> {
@@ -26,14 +52,18 @@ export class InMemoryCacheStore implements CacheStore {
       recordCacheEviction();
       return undefined;
     }
+    this.touch(key);
     return entry.value as T;
   }
 
   async set<T>(key: string, value: T, ttlMs?: number): Promise<void> {
-    this.store.set(key, {
+    const entry: Entry = {
       value,
       expiresAt: ttlMs !== undefined ? Date.now() + ttlMs : undefined,
-    });
+    };
+    if (this.store.has(key)) this.store.delete(key);
+    this.store.set(key, entry);
+    this.evictIfNeeded();
   }
 
   async del(key: string): Promise<void> {
@@ -47,6 +77,7 @@ export class InMemoryCacheStore implements CacheStore {
       this.store.delete(key);
       return false;
     }
+    this.touch(key);
     return true;
   }
 

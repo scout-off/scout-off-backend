@@ -9,7 +9,6 @@ import {
   persistLastIndexedLedger,
   insertOrUpdatePlayer,
   updatePlayerProgress,
-  getEvents,
   insertPendingMilestone,
   queryEvents,
   rollbackEventsFromLedger,
@@ -17,6 +16,12 @@ import {
 import { dispatchEventWebhook } from './webhooks';
 import { logger } from '../utils/logger';
 import { tierForApprovedMilestones } from './tierPromotion';
+import {
+  normalizeAndSortEvents,
+  groupCoTransactionEvents,
+  type RawIndexerEvent,
+} from './eventOrdering';
+import { withRestoredCorrelation } from './txCorrelation';
 
 const tracer = trace.getTracer('scout-off-backend');
 
@@ -60,25 +65,29 @@ export function normalizePayload(payload: Record<string, unknown>): Record<strin
 
 // ─── Deduplication strategy ───────────────────────────────────────────────────
 //
-// Primary deduplication: the `events` table has a UNIQUE constraint on `tx_hash`.
-// INSERT OR IGNORE silently discards any row whose tx_hash already exists, so
-// replaying the same ledger range is safe and idempotent.
+// Primary deduplication: UNIQUE(tx_hash, event_index) — co-transaction events
+// are retained; replays of the same (tx, index) are ignored.
 //
 // Canonical event ID: each event is identified by the tuple
-//   (contractId, ledger, txHash, topicIndex)
-// normalizeEventId() encodes this as a single opaque string that can be used
-// for in-memory dedup checks before hitting the DB (e.g. in tests or caches).
+//   (contractId, ledger, txHash, eventIndex)
+// normalizeEventId() encodes this as a single opaque string.
 //
-// Stub hooks (onBeforeInsert / onAfterInsert) are called around every insert so
-// future logic (metrics, alerting, secondary caches) can be added without
-// touching the core indexing loop.
+// Total order (#1111): events are sorted by
+//   (ledger, tx_application_order, event_index, contract_id)
+// before insert and side-effect application. Co-transaction groups are applied
+// atomically (all inserts + side effects for one tx before the next tx).
 
 /**
  * Returns a canonical, stable ID for a contract event.
- * Format: `<contractId>:<ledger>:<txHash>`
+ * Format: `<contractId>:<ledger>:<txHash>:<eventIndex>`
  */
-export function normalizeEventId(contractId: string, ledger: number, txHash: string): string {
-  return `${contractId}:${ledger}:${txHash}`;
+export function normalizeEventId(
+  contractId: string,
+  ledger: number,
+  txHash: string,
+  eventIndex = 0,
+): string {
+  return `${contractId}:${ledger}:${txHash}:${eventIndex}`;
 }
 
 // Stub hook — replace with real logic as needed (e.g. metrics, alerting).
@@ -96,7 +105,10 @@ export async function indexEvents(): Promise<void> {
   try {
   const db = getDb();
   const insert = db.prepare(
-    'INSERT OR IGNORE INTO events (type, ledger, ledger_hash, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    `INSERT OR IGNORE INTO events
+      (type, ledger, ledger_hash, tx_hash, payload, created_at,
+       tx_application_order, event_index, contract_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const lastIndexed = fetchLastIndexedLedger();
@@ -104,9 +116,17 @@ export async function indexEvents(): Promise<void> {
   const fromLedger = Math.max(0, lastIndexed > margin ? lastIndexed - margin : 0);
   span.setAttribute('indexer.ledger_start', fromLedger);
 
+  const contractIds = [
+    config.contractId,
+    config.registerContractId,
+    config.progressContractId,
+    config.subscriptionContractId,
+    config.connectionContractId,
+  ].filter((id, i, arr) => Boolean(id) && arr.indexOf(id) === i);
+
   const response = await server.getEvents({
     startLedger: fromLedger > 0 ? fromLedger : 1,
-    filters: [{ type: 'contract', contractIds: [config.contractId] }],
+    filters: [{ type: 'contract', contractIds: contractIds.length ? contractIds : [config.contractId] }],
   });
   span.setAttribute('indexer.ledger_end', response.latestLedger);
   span.setAttribute('indexer.events_processed', response.events.length);
@@ -120,7 +140,7 @@ export async function indexEvents(): Promise<void> {
 
   if (!response.events.length) return;
 
-  const webhookEvents: Array<{ type: string; payload: unknown }> = [];
+  const webhookEvents: Array<{ type: string; payload: unknown; txHash: string }> = [];
 
   // NOTE: this used to be (and, on main, still is) a single synchronous
   // db.transaction() wrapping the whole batch, including reorg detection.
@@ -132,10 +152,15 @@ export async function indexEvents(): Promise<void> {
   // synchronous getDb() handle unchanged, but player/milestone upserts run
   // as a separate async loop below rather than inside one atomic
   // transaction. Losing whole-batch atomicity here is safe: every insert
-  // below is idempotent (events dedup on tx_hash via INSERT OR IGNORE,
-  // player/milestone upserts are keyed and re-appliable), so a mid-batch
-  // failure just gets safely reprocessed on the next poll from the same
-  // fromLedger.
+  // below is idempotent (events dedup on (tx_hash, event_index) via
+  // INSERT OR IGNORE, player/milestone upserts are keyed and re-appliable),
+  // so a mid-batch failure just gets safely reprocessed on the next poll
+  // from the same fromLedger.
+  //
+  // Co-transaction atomicity (#1111): within a single transaction's event
+  // group we still apply inserts + side effects sequentially before moving
+  // to the next transaction so order-sensitive consumers never see a later
+  // sibling before an earlier one.
 
   // 1. Reorg detection
   const overlappingEvents = db.prepare('SELECT ledger, ledger_hash FROM events WHERE ledger >= ?').all(fromLedger) as { ledger: number, ledger_hash: string | null }[];
@@ -159,81 +184,137 @@ export async function indexEvents(): Promise<void> {
     rollbackEventsFromLedger(reorgLedger);
   }
 
-  // 2. Insert events, then upsert players/milestones (async, not
-  // transactionally atomic with the events insert — see note above).
-  const insertMany = async (events: typeof response.events) => {
-    for (const raw of events) {
-      // In @stellar/stellar-sdk v16+, topic items and value are xdr.ScVal
-      // discriminated-union objects; use scValToNative() instead of .value().
-      const type = raw.topic[0] ? scValToNative(raw.topic[0]) as string : '';
-      const payload = normalizePayload((raw.value ? scValToNative(raw.value) as Record<string, unknown> : {}) ?? {});
-      const eventId = normalizeEventId(config.contractId, raw.ledger, raw.txHash);
-      const createdAt = raw.ledgerClosedAt ? new Date(raw.ledgerClosedAt).getTime() : Date.now();
-      const ledgerHash = (raw as any).ledgerHash ?? (raw as any).pagingToken ?? raw.txHash;
+  // 2. Normalize + sort into deterministic total order, then apply as
+  //    co-transaction atomic groups regardless of RPC return order.
+  const rawEvents: RawIndexerEvent[] = response.events.map((raw: any) => ({
+    ledger: raw.ledger,
+    txHash: raw.txHash,
+    id: raw.id,
+    contractId: raw.contractId ?? config.contractId,
+    topic: raw.topic,
+    value: raw.value,
+    ledgerClosedAt: raw.ledgerClosedAt,
+    ledgerHash: raw.ledgerHash,
+    pagingToken: raw.pagingToken,
+    txIndex: raw.txIndex,
+    eventIndex: raw.eventIndex,
+  }));
 
-      onBeforeInsert(eventId);
-      insert.run(type, raw.ledger, ledgerHash, raw.txHash, JSON.stringify(payload), createdAt);
-      onAfterInsert(eventId);
+  const ordered = normalizeAndSortEvents(rawEvents, config.contractId);
+  const groups = groupCoTransactionEvents(ordered);
 
-      if (type === 'player_registered') {
-        const playerId = payload.player_id as string;
-        const registeredAt = raw.ledgerClosedAt
-          ? new Date(raw.ledgerClosedAt).getTime()
-          : Date.now();
-        await insertOrUpdatePlayer({
-          player_id: playerId,
-          wallet: payload.wallet as string,
-          position: payload.position as string | undefined,
-          region: payload.region as string | undefined,
-          metadata_uri: payload.metadata_uri as string | undefined,
-          created_at: registeredAt,
-          registered_at: registeredAt,
-        });
-        // Invalidate cache after player registration
-        const cache = getCache();
-        cache.invalidatePlayerCache(playerId);
-      } else if (type === 'milestone_submitted') {
-        const milestoneId = payload.milestone_id as string;
-        const playerId = payload.player_id as string;
-        const validatorWallet = payload.validator as string;
-        const milestoneType = payload.milestone_type as string;
-        const evidenceUri = payload.evidence_uri as string;
-        const submittedAt = raw.ledger;
-        if (milestoneId && playerId && validatorWallet) {
-          await insertPendingMilestone(milestoneId, playerId, validatorWallet, milestoneType, evidenceUri, submittedAt);
+  const applyOne = async (event: (typeof ordered)[number]): Promise<void> => {
+    const raw = event.raw as any;
+    const type = raw.topic?.[0] ? (scValToNative(raw.topic[0]) as string) : '';
+    const payload = normalizePayload(
+      (raw.value ? (scValToNative(raw.value) as Record<string, unknown>) : {}) ?? {},
+    );
+    const eventId = normalizeEventId(
+      event.contractId,
+      event.ledger,
+      event.txHash,
+      event.eventIndex,
+    );
+    const createdAt = raw.ledgerClosedAt ? new Date(raw.ledgerClosedAt).getTime() : Date.now();
+    const ledgerHash = raw.ledgerHash ?? raw.pagingToken ?? raw.txHash;
+
+    onBeforeInsert(eventId);
+    insert.run(
+      type,
+      event.ledger,
+      ledgerHash,
+      event.txHash,
+      JSON.stringify(payload),
+      createdAt,
+      event.txApplicationOrder,
+      event.eventIndex,
+      event.contractId,
+    );
+    onAfterInsert(eventId);
+
+    await withRestoredCorrelation(
+      event.txHash,
+      'indexer.applyEvent',
+      async (correlationId) => {
+        if (correlationId) {
+          logger.debug(
+            `[indexer] restored correlationId=${correlationId} for tx=${event.txHash}`,
+          );
         }
-        webhookEvents.push({ type, payload });
-      } else if (type === 'milestone_approved') {
-        const playerId = payload.player_id as string;
-        if (playerId) {
-          // Tier promotion (#359): derive the player's tier from the total number
-          // of approved milestones now recorded for them, rather than trusting a
-          // progress_level field on the event payload. The just-inserted event is
-          // already part of this count, and replays are safe because the events
-          // table dedups on tx_hash.
-          const approvedMilestoneCount = queryEvents('milestone_approved').filter(
-            (e) => e.payload.player_id === playerId,
-          ).length;
-          await updatePlayerProgress(playerId, tierForApprovedMilestones(approvedMilestoneCount));
-          // Invalidate cache after player progress update
+
+        if (type === 'player_registered') {
+          const playerId = payload.player_id as string;
+          const registeredAt = raw.ledgerClosedAt
+            ? new Date(raw.ledgerClosedAt).getTime()
+            : Date.now();
+          await insertOrUpdatePlayer({
+            player_id: playerId,
+            wallet: payload.wallet as string,
+            position: payload.position as string | undefined,
+            region: payload.region as string | undefined,
+            metadata_uri: payload.metadata_uri as string | undefined,
+            created_at: registeredAt,
+            registered_at: registeredAt,
+          });
           const cache = getCache();
           cache.invalidatePlayerCache(playerId);
+        } else if (type === 'milestone_submitted') {
+          const milestoneId = payload.milestone_id as string;
+          const playerId = payload.player_id as string;
+          const validatorWallet = payload.validator as string;
+          const milestoneType = payload.milestone_type as string;
+          const evidenceUri = payload.evidence_uri as string;
+          const submittedAt = raw.ledger;
+          if (milestoneId && playerId && validatorWallet) {
+            await insertPendingMilestone(
+              milestoneId,
+              playerId,
+              validatorWallet,
+              milestoneType,
+              evidenceUri,
+              submittedAt,
+            );
+          }
+          webhookEvents.push({ type, payload, txHash: event.txHash });
+        } else if (type === 'milestone_approved') {
+          const playerId = payload.player_id as string;
+          if (playerId) {
+            const approvedMilestoneCount = queryEvents('milestone_approved').filter(
+              (e) => e.payload.player_id === playerId,
+            ).length;
+            await updatePlayerProgress(
+              playerId,
+              tierForApprovedMilestones(approvedMilestoneCount),
+            );
+            const cache = getCache();
+            cache.invalidatePlayerCache(playerId);
+          }
+          webhookEvents.push({ type, payload, txHash: event.txHash });
         }
-        webhookEvents.push({ type, payload });
-      }
-    }
+      },
+      span,
+    );
   };
 
-  await insertMany(response.events);
+  for (const group of groups) {
+    // Atomic co-transaction group: apply every event in order before the next tx.
+    for (const event of group) {
+      await applyOne(event);
+    }
+  }
 
-  const latest = response.events.at(-1)!;
+  const latest = ordered.at(-1)!;
 
   // 3. Update last indexed ledger once the batch above has been applied.
   persistLastIndexedLedger(latest.ledger + 1);
 
-  for (const { type, payload } of webhookEvents) {
-    dispatchEventWebhook(type, payload).catch((err: unknown) => {
-      logger.warn(`[indexer] webhook dispatch failed for ${type}: ${err instanceof Error ? err.message : String(err)}`);
+  for (const { type, payload, txHash } of webhookEvents) {
+    withRestoredCorrelation(txHash, 'indexer.webhookDispatch', async () => {
+      await dispatchEventWebhook(type, payload);
+    }, span).catch((err: unknown) => {
+      logger.warn(
+        `[indexer] webhook dispatch failed for ${type}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     });
   }
 
@@ -344,4 +425,3 @@ export async function getValidatorByWallet(wallet: string): Promise<ValidatorRow
     )) ?? null
   );
 }
-

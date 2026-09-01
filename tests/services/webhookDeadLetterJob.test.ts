@@ -15,6 +15,7 @@ import * as metrics from '../../src/middleware/metrics';
 
 jest.mock('../../src/db', () => ({
   countWebhookDeadLetters: jest.fn(),
+  countWebhookDeadLettersBySubscription: jest.fn(),
   listWebhookDeadLetters: jest.fn(),
   listWebhookSubscriptions: jest.fn(),
   claimWebhookDeadLetter: jest.fn(),
@@ -30,6 +31,17 @@ jest.mock('../../src/services/webhooks', () => ({
 jest.mock('../../src/middleware/metrics', () => ({
   incrementWebhookRetrySuccessTotal: jest.fn(),
   incrementWebhookDeadLettersTotal: jest.fn(),
+}));
+
+jest.mock('../../src/services/webhookDeadLetterAlerts', () => ({
+  evaluateDeadLetterAlerts: jest.fn().mockResolvedValue({
+    total: 0,
+    bySubscription: [],
+    sizeExceeded: false,
+    rateExceeded: false,
+    insertsInWindow: 0,
+    notified: false,
+  }),
 }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -72,6 +84,7 @@ describe('webhookDeadLetterJob — runDeadLetterRetryJob', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCountDeadLetters.mockReturnValue(0);
+    (db.countWebhookDeadLettersBySubscription as jest.Mock).mockReturnValue([]);
     mockListSubscriptions.mockReturnValue([{ id: 1, url: 'https://example.com/webhook', secret: 'secret' }]);
   });
 
@@ -157,18 +170,20 @@ describe('webhookDeadLetterJob — runDeadLetterRetryJob', () => {
     expect(mockClaimDeadLetter).not.toHaveBeenCalled();
   });
 
-  it('emits overflow log when queue depth exceeds 100', async () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  it('evaluates dead-letter alerts when queue is non-empty', async () => {
+    const { evaluateDeadLetterAlerts } = require('../../src/services/webhookDeadLetterAlerts');
     mockCountDeadLetters.mockReturnValue(150);
+    (db.countWebhookDeadLettersBySubscription as jest.Mock).mockReturnValue([
+      { subscription_id: 1, count: 150 },
+    ]);
     mockListDeadLetters.mockReturnValue([]);
 
     await runDeadLetterRetryJob();
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[error]'),
-      expect.stringContaining('webhook_dead_letter_overflow'),
+    expect(evaluateDeadLetterAlerts).toHaveBeenCalledWith(
+      150,
+      [{ subscription_id: 1, count: 150 }],
     );
-    consoleSpy.mockRestore();
   });
 
   it('preserves delivery_id across retry (same ID re-sent)', async () => {
@@ -201,6 +216,7 @@ describe('webhookDeadLetterJob — overlap guard (acceptance criterion)', () => 
   beforeEach(() => {
     jest.clearAllMocks();
     (db.countWebhookDeadLetters as jest.Mock).mockReturnValue(0);
+    (db.countWebhookDeadLettersBySubscription as jest.Mock).mockReturnValue([]);
     (db.listWebhookSubscriptions as jest.Mock).mockReturnValue([{ id: 1, url: 'https://example.com/webhook', secret: 'secret' }]);
   });
 

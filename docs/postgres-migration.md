@@ -29,6 +29,81 @@ The migration is reversible within a maintenance window.
 - Network connectivity between backend instances and PostgreSQL server
 - Admin access to create databases and users
 
+## Database Configuration
+
+Before starting the backend, configure these environment variables:
+
+| Variable | Accepted Values | Default | Purpose |
+|---|---|---|---|
+| `DB_DRIVER` | `sqlite` or `postgres` | `sqlite` | Which database system to use; typos cause startup failure (no silent fallback) |
+| `DATABASE_URL` | PostgreSQL connection string | (none) | **Required when `DB_DRIVER=postgres`**. Format: `postgresql://user:password@host:5432/dbname` |
+| `DATABASE_SSL` | `true`, `no-verify`, `false` | (disabled) | TLS/SSL mode for PostgreSQL connections. See [SSL / TLS Configuration](#ssl--tls-configuration) |
+| `DATABASE_POOL_SIZE` | Integer 1–100 | `10` | Maximum concurrent connections in the pool. Only used with `DB_DRIVER=postgres` |
+
+### `DB_DRIVER` behavior
+
+The backend **requires an explicit, valid `DB_DRIVER` value**:
+
+- `DB_DRIVER=sqlite` — Use SQLite (local file-based, single-writer)
+- `DB_DRIVER=postgres` — Use PostgreSQL (requires `DATABASE_URL`)
+- Any other value (typo, misspelling) → **server fails at startup** with an error message
+
+```
+ERROR: DB_DRIVER="postgrez" is invalid. Must be one of: sqlite, postgres. 
+       Check for typos — an unrecognised value does NOT fall back to SQLite; 
+       the server will not start.
+```
+
+This is intentional: an undetected typo could silently cause a production deployment to use SQLite instead of the intended PostgreSQL, leading to lost data in a multi-replica scenario.
+
+### `DATABASE_URL` format
+
+When `DB_DRIVER=postgres`, provide a valid PostgreSQL URI:
+
+```
+postgresql://user:password@host:5432/dbname
+```
+
+Breaking this down:
+- `user` — Database user (e.g., `scout_user`)
+- `password` — User password (keep secure; use secrets management)
+- `host` — PostgreSQL server hostname or IP
+- `5432` — PostgreSQL port (default; adjust if your server runs on a different port)
+- `dbname` — Database name (e.g., `scout_off`)
+
+**Examples:**
+
+Local development (Docker Compose):
+```
+DATABASE_URL=postgresql://scout_user:password@postgres:5432/scout_off
+```
+
+AWS RDS:
+```
+DATABASE_URL=postgresql://scout_user:password@scout-off-db.abc123.us-east-1.rds.amazonaws.com:5432/scout_off
+```
+
+Heroku Postgres:
+```
+# Heroku sets DATABASE_URL automatically; it looks like:
+# postgresql://user:password@ec2-1-2-3-4.compute-1.amazonaws.com:5432/database
+```
+
+Supabase:
+```
+DATABASE_URL=postgresql://postgres:password@db.project-ref.supabase.co:5432/postgres
+```
+
+### `DATABASE_POOL_SIZE` guidance
+
+| Deployment | Recommended | Notes |
+|---|---|---|
+| Development (single instance) | 5–10 | Conservative; local testing doesn't stress the pool |
+| Staging (1–3 replicas) | 10–20 | Moderate load; balance pool size against PgBouncer if used |
+| Production (3+ replicas with HPA) | 20–50 | Higher concurrency; monitor pool exhaustion via application metrics |
+
+Each replica maintains its own pool, so a 3-replica deployment with `DATABASE_POOL_SIZE=20` opens up to 60 total connections to PostgreSQL. Ensure the PostgreSQL `max_connections` setting is at least `(replicas × pool_size) + 10` to account for admin and utility connections.
+
 ## Pre-Migration Checklist
 
 - [ ] Back up current SQLite database file

@@ -344,6 +344,33 @@ const config = {
      */
     timeoutMs: parseNumericEnv('WEBHOOK_TIMEOUT_MS', process.env.WEBHOOK_TIMEOUT_MS, 10000, { min: 1, integer: true }),
   },
+  /**
+   * Dead-letter queue alerting (#1131).
+   * Size threshold: absolute pending+in_progress row count.
+   * Rate threshold: inserts within rateWindowMs.
+   * Optional PLATFORM_ADMIN_NOTIFY_URL receives a JSON POST on crossing.
+   */
+  webhookDeadLetterAlert: {
+    sizeThreshold: parseNumericEnv(
+      'WEBHOOK_DLQ_SIZE_THRESHOLD',
+      process.env.WEBHOOK_DLQ_SIZE_THRESHOLD,
+      100,
+      { min: 1, integer: true },
+    ),
+    rateThreshold: parseNumericEnv(
+      'WEBHOOK_DLQ_RATE_THRESHOLD',
+      process.env.WEBHOOK_DLQ_RATE_THRESHOLD,
+      50,
+      { min: 1, integer: true },
+    ),
+    rateWindowMs: parseNumericEnv(
+      'WEBHOOK_DLQ_RATE_WINDOW_MS',
+      process.env.WEBHOOK_DLQ_RATE_WINDOW_MS,
+      5 * 60 * 1000,
+      { min: 1000, integer: true },
+    ),
+    adminNotifyUrl: process.env.PLATFORM_ADMIN_NOTIFY_URL ?? '',
+  },
   // Symmetric key (32-byte hex, e.g. `openssl rand -hex 32`) used to encrypt
   // webhook_subscriptions.secret at rest (#686). Required in production —
   // see src/utils/webhookSecretCipher.ts and docs/secrets-rotation.md.
@@ -378,6 +405,13 @@ const config = {
   webhookTestRateLimit: {
     windowMs: parseNumericEnv('WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS', process.env.WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS, 60000, { min: 1, integer: true }),
     max: parseNumericEnv('WEBHOOK_TEST_RATE_LIMIT_MAX', process.env.WEBHOOK_TEST_RATE_LIMIT_MAX, process.env.NODE_ENV === 'test' ? 1000 : 5, { min: 1, integer: true }),
+  },
+  // Per-player milestone submission rate limit (#1137): guards against a
+  // validator (or compromised key) flooding a single player's milestone history.
+  // Default: 10 submissions per player per hour.
+  milestonePlayerRateLimit: {
+    windowMs: parseNumericEnv('MILESTONE_PLAYER_RATE_WINDOW_MS', process.env.MILESTONE_PLAYER_RATE_WINDOW_MS, 3_600_000, { min: 1, integer: true }),
+    max: parseNumericEnv('MILESTONE_PLAYER_RATE_MAX', process.env.MILESTONE_PLAYER_RATE_MAX, process.env.NODE_ENV === 'test' ? 1000 : 10, { min: 1, integer: true }),
   },
   bodyLimit: {
     // Maximum JSON payload size (default: 1MB)
@@ -463,6 +497,9 @@ const config = {
   // it falls back to an in-memory Map — no setup required for local dev/CI.
   redisUrl: process.env.REDIS_URL || '',
 
+  /** In-memory search cache max entries; LRU eviction applies after TTL expiry (default: 1000). */
+  searchCacheMaxEntries: parseNumericEnv('SEARCH_CACHE_MAX_ENTRIES', process.env.SEARCH_CACHE_MAX_ENTRIES, 1000, { min: 1, integer: true }),
+
   /** TTL for pinJson deduplication cache entries in milliseconds (default: 5 min). */
   pinJsonCacheTtlMs: parseNumericEnv('PIN_JSON_CACHE_TTL_MS', process.env.PIN_JSON_CACHE_TTL_MS, 300000, { min: 0, integer: true }),
 
@@ -485,16 +522,34 @@ const config = {
   compressionThresholdBytes: parseNumericEnv('COMPRESSION_THRESHOLD', process.env.COMPRESSION_THRESHOLD ?? process.env.COMPRESSION_THRESHOLD_BYTES, 1024, { min: 1, integer: true }),
 
   /**
-   * Tier divergence reconciliation job config (#1132).
-   * Compares derived (off-chain) tier against stored progress_level and
-   * emits scout_off_tier_divergence_total + structured log per mismatch.
-   *
-   * TIER_DIVERGENCE_INTERVAL_MS  — how often to run (default: 5 min)
-   * TIER_DIVERGENCE_SAMPLE_SIZE  — max players to check per run (default: 100)
+   * Maximum indexer ledger lag (in ledgers) allowed for readiness check.
+   * If the indexer is more than this many ledgers behind the chain tip,
+   * the readiness check will report the indexer as unavailable.
+   * Default: 100 ledgers. Set to 0 to disable the lag check.
    */
-  tierDivergence: {
-    intervalMs: parseNumericEnv('TIER_DIVERGENCE_INTERVAL_MS', process.env.TIER_DIVERGENCE_INTERVAL_MS, 300_000, { min: 1000, integer: true }),
-    sampleSize: parseNumericEnv('TIER_DIVERGENCE_SAMPLE_SIZE', process.env.TIER_DIVERGENCE_SAMPLE_SIZE, 100, { min: 1, integer: true }),
+  readinessMaxLag: parseNumericEnv('READINESS_MAX_LAG', process.env.READINESS_MAX_LAG, 100, { min: 0, integer: true }),
+
+  /**
+   * Startup grace period in milliseconds for the readiness lag check.
+   * After process startup, the indexer is allowed to lag without failing
+   * readiness for this duration (to accommodate initial sync from persisted cursor).
+   * Default: 5 minutes. Set to 0 to disable the grace period.
+   */
+  readinessGracePeriodMs: parseNumericEnv('READINESS_GRACE_PERIOD_MS', process.env.READINESS_GRACE_PERIOD_MS, 5 * 60 * 1000, { min: 0, integer: true }),
+
+  /**
+   * Log redaction configuration for sensitive data in production logs.
+   * In development, redaction is always disabled (pass-through).
+   */
+  logRedaction: {
+    /** Enable redaction in non-development environments (default: true for staging/production) */
+    enabled: nodeEnv !== 'development' && process.env.LOG_REDACTION_ENABLED !== 'false',
+    /** Number of characters to preserve at the start of masked wallet addresses (default: 1) */
+    walletPrefixLength: parseNumericEnv('LOG_REDACTION_WALLET_PREFIX', process.env.LOG_REDACTION_WALLET_PREFIX, 1, { min: 1, max: 10, integer: true }),
+    /** Number of characters to preserve at the end of masked wallet addresses (default: 4) */
+    walletSuffixLength: parseNumericEnv('LOG_REDACTION_WALLET_SUFFIX', process.env.LOG_REDACTION_WALLET_SUFFIX, 4, { min: 1, max: 10, integer: true }),
+    /** Hash correlation IDs instead of logging them raw (default: false) */
+    hashCorrelationIds: process.env.LOG_REDACTION_HASH_CORRELATION_IDS === 'true',
   },
 
 };

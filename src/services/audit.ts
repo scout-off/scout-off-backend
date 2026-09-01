@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { logWithoutRedaction } from '../utils/logRedaction';
 import { insertAuditLog } from '../db';
 
 export interface AuditEvent {
@@ -30,9 +31,12 @@ export interface AuditEvent {
  * 401 response on a DB round-trip is undesirable) must attach their own
  * `.catch()` — see src/middleware/auth.ts — rather than this function
  * swallowing the error on their behalf.
+ *
+ * Audit logs bypass redaction to preserve full wallet addresses for compliance.
  */
 export async function logAuditEvent(event: AuditEvent): Promise<void> {
-  logger.info('[audit]', JSON.stringify(event));
+  // Use audit-safe logging that bypasses redaction
+  logWithoutRedaction('info', '[audit]', JSON.stringify(event));
   try {
     await insertAuditLog({
       action: event.contractAction ?? event.action,
@@ -41,7 +45,8 @@ export async function logAuditEvent(event: AuditEvent): Promise<void> {
       createdAt: event.timestamp,
     });
   } catch (err) {
-    logger.critical('[audit] failed to persist audit event to DB — audit trail has a gap', {
+    // Also bypass redaction for critical errors
+    logWithoutRedaction('critical', '[audit] failed to persist audit event to DB — audit trail has a gap', {
       event,
       error: err instanceof Error ? err.message : String(err),
     });

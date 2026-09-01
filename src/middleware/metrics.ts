@@ -255,6 +255,72 @@ export function getStuckPendingPinsCount(): number {
   return stuckPendingPinsCount;
 }
 
+// ─── Webhook dead-letter counters / gauges (#1131) ────────────────────────────
+// Declared before resetMetrics so test isolation can clear them.
+
+export interface WebhookCounters {
+  deadLettersTotal: number;
+  retrySuccessTotal: number;
+}
+
+export const webhookCountersStore: WebhookCounters = {
+  deadLettersTotal: 0,
+  retrySuccessTotal: 0,
+};
+
+/** Per-subscription gauge for current dead-letter queue depth. */
+const webhookDeadLetterGaugeStore: Record<string, number> = {};
+
+/** Timestamps of recent dead-letter inserts for rate-based alerting. */
+const webhookDeadLetterInsertTimestamps: number[] = [];
+
+/** Increment webhook_dead_letters_total counter (lifetime inserts). */
+export function incrementWebhookDeadLettersTotal(): void {
+  webhookCountersStore.deadLettersTotal += 1;
+  webhookDeadLetterInsertTimestamps.push(Date.now());
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  while (
+    webhookDeadLetterInsertTimestamps.length > 0 &&
+    webhookDeadLetterInsertTimestamps[0]! < cutoff
+  ) {
+    webhookDeadLetterInsertTimestamps.shift();
+  }
+}
+
+/** Increment webhook_retry_success_total counter. */
+export function incrementWebhookRetrySuccessTotal(): void {
+  webhookCountersStore.retrySuccessTotal += 1;
+}
+
+/** Returns a snapshot of webhook counters. */
+export function getWebhookCounters(): WebhookCounters {
+  return { ...webhookCountersStore };
+}
+
+export function setWebhookDeadLetterGauge(
+  entries: Array<{ subscriptionId: string; count: number }>,
+): void {
+  for (const key of Object.keys(webhookDeadLetterGaugeStore)) {
+    delete webhookDeadLetterGaugeStore[key];
+  }
+  for (const entry of entries) {
+    webhookDeadLetterGaugeStore[entry.subscriptionId] = entry.count;
+  }
+}
+
+export function getWebhookDeadLetterGauge(): Record<string, number> {
+  return { ...webhookDeadLetterGaugeStore };
+}
+
+export function getWebhookDeadLetterInsertTimestamps(): number[] {
+  return [...webhookDeadLetterInsertTimestamps];
+}
+
+/** Test helper — clear insert-rate timestamps. */
+export function resetWebhookDeadLetterInsertTimestamps(): void {
+  webhookDeadLetterInsertTimestamps.length = 0;
+}
+
 /** Resets every metric store. Intended for test isolation. */
 export function resetMetrics(): void {
   Object.keys(metricsStore).forEach((k) => delete metricsStore[k]);
@@ -335,33 +401,6 @@ export function recordCacheInvalidation(): void {
 /** Returns the current cache invalidation counter. */
 export function getCacheInvalidationTotal(): number {
   return cacheInvalidationStore.total;
-}
-
-// ─── Webhook dead-letter counters ─────────────────────────────────────────────
-
-export interface WebhookCounters {
-  deadLettersTotal: number;
-  retrySuccessTotal: number;
-}
-
-export const webhookCountersStore: WebhookCounters = {
-  deadLettersTotal: 0,
-  retrySuccessTotal: 0,
-};
-
-/** Increment webhook_dead_letters_total counter. */
-export function incrementWebhookDeadLettersTotal(): void {
-  webhookCountersStore.deadLettersTotal += 1;
-}
-
-/** Increment webhook_retry_success_total counter. */
-export function incrementWebhookRetrySuccessTotal(): void {
-  webhookCountersStore.retrySuccessTotal += 1;
-}
-
-/** Returns a snapshot of webhook counters. */
-export function getWebhookCounters(): WebhookCounters {
-  return { ...webhookCountersStore };
 }
 
 // ─── Fee withdrawal DB-write failure counter ──────────────────────────────────
@@ -513,6 +552,23 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# HELP stuck_pending_pins_count Current number of stuck pending IPFS pins');
   lines.push('# TYPE stuck_pending_pins_count gauge');
   lines.push(`stuck_pending_pins_count ${stuckPins}`);
+
+  // Dead-letter queue depth gauge (#1131) — broken down per subscription.
+  lines.push('# HELP scout_off_webhook_dead_letters_total Current webhook dead-letter queue depth by subscription');
+  lines.push('# TYPE scout_off_webhook_dead_letters_total gauge');
+  const dlGauge = getWebhookDeadLetterGauge();
+  for (const [subscriptionId, count] of Object.entries(dlGauge)) {
+    lines.push(
+      `scout_off_webhook_dead_letters_total{subscription_id="${escapeLabelValue(subscriptionId)}"} ${count}`,
+    );
+  }
+  // Always emit a lifetime insert counter for dashboards that prefer counters.
+  lines.push('# HELP scout_off_webhook_dead_letters_inserted_total Lifetime webhook dead-letter inserts');
+  lines.push('# TYPE scout_off_webhook_dead_letters_inserted_total counter');
+  lines.push(`scout_off_webhook_dead_letters_inserted_total ${webhook.deadLettersTotal}`);
+  lines.push('# HELP scout_off_webhook_retry_success_total Successful dead-letter auto-retries');
+  lines.push('# TYPE scout_off_webhook_retry_success_total counter');
+  lines.push(`scout_off_webhook_retry_success_total ${webhook.retrySuccessTotal}`);
 
   // IP reputation counters.
   lines.push('# HELP ip_reputation_blocked_total Total number of requests blocked by IP reputation scoring');

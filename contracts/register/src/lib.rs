@@ -779,4 +779,32 @@ mod tests {
         );
         assert_eq!(id2, id1 + 1);
     }
+
+    #[test]
+    fn set_platform_fee_bps_succeeds_for_admin() {
+        let env = Env::default();
+        let (client, admin, token) = setup(&env);
+        client.initialize(&admin, &token, &100);
+        client.set_platform_fee_bps(&250u32);
+        assert_eq!(client.get_platform_fee_bps(), 250u32);
+    }
+
+    #[test]
+    fn set_platform_fee_bps_rejects_out_of_range() {
+        let env = Env::default();
+        let (client, admin, token) = setup(&env);
+        client.initialize(&admin, &token, &100);
+        assert!(client.try_set_platform_fee_bps(&10001u32).is_err());
+    }
+
+    #[test]
+    fn set_platform_fee_bps_allows_zero_and_max() {
+        let env = Env::default();
+        let (client, admin, token) = setup(&env);
+        client.initialize(&admin, &token, &100);
+        client.set_platform_fee_bps(&0u32);
+        assert_eq!(client.get_platform_fee_bps(), 0u32);
+        client.set_platform_fee_bps(&10000u32);
+        assert_eq!(client.get_platform_fee_bps(), 10000u32);
+    }
 }

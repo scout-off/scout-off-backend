@@ -66,6 +66,8 @@ Copy `.env.example` to `.env` and fill in all required values before starting th
 | `RATE_LIMIT_MAX` | — | Max requests per window per IP (default: `60`). See [docs/rate-limiting.md](docs/rate-limiting.md). |
 | `AUTH_RATE_LIMIT_WINDOW_MS` | — | Auth rate limit window (default: `60000`). See [docs/rate-limiting.md](docs/rate-limiting.md). |
 | `AUTH_RATE_LIMIT_MAX` | — | Max auth requests per window (default: `5`). See [docs/rate-limiting.md](docs/rate-limiting.md). |
+| `READINESS_MAX_LAG` | — | Maximum indexer ledger lag (in ledgers) allowed for readiness check. If the indexer is more than this many ledgers behind the chain tip, the readiness check will report the indexer as unavailable. Default: `100`. Set to `0` to disable the lag check. |
+| `READINESS_GRACE_PERIOD_MS` | — | Startup grace period in milliseconds for the readiness lag check. After process startup, the indexer is allowed to lag without failing readiness for this duration (to accommodate initial sync from persisted cursor). Default: `300000` (5 minutes). Set to `0` to disable the grace period. |
 
 ---
 

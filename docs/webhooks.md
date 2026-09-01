@@ -382,6 +382,28 @@ preserved in the payload, so subscriber-side dedup works across replays.
 This never throws back into the caller that triggered the event — a broken or
 slow subscriber cannot fail an unrelated request (e.g. player registration).
 
+### Alerting and metrics (#1131)
+
+The dead-letter retry job refreshes a per-subscription Prometheus gauge and
+evaluates configurable thresholds on every sweep:
+
+| Env | Default | Meaning |
+| --- | --- | --- |
+| `WEBHOOK_DLQ_SIZE_THRESHOLD` | `100` | Absolute queue depth |
+| `WEBHOOK_DLQ_RATE_THRESHOLD` | `50` | Inserts within the rate window |
+| `WEBHOOK_DLQ_RATE_WINDOW_MS` | `300000` | Sliding window for the rate check |
+| `PLATFORM_ADMIN_NOTIFY_URL` | _(empty)_ | Optional JSON POST target on crossing |
+
+Crossing either threshold emits a **critical** log line
+(`webhook_dead_letter_threshold_crossed`) that includes the top culprit
+subscriptions, and optionally notifies the platform-admin URL.
+
+Metrics (see `GET /metrics`):
+
+- `scout_off_webhook_dead_letters_total{subscription_id}` — gauge of current depth
+- `scout_off_webhook_dead_letters_inserted_total` — lifetime inserts
+- `scout_off_webhook_retry_success_total` — successful auto-retries
+
 ## Secret Rotation
 
 ### At-rest encryption (#686)

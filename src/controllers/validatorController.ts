@@ -4,10 +4,11 @@ import { z } from 'zod';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { pinJson, pinFile } from '../services/ipfs';
-import { getPendingMilestones as getPendingMilestonesFromDb, getDriver, removePendingMilestone, incrementValidatorApproved, queryEvents, updatePlayerProgress } from '../db';
+import { getPendingMilestones as getPendingMilestonesFromDb, getDriver, removePendingMilestone, incrementValidatorApproved, queryEvents, updatePlayerProgress, getValidatorStats } from '../db';
 import { invalidateMilestoneCache } from '../services/cache';
 import { recordAudit } from '../utils/audit';
 import { isValidMetadataUri, URI_VALIDATION_ERROR } from '../utils/uriValidator';
+import { checkWalletOwnership } from '../middleware/requireOwner';
 
 // Re-exported so callers/tests can import the metadata_uri validator directly
 // from validatorController without reaching into utils/uriValidator.
@@ -271,6 +272,103 @@ try {
     }
 
     res.json({ success: true, data: results });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Maximum recent-activity items returned by the stats endpoint (#1136). */
+const RECENT_ACTIVITY_LIMIT = 20;
+
+/** Number of seconds in 30 days, used to filter approvedLast30d. */
+const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * GET /api/validators/:wallet/stats
+ *
+ * Returns a dashboard summary for the given validator wallet:
+ *   - pending:          number of pending milestones currently assigned to this validator
+ *   - approvedTotal:    total milestones approved (from validator_stats table)
+ *   - rejectedTotal:    total milestones rejected (from validator_stats table)
+ *   - approvedLast30d:  approvals recorded in the last 30 days (from indexed events)
+ *   - recent:           up to 20 most recent milestone events (submitted/approved/rejected)
+ *                       involving this validator, newest first
+ *
+ * Auth: validators may only query their own wallet; admins can query any wallet.
+ */
+export async function getValidatorDashboardStats(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { wallet } = req.params as { wallet: string };
+
+    // Enforce ownership: validators see only their own stats; admins may query any wallet.
+    if (!checkWalletOwnership(req, res)) return;
+
+    // 1. Count pending milestones for this validator.
+    const { total: pending } = await getPendingMilestonesFromDb({
+      validatorWallet: wallet,
+      pageSize: 1,
+      page: 1,
+    });
+
+    // 2. Pull approved / rejected totals from the write-optimised stats table.
+    const statsRow = await getValidatorStats(wallet);
+    const approvedTotal = statsRow?.milestones_approved ?? 0;
+    const rejectedTotal = statsRow?.milestones_rejected ?? 0;
+
+    // 3. Derive approvedLast30d from indexed milestone_approved events.
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const cutoff = nowSeconds - THIRTY_DAYS_SECONDS;
+
+    const approvedEvents = queryEvents('milestone_approved');
+    const approvedLast30d = approvedEvents.filter((e) => {
+      const isThisValidator =
+        e.payload.validator === wallet || e.payload.validator_wallet === wallet;
+      const withinWindow =
+        typeof e.created_at === 'number' && e.created_at >= cutoff;
+      return isThisValidator && withinWindow;
+    }).length;
+
+    // 4. Build the recent-activity list (bounded to RECENT_ACTIVITY_LIMIT).
+    //    Combine submitted, approved, and rejected events for this validator.
+    const milestoneEventTypes = [
+      'milestone_submitted',
+      'milestone_approved',
+      'milestone_rejected',
+    ] as const;
+
+    const recentActivity = milestoneEventTypes
+      .flatMap((type) =>
+        queryEvents(type).filter((e) => {
+          return (
+            e.payload.validator === wallet ||
+            e.payload.validator_wallet === wallet
+          );
+        }).map((e) => ({
+          type: e.type as string,
+          playerId: (e.payload.player_id ?? e.payload.playerId ?? null) as string | null,
+          milestoneId: (e.payload.milestone_id ?? e.payload.milestoneId ?? null) as string | null,
+          createdAt: e.created_at ?? null,
+        })),
+      )
+      // Sort newest first (nulls treated as 0).
+      .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+      .slice(0, RECENT_ACTIVITY_LIMIT);
+
+    res.json({
+      success: true,
+      data: {
+        wallet,
+        pending,
+        approvedTotal,
+        rejectedTotal,
+        approvedLast30d,
+        recent: recentActivity,
+      },
+    });
   } catch (err) {
     next(err);
   }

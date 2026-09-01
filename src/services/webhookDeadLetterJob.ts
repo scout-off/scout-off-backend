@@ -2,8 +2,8 @@
  * Background retry job for the webhook dead-letter queue.
  *
  * Every 5 minutes the job:
- *   1. Checks whether the dead-letter count exceeds OVERFLOW_THRESHOLD and
- *      emits an error-level log event when it does.
+ *   1. Refreshes the per-subscription dead-letter gauge and evaluates
+ *      configurable size / insert-rate thresholds (#1131).
  *   2. Picks up pending rows older than 10 minutes whose retry_count < 5.
  *   3. Atomically claims each eligible row (pending → in_progress) so that
  *      a second overlapping sweep cannot process the same row.
@@ -21,6 +21,7 @@
 import crypto from 'crypto';
 import {
   countWebhookDeadLetters,
+  countWebhookDeadLettersBySubscription,
   listWebhookDeadLetters,
   listWebhookSubscriptions,
   claimWebhookDeadLetter,
@@ -32,6 +33,8 @@ import {
 import { postWebhookWithRetry } from './webhooks';
 import { logger } from '../utils/logger';
 import { incrementWebhookRetrySuccessTotal } from '../middleware/metrics';
+import { evaluateDeadLetterAlerts } from './webhookDeadLetterAlerts';
+import config from '../config';
 
 // ─── Configuration ─────────────────────────────────────────────────────────────
 
@@ -44,8 +47,8 @@ const MIN_AGE_BEFORE_RETRY_MS = 10 * 60 * 1000; // 10 min
 /** Maximum number of auto-retries per dead-letter row. */
 export const MAX_AUTO_RETRIES = 5;
 
-/** Queue depth that triggers the overflow alert. */
-const OVERFLOW_THRESHOLD = 100;
+/** @deprecated Prefer config.webhookDeadLetterAlert.sizeThreshold. */
+export const OVERFLOW_THRESHOLD = (): number => config.webhookDeadLetterAlert.sizeThreshold;
 
 /** Stale lock threshold — locks older than this are assumed abandoned (ms). */
 const STALE_LOCK_THRESHOLD_MS = 15 * 60 * 1000; // 15 min
@@ -72,13 +75,10 @@ export async function runDeadLetterRetryJob(): Promise<number> {
   let successCount = 0;
   _currentWorkerId = generateWorkerId();
 
-  // ── Overflow alerting ────────────────────────────────────────────────────────
+  // ── Threshold alerting + gauge refresh (#1131) ─────────────────────────────
   const total = countWebhookDeadLetters();
-  if (total > OVERFLOW_THRESHOLD) {
-    logger.error(
-      `[webhooks] webhook_dead_letter_overflow — queue depth ${total} exceeds threshold ${OVERFLOW_THRESHOLD}`,
-    );
-  }
+  const bySubscription = countWebhookDeadLettersBySubscription();
+  await evaluateDeadLetterAlerts(total, bySubscription);
 
   // ── Pick eligible rows ───────────────────────────────────────────────────────
   // Fetch a generous page (up to 200) and filter in-process so we don't need
@@ -94,7 +94,10 @@ export async function runDeadLetterRetryJob(): Promise<number> {
       r.created_at <= cutoff,
   );
 
-  if (eligible.length === 0) return 0;
+  if (eligible.length === 0) {
+    _currentWorkerId = null;
+    return 0;
+  }
 
   const subscriptions = listWebhookSubscriptions();
 

@@ -1,18 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import config, { isProduction, isStaging } from '../config';
 
+/**
+ * Application-owned security headers (CSP, nosniff, frame options, referrer,
+ * permissions-policy, HSTS). Helmet is configured in app.ts to leave these
+ * unset so each header has exactly one middleware as its source of truth.
+ */
 export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
   const h = config.securityHeaders;
 
   // HSTS — only meaningful over TLS; omit in development/test to avoid
-  // accidentally pinning localhost or CI environments.
+  // accidentally pinning localhost or CI environments. helmet's HSTS module
+  // is disabled in app.ts, so we only set (never strip) here.
   if (isProduction() || isStaging()) {
     res.setHeader('Strict-Transport-Security', h.hsts);
-  } else {
-    // helmet() (mounted earlier in app.ts) sets this header by default
-    // regardless of environment — explicitly strip it here so it's absent
-    // outside production/staging regardless of middleware ordering.
-    res.removeHeader('Strict-Transport-Security');
   }
 
   res.setHeader('Content-Security-Policy', h.csp);
@@ -21,8 +22,8 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
   res.setHeader('Referrer-Policy', h.referrerPolicy);
   res.setHeader('Permissions-Policy', h.permissionsPolicy);
 
-  // Belt-and-suspenders: helmet already removes this, but set it explicitly
-  // so the header is absent regardless of middleware ordering.
+  // Belt-and-suspenders: Express + helmet both suppress this, but remove it
+  // explicitly so the header is absent regardless of middleware ordering.
   res.removeHeader('X-Powered-By');
 
   next();

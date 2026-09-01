@@ -9,6 +9,7 @@ import {
   Keypair,
 } from '@stellar/stellar-sdk';
 import { server, networkPassphrase } from '../services/stellar';
+import { correlationMemoFromContext, recordTxCorrelation } from '../services/txCorrelation';
 import config from '../config';
 
 // ─── Typed errors ─────────────────────────────────────────────────────────────
@@ -66,10 +67,13 @@ export async function invokeContract(
   }
 
   const contract = new Contract(config.contractId);
-  const tx = new TransactionBuilder(account, {
+  const txOpts: ConstructorParameters<typeof TransactionBuilder>[1] = {
     fee: BASE_FEE,
     networkPassphrase: networkPassphrase(),
-  })
+  };
+  const memo = correlationMemoFromContext();
+  if (memo) txOpts.memo = memo;
+  const tx = new TransactionBuilder(account, txOpts)
     .addOperation(contract.call(method, ...args))
     .setTimeout(Math.ceil(timeoutMs / 1000))
     .build();
@@ -92,6 +96,7 @@ export async function invokeContract(
   let sendResult;
   try {
     sendResult = await server.sendTransaction(preparedTx);
+    if (sendResult.hash) recordTxCorrelation(sendResult.hash);
   } catch (err) {
     throw new ContractNetworkError(`Submit request failed: ${(err as Error).message}`);
   }

@@ -4,7 +4,8 @@
  * Robust event backfill system that replays Soroban contract events for a
  * specific ledger range, with:
  *   - Batched fetching (100 ledgers/batch, 50 ms inter-batch delay)
- *   - Duplicate-safe insertion via the existing UNIQUE constraint on tx_hash
+ *   - Duplicate-safe insertion via UNIQUE(tx_hash, event_index)
+ *   - Deterministic ordering via eventOrdering (#1111)
  *   - Live progress tracking exposed through getReindexStatus()
  *   - Audit log entries for reindex_started and reindex_completed
  *   - Catch-up mode: when ledger lag exceeds CATCHUP_THRESHOLD, batch size
@@ -24,6 +25,7 @@ import { scValToNative } from '@stellar/stellar-sdk';
 import config from '../config';
 import { getDb, persistLastIndexedLedger } from '../db';
 import { normalizePayload, normalizeEventId } from './indexer';
+import { normalizeAndSortEvents, type RawIndexerEvent } from './eventOrdering';
 import { logAuditEvent } from './audit';
 import { logger } from '../utils/logger';
 
@@ -225,7 +227,9 @@ async function _runReindex(
 ): Promise<void> {
   const db = getDb();
   const insert = db.prepare(
-    'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)',
+    `INSERT OR IGNORE INTO events
+      (type, ledger, tx_hash, payload, created_at, tx_application_order, event_index, contract_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
 
   let eventsInserted = 0;
@@ -279,30 +283,49 @@ async function _runReindex(
         // Non-rate-limit errors: continue to next batch (partial failures don't abort the job).
       }
 
-      // Insert events from this batch in a single transaction.
+      const rawEvents: RawIndexerEvent[] = batchEvents.map((raw: any) => ({
+        ledger: raw.ledger,
+        txHash: raw.txHash,
+        id: raw.id,
+        contractId: raw.contractId ?? config.registerContractId,
+        topic: raw.topic,
+        value: raw.value,
+        ledgerClosedAt: raw.ledgerClosedAt,
+        txIndex: raw.txIndex,
+        eventIndex: raw.eventIndex,
+      }));
+      const ordered = normalizeAndSortEvents(rawEvents, config.registerContractId);
+
+      // Insert events from this batch in a single transaction, in total order.
       const insertBatch = db.transaction(
-        (events: typeof batchEvents) => {
+        (events: typeof ordered) => {
           let batchInserted = 0;
-          for (const raw of events) {
-            // In @stellar/stellar-sdk v16+, topic items and value are xdr.ScVal
-            // discriminated-union objects; use scValToNative() instead of .value().
-            const type = raw.topic[0] ? scValToNative(raw.topic[0]) as string : '';
+          for (const event of events) {
+            const raw = event.raw as any;
+            const type = raw.topic?.[0] ? (scValToNative(raw.topic[0]) as string) : '';
             const payload = normalizePayload(
-              (raw.value ? scValToNative(raw.value) as Record<string, unknown> : {}) ?? {},
+              (raw.value ? (scValToNative(raw.value) as Record<string, unknown>) : {}) ?? {},
             );
-            const eventId = normalizeEventId(config.registerContractId, raw.ledger, raw.txHash);
+            const eventId = normalizeEventId(
+              event.contractId,
+              event.ledger,
+              event.txHash,
+              event.eventIndex,
+            );
             const createdAt = raw.ledgerClosedAt
               ? new Date(raw.ledgerClosedAt).getTime()
               : Date.now();
 
             const result = insert.run(
               type,
-              raw.ledger,
-              raw.txHash,
+              event.ledger,
+              event.txHash,
               JSON.stringify(payload),
               createdAt,
+              event.txApplicationOrder,
+              event.eventIndex,
+              event.contractId,
             );
-            // changes === 1 means a new row; 0 means the tx_hash already existed (duplicate).
             if (result.changes === 1) {
               batchInserted++;
               logger.debug(`[reindex] inserted eventId=${eventId}`);
@@ -312,7 +335,7 @@ async function _runReindex(
         },
       );
 
-      eventsInserted += insertBatch(batchEvents);
+      eventsInserted += insertBatch(ordered);
 
       const ledgersProcessed = batchEnd - fromLedger + 1;
       _state = {

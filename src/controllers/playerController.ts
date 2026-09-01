@@ -26,7 +26,7 @@ import {
 } from "../db";
 
 import { queryMilestones, updateProfile } from "../services/stellar";
-import { cacheGet, cacheSet, invalidatePlayerCache } from "../services/cache";
+import { cacheGet, cacheSet, invalidatePlayerCache, getPlayerListLastModified } from "../services/cache";
 import { ApiResponse } from "../types";
 import { ErrorCode } from "../utils/errorCodes";
 import { getTierMeta, tierName } from "../utils/tier";
@@ -37,6 +37,7 @@ import { enrichPlayerResult } from "../utils/searchEnrichment";
 import { playerIdSchema } from "../utils/playerIdValidator";
 import { recordAudit } from "../utils/audit";
 import { canAccessPlayer } from "../utils/playerAccess";
+import { MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE } from "../utils/pagination";
 
 const baseRegistrationSchema = z.object({
   wallet: z.string().min(56).max(56),
@@ -64,7 +65,7 @@ export const filterSchema = z.object({
   sortBy: z.enum(['relevance', 'tier', 'region', 'created_at']).default('relevance'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
   page: z.coerce.number().int().min(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
   cursor: z.string().optional(),
   /**
    * Comma-separated list of field names to include in each player object.
@@ -252,6 +253,51 @@ function projectFields(
   return result;
 }
 
+/** Short CDN/client revalidation window — cheap validators, not long staleness. */
+const PLAYER_LIST_CACHE_CONTROL = 'public, max-age=10, must-revalidate';
+
+/**
+ * Apply Cache-Control / Last-Modified / ETag for the player list and honour
+ * conditional request headers. Returns true when a 304 was sent.
+ */
+function maybeNotModifiedPlayerList(
+  req: Request,
+  res: Response,
+  cacheKey: string,
+): boolean {
+  const listVersion = getPlayerListLastModified();
+  // Truncate to seconds — HTTP Last-Modified has second resolution.
+  const lastModifiedSec = Math.floor(listVersion / 1000) * 1000;
+  const etag = `"${createHash('sha1').update(`${cacheKey}:${lastModifiedSec}`).digest('hex')}"`;
+  const lastModifiedHttp = new Date(lastModifiedSec).toUTCString();
+
+  res.set('Cache-Control', PLAYER_LIST_CACHE_CONTROL);
+  res.set('Last-Modified', lastModifiedHttp);
+  res.set('ETag', etag);
+
+  const ifNoneMatch = req.headers['if-none-match'];
+  if (typeof ifNoneMatch === 'string' && ifNoneMatch === etag) {
+    res.status(304).end();
+    return true;
+  }
+
+  // If-None-Match takes precedence over If-Modified-Since when both are sent.
+  if (ifNoneMatch) {
+    return false;
+  }
+
+  const ims = req.headers['if-modified-since'];
+  if (typeof ims === 'string') {
+    const imsMs = Date.parse(ims);
+    if (!Number.isNaN(imsMs) && lastModifiedSec <= imsMs) {
+      res.status(304).end();
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /** GET /api/players?region=&position=&minTier=&sortBy=&sortOrder=&cursor= */
 export async function filterPlayers(
   req: Request,
@@ -286,6 +332,10 @@ export async function filterPlayers(
     cursor: cursor ?? null,
     pageSize,
   })}`;
+
+  if (maybeNotModifiedPlayerList(req, res, cacheKey)) {
+    return;
+  }
 
   const cached = await cacheGet<FilterPlayersResult>(cacheKey);
   if (cached) {
@@ -577,6 +627,21 @@ export async function getPlayerMilestones(
 
   // Apply limit (parameterised, no interpolation)
   const paginated = combined.slice(0, limit);
+
+  // ── ETag / conditional GET (#1139) ─────────────────────────────────────────
+  // Derive a weak ETag from the count of milestones and the latest event
+  // timestamp so the tag changes exactly when the list changes.  This mirrors
+  // the playerEtag() pattern used by GET /api/players/:playerId.
+  const milestoneEtag = playerEtag(
+    { count: paginated.length, items: paginated },
+    paginated.length,
+  );
+  if (req.headers["if-none-match"] === milestoneEtag) {
+    res.status(304).end();
+    return;
+  }
+  res.set("ETag", milestoneEtag);
+  res.set("Cache-Control", "no-cache");
 
   res.json({ success: true, data: paginated });
 }

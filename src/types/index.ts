@@ -215,6 +215,7 @@ export type ContractEventType =
   | 'trial_offer_logged'
   | 'trial_offer_accepted'
   | 'trial_offer_rejected'
+  | 'trial_offer_cancelled'
   | 'fees_withdrawn'
   | 'player_deactivated'
   | 'player_reactivated';

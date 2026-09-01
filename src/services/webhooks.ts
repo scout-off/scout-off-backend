@@ -1,12 +1,8 @@
 import fetch from 'node-fetch';
 import crypto from 'crypto';
-import {
-  listWebhookSubscriptions,
-  insertWebhookDeadLetter,
-  WebhookSubscription,
-} from '../db';
+import { listWebhookSubscriptions, insertWebhookDeadLetter, WebhookSubscription } from '../db';
 import { logger } from '../utils/logger';
-import { recordWebhookDelivery } from '../middleware/metrics';
+import { recordWebhookDelivery, incrementWebhookDeadLettersTotal } from '../middleware/metrics';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
 import { insertWebhookDelivery } from '../db';
@@ -148,7 +144,13 @@ export async function dispatchEventWebhook(eventType: string, payload: unknown):
   // All subscribers receive the same ID for the same event, but dead-letter
   // replays reuse the ID from the original delivery (stored in the payload).
   const deliveryId = generateDeliveryId();
-  const body = { deliveryId, eventType, payload };
+  const correlationId = getCorrelationId();
+  const body = {
+    deliveryId,
+    eventType,
+    payload,
+    ...(correlationId ? { correlationId } : {}),
+  };
 
   await Promise.all(
     subscriptions.map((subscription: WebhookSubscription) =>
@@ -183,6 +185,7 @@ async function deliverToSubscription(
       failureReason,
       attempts: RETRY_OPTIONS.retries,
     });
+    incrementWebhookDeadLettersTotal();
     recordWebhookDelivery('dead_letter');
   }
 }
