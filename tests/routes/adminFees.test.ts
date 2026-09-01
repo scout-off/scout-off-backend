@@ -1,5 +1,6 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import { Keypair } from '@stellar/stellar-sdk';
 import app from '../../src/app';
 import { logAuditEvent } from '../../src/services/audit';
 import * as stellar from '../../src/services/stellar';
@@ -8,16 +9,19 @@ import { resetWithdrawalLock, setWithdrawalLockForTesting } from '../../src/cont
 const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 
 jest.mock('../../src/services/audit', () => ({
-  logAuditEvent: jest.fn(),
+  logAuditEvent: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../../src/services/stellar', () => ({
   ...jest.requireActual('../../src/services/stellar'),
   withdrawFees: jest.fn(),
+  // The v2 endpoint (/fees/withdraw) pre-checks amountStroops against the
+  // live on-chain balance before submitting.
+  getFeeBalance: jest.fn().mockResolvedValue(1_000_000_000n),
 }));
 
 jest.mock('../../src/db', () => ({
-  getEvents: jest.fn().mockReturnValue([]),
+  queryEvents: jest.fn().mockReturnValue([]),
 }));
 
 jest.mock('../../src/services/indexer', () => ({
@@ -30,6 +34,10 @@ const mockLogAuditEvent = logAuditEvent as jest.Mock;
 
 const ADMIN_WALLET = 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
 const VALID_RECIPIENT = 'GRECIPIENTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
+// Checksum-valid key — the v2 endpoint validates treasuryAddress via
+// isValidStellarAddress (Keypair.fromPublicKey), which is stricter than the
+// legacy regex-only check.
+const V2_TREASURY = Keypair.random().publicKey();
 
 function makeToken(wallet: string, role: string): string {
   return jwt.sign({ sub: wallet, role }, SECRET, { expiresIn: '1h' });
@@ -520,5 +528,110 @@ describe('POST /api/v1/admin/fees — versioned alias', () => {
       .send({ recipient: VALID_RECIPIENT });
     expect(res.status).toBe(409);
     expect(res.body.success).toBe(false);
+  });
+});
+
+// ─── POST /api/admin/fees/withdraw (v2 — #1045) ──────────────────────────────
+// The v2 endpoint validates amountStroops against the on-chain balance and
+// must pass that exact amount into withdraw_fees — regression tests for the
+// silently-discarded-amount bug.
+
+describe('POST /api/admin/fees/withdraw — v2 amount threading (#1045)', () => {
+  const mockGetFeeBalance = stellar.getFeeBalance as jest.Mock;
+
+  it('returns 401 with no token', async () => {
+    const res = await request(app)
+      .post('/api/admin/fees/withdraw')
+      .send({ treasuryAddress: V2_TREASURY, amountStroops: '100' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for a non-admin role', async () => {
+    const token = makeToken('GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'scout');
+    const res = await request(app)
+      .post('/api/admin/fees/withdraw')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ treasuryAddress: V2_TREASURY, amountStroops: '100' });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 for an invalid treasuryAddress', async () => {
+    const adminToken = makeToken(ADMIN_WALLET, 'admin');
+    const res = await request(app)
+      .post('/api/admin/fees/withdraw')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ treasuryAddress: 'INVALID', amountStroops: '100' });
+    expect(res.status).toBe(400);
+    expect(mockWithdrawFees).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for a non-positive amountStroops', async () => {
+    const adminToken = makeToken(ADMIN_WALLET, 'admin');
+    const res = await request(app)
+      .post('/api/admin/fees/withdraw')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ treasuryAddress: V2_TREASURY, amountStroops: '0' });
+    expect(res.status).toBe(400);
+    expect(mockWithdrawFees).not.toHaveBeenCalled();
+  });
+
+  it('returns 422 when amountStroops exceeds the on-chain fee balance', async () => {
+    mockGetFeeBalance.mockResolvedValue(50n);
+    const adminToken = makeToken(ADMIN_WALLET, 'admin');
+    const res = await request(app)
+      .post('/api/admin/fees/withdraw')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ treasuryAddress: V2_TREASURY, amountStroops: '100' });
+    expect(res.status).toBe(422);
+    expect(res.body.error).toMatch(/exceeds/i);
+    expect(mockWithdrawFees).not.toHaveBeenCalled();
+  });
+
+  it('calls withdrawFees with the validated amount and returns the confirmed result', async () => {
+    mockGetFeeBalance.mockResolvedValue(1_000_000_000n);
+    mockWithdrawFees.mockResolvedValue({
+      transactionId: 'v2-tx-001',
+      recipient: V2_TREASURY,
+      amount: '100',
+      token: 'XLM',
+    });
+    const adminToken = makeToken(ADMIN_WALLET, 'admin');
+
+    const res = await request(app)
+      .post('/api/admin/fees/withdraw')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ treasuryAddress: V2_TREASURY, amountStroops: '100' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockWithdrawFees).toHaveBeenCalledWith(V2_TREASURY, '100');
+    expect(res.body.data.transactionId).toBe('v2-tx-001');
+    expect(res.body.data.treasuryAddress).toBe(V2_TREASURY);
+    expect(res.body.data.amountStroops).toBe('100');
+    expect(res.body.data.amount).toBe('100');
+  });
+
+  it('logs a success audit event with both the requested and actual amounts', async () => {
+    mockGetFeeBalance.mockResolvedValue(1_000_000_000n);
+    mockWithdrawFees.mockResolvedValue({
+      transactionId: 'v2-tx-002',
+      recipient: V2_TREASURY,
+      amount: '100',
+      token: 'XLM',
+    });
+    const adminToken = makeToken(ADMIN_WALLET, 'admin');
+
+    await request(app)
+      .post('/api/admin/fees/withdraw')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ treasuryAddress: V2_TREASURY, amountStroops: '100' });
+
+    const call = mockLogAuditEvent.mock.calls.at(-1)[0];
+    expect(call.action).toBe('fee_withdrawal_attempt');
+    expect(call.contractAction).toBe('withdraw_fees');
+    expect(call.queryParams.amountStroops).toBe('100');
+    expect(call.queryParams.amount).toBe('100');
+    expect(call.queryParams.transactionId).toBe('v2-tx-002');
+    expect(call.queryParams.outcome).toBe('success');
   });
 });

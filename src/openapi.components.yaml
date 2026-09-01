@@ -1,0 +1,269 @@
+openapi: "3.0.3"
+info:
+  title: ScoutOff API
+  description: >
+    Backend API for ScoutOff — a decentralised football scouting platform
+    built on the Stellar blockchain (Soroban smart contracts).
+  version: "1.0.0"
+  contact:
+    name: ScoutOff Engineering
+servers:
+  - url: /api
+    description: Stable API (version-less alias)
+  - url: /api/v1
+    description: API v1
+  - url: /api/v2
+    description: API v2 (includes SSE stream endpoint)
+
+tags:
+  - name: auth
+    description: Authentication (SEP-10 challenge / JWT exchange)
+  - name: players
+    description: Player profile management and discovery
+  - name: scouts
+    description: Scout subscriptions, contacts, trial offers, and tools
+  - name: validators
+    description: Milestone evidence submission and review
+  - name: admin
+    description: Platform administration (admin role required)
+  - name: events
+    description: Server-Sent Events streams and event feeds
+  - name: docs
+    description: This documentation surface (self-describing)
+
+# ─── Reusable components ──────────────────────────────────────────────────────
+# This file is the ONLY hand-maintained part of the OpenAPI spec: generic,
+# cross-cutting infrastructure (security schemes, common path parameters,
+# reusable response envelopes) that every endpoint shares. It is not
+# per-route content, so it does not carry the drift risk this generator
+# exists to eliminate — see scripts/generate-openapi-json.js.
+#
+# Per-route content (paths, operations, request/response shapes, auth
+# requirements) is generated from the route source files themselves and must
+# never be added here.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: >-
+        Long-lived scout API key (alternative to a Bearer JWT). Restricted keys
+        may only perform operations covered by their granted scopes (#1019).
+        Legacy keys without a scope list are unrestricted.
+
+  parameters:
+    playerId:
+      name: playerId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Player's unique identifier (cuid2)
+    walletParam:
+      name: wallet
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 56
+        maxLength: 56
+      description: Stellar public key (G…)
+
+  schemas:
+    # ── Envelope ──────────────────────────────────────────────────────────────
+    SuccessEnvelope:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+
+    ErrorEnvelope:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+        code:
+          type: string
+
+    # ── Player ────────────────────────────────────────────────────────────────
+    PlayerSummary:
+      type: object
+      required: [player_id, wallet]
+      properties:
+        player_id:
+          type: string
+        wallet:
+          type: string
+        position:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        metadataUri:
+          type: string
+          nullable: true
+        progress_level:
+          type: integer
+          minimum: 0
+          maximum: 3
+        created_at:
+          type: integer
+          description: Unix timestamp (seconds)
+        registered_at:
+          type: integer
+          nullable: true
+          description: Unix timestamp (seconds) of the on-chain registration, when known
+        progress_tier_name:
+          type: string
+          enum: [Unverified, "Verified Identity", "Performance Milestones", "Elite Tier"]
+        tierName:
+          type: string
+        tierDescription:
+          type: string
+        is_active:
+          type: integer
+          enum: [0, 1]
+        progressLabel:
+          type: string
+          description: UI label for the player's progress tier
+        verificationBadge:
+          type: string
+          description: Verification badge key for the player's progress tier
+
+    PlayerDetail:
+      allOf:
+        - $ref: "#/components/schemas/PlayerSummary"
+        - type: object
+          required: [offerCount]
+          properties:
+            offerCount:
+              type: integer
+              minimum: 0
+              description: Number of trial offers submitted for this player
+
+    PlayerList:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          required: [data, total, page, pageSize, pages, nextCursor]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/PlayerSummary"
+            total:
+              type: integer
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            pages:
+              type: integer
+            nextCursor:
+              type: string
+              nullable: true
+              description: Opaque cursor for the next page of results, null on the last page
+
+    # ── Subscription ──────────────────────────────────────────────────────────
+    SubscriptionStatus:
+      type: object
+      required: [active]
+      properties:
+        active:
+          type: boolean
+        tier:
+          type: string
+          nullable: true
+        expiresAt:
+          type: integer
+          nullable: true
+        remainingDays:
+          type: integer
+          nullable: true
+        gracePeriodActive:
+          type: boolean
+
+    # ── Trial offer ───────────────────────────────────────────────────────────
+    TrialOffer:
+      type: object
+      required: [offer_id, scout_wallet, player_id, details_uri, status, created_at]
+      properties:
+        offer_id:
+          type: string
+        scout_wallet:
+          type: string
+        player_id:
+          type: string
+        details_uri:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted, rejected]
+        reject_reason:
+          type: string
+          nullable: true
+        responded_at:
+          type: integer
+          nullable: true
+        created_at:
+          type: integer
+
+    # ── Milestone ─────────────────────────────────────────────────────────────
+    Milestone:
+      type: object
+      properties:
+        milestone_id:
+          type: string
+        player_id:
+          type: string
+        milestone_type:
+          type: string
+        evidence_uri:
+          type: string
+        submitted_at:
+          type: integer
+        approved_at:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [pending, approved]
+          description: Approval state added by the milestones endpoint ("all" status param)
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Forbidden:
+      description: Insufficient role or wallet mismatch
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"

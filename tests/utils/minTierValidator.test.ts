@@ -32,46 +32,44 @@ describe('validateMinTier', () => {
   });
 
   it('rejects out-of-range values', () => {
-    const result = validateMinTier(4);
+    const result = validateMinTier(5);
     expect(result.valid).toBe(false);
-    expect(result.error).toMatch(/out of range/);
-    expect(result.error).toMatch(/0, 1, 2, 3/);
+    expect(result.error).toBe('minTier must be between 0 (Unverified) and 3 (Elite Tier)');
   });
 
   it('rejects negative values', () => {
     const result = validateMinTier(-1);
     expect(result.valid).toBe(false);
-    expect(result.error).toMatch(/out of range/);
+    expect(result.error).toBe('minTier must be between 0 (Unverified) and 3 (Elite Tier)');
   });
 
   it('rejects non-numeric strings', () => {
-    const result = validateMinTier('gold');
+    const result = validateMinTier('elite');
     expect(result.valid).toBe(false);
-    expect(result.error).toMatch(/integer/);
-    expect(result.error).toMatch(/0, 1, 2, 3/);
+    expect(result.error).toBe('minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite');
   });
 
   it('rejects string float values', () => {
     const result = validateMinTier('1.5');
     expect(result.valid).toBe(false);
-    expect(result.error).toMatch(/integer/);
+    expect(result.error).toBe('minTier must be an integer between 0 and 3');
   });
 
   it('rejects exponential string values', () => {
     const result = validateMinTier('1e1');
     expect(result.valid).toBe(false);
-    expect(result.error).toMatch(/integer/);
+    expect(result.error).toBe('minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite');
   });
 
   it('rejects hexadecimal string values', () => {
     const result = validateMinTier('0x2');
     expect(result.valid).toBe(false);
-    expect(result.error).toMatch(/integer/);
+    expect(result.error).toBe('minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite');
   });
 
   it('rejects float values', () => {
     const result = validateMinTier(1.5);
     expect(result.valid).toBe(false);
-    expect(result.error).toMatch(/integer/);
+    expect(result.error).toBe('minTier must be an integer between 0 and 3');
   });
 });

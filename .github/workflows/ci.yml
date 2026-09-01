@@ -1,3 +1,9 @@
+# npm dependency caching: every actions/setup-node step below sets
+# `cache: npm`, which caches ~/.npm keyed on the runner OS, the Node.js
+# version, and a hash of package-lock.json. A cache hit skips re-downloading
+# packages during `npm ci`, cutting install time from ~60-90s to well under
+# 10s. The cache is automatically invalidated whenever package-lock.json
+# changes, so dependency updates always install cleanly.
 name: Backend CI
 
 on:
@@ -6,36 +12,290 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: ${{ matrix.node-version }}
+          cache: npm
 
       - run: npm ci
-
-      - name: Validate env example
-        run: node scripts/validate-env.js
 
       - name: Lint
         run: npm run lint
 
-      - name: Type check
-        run: npx tsc --noEmit
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
-      - name: Run tests
-        run: npm test
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - run: npm ci
+
+      # GitHub-hosted runners intermittently lose connectivity to the
+      # azure.archive.ubuntu.com mirror, making apt-get update hang or time
+      # out (observed stalling a whole job until its 30-minute budget). Point
+      # apt at the main archive mirror instead, then bound the update with a
+      # timeout and enable retries as a backstop.
+      - name: Install sqlite3 CLI
+        run: |
+          sudo sed -i 's|//azure\.archive\.ubuntu\.com|//archive.ubuntu.com|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          timeout 180 sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=15
+          sudo apt-get install -y --no-install-recommends sqlite3
+
+      - name: Validate env example
+        run: node scripts/validate-env.js
+
+      - name: Check every route has canonical-source documentation
+        run: npm run docs:check
+
+      - name: Validate OpenAPI spec is in sync with route sources
+        run: npm run validate:openapi
+
+      - name: Check for unsafe SQL string interpolation
+        run: npm run check:sql-injection
+
+      # The Helm chart's defaults must stay internally consistent: SQLite is
+      # single-process, so the default topology is one replica with HPA/PDB
+      # disabled, and the SQLite + multi-replica combination must be loudly
+      # flagged in NOTES.txt. Runs on every Node version in the matrix; helm
+      # is preinstalled on ubuntu-latest runners.
+      - name: Validate Helm chart topology defaults
+        run: bash scripts/validate-helm-chart.sh
+
+      # Every production-required env var from src/config.ts must be wired
+      # into the rendered Helm deployment manifest (issue #1043). This check
+      # renders the chart and greps for each required variable name, so a
+      # future change that adds a new required secret cannot silently omit
+      # the corresponding secretKeyRef without breaking CI.
+      - name: Validate Helm env-var wiring (issue #1043)
+        run: bash scripts/validate-helm-env-wiring.sh
+
+      - name: Type check (src)
+        run: node node_modules/.bin/tsc --noEmit
+
+      - name: Type check (scripts)
+        run: node node_modules/.bin/tsc --noEmit -p tsconfig.scripts.json
+
+      - name: Run tests with coverage
+        # node_modules/.bin/jest is unreliable here: jest and jest-cli are
+        # both hoisted to top-level node_modules and both declare a bin
+        # literally named "jest", so npm can't deterministically symlink it.
+        # Invoke via the npm script which calls jest's own bin directly.
+        run: npm run test:coverage -- --forceExit --coverageReporters=text --coverageReporters=lcov
         env:
-          CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC
+          CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
+
+      # Coverage is only representative once, so upload it from the Node
+      # version .nvmrc pins (20) to keep this identical to the prior
+      # single-version behavior instead of uploading/overwriting 3x.
+      - name: Upload coverage to Codecov
+        if: matrix.node-version == 20
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage/lcov.info
+          fail_ci_if_error: false
+
+      - name: Upload coverage report as artifact
+        if: matrix.node-version == 20
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+  # Runs the same suite as `test` above but against a real PostgreSQL service
+  # container with DB_DRIVER=postgres, so the Postgres driver path (#1014)
+  # can never silently regress. Excludes suites that still use sync getDb() /
+  # SQLite-specific APIs (see docs/postgres-migration.md FAQ). Keep this list
+  # aligned with package.json `test:postgres`. adminPagination is included
+  # (fully mocked). playerListFreshness and trialOffers remain excluded.
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: scout_off_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check (src)
+        run: node node_modules/.bin/tsc --noEmit
+
+      - name: Run test suite against DB_DRIVER=postgres
+        run: >
+          node node_modules/jest/bin/jest.js --runInBand
+          --testPathIgnorePatterns="/node_modules/"
+          --testPathIgnorePatterns="tests/controllers/webhookAdminController.test.ts"
+          --testPathIgnorePatterns="tests/db/backfill.test.ts"
+          --testPathIgnorePatterns="tests/db/sqlInjectionRegression.test.ts"
+          --testPathIgnorePatterns="tests/e2e/milestonePromotion.e2e.test.ts"
+          --testPathIgnorePatterns="tests/e2e/scoutUnlock.e2e.test.ts"
+          --testPathIgnorePatterns="tests/routes/adminAuditTrail.test.ts"
+          --testPathIgnorePatterns="tests/routes/adminExport.test.ts"
+          --testPathIgnorePatterns="tests/routes/adminQuerySchema.test.ts"
+          --testPathIgnorePatterns="tests/routes/exportStreaming.test.ts"
+          --testPathIgnorePatterns="tests/routes/reindex.test.ts"
+          --testPathIgnorePatterns="tests/routes/playerListFreshness.test.ts"
+          --testPathIgnorePatterns="tests/routes/trialOffers.test.ts"
+          --testPathIgnorePatterns="tests/services/indexer.test.ts"
+          --testPathIgnorePatterns="tests/services/indexerDispatch.test.ts"
+          --testPathIgnorePatterns="tests/services/tierPromotion.test.ts"
+          --testPathIgnorePatterns="tests/services/webhooks.test.ts"
+        env:
+          DB_DRIVER: postgres
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/scout_off_ci
+          POSTGRES_TEST_URL: postgres://postgres:postgres@localhost:5432/scout_off_ci
+          CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
+
+  # Catches "compiles but doesn't run" regressions (bad import path, missing
+  # runtime asset like db/ migrations or openapi files) that tsc alone can't
+  # see, since nothing else in this workflow boots the compiled dist/ output.
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Boot dist/index.js and wait for /health
+        env:
+          NODE_ENV: test
+          PORT: 4000
+          DB_PATH: /tmp/smoke-test.db
+          JWT_SECRET: test-secret-min-32-chars-for-ci-only
+          CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
+        run: |
+          node dist/index.js &
+          SERVER_PID=$!
+
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4000/health > /dev/null; then
+              echo "Server is up after ${i}s"
+              break
+            fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "Server process exited before becoming healthy"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/health)
+          if [ "$status" != "200" ]; then
+            echo "Expected 200 from /health, got $status"
+            kill "$SERVER_PID" 2>/dev/null || true
+            exit 1
+          fi
+
+          kill -TERM "$SERVER_PID"
+          wait "$SERVER_PID" || true
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - run: npm ci
+
+      # Dev-only tooling (eslint, jest, etc.) never ships to production, so
+      # only production dependencies gate the build. See CONTRIBUTING.md's
+      # "CI Enforcement & Exception Process" for what to do when this fails
+      # on a legitimately unpatchable finding.
+      - name: Audit production dependencies (high/critical)
+        run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image with GIT_COMMIT build arg
+        run: |
+          docker build \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            --tag scout-off-backend:ci \
+            .
+
+      - name: Verify GIT_COMMIT is set in the image
+        run: |
+          commit=$(docker run --rm \
+            -e CONTRACT_ID=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4 \
+            -e JWT_SECRET=test-secret-min-32-chars-for-ci-only \
+            scout-off-backend:ci \
+            node -e "console.log(process.env.GIT_COMMIT)")
+          echo "GIT_COMMIT in image: $commit"
+          test "$commit" = "${{ github.sha }}"
   contracts:
     name: Soroban Contracts
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -57,8 +317,25 @@ jobs:
 
       - name: Build contracts (WASM)
         working-directory: contracts
-        run: cargo build --release
+        run: cargo build --target wasm32-unknown-unknown --release
 
-      - name: Test contracts (host target)
+      # contracts/.cargo/config.toml sets wasm32-unknown-unknown as the
+      # default build target for this workspace, so host-target commands
+      # must pass --target explicitly or they'll silently try to build (and
+      # fail to link/run) against wasm instead.
+      - name: Run unit tests
         working-directory: contracts
-        run: cargo test --target x86_64-unknown-linux-gnu
+        run: cargo test --workspace --lib --target x86_64-unknown-linux-gnu
+
+      # Property-based invariant fuzz tests live in each contract's tests/ directory.
+      # PROPTEST_CASES controls the number of random inputs per test via each
+      # file's own proptest_cases() helper. The default is 10 000, which alone
+      # takes ~27 minutes for the connection contract and blows this job's
+      # timeout; CI overrides this to a lower number for fast feedback within
+      # its time budget, keeping the full 10 000 run available locally and on
+      # nightly. Mirrors contract-ci.yml's invariant fuzz test step.
+      - name: Run invariant fuzz tests
+        working-directory: contracts
+        env:
+          PROPTEST_CASES: ${{ vars.PROPTEST_CASES || '256' }}
+        run: cargo test --workspace --tests --target x86_64-unknown-linux-gnu -- invariants

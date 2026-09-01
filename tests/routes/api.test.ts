@@ -3,19 +3,116 @@ import jwt from 'jsonwebtoken';
 import { logger } from '../../src/utils/logger';
 import app from '../../src/app';
 import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
-import { auditStore } from '../../src/utils/audit';
+import { queryAudit } from '../../src/utils/audit';
+import * as db from '../../src/db';
 
 jest.mock('../../src/services/ipfs', () => ({
   pinJson: jest.fn().mockResolvedValue('QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64'),
   checkHealth: jest.fn().mockResolvedValue(undefined),
   gatewayUrl: jest.fn((cid) => `https://gateway.pinata.cloud/ipfs/${cid}`),
+  gatewayUrls: jest.fn((cid) => [`https://gateway.pinata.cloud/ipfs/${cid}`]),
 }));
 
-jest.mock('../../src/db', () => ({
-  getEvents: jest.fn().mockReturnValue([]),
-  queryPlayers: jest.fn().mockReturnValue([]),
-  getPlayerById: jest.fn().mockReturnValue(null),
-}));
+jest.mock('../../src/db', () => {
+  // Minimal in-memory stand-in for the audit_log table, so that the real
+  // (unmocked) src/utils/audit.ts's recordAudit/queryAudit — which now read
+  // and write through src/db instead of an in-memory array (#464) — keep
+  // working against this fully-mocked db module.
+  let auditRows: Array<{
+    id: number;
+    action: string;
+    admin_wallet: string;
+    query_params: string;
+    created_at: string;
+    prev_hash: string | null;
+    hash: string;
+    event_source: string;
+  }> = [];
+  let nextAuditId = 1;
+
+  return {
+    queryEvents: jest.fn().mockReturnValue([]),
+    queryPlayers: jest.fn().mockReturnValue([]),
+    countPlayers: jest.fn().mockReturnValue(0),
+    searchPlayers: jest.fn().mockReturnValue({ data: [], nextCursor: null }),
+    countEventsFiltered: jest.fn().mockReturnValue(0),
+    getEventsPage: jest.fn().mockReturnValue([]),
+    getPlayerById: jest.fn().mockImplementation((id) => {
+      if (id === 'player_123') {
+        return {
+          player_id: 'player_123',
+          wallet: 'G' + 'A'.repeat(55),
+          position: 'striker',
+          region: 'europe',
+          metadata_uri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+          progress_level: 1,
+          created_at: 1700000000,
+          is_active: 1,
+        };
+      }
+      return null;
+    }),
+    getEventsCount: jest.fn().mockReturnValue(0),
+    insertPlayerProfileHistory: jest.fn(),
+    getPlayerProfileHistory: jest.fn().mockReturnValue([]),
+    getLatestSubscription: jest.fn().mockReturnValue(null),
+    insertSubscription: jest.fn().mockReturnValue(1),
+    renewSubscription: jest.fn(),
+    cancelSubscription: jest.fn(),
+    getPendingMilestones: jest.fn().mockReturnValue({ data: [], total: 0 }),
+    insertOrUpdatePlayer: jest.fn(),
+    insertAuditLog: jest.fn(
+      (p: { action: string; adminWallet?: string; queryParams?: Record<string, unknown>; createdAt: string; eventSource?: string }) => {
+        const row = {
+          id: nextAuditId++,
+          action: p.action,
+          admin_wallet: p.adminWallet ?? '',
+          query_params: JSON.stringify(p.queryParams ?? {}),
+          created_at: p.createdAt,
+          prev_hash: auditRows.length ? auditRows[auditRows.length - 1].hash : '0'.repeat(64),
+          hash: `mock-hash-${nextAuditId}`,
+          event_source: p.eventSource ?? 'admin_action',
+        };
+        auditRows.push(row);
+        return row;
+      }
+    ),
+    getAllAuditLogRows: jest.fn(
+      (filters: { eventSource?: string; actorWallet?: string; action?: string } = {}) =>
+        auditRows.filter((r) => {
+          if (filters.eventSource && r.event_source !== filters.eventSource) return false;
+          if (filters.actorWallet && r.admin_wallet !== filters.actorWallet) return false;
+          if (filters.action && r.action !== filters.action) return false;
+          return true;
+        })
+    ),
+    __resetAuditRows: () => {
+      auditRows = [];
+      nextAuditId = 1;
+    },
+    // src/app.ts's /health and /ready probes go through getDriver() but only
+    // care whether the call resolves, not what it resolves to. Meanwhile
+    // tokenBlocklist.ts's real (unmocked) getDriver()-based checkDb treats
+    // any truthy row as "revoked" — see src/services/tokenBlocklist.ts
+    // checkDb() — so `get` must resolve to `undefined` (no matching row) or
+    // every token in these tests would appear revoked and auth would fail.
+    getDriver: jest.fn(() => ({
+      run: () => ({ changes: 0, lastId: 0 }),
+      get: () => undefined,
+      all: () => [],
+      value: () => undefined,
+      exec: () => {},
+      transaction: (fn: (tx: unknown) => unknown) => fn({
+        run: () => ({ changes: 0, lastId: 0 }),
+        get: () => undefined,
+        all: () => [],
+        value: () => undefined,
+        exec: () => {},
+      }),
+      close: async () => {},
+    })),
+  };
+});
 
 jest.mock('../../src/services/indexer', () => ({
   indexEvents: jest.fn(),
@@ -24,6 +121,18 @@ jest.mock('../../src/services/indexer', () => ({
 
 jest.mock('../../src/services/webhooks', () => ({
   dispatchEventWebhook: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Without this, GET /api/players/:playerId/milestones's unmocked call to the
+// real queryMilestones() makes a live network call to Soroban testnet for a
+// contract ID that doesn't actually exist there, which errors out as a 500
+// instead of exercising the route's own logic. Every sibling route test file
+// (e.g. tests/routes/compression.test.ts, tests/routes/playerPagination.test.ts)
+// mocks this module for the same reason.
+jest.mock('../../src/services/stellar', () => ({
+  stellarHealth: jest.fn().mockResolvedValue(true),
+  queryMilestones: jest.fn().mockResolvedValue([]),
+  updateProfile: jest.fn().mockResolvedValue(undefined),
 }));
 
 describe('GET /health', () => {
@@ -60,8 +169,9 @@ describe('GET /api/players', () => {
 });
 
 describe('POST /api/players/register', () => {
+  const PLAYER_WALLET = 'G'.repeat(56);
   const validPlayer = {
-    wallet: 'G'.repeat(56),
+    wallet: PLAYER_WALLET,
     position: 'striker',
     region: 'europe',
     metadataUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
@@ -97,7 +207,14 @@ describe('POST /api/players/register', () => {
   });
 
   it('accepts registration payloads with valid metadataUri', async () => {
-    const token = await getPlayerToken();
+    // registerPlayer requires body.wallet === req.account, so the token must
+    // be signed for PLAYER_WALLET specifically (getPlayerToken() signs for a
+    // fresh random keypair each call, which would never match).
+    const token = jwt.sign(
+      { sub: PLAYER_WALLET, role: 'player' },
+      process.env.JWT_SECRET ?? 'test-secret',
+      { expiresIn: '1h' },
+    );
     const res = await request(app)
       .post('/api/players/register')
       .set('Authorization', `Bearer ${token}`)
@@ -106,6 +223,73 @@ describe('POST /api/players/register', () => {
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.metadataUri).toBe(validPlayer.metadataUri);
+  });
+
+  it('returns 403 when req.body.wallet does not match authenticated account', async () => {
+    // Token belongs to a different wallet
+    const token = await getPlayerToken();
+    const res = await request(app)
+      .post('/api/players/register')
+      .set('Authorization', `Bearer ${token}`)
+      .send(validPlayer);
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toMatch(/wallet must match authenticated account/i);
+  });
+
+  it('returns 401 when no token is provided', async () => {
+    const res = await request(app)
+      .post('/api/players/register')
+      .send(validPlayer);
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('GET /api/players/:playerId route validation', () => {
+  it('accepts a valid player ID and returns 404 when the player does not exist', async () => {
+    const res = await request(app).get('/api/players/player_non_existent');
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('rejects an empty player ID with 400', async () => {
+    const res = await request(app).get('/api/players/%20');
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toContain('playerId may only contain letters, numbers, underscores, and hyphens');
+  });
+
+  it('rejects an overlong player ID with 400', async () => {
+    const longId = 'a'.repeat(129);
+    const res = await request(app).get(`/api/players/${longId}`);
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toContain('playerId cannot exceed 128 characters');
+  });
+
+  it('rejects a player ID with invalid characters', async () => {
+    const res = await request(app).get('/api/players/player%20with%20spaces');
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toContain('playerId may only contain letters, numbers, underscores, and hyphens');
+  });
+});
+
+describe('GET /api/players/:playerId/milestones route validation', () => {
+  it('accepts a valid player ID and returns 200 with array data', async () => {
+    const res = await request(app).get('/api/players/player_123/milestones');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  it('rejects an invalid player ID with 400', async () => {
+    const res = await request(app).get('/api/players/player%23123/milestones');
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toContain('playerId may only contain letters, numbers, underscores, and hyphens');
   });
 });
 
@@ -158,7 +342,7 @@ describe('POST /auth/token', () => {
 
     const res = await request(app)
       .post('/auth/token')
-      .send({ transaction: tx.toXDR() });
+      .send({ transaction: tx.toXdr() });
 
     expect(res.status).toBe(200);
     expect(typeof res.body.token).toBe('string');
@@ -176,7 +360,7 @@ describe('POST /auth/token', () => {
 
     const res = await request(app)
       .post('/auth/token')
-      .send({ transaction: tx.toXDR(), role: 'validator' });
+      .send({ transaction: tx.toXdr(), role: 'validator' });
 
     expect(res.status).toBe(200);
     expect(typeof res.body.token).toBe('string');
@@ -210,7 +394,7 @@ async function getValidatorToken(): Promise<string> {
   tx.sign(kp);
   const tokenRes = await request(app)
     .post('/auth/token')
-    .send({ transaction: tx.toXDR(), role: 'validator' });
+    .send({ transaction: tx.toXdr(), role: 'validator' });
   return tokenRes.body.token;
 }
 
@@ -221,9 +405,10 @@ async function getPlayerToken(): Promise<string> {
   tx.sign(kp);
   const tokenRes = await request(app)
     .post('/auth/token')
-    .send({ transaction: tx.toXDR(), role: 'player' });
+    .send({ transaction: tx.toXdr(), role: 'player' });
   return tokenRes.body.token;
 }
+
 
 async function getAdminToken(): Promise<string> {
   const kp = Keypair.random();
@@ -232,7 +417,7 @@ async function getAdminToken(): Promise<string> {
   tx.sign(kp);
   const tokenRes = await request(app)
     .post('/auth/token')
-    .send({ transaction: tx.toXDR(), role: 'admin' });
+    .send({ transaction: tx.toXdr(), role: 'admin' });
   return tokenRes.body.token;
 }
 
@@ -363,12 +548,12 @@ describe('POST /api/validators/milestone', () => {
 
 describe('GET /api/players — search audit logging', () => {
   beforeEach(() => {
-    auditStore.length = 0;
+    (db as unknown as { __resetAuditRows: () => void }).__resetAuditRows();
   });
 
   it('records an anonymous player_search entry when no auth token is provided', async () => {
     await request(app).get('/api/players?region=europe');
-    const entry = auditStore.find((e) => e.eventType === 'player_search');
+    const entry = (await queryAudit({ eventType: 'player_search' }))[0];
     expect(entry).toBeDefined();
     expect(entry!.actorWallet).toBe('anonymous');
     expect(entry!.eventType).toBe('player_search');
@@ -380,7 +565,7 @@ describe('GET /api/players — search audit logging', () => {
     await request(app)
       .get('/api/players?position=striker')
       .set('Authorization', `Bearer ${token}`);
-    const entry = auditStore.find((e) => e.eventType === 'player_search');
+    const entry = (await queryAudit({ eventType: 'player_search' }))[0];
     expect(entry).toBeDefined();
     expect(entry!.actorWallet).toBe(scoutWallet);
   });

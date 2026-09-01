@@ -1,0 +1,3597 @@
+openapi: 3.0.3
+info:
+  title: ScoutOff API
+  description: >
+    Backend API for ScoutOff — a decentralised football scouting platform built on the Stellar
+    blockchain (Soroban smart contracts).
+  version: 1.0.0
+  contact:
+    name: ScoutOff Engineering
+servers:
+  - url: /api
+    description: Stable API (version-less alias)
+  - url: /api/v1
+    description: API v1
+  - url: /api/v2
+    description: API v2 (includes SSE stream endpoint)
+tags:
+  - name: auth
+    description: Authentication (SEP-10 challenge / JWT exchange)
+  - name: players
+    description: Player profile management and discovery
+  - name: scouts
+    description: Scout subscriptions, contacts, trial offers, and tools
+  - name: validators
+    description: Milestone evidence submission and review
+  - name: admin
+    description: Platform administration (admin role required)
+  - name: events
+    description: Server-Sent Events streams and event feeds
+  - name: docs
+    description: This documentation surface (self-describing)
+  - name: v2
+    description: v2
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: >-
+        Long-lived scout API key (alternative to a Bearer JWT). Restricted keys may only perform
+        operations covered by their granted scopes (#1019). Legacy keys without a scope list are
+        unrestricted.
+  parameters:
+    playerId:
+      name: playerId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Player's unique identifier (cuid2)
+    walletParam:
+      name: wallet
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 56
+        maxLength: 56
+      description: Stellar public key (G…)
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+    ErrorEnvelope:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum:
+            - false
+        error:
+          type: string
+        code:
+          type: string
+    PlayerSummary:
+      type: object
+      required:
+        - player_id
+        - wallet
+      properties:
+        player_id:
+          type: string
+        wallet:
+          type: string
+        position:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        metadataUri:
+          type: string
+          nullable: true
+        progress_level:
+          type: integer
+          minimum: 0
+          maximum: 3
+        created_at:
+          type: integer
+          description: Unix timestamp (seconds)
+        registered_at:
+          type: integer
+          nullable: true
+          description: Unix timestamp (seconds) of the on-chain registration, when known
+        progress_tier_name:
+          type: string
+          enum:
+            - Unverified
+            - Verified Identity
+            - Performance Milestones
+            - Elite Tier
+        tierName:
+          type: string
+        tierDescription:
+          type: string
+        is_active:
+          type: integer
+          enum:
+            - 0
+            - 1
+        progressLabel:
+          type: string
+          description: UI label for the player's progress tier
+        verificationBadge:
+          type: string
+          description: Verification badge key for the player's progress tier
+    PlayerDetail:
+      allOf:
+        - $ref: '#/components/schemas/PlayerSummary'
+        - type: object
+          required:
+            - offerCount
+          properties:
+            offerCount:
+              type: integer
+              minimum: 0
+              description: Number of trial offers submitted for this player
+    PlayerList:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required:
+            - data
+            - total
+            - page
+            - pageSize
+            - pages
+            - nextCursor
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/PlayerSummary'
+            total:
+              type: integer
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            pages:
+              type: integer
+            nextCursor:
+              type: string
+              nullable: true
+              description: Opaque cursor for the next page of results, null on the last page
+    SubscriptionStatus:
+      type: object
+      required:
+        - active
+      properties:
+        active:
+          type: boolean
+        tier:
+          type: string
+          nullable: true
+        expiresAt:
+          type: integer
+          nullable: true
+        remainingDays:
+          type: integer
+          nullable: true
+        gracePeriodActive:
+          type: boolean
+    TrialOffer:
+      type: object
+      required:
+        - offer_id
+        - scout_wallet
+        - player_id
+        - details_uri
+        - status
+        - created_at
+      properties:
+        offer_id:
+          type: string
+        scout_wallet:
+          type: string
+        player_id:
+          type: string
+        details_uri:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - accepted
+            - rejected
+        reject_reason:
+          type: string
+          nullable: true
+        responded_at:
+          type: integer
+          nullable: true
+        created_at:
+          type: integer
+    Milestone:
+      type: object
+      properties:
+        milestone_id:
+          type: string
+        player_id:
+          type: string
+        milestone_type:
+          type: string
+        evidence_uri:
+          type: string
+        submitted_at:
+          type: integer
+        approved_at:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+          description: Approval state added by the milestones endpoint ("all" status param)
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: Insufficient role or wallet mismatch
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+paths:
+  /admin/actions/pending:
+    get:
+      tags:
+        - admin
+      summary: Returns all pending (non-expired, non-executed) multi-admin action proposals.
+      operationId: getPendingActions
+      description: |-
+        Returns all pending (non-expired, non-executed) multi-admin action proposals.
+        Results may be stale if an action expired between the listing and the next
+        sweep, but approval of an expired action is rejected at the service layer.
+      responses:
+        '200':
+          description: '{ success: true, data: PendingAction[] }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/actions/{id}:
+    get:
+      tags:
+        - admin
+      summary: Returns details of a specific action proposal including collected signers.
+      operationId: getPendingActionById
+      description: Returns details of a specific action proposal including collected signers.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Action proposal ID
+      responses:
+        '200':
+          description: '{ success: true, data: PendingActionDetail }'
+        '404':
+          description: '{ success: false, error: string } - Action not found'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/actions/{id}/approve:
+    post:
+      tags:
+        - admin
+      summary: Co-signs (approves) an existing pending action.
+      operationId: approvePendingAction
+      description: |-
+        Co-signs (approves) an existing pending action. Requires the caller to be
+        a distinct admin wallet that has not already signed. When the threshold of
+        distinct signatures is met, the action is executed automatically.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Action proposal ID
+      responses:
+        '200':
+          description: '{ success: true, message, data } - Threshold met, action executed'
+        '202':
+          description: '{ success: true, message, data } - Signature recorded, more needed'
+        '403':
+          description: '{ success: false, error } - Not an admin wallet'
+        '404':
+          description: '{ success: false, error } - Action not found'
+        '409':
+          description: '{ success: false, error } - Duplicate signer'
+        '410':
+          description: '{ success: false, error } - Action expired'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/audit:
+    get:
+      tags:
+        - admin
+      summary: Returns paginated audit log entries.
+      operationId: getAuditLog
+      description: |-
+        Returns paginated audit log entries. Supports `startDate`, `endDate` (ISO 8601),
+        `action` filters, and `limit`/`offset` pagination.
+      responses:
+        '200':
+          description: '{ success: true, data: AuditLogRow[], total, limit, offset }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/audit/trail:
+    get:
+      tags:
+        - admin
+      summary: Returns a paginated, event-type-filtered audit trail.
+      operationId: getAuditTrail
+      description: |-
+        Returns a paginated, event-type-filtered audit trail in the canonical
+        AuditEntry shape { id, event_type, actor_wallet, target_id, metadata,
+        created_at, hash }. Accepts ?eventType=, ?from=, ?to= (ISO 8601),
+        ?page=, ?pageSize= (#832).
+      responses:
+        '200':
+          description: '{ success: true, data: AuditEntry[], total, page, pageSize }'
+        '400':
+          description: '{ success: false, error: string } - Invalid eventType or date range'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/audit/verify:
+    get:
+      tags:
+        - admin
+      summary: Walks the audit_log hash chain and reports whether it is intact (#464).
+      operationId: getAuditChainVerification
+      description: Walks the audit_log hash chain and reports whether it is intact (#464).
+      responses:
+        '200':
+          description: '{ success: true, data: { valid, brokenAtId, reason?, rowsChecked } }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/contract/pause:
+    post:
+      tags:
+        - admin
+      summary: Stub endpoint that simulates pausing the Soroban smart contract.
+      operationId: pauseContract
+      description: |-
+        Stub endpoint that simulates pausing the Soroban smart contract.
+        Contract-level behavior is simulated — no real on-chain transaction is issued.
+      responses:
+        '202':
+          description: '{ success: true, message: string, transactionId: string }'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/contract/unpause:
+    post:
+      tags:
+        - admin
+      summary: Stub endpoint that simulates unpausing the Soroban smart contract.
+      operationId: unpauseContract
+      description: |-
+        Stub endpoint that simulates unpausing the Soroban smart contract.
+        Contract-level behavior is simulated — no real on-chain transaction is issued.
+      responses:
+        '202':
+          description: '{ success: true, message: string, transactionId: string }'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/events:
+    get:
+      tags:
+        - admin
+      summary: Returns all indexed Soroban contract events in insertion order.
+      operationId: getAllEvents
+      description: |-
+        Returns all indexed Soroban contract events in insertion order.
+        Query params: startDate, endDate (ISO 8601), eventType, fromLedger, toLedger, page, pageSize
+      responses:
+        '200':
+          description: '{ success: true, data: AdminEvent[] }'
+        '400':
+          description: '{ success: false, error: string } - Invalid date range'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/events/export:
+    get:
+      tags:
+        - admin
+      summary: Streams indexed Soroban contract events as CSV.
+      operationId: exportEvents
+      description: >-
+        Streams indexed Soroban contract events as CSV. Rows are fetched from the
+
+        database in bounded pages and written to the response as they arrive, so
+
+        memory usage stays constant regardless of table size.
+
+        Useful for data analysis, reporting, and external system integration.
+
+
+        Query params (same semantics as GET /api/admin/events): startDate, endDate (ISO 8601),
+        eventType
+
+
+        Timeout: 120 s (overrides the 30 s default — large exports can take up to 60 s).
+      responses:
+        '200':
+          description: 'CSV file with columns: event_type, ledger, timestamp, payload'
+        '400':
+          description: '{ success: false, error: string } - Invalid date range'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/feature-flags:
+    get:
+      tags:
+        - admin
+      summary: Returns all runtime feature flags and their current enabled state.
+      operationId: getFeatureFlags
+      description: |-
+        Returns all runtime feature flags and their current enabled state.
+        Cache is cleared before reading so the response always reflects DB state.
+      responses:
+        '200':
+          description: '{ success: true, data: FeatureFlag[] }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+    put:
+      tags:
+        - admin
+      summary: Updates a feature flag without restarting the process.
+      operationId: updateFeatureFlag
+      description: |-
+        Updates a feature flag without restarting the process.
+        Writes a feature_flag_toggled audit entry on every change.
+      responses:
+        '200':
+          description: '{ success: true, data: FeatureFlag }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/feature-flags/{name}:
+    put:
+      tags:
+        - admin
+      summary: Toggle a specific feature flag by name.
+      operationId: toggleFeatureFlag
+      description: |-
+        Toggle a specific feature flag by name. Body only needs { enabled: boolean }.
+        Returns 404 when the flag has not been seeded into the DB yet.
+        Writes a feature_flag_toggled audit entry on every change.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: snake_case flag name
+      responses:
+        '200':
+          description: '{ success: true, data: { name, enabled, updated_by, updated_at } }'
+        '400':
+          description: Invalid flag name or body
+        '404':
+          description: Flag not found
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/fees:
+    get:
+      tags:
+        - admin
+      summary: Returns a list of fee withdrawal events from the contract.
+      operationId: getFeeSummary
+      description: |-
+        Returns a list of fee withdrawal events from the contract.
+        Query params: startDate, endDate (ISO 8601)
+      responses:
+        '200':
+          description: '{ success: true, data: FeeHistoryItem[] }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+    post:
+      tags:
+        - admin
+      summary: Withdraws accumulated platform fees from the Soroban contract to a specified recipient.
+      operationId: withdrawFeesController
+      description: Withdraws accumulated platform fees from the Soroban contract to a specified recipient.
+      responses:
+        '200':
+          description: '{ success: true, data: { transactionId, recipient, amount, token } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid recipient address'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+        '409':
+          description: '{ success: false, error: string } - No fees available'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/fees/withdraw:
+    post:
+      tags:
+        - admin
+      summary: Withdraw accumulated platform fees from the Soroban contract to a treasury address.
+      operationId: withdrawFeesV2Controller
+      description: |-
+        Withdraw accumulated platform fees from the Soroban contract to a treasury
+        address. This is the fully-specified replacement for POST /api/admin/fees.
+      responses:
+        '200':
+          description: >-
+            { success: true, data: { transactionId, treasuryAddress, amountStroops, recipient,
+            amount, token } }
+        '202':
+          description: >-
+            { success: true, message, data: { actionId, collectedSignatures, requiredSignatures, … }
+            }
+                          — when ADMIN_THRESHOLD > 1 (multi-sig required)
+        '400':
+          description: '{ success: false, error } — invalid treasuryAddress or amountStroops'
+        '401':
+          description: '{ success: false, error } — missing/expired token'
+        '403':
+          description: '{ success: false, error } — non-admin role'
+        '409':
+          description: '{ success: false, error } — no fees / contract paused / concurrent withdrawal'
+        '422':
+          description: '{ success: false, error } — amountStroops exceeds contract fee balance'
+        '503':
+          description: '{ success: false, error } — transient network error (retryable)'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/indexer/reindex:
+    post:
+      tags:
+        - admin
+      summary: Reset the indexer's last_ledger so the next poll replays from fromLedger.
+      operationId: reindex
+      description: |-
+        Resets the indexer's stored last_ledger to the given fromLedger value,
+        causing the next poll cycle to replay all events from that ledger onward.
+      responses:
+        '200':
+          description: '{ success: true, data: { fromLedger, previous } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid fromLedger'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/introspect:
+    post:
+      tags:
+        - admin
+      summary: Decodes the caller's own bearer token and returns its payload metadata.
+      operationId: introspectToken
+      description: |-
+        Decodes the caller's own bearer token and returns its payload metadata.
+        The token is extracted from the Authorization header only — no body input is accepted.
+        Useful for admins to inspect their own token claims (subject, role, expiry).
+      responses:
+        '200':
+          description: '{ success: true, data: { sub, role, iat, exp } }'
+        '401':
+          description: '{ success: false, error: string } - Missing or invalid bearer token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/ip-allowlist:
+    post:
+      tags:
+        - admin
+      summary: Manually set an IP's reputation score.
+      operationId: setIpReputationController
+      description: |-
+        Manually set an IP's reputation score.
+        - body { ip, score: 0 }   → whitelist the IP (score pinned at 0, immune to decay)
+        - body { ip, score: 100 } → blacklist the IP (immediate 429 for all requests)
+        - body { ip, score: N }   → any 0–100 value (admin override)
+      responses:
+        '200':
+          description: '{ success: true, data: { ip, score } }'
+        '400':
+          description: '{ success: false, error: string } - Validation error'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/ip-reputation/{ip}:
+    get:
+      tags:
+        - admin
+      summary: Returns the current reputation record (score, lastSeen, pinned) for a given IP.
+      operationId: getIpReputationController
+      description: Returns the current reputation record (score, lastSeen, pinned) for a given IP.
+      parameters:
+        - name: ip
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: '{ success: true, data: IpReputation | null }'
+        '400':
+          description: '{ success: false, error: string } - :ip is not a valid IPv4/IPv6 address'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/players/import:
+    post:
+      tags:
+        - admin
+      summary: Bulk-onboards players from a CSV or JSON batch (e.g.
+      operationId: importPlayers
+      description: |-
+        Bulk-onboards players from a CSV or JSON batch (e.g. migrating an
+        academy's existing roster), reusing the same validation and IPFS pinning
+        logic as POST /api/players/register.
+        Accepts either:
+          - JSON body: { players: [{ wallet, position, region, metadata|metadataUri }, …] }
+          - CSV body (Content-Type: text/csv): rows of wallet,position,region,metadataUri
+
+        Each entry is validated against the single-registration schema and
+        processed independently — one invalid or failing row doesn't abort the
+        batch. Batch size is capped by config.playerImport.maxBatchSize.
+      responses:
+        '200':
+          description: '{ success: true, data: { results, summary } }'
+        '400':
+          description: '{ success: false, error: string } - Empty/unparseable body or batch too large'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/players/{playerId}/deactivate:
+    post:
+      tags:
+        - admin
+      summary: Admin soft-delete of a player.
+      operationId: adminDeactivatePlayer
+      description: |-
+        Admin soft-delete of a player. Requires { reason } in the request body.
+        Cancels all pending milestones and emits player_deactivated SSE events to
+        every scout who has unlocked the player's contact details.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: '{ success: true, data: { playerId, cancelledMilestones, notifiedScouts } }'
+        '400':
+          description: '{ success: false, error } — missing/invalid reason or playerId'
+        '404':
+          description: '{ success: false, error } — player not found'
+        '409':
+          description: '{ success: false, error } — player already deactivated'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/players/{playerId}/reactivate:
+    post:
+      tags:
+        - admin
+      summary: Restore a previously deactivated player.
+      operationId: adminReactivatePlayer
+      description: |-
+        Restore a previously deactivated player. Clears deactivated_at and
+        deactivation_reason, emits a player_reactivated SSE event, and writes
+        a player_reactivated audit entry.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: '{ success: true, data: { playerId } }'
+        '404':
+          description: '{ success: false, error } — player not found'
+        '409':
+          description: '{ success: false, error } — player already active'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/reindex:
+    post:
+      tags:
+        - admin
+      summary: Trigger a background event backfill for a specific ledger range.
+      operationId: triggerReindex
+      description: |-
+        Trigger a background event backfill for a specific ledger range.
+        The job fetches events in batches of 100 ledgers with a 50 ms inter-batch
+        delay. Duplicate events are silently discarded via the UNIQUE constraint on
+        tx_hash. The job status is available via GET /api/admin/reindex/status.
+
+        Timeout: disabled (0). The endpoint returns 202 immediately — the actual
+        backfill runs as a background job and must never be killed by a network timeout.
+      responses:
+        '202':
+          description: '{ success: true, data: { fromLedger, toLedger, status: ''running'' } }'
+        '409':
+          description: '{ success: false, error: string } - job already running'
+        '422':
+          description: '{ success: false, error: string } - range > 10 000 ledgers or invalid range'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/reindex/status:
+    get:
+      tags:
+        - admin
+      summary: Return the current state of the background reindex job (live progress).
+      operationId: reindexStatusHandler
+      description: Return the current state of the background reindex job (live progress).
+      responses:
+        '200':
+          description: |-
+            {
+              success: true,
+              data: {
+                status: 'idle' | 'running' | 'complete' | 'error',
+                from_ledger, to_ledger,
+                ledgers_processed, ledgers_total,
+                events_inserted,
+                started_at, completed_at, error_message
+              }
+            }
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/stats:
+    get:
+      tags:
+        - admin
+      summary: 'Returns aggregate platform counts: players, milestones, subscriptions, and total events.'
+      operationId: getStats
+      description: 'Returns aggregate platform counts: players, milestones, subscriptions, and total events.'
+      responses:
+        '200':
+          description: '{ success: true, data: { players, milestones, subscriptions, events } }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/tokens/revoke:
+    post:
+      tags:
+        - admin
+      summary: Revoke a JWT by jti so it is rejected even before it expires.
+      operationId: revokeTokenController
+      description: |-
+        Adds a JWT's jti claim to the revocation blocklist so requireAuth/requireRole
+        reject it on subsequent requests, even if it has not yet expired.
+      responses:
+        '200':
+          description: '{ success: true, data: { jti } }'
+        '400':
+          description: '{ success: false, error: string } - Neither jti nor token provided, or token has no jti'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/validators:
+    get:
+      tags:
+        - admin
+      summary: Returns the full list of registered validator wallets.
+      operationId: listValidators
+      description: |-
+        Returns the full list of registered validator wallets from the local DB,
+        including their registration timestamp, revocation timestamp (if any), and tx_hash.
+      responses:
+        '200':
+          description: '{ success: true, data: ValidatorRow[] }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/validators/import:
+    post:
+      tags:
+        - admin
+      summary: Bulk-onboards validators from a CSV or JSON batch.
+      operationId: importValidators
+      description: |-
+        Bulk-onboards validators from a CSV or JSON batch.
+        Accepts either:
+          - JSON body: { validators: [{ wallet, label?, region? }, …] }
+          - CSV body (Content-Type: text/csv): rows of wallet[,label[,region]]
+
+        Each entry is validated and processed through the same single-registration
+        path. Invalid addresses and already-registered (non-revoked) validators are
+        skipped per-entry rather than failing the whole batch.
+      responses:
+        '200':
+          description: '{ success: true, data: { results, summary } }'
+        '400':
+          description: '{ success: false, error: string } - Empty or unparseable body'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/validators/register:
+    post:
+      tags:
+        - admin
+      summary: Submits a request to register a new validator on the Soroban contract.
+      operationId: registerValidator
+      description: |-
+        Submits a request to register a new validator on the Soroban contract.
+        Only platform admins may call this endpoint.
+      responses:
+        '202':
+          description: '{ success: true, message: string }'
+        '400':
+          description: '{ success: false, error: string } - Invalid Stellar address'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/validators/revoke:
+    post:
+      tags:
+        - admin
+      summary: Submits a request to revoke an existing validator on the Soroban contract.
+      operationId: revokeValidator
+      description: |-
+        Submits a request to revoke an existing validator on the Soroban contract.
+        Only platform admins may call this endpoint.
+      responses:
+        '202':
+          description: '{ success: true, message: string }'
+        '400':
+          description: '{ success: false, error: string } - Invalid Stellar address'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/validators/{wallet}/stats:
+    get:
+      tags:
+        - admin
+      summary: Returns a validator's lifetime milestone approval/rejection counts.
+      operationId: getValidatorStatsEndpoint
+      description: |-
+        Returns a validator's lifetime milestone approval/rejection counts.
+        Unknown wallets return zeroed counts rather than 404.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Validator's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: { wallet, milestones_approved, milestones_rejected } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid Stellar address'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/webhooks/dead-letters:
+    get:
+      tags:
+        - admin
+      summary: Paginated list of dead-lettered webhook deliveries.
+      operationId: listDeadLetters
+      description: |-
+        Paginated list of dead-lettered webhook deliveries.
+        Each entry includes url, payload_preview, retry_count, last_error, created_at.
+      responses:
+        '200':
+          description: '{ success: true, data: DeadLetterView[], total, page, pageSize }'
+        '400':
+          description: '{ success: false, error: string } - Invalid page/pageSize'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+    delete:
+      tags:
+        - admin
+      summary: 'Purge all dead letters older than `olderThanDays` query param (default: 7 days).'
+      operationId: purgeOldDeadLetters
+      description: 'Purge all dead letters older than `olderThanDays` query param (default: 7 days).'
+      parameters:
+        - name: olderThanDays
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: 'Minimum age in days to purge (default: 7)'
+      responses:
+        '200':
+          description: '{ success: true, message: string, data: { deleted, olderThanDays } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid olderThanDays'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/webhooks/dead-letters/{id}:
+    delete:
+      tags:
+        - admin
+      summary: Purge a specific dead-letter row.
+      operationId: purgeDeadLetter
+      description: Purge a specific dead-letter row.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Dead letter row ID
+      responses:
+        '200':
+          description: '{ success: true, message: string, data: { id } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid id'
+        '404':
+          description: '{ success: false, error: string } - Not found'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/webhooks/dead-letters/{id}/requeue:
+    post:
+      tags:
+        - admin
+      summary: >-
+        Manually trigger an immediate retry of a specific dead-lettered webhook, re-signing the
+        payload with the subscription's current secret.
+      operationId: requeueDeadLetter
+      description: |-
+        Manually trigger an immediate retry of a specific dead-lettered webhook,
+        re-signing the payload with the subscription's current secret.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Dead letter row ID
+      responses:
+        '200':
+          description: '{ success: true, message, data: { id, status: ''replayed'' } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid id'
+        '404':
+          description: '{ success: false, error } - Not found'
+        '409':
+          description: '{ success: false, error } - Already replayed'
+        '502':
+          description: >-
+            { success: false, message, error, data: { id, status: 'pending', retryCount } } -
+            Delivery failed
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/webhooks/{id}/replay:
+    post:
+      tags:
+        - admin
+      summary: Legacy alias — kept for backwards compatibility.
+      operationId: replayDeadLetter
+      description: |-
+        Legacy alias — kept for backwards compatibility. Delegates to the same
+        handler as POST /api/admin/webhooks/dead-letters/:id/requeue.
+
+        Use POST /api/admin/webhooks/dead-letters/:id/requeue instead.
+      deprecated: true
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Dead letter row ID
+      responses:
+        '200':
+          description: '{ success: true, message, data: { id, status: ''replayed'' } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid id'
+        '404':
+          description: '{ success: false, error } - Not found'
+        '409':
+          description: '{ success: false, error } - Already replayed'
+        '502':
+          description: >-
+            { success: false, message, error, data: { id, status: 'pending', retryCount } } -
+            Delivery failed
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /auth/challenge:
+    get:
+      tags:
+        - auth
+      summary: Issue a SEP-10-style challenge transaction XDR for the given Stellar account.
+      operationId: getChallenge
+      description: |-
+        Issue a SEP-10-style challenge transaction XDR for the given Stellar
+        account. The client signs it and exchanges it for a token via POST
+        /auth/token.
+      parameters:
+        - name: account
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Stellar public key (G...) to build the challenge for
+      responses:
+        '200':
+          description: '{ challenge: string, networkPassphrase: string }'
+        '400':
+          description: '{ success: false, error: string } - Missing/invalid account'
+      security: []
+  /auth/logout:
+    post:
+      tags:
+        - auth
+      summary: >-
+        Revoke the caller's access token and any associated refresh token (identified by the `jti`
+        in the bearer token).
+      operationId: postLogout
+      description: |-
+        Revoke the caller's access token and any associated refresh token
+        (identified by the `jti` in the bearer token).
+      responses:
+        '200':
+          description: '{ success: true }'
+        '401':
+          description: — missing/invalid bearer token
+      security:
+        - bearerAuth: []
+  /auth/refresh:
+    post:
+      tags:
+        - auth
+      summary: >-
+        Exchange a valid refresh token for a new access token + refresh token pair (refresh token
+        rotation).
+      operationId: postRefresh
+      description: |-
+        Exchange a valid refresh token for a new access token + refresh token pair
+        (refresh token rotation). The old refresh token is revoked immediately.
+      responses:
+        '200':
+          description: '{ accessToken, refreshToken, expiresAt }'
+        '401':
+          description: '{ success: false, error } — invalid, expired, or revoked refresh token'
+      security: []
+  /auth/token:
+    post:
+      tags:
+        - auth
+      summary: Exchange a signed challenge transaction for an access + refresh token pair.
+      operationId: postToken
+      description: |-
+        Exchange a signed challenge transaction for an access + refresh token
+        pair. The caller's role is derived from the verified account: configured
+        admin wallets always get `admin`, otherwise the requested `role` (default
+        `player`) is used.
+      responses:
+        '200':
+          description: '{ token, accessToken, refreshToken, account, expiresAt }'
+        '400':
+          description: '{ success: false, error: string } - Invalid body or malformed XDR'
+        '401':
+          description: '{ success: false, error: string } - Invalid signature or expired challenge'
+      security: []
+  /docs:
+    get:
+      tags:
+        - docs
+      summary: Returns the OpenAPI 3.0 specification as JSON.
+      operationId: getDocs
+      description: Returns the OpenAPI 3.0 specification as JSON.
+      responses:
+        '200':
+          description: OpenAPI 3.0 document (application/json)
+        '500':
+          description: '{ success: false, error: string } - Spec file missing or unparsable'
+      security: []
+  /docs/ui:
+    get:
+      tags:
+        - docs
+      summary: Serves embedded Swagger UI.
+      operationId: getDocsUi
+      description: |-
+        Serves embedded Swagger UI.
+        Requires `swagger-ui-dist` to be installed:
+          npm install swagger-ui-dist
+      responses:
+        '200':
+          description: Swagger UI HTML page (text/html)
+        '501':
+          description: '{ success: false, error: string } - swagger-ui-dist not installed'
+      security: []
+  /docs/yaml:
+    get:
+      tags:
+        - docs
+      summary: Returns the raw OpenAPI YAML source.
+      operationId: getDocsYaml
+      description: Returns the raw OpenAPI YAML source.
+      responses:
+        '200':
+          description: Raw OpenAPI YAML (text/yaml)
+        '500':
+          description: '{ success: false, error: string } - Spec file missing'
+      security: []
+  /events/stream:
+    get:
+      tags:
+        - events
+      summary: Server-Sent Events endpoint.
+      operationId: getEventsStream
+      description: |-
+        Server-Sent Events endpoint. Opens a long-lived HTTP connection and pushes
+        relevant contract events to the authenticated client as they are indexed.
+
+        Authentication: Bearer JWT (same as all other protected routes).
+
+        Query parameters (all optional, combinable):
+          - eventType  One event type name to subscribe to (e.g. "milestone_approved").
+                       When omitted the client receives all event types that pass the
+                       wallet-relevance filter.  Unknown values are ignored.
+          - playerId   Only deliver events whose payload contains this player identifier.
+                       When omitted no additional player-level filtering is applied.
+
+        Filtering: only events relevant to the authenticated wallet are sent (wallet
+        isolation is always enforced regardless of query params).  The optional
+        query params add further narrowing on top.
+
+        SSE event types sent:
+          - milestone_approved  (player: their own milestone approvals)
+          - scout_subscribed    (scout: their own subscription changes)
+          - contact_unlocked    (scout: their own contact unlocks)
+          - trial_offer_logged  (scout/player: trial offers involving them)
+          - player_registered   (player: their own registration)
+          - milestone_submitted (player/validator)
+          - fees_withdrawn      (admin)
+
+        Live authorization enforcement (#1019):
+          - If the authenticated JWT is revoked (via POST /auth/logout or admin
+            token revocation) while the stream is open, the connection emits a
+            terminal `session_ended` event (reason "token_revoked") and closes;
+            no further protected events are delivered.
+          - If the wallet is blocklisted while the stream is open, the same
+            termination happens with reason "wallet_blocklisted".
+          - Detection bound: immediate for revocations/blocklists processed in
+            this process; ≤ SSE_AUTH_SWEEP_INTERVAL_MS (default 30 s) for changes
+            persisted by another instance (one sweep query per process, never a
+            DB query per keep-alive tick).
+          - Blocklisted wallets cannot open a new connection (403).
+
+        Keep-alive: a `: ping` comment is sent every SSE_KEEPALIVE_INTERVAL_MS ms
+        (default 15 s) to prevent idle-connection timeouts.
+      responses:
+        '200':
+          description: text/event-stream — long-lived SSE connection
+        '401':
+          description: '{ success: false, error: string } — missing or invalid token'
+        '403':
+          description: '{ success: false, error: string } — wallet is blocklisted'
+        '503':
+          description: '{ success: false, error: string } — connection limit reached'
+      security:
+        - bearerAuth: []
+  /players:
+    get:
+      tags:
+        - players
+      summary: optionalAuth so req.account is set when a Bearer token is present (for audit logging)
+      operationId: filterPlayers
+      description: optionalAuth so req.account is set when a Bearer token is present (for audit logging)
+      parameters:
+        - name: region
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: position
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: minTier
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 3
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - relevance
+              - tier
+              - region
+              - created_at
+            default: relevance
+        - name: sortOrder
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: desc
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: fields
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: '{ success: true, data: PlayerSummary[], total, page, pageSize, pages }'
+        '400':
+          description: '{ success: false, error: string } - Invalid query parameters'
+        '422':
+          description: '{ success: false, error: string } - minTier out of range'
+      security:
+        - {}
+        - bearerAuth: []
+  /players/register:
+    post:
+      tags:
+        - players
+      summary: Register a new player profile.
+      operationId: registerPlayer
+      description: |-
+        Register a new player profile. `wallet` must match the authenticated
+        account. Metadata is pinned to IPFS on the caller's behalf unless a
+        pre-pinned `metadataUri` is supplied instead.
+      requestBody:
+        required: true
+        description: >-
+          { wallet: string, position: string, region: string, metadata?: object } | { wallet,
+          position, region, metadataUri: string }
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  properties:
+                    wallet:
+                      type: string
+                      minLength: 56
+                      maxLength: 56
+                    position:
+                      type: string
+                      minLength: 1
+                    region:
+                      type: string
+                      minLength: 1
+                    metadata:
+                      type: object
+                      additionalProperties: {}
+                  required:
+                    - wallet
+                    - position
+                    - region
+                    - metadata
+                - type: object
+                  properties:
+                    wallet:
+                      type: string
+                      minLength: 56
+                      maxLength: 56
+                    position:
+                      type: string
+                      minLength: 1
+                    region:
+                      type: string
+                      minLength: 1
+                    metadataUri:
+                      type: string
+                      minLength: 1
+                      description: Additional validation is applied beyond this schema — see the route handler.
+                  required:
+                    - wallet
+                    - position
+                    - region
+                    - metadataUri
+      responses:
+        '201':
+          description: '{ success: true, data: { playerId, metadataUri, gatewayUrl } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid body'
+        '403':
+          description: '{ success: false, error: string } - wallet does not match authenticated account'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+  /players/{playerId}:
+    get:
+      tags:
+        - players
+      summary: Fetch a single player profile, including a live `offerCount`.
+      operationId: getPlayer
+      description: |-
+        Fetch a single player profile, including a live `offerCount`. Deactivated
+        profiles return 404 to non-owners/non-admins. Supports conditional
+        requests via ETag (304 when `If-None-Match` matches). The same ETag is the
+        version token for optimistic concurrency — echo it as `If-Match` on PUT.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, data: PlayerDetail }'
+        '304':
+          description: Not Modified (when If-None-Match matches the current ETag)
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId'
+        '404':
+          description: '{ success: false, error: string } - Player not found or not visible to caller'
+      security:
+        - {}
+        - bearerAuth: []
+    put:
+      tags:
+        - players
+      summary: Update a player's profile metadata.
+      operationId: updatePlayer
+      description: |-
+        Update a player's profile metadata. Owner-only. Accepts either a raw
+        `metadata` object (pinned to IPFS by the backend) or a pre-pinned
+        `metadataUri`. Optimistic concurrency (#1151): the ETag returned by GET
+        must be echoed in the `If-Match` header. A missing header is rejected with
+        428, a stale one with 412 (no write happens); `If-Match: *` is the
+        documented override.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+        - name: If-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: ETag from GET /api/players/:playerId (required; "*" to override)
+      requestBody:
+        required: true
+        description: '{ metadata: object } | { metadataUri: string }'
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  properties:
+                    metadata:
+                      type: object
+                      additionalProperties: {}
+                  required:
+                    - metadata
+                - type: object
+                  properties:
+                    metadataUri:
+                      type: string
+                      minLength: 1
+                      description: Additional validation is applied beyond this schema — see the route handler.
+                  required:
+                    - metadataUri
+      responses:
+        '200':
+          description: '{ success: true, data: { metadataUri, playerId } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId or body'
+        '403':
+          description: '{ success: false, error: string } - Not the profile owner'
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+        '412':
+          description: '{ success: false, error: string } - If-Match does not match the current profile version'
+        '428':
+          description: '{ success: false, error: string } - If-Match header required'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+      x-owner-only: true
+  /players/{playerId}/analytics:
+    get:
+      tags:
+        - players
+      summary: Return profile view and contact unlock analytics (owner-only).
+      operationId: getPlayerAnalytics
+      description: Return profile view and contact unlock analytics (owner-only).
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, data: { view_count, viewer_count, contact_unlock_count, lastUpdated } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId'
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+      x-owner-only: true
+  /players/{playerId}/anonymize:
+    post:
+      tags:
+        - players
+      summary: 'GDPR right-to-erasure: scrub all off-chain PII for this player.'
+      operationId: anonymizePlayer
+      description: |-
+        GDPR right-to-erasure: scrubs PII from every off-chain store this backend
+        controls (profile fields, history, views, contact unlocks, trial offers),
+        unpins the player's IPFS content, and deactivates the profile. Does NOT
+        erase on-chain Soroban contract state, which is immutable by design — see
+        docs/data-privacy.md.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, data: { playerId } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId'
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+      x-owner-only: true
+  /players/{playerId}/deactivate:
+    post:
+      tags:
+        - players
+      summary: Self-service soft-delete of the caller's own player profile.
+      operationId: deactivatePlayerEndpoint
+      description: Self-service soft-delete of the caller's own player profile. Owner-only.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, message: string }'
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId'
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+      x-owner-only: true
+  /players/{playerId}/history:
+    get:
+      tags:
+        - players
+      summary: Admin or profile owner only.
+      operationId: getPlayerHistory
+      description: Admin or profile owner only.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, data: PlayerProfileHistoryItem[] } - Newest first'
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId'
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+      x-auth-note: >-
+        Authorization includes custom inline logic beyond a single role check — see the route
+        source.
+  /players/{playerId}/history/{version}:
+    get:
+      tags:
+        - players
+      summary: Returns the full profile snapshot at the given 1-based version number.
+      operationId: getPlayerHistoryVersion
+      description: |-
+        Returns the full profile snapshot at the given 1-based version number.
+        Admin or profile owner only.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 1-based version number (1 = oldest snapshot)
+      responses:
+        '200':
+          description: '{ success: true, data: PlayerProfileHistoryItem }'
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId or version'
+        '404':
+          description: '{ success: false, error: string } - Player not found or version out of range'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+      x-auth-note: >-
+        Authorization includes custom inline logic beyond a single role check — see the route
+        source.
+  /players/{playerId}/history/{version}/diff:
+    get:
+      tags:
+        - players
+      summary: Returns a field-level diff between version N and N-1.
+      operationId: getPlayerHistoryDiff
+      description: |-
+        Returns a field-level diff between version N and N-1.
+        Admin or profile owner only.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 1-based version number (1 = oldest snapshot, has no diff predecessor)
+      responses:
+        '200':
+          description: '{ success: true, data: { version, previousVersion, diff: { field: { from, to } } } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId or version'
+        '404':
+          description: '{ success: false, error: string } - Player not found or version out of range'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+      x-auth-note: >-
+        Authorization includes custom inline logic beyond a single role check — see the route
+        source.
+  /players/{playerId}/milestones:
+    get:
+      tags:
+        - players
+      summary: >-
+        List a player's milestones, merging on-chain milestone events with
+        pending/approved/rejected submission events.
+      operationId: getPlayerMilestones
+      description: |-
+        List a player's milestones, merging on-chain milestone events with
+        pending/approved/rejected submission events. Supports `status`
+        (pending|approved|rejected; omit for all), `sortBy`, `order`/`sort`,
+        and `limit` (max 50) query params.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - approved
+              - rejected
+          description: >-
+            Filter by milestone status. Omit to include approved, pending, and
+            on-chain milestones. `rejected` returns milestone_rejected events only.
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - submittedAt
+              - approvedAt
+            default: submittedAt
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
+          description: Sort direction (`sort` is accepted as an alias)
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+          description: Alias for `order`; takes precedence when both are set
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: '{ success: true, data: Milestone[] }'
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId, limit, or query params'
+        '404':
+          description: '{ success: false, error: string } - Player not found or not visible to caller'
+      security:
+        - {}
+        - bearerAuth: []
+  /players/{playerId}/reactivate:
+    post:
+      tags:
+        - players
+      summary: Restore a previously self-deactivated player profile.
+      operationId: reactivatePlayerEndpoint
+      description: Restore a previously self-deactivated player profile. Owner-only.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, message: string }'
+        '400':
+          description: '{ success: false, error: string } - Invalid playerId'
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+      x-owner-only: true
+  /players/{playerId}/tokens:
+    get:
+      tags:
+        - players
+      summary: Return the list of token holders and their balances for the given player.
+      operationId: getPlayerTokenHolders
+      description: |-
+        Return the list of token holders and their balances for the given player.
+        Gated by the `player_tokens` feature flag — returns 404 when disabled.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The player's on-chain identifier
+      responses:
+        '200':
+          description: '{ success: true, data: { playerId, holders: [{ holder, tokens }], meta } }'
+        '404':
+          description: '{ success: false, error: string } - Feature flag disabled'
+      security:
+        - {}
+        - bearerAuth: []
+  /players/{playerId}/tokens/buy:
+    post:
+      tags:
+        - players
+      summary: Purchase Player Tokens for the given player (stub — no real XLM transfer).
+      operationId: buyPlayerToken
+      description: |-
+        Purchase Player Tokens for the given player (stub — no real XLM transfer).
+        Gated by the `player_tokens` feature flag — returns 404 when disabled.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The player's on-chain identifier
+      responses:
+        '200':
+          description: '{ success: true, data: { playerId, buyerWallet, amount, newBalance } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid amount'
+        '404':
+          description: '{ success: false, error: string } - Feature flag disabled or player not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:player_tokens
+      x-required-role:
+        - scout
+      x-api-key-scope: write:player_tokens
+  /players/{playerId}/trial-offers/{offerId}/accept:
+    post:
+      tags:
+        - players
+      summary: Accept a trial offer.
+      operationId: acceptTrialOffer
+      description: Accept a trial offer. Only the player who owns this playerId may respond.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The player's on-chain identifier
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The trial offer identifier
+      responses:
+        '200':
+          description: '{ success: true, data: { offerId, playerId, status: ''accepted'', respondedAt } }'
+        '403':
+          description: '{ success: false, error: string } - Not the offer''s target player'
+        '404':
+          description: '{ success: false, error: string } - Offer not found'
+        '409':
+          description: '{ success: false, error: string } - Offer already responded to'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+  /players/{playerId}/trial-offers/{offerId}/reject:
+    post:
+      tags:
+        - players
+      summary: Reject a trial offer with an optional reason.
+      operationId: rejectTrialOffer
+      description: >-
+        Reject a trial offer with an optional reason. Only the player who owns this playerId may
+        respond.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The player's on-chain identifier
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The trial offer identifier
+      requestBody:
+        required: true
+        description: '{ reason?: string } - Optional rejection reason (max 500 chars)'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: '{ success: true, data: { offerId, playerId, status: ''rejected'', reason, respondedAt } }'
+        '403':
+          description: '{ success: false, error: string } - Not the offer''s target player'
+        '404':
+          description: '{ success: false, error: string } - Offer not found'
+        '409':
+          description: '{ success: false, error: string } - Offer already responded to'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - player
+  /scouts/{wallet}/api-keys:
+    get:
+      tags:
+        - scouts
+      summary: List existing API keys (metadata + hash prefix only — no plaintext).
+      operationId: listApiKeys
+      description: List existing API keys (metadata + hash prefix only — no plaintext).
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: >-
+            { success: true, data: Array<{ id, label, key_prefix, created_at, last_used_at, revoked,
+            revoked_at, scopes }> }
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+    post:
+      tags:
+        - scouts
+      summary: Issue a new API key for server-to-server integrations.
+      operationId: issueApiKey
+      description: |-
+        Issue a new API key for server-to-server integrations. Returns the plaintext
+        key exactly once; only a salted hash is persisted.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '201':
+          description: '{ success: true, data: { id, key, label, created_at, scopes } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid body or unknown scope'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:api_keys
+      x-required-role:
+        - scout
+      x-api-key-scope: write:api_keys
+      x-owner-only: true
+  /scouts/{wallet}/api-keys/{id}:
+    delete:
+      tags:
+        - scouts
+      summary: Revoke an existing API key by its row id.
+      operationId: revokeApiKey
+      description: |-
+        Revoke an existing API key by its row id. Revoked keys are rejected by the
+        auth middleware on subsequent requests.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: API key row ID
+      responses:
+        '200':
+          description: '{ success: true, data: { id, revoked: true } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid id'
+        '404':
+          description: '{ success: false, error: string } - API key not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:api_keys
+      x-required-role:
+        - scout
+      x-api-key-scope: write:api_keys
+      x-owner-only: true
+  /scouts/{wallet}/api-keys/{id}/rotate:
+    post:
+      tags:
+        - scouts
+      summary: >-
+        Atomically issue a replacement key and schedule the old one for revocation after a grace
+        period, instead of issuing and revoking as two s...
+      operationId: rotateApiKey
+      description: |-
+        Atomically issue a replacement key and schedule the old one for revocation
+        after a grace period, instead of issuing and revoking as two separate,
+        non-atomic requests (#676). The replacement inherits the old key's label
+        and scopes. The old key keeps authenticating until `oldKey.revokesAt`.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: API key row ID to rotate
+      responses:
+        '201':
+          description: >-
+            { success: true, data: { newKey: { id, key, label, created_at, scopes }, oldKey: { id,
+            revokesAt } } }
+        '400':
+          description: '{ success: false, error: string } - Invalid id or gracePeriodSeconds'
+        '404':
+          description: '{ success: false, error: string } - API key not found (or already revoked)'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:api_keys
+      x-required-role:
+        - scout
+      x-api-key-scope: write:api_keys
+      x-owner-only: true
+  /scouts/{wallet}/bookmark-folders:
+    get:
+      tags:
+        - scouts
+      summary: List all bookmark folders with bookmark counts.
+      operationId: listBookmarkFolders
+      description: List all bookmark folders with bookmark counts.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: Array<{ id, scout_wallet, name, created_at, bookmark_count }> }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+    post:
+      tags:
+        - scouts
+      summary: Create a new bookmark folder.
+      operationId: createBookmarkFolder
+      description: Create a new bookmark folder.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '201':
+          description: '{ success: true, data: { id, scout_wallet, name, created_at } }'
+        '400':
+          description: '{ success: false, error: string } - Missing/invalid name'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:bookmarks
+      x-required-role:
+        - scout
+      x-api-key-scope: write:bookmarks
+      x-owner-only: true
+  /scouts/{wallet}/bookmark-folders/{folderId}:
+    delete:
+      tags:
+        - scouts
+      summary: Delete a bookmark folder.
+      operationId: deleteBookmarkFolderHandler
+      description: Delete a bookmark folder. Bookmarks move to root (folder_id set to NULL), not deleted.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: folderId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Bookmark folder row ID
+      responses:
+        '200':
+          description: '{ success: true, data: { deleted: true, folder_id } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid folderId'
+        '404':
+          description: '{ success: false, error: string } - Folder not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:bookmarks
+      x-required-role:
+        - scout
+      x-api-key-scope: write:bookmarks
+      x-owner-only: true
+  /scouts/{wallet}/bookmarks:
+    get:
+      tags:
+        - scouts
+      summary: List all bookmarked players with full profile summaries.
+      operationId: listBookmarks
+      description: |-
+        List all bookmarked players with full profile summaries.
+        Supports ?folderId= query parameter to filter by folder.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: folderId
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Optional — restrict to one folder
+      responses:
+        '200':
+          description: '{ success: true, data: Array<PlayerSummary & { bookmarked_at, folder_id, note }> }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+    post:
+      tags:
+        - scouts
+      summary: Bookmark a player with optional folder and note.
+      operationId: addBookmark
+      description: >-
+        Bookmark a player with optional folder and note. Idempotent — no error if already
+        bookmarked.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: { scout_wallet, player_id, folder_id, note, created_at } }'
+        '400':
+          description: '{ success: false, error: string } - Missing playerId'
+        '404':
+          description: '{ success: false, error: string } - Player or folder not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:bookmarks
+      x-required-role:
+        - scout
+      x-api-key-scope: write:bookmarks
+      x-owner-only: true
+  /scouts/{wallet}/bookmarks/{playerId}:
+    delete:
+      tags:
+        - scouts
+      summary: Remove a bookmark.
+      operationId: removeBookmark
+      description: Remove a bookmark. Returns 404 when the bookmark does not exist.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, data: { removed: true, player_id } }'
+        '404':
+          description: '{ success: false, error: string } - Bookmark not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:bookmarks
+      x-required-role:
+        - scout
+      x-api-key-scope: write:bookmarks
+      x-owner-only: true
+  /scouts/{wallet}/contacts:
+    get:
+      tags:
+        - scouts
+      summary: List all players this scout has unlocked contact details for.
+      operationId: getUnlockedContacts
+      description: |-
+        List all players this scout has unlocked contact details for. Supports an
+        optional `?playerId=` filter to check a single player.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional — restrict to a single player
+      responses:
+        '200':
+          description: '{ success: true, data: Array<{ playerId, contact_status: ''unlocked'', unlockedAt }> }'
+        '401':
+          description: '{ success: false, error: string } - Wallet mismatch or missing token'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+  /scouts/{wallet}/contacts/{playerId}:
+    get:
+      tags:
+        - scouts
+      summary: Return full contact details for a player this scout has already unlocked.
+      operationId: getContactDetails
+      description: Return full contact details for a player this scout has already unlocked.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, data: ContactDetails }'
+        '401':
+          description: '{ success: false, error: string } - Wallet mismatch or missing token'
+        '403':
+          description: '{ success: false, error: string } - Contact not unlocked'
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+  /scouts/{wallet}/contacts/{playerId}/unlock:
+    post:
+      tags:
+        - scouts
+      summary: Pay the XLM micro-fee to unlock a player's contact details.
+      operationId: unlockContact
+      description: |-
+        Pay-to-contact XLM micro-fee flow (#761): the idempotency middleware is
+        configured with a request fingerprint (wallet + playerId) so replaying the
+        same Idempotency-Key with a materially different request is rejected with
+        409 instead of reusing the cached response, and duplicate requests with the
+        same key never submit a second blockchain transaction. Already-unlocked
+        players are returned without a second charge (`alreadyUnlocked: true`).
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        '200':
+          description: >-
+            { success: true, data: { alreadyUnlocked?: true, transactionId?, status?,
+            ...ContactDetails } }
+        '400':
+          description: >-
+            { success: false, error: string } - Missing params or scout trying to unlock their own
+            profile
+        '401':
+          description: '{ success: false, error: string } - Wallet mismatch or missing token'
+        '402':
+          description: '{ success: false, error: string, code } - Payment failed (see PaymentError code)'
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+        '409':
+          description: '{ success: false, error: string } - Idempotency key reused with a different request'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:contacts
+      x-required-role:
+        - scout
+      x-api-key-scope: write:contacts
+      x-owner-only: true
+  /scouts/{wallet}/notes:
+    get:
+      tags:
+        - scouts
+      summary: List all private notes for the authenticated scout, ordered newest-first.
+      operationId: listScoutNotesHandler
+      description: List all private notes for the authenticated scout, ordered newest-first.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: Array<{ scout_wallet, player_id, note, updated_at }> }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+  /scouts/{wallet}/notes/{playerId}:
+    get:
+      tags:
+        - scouts
+      summary: Retrieve the authenticated scout's note for a specific player.
+      operationId: getScoutNoteHandler
+      description: Retrieve the authenticated scout's note for a specific player.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, data: { scout_wallet, player_id, note, updated_at } }'
+        '404':
+          description: '{ success: false, error: string } - No note exists yet'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+    put:
+      tags:
+        - scouts
+      summary: Create or update (upsert) a private note on a player profile.
+      operationId: putScoutNote
+      description: |-
+        Create or update (upsert) a private note on a player profile.
+        Only the authoring scout can read or write their notes.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: '{ success: true, data: { scout_wallet, player_id, note, updated_at } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid or missing note'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:notes
+      x-required-role:
+        - scout
+      x-api-key-scope: write:notes
+      x-owner-only: true
+  /scouts/{wallet}/payments:
+    get:
+      tags:
+        - scouts
+      summary: Combined payment history (contact unlocks + subscription purchases), newest first.
+      operationId: getPaymentHistory
+      description: |-
+        Combined payment history (contact unlocks + subscription purchases),
+        newest first. Supports `from`/`to` (ISO date), `type`
+        ('contact_unlock'|'subscription'), pagination, and `format=csv` for a
+        downloadable export.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional ISO date lower bound
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional ISO date upper bound
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 'Optional filter: ''contact_unlock'' | ''subscription'''
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Default 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Default 50, max 100
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+          description: '''json'' (default) | ''csv'''
+      responses:
+        '200':
+          description: >-
+            { success: true, data: PaymentRecord[], total, page, pageSize } (or text/csv when
+            format=csv)
+        '400':
+          description: '{ success: false, error: string } - Invalid query parameters or dates'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+  /scouts/{wallet}/players/{playerId}/notes:
+    get:
+      tags:
+        - scouts
+      summary: List all private notes for the scout-player pair, newest-first.
+      operationId: listPlayerNotes
+      description: List all private notes for the scout-player pair, newest-first.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '200':
+          description: >-
+            { success: true, data: Array<{ id, scout_wallet, player_id, content, created_at,
+            updated_at }> }
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+    post:
+      tags:
+        - scouts
+      summary: Create a new private note for the authenticated scout on the given player.
+      operationId: createPlayerNote
+      description: Create a new private note for the authenticated scout on the given player.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+      responses:
+        '201':
+          description: >-
+            { success: true, data: { id, scout_wallet, player_id, content, created_at, updated_at }
+            }
+        '400':
+          description: '{ success: false, error: string } - Invalid or missing content'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:notes
+      x-required-role:
+        - scout
+      x-api-key-scope: write:notes
+      x-owner-only: true
+  /scouts/{wallet}/players/{playerId}/notes/{noteId}:
+    put:
+      tags:
+        - scouts
+      summary: Update a note's content.
+      operationId: updatePlayerNote
+      description: Update a note's content. Returns 404 when not found or owned by another scout.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Note row ID
+      responses:
+        '200':
+          description: '{ success: true, data: { id, scout_wallet, player_id, content, updated_at } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid note id or content'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch'
+        '404':
+          description: '{ success: false, error: string } - Note not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:notes
+      x-required-role:
+        - scout
+      x-api-key-scope: write:notes
+      x-owner-only: true
+    delete:
+      tags:
+        - scouts
+      summary: Delete a note.
+      operationId: deletePlayerNote
+      description: Delete a note. Returns 404 when not found or owned by another scout.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Player's unique identifier (cuid2)
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Note row ID
+      responses:
+        '200':
+          description: '{ success: true, data: { removed: true, id } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid note id'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch'
+        '404':
+          description: '{ success: false, error: string } - Note not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:notes
+      x-required-role:
+        - scout
+      x-api-key-scope: write:notes
+      x-owner-only: true
+  /scouts/{wallet}/recommendations:
+    get:
+      tags:
+        - scouts
+      summary: Weighted, cursor-paginated player recommendations for this scout.
+      operationId: getScoutRecommendations
+      description: |-
+        Weighted player recommendations derived from the scout's saved searches,
+        bookmarks, and past contact unlocks (falls back to top-tier players when
+        the scout has no history). Cursor-paginated; results cached 10 minutes.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional — last player_id of the previous page
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Optional — default 20
+      responses:
+        '200':
+          description: >-
+            { success: true, data: PlayerSummary[], nextCursor, meta: { preferredRegion,
+            preferredPosition, minTier, totalCandidates } }
+        '400':
+          description: '{ success: false, error: string } - Invalid query parameters'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+  /scouts/{wallet}/saved-searches:
+    get:
+      tags:
+        - scouts
+      summary: List all saved searches for the authenticated scout, newest-first.
+      operationId: listSavedSearches
+      description: List all saved searches for the authenticated scout, newest-first.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: Array<{ id, scout_wallet, name, filters, created_at }> }'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch or not the scout role'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:saved_searches
+      x-required-role:
+        - scout
+      x-api-key-scope: write:saved_searches
+      x-owner-only: true
+    post:
+      tags:
+        - scouts
+      summary: Create a new named saved search.
+      operationId: createSavedSearch
+      description: |-
+        Create a new named saved search.  The filter payload is validated against
+        the same Zod schema used by the live player-filter endpoint. Capped at 20
+        saved searches per scout.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '201':
+          description: '{ success: true, data: { id, scout_wallet, name, filters, created_at } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid request body'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch or not the scout role'
+        '422':
+          description: '{ success: false, error: string } - Maximum of 20 saved searches per scout'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:saved_searches
+      x-required-role:
+        - scout
+      x-api-key-scope: write:saved_searches
+      x-owner-only: true
+  /scouts/{wallet}/saved-searches/{id}:
+    put:
+      tags:
+        - scouts
+      summary: Update a saved search's name and/or filters.
+      operationId: updateSavedSearchHandler
+      description: Update a saved search's name and/or filters. Returns 404 when not found for this scout.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Row id of the saved search to update
+      responses:
+        '200':
+          description: '{ success: true, data: { id, scout_wallet, name, filters, created_at } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid id or request body'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch or not the scout role'
+        '404':
+          description: '{ success: false, error: string } - Saved search not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:saved_searches
+      x-required-role:
+        - scout
+      x-api-key-scope: write:saved_searches
+      x-owner-only: true
+    delete:
+      tags:
+        - scouts
+      summary: Delete a saved search by its row id.
+      operationId: deleteSavedSearchHandler
+      description: |-
+        Delete a saved search by its row id.
+        A scout cannot delete another scout's saved searches.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Row id of the saved search to delete
+      responses:
+        '200':
+          description: '{ success: true, data: { removed: true, id } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid id'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch or not the scout role'
+        '404':
+          description: '{ success: false, error: string } - Saved search not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:saved_searches
+      x-required-role:
+        - scout
+      x-api-key-scope: write:saved_searches
+      x-owner-only: true
+  /scouts/{wallet}/saved-searches/{id}/run:
+    get:
+      tags:
+        - scouts
+      summary: Execute a saved search and return matching players (paginated).
+      operationId: runSavedSearch
+      description: |-
+        Execute a saved search and return matching players (paginated).
+        Returns 404 when the saved search does not exist for this scout.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Row id of the saved search to run
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Default 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Default 20, max 100
+      responses:
+        '200':
+          description: '{ success: true, data: { players: PlayerRow[], total, page, pageSize } }'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch or not the scout role'
+        '404':
+          description: '{ success: false, error: string } - Saved search not found'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+  /scouts/{wallet}/subscribe:
+    post:
+      tags:
+        - scouts
+      summary: Purchase a new scout subscription.
+      operationId: subscribe
+      description: Purchase a new scout subscription.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: |-
+            Optional. Ensures safe retries: duplicate keys return
+              the cached response for 24 hours without triggering a new on-chain transaction.
+      responses:
+        '201':
+          description: '{ success: true, data: { transactionId, tier, expiresAt, status } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid tier or duration'
+        '402':
+          description: '{ success: false, error: string } - Insufficient XLM balance'
+        '403':
+          description: '{ success: false, error: string } - Scout role required or wallet mismatch'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:subscriptions
+      x-required-role:
+        - scout
+      x-api-key-scope: write:subscriptions
+      x-owner-only: true
+    put:
+      tags:
+        - scouts
+      summary: Renew or create a subscription.
+      operationId: renewSubscription
+      description: |-
+        Renew or create a subscription.
+        If an existing subscription exists, extends its expiry by `duration` days.
+        If no subscription exists, behaves like POST (creates a new one).
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: { transactionId, tier, expiresAt, status } } - Renewal'
+        '201':
+          description: '{ success: true, data: { transactionId, tier, expiresAt, status } } - New subscription'
+        '400':
+          description: '{ success: false, error: string } - Invalid tier or duration'
+        '402':
+          description: '{ success: false, error: string } - Insufficient XLM balance'
+        '403':
+          description: '{ success: false, error: string } - Scout role required or wallet mismatch'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:subscriptions
+      x-required-role:
+        - scout
+      x-api-key-scope: write:subscriptions
+      x-owner-only: true
+    delete:
+      tags:
+        - scouts
+      summary: Cancel an active subscription.
+      operationId: cancelSubscription
+      description: Cancel an active subscription. Records cancellation on-chain and locally.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: { transactionId, cancelledAt, wallet } }'
+        '403':
+          description: '{ success: false, error: string } - Scout role required or wallet mismatch'
+        '404':
+          description: '{ success: false, error: string } - No active subscription found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:subscriptions
+      x-required-role:
+        - scout
+      x-api-key-scope: write:subscriptions
+      x-owner-only: true
+  /scouts/{wallet}/subscription:
+    get:
+      tags:
+        - scouts
+      summary: Returns the active subscription status for a scout wallet.
+      operationId: getSubscription
+      description: |-
+        Returns the active subscription status for a scout wallet.
+        Response includes a `gracePeriodActive` boolean field.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: { active, tier, expiresAt, remainingDays, gracePeriodActive } }'
+        '401':
+          description: '{ success: false, error: string } - Missing or invalid token'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - read:subscription
+      x-required-role:
+        - scout
+      x-api-key-scope: read:subscription
+      x-owner-only: true
+  /scouts/{wallet}/trial-offer:
+    post:
+      tags:
+        - scouts
+      summary: DEPRECATED alias of POST /api/scouts/:wallet/trial-offers (#1034).
+      operationId: createTrialOffer
+      description: |-
+        DEPRECATED alias of POST /api/scouts/:wallet/trial-offers (#1034). It runs the
+        same handler, so it carries the same middleware chain — including walletRateLimit
+        and idempotency, which guard the on-chain submission this route now performs.
+
+        Use POST /api/scouts/:wallet/trial-offers instead.
+      deprecated: true
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      requestBody:
+        required: true
+        description: '{ playerId: string, detailsUri: string }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                playerId:
+                  type: string
+                  minLength: 1
+                detailsUri:
+                  type: string
+                  minLength: 1
+                  description: Additional validation is applied beyond this schema — see the route handler.
+              required:
+                - playerId
+                - detailsUri
+      responses:
+        '201':
+          description: >-
+            { success: true, data: { offerId, transactionId, scout, playerId, detailsUri, createdAt,
+            tierPromoted: true, newTier: 3 } }
+        '400':
+          description: '{ success: false, error: string } - Invalid body'
+        '401':
+          description: '{ success: false, error: string } - Wallet mismatch or missing token'
+        '402':
+          description: >-
+            { success: false, error: string, code } - Scout lacks an active subscription or contact
+            unlock for this player
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+        '409':
+          description: '{ success: false, error: string } - Idempotency key reused with a different request'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:trial_offers
+      x-required-role:
+        - scout
+      x-api-key-scope: write:trial_offers
+      x-owner-only: true
+  /scouts/{wallet}/trial-offers:
+    get:
+      tags:
+        - scouts
+      summary: On-chain trial-offer event history submitted by this scout.
+      operationId: listTrialOffers
+      description: On-chain trial-offer event history submitted by this scout.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: TrialOfferEvent[] }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+    post:
+      tags:
+        - scouts
+      summary: Submit a trial offer on-chain and promote the player to Elite Tier.
+      operationId: createTrialOffer
+      description: |-
+        Canonical trial-offer submission (#285, #770): submits the offer on-chain,
+        indexes it locally by tx_hash, promotes the player's tier and broadcasts SSE.
+        The singular /trial-offer path above is a deprecated alias of this POST.
+        Distinct from the accept/reject workflow in trialOfferController.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      requestBody:
+        required: true
+        description: '{ playerId: string, detailsUri: string }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                playerId:
+                  type: string
+                  minLength: 1
+                detailsUri:
+                  type: string
+                  minLength: 1
+                  description: Additional validation is applied beyond this schema — see the route handler.
+              required:
+                - playerId
+                - detailsUri
+      responses:
+        '201':
+          description: >-
+            { success: true, data: { offerId, transactionId, scout, playerId, detailsUri, createdAt,
+            tierPromoted: true, newTier: 3 } }
+        '400':
+          description: '{ success: false, error: string } - Invalid body'
+        '401':
+          description: '{ success: false, error: string } - Wallet mismatch or missing token'
+        '402':
+          description: >-
+            { success: false, error: string, code } - Scout lacks an active subscription or contact
+            unlock for this player
+        '404':
+          description: '{ success: false, error: string } - Player not found'
+        '409':
+          description: '{ success: false, error: string } - Idempotency key reused with a different request'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:trial_offers
+      x-required-role:
+        - scout
+      x-api-key-scope: write:trial_offers
+      x-owner-only: true
+  /scouts/{wallet}/trial-offers/{offerId}:
+    delete:
+      tags:
+        - scouts
+      summary: Cancel (withdraw) a pending trial offer submitted by this scout.
+      operationId: cancelTrialOfferHandler
+      description: |-
+        Cancel (withdraw) a pending trial offer submitted by this scout.
+        Only the originating scout may cancel their own offer, and only while it is
+        still in 'pending' status — the player has not yet accepted or rejected it.
+
+        After cancellation, the player's accept/reject attempts return 410 Gone.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Trial offer ID to cancel
+      responses:
+        '200':
+          description: '{ success: true, data: { offerId, status: ''cancelled'', cancelledAt } }'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch or offer belongs to another scout'
+        '404':
+          description: '{ success: false, error: string } - Trial offer not found'
+        '409':
+          description: '{ success: false, error: string } - Offer already accepted/rejected or already cancelled'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:trial_offers
+      x-required-role:
+        - scout
+      x-api-key-scope: write:trial_offers
+      x-owner-only: true
+  /scouts/{wallet}/webhooks:
+    get:
+      tags:
+        - scouts
+      summary: List all active subscriptions (secrets masked — only the last 4 hex chars visible).
+      operationId: listWebhooks
+      description: |-
+        List all active subscriptions (secrets masked — only the last 4 hex chars visible).
+
+        Registration is subject to the default per-wallet rate limit (#1037).
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: Array<{ id, url, secret, eventTypes, createdAt }> }'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
+    post:
+      tags:
+        - scouts
+      summary: Register a webhook URL.
+      operationId: registerWebhook
+      description: |-
+        Register a webhook URL. Generates a per-subscription HMAC secret returned
+        once in plaintext (AES-256-GCM encrypted at rest); subsequent GETs show a
+        masked value only.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '201':
+          description: '{ success: true, data: { id, url, secret, eventTypes, createdAt } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid URL or unknown event type'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:webhooks
+      x-required-role:
+        - scout
+      x-api-key-scope: write:webhooks
+      x-owner-only: true
+  /scouts/{wallet}/webhooks/{id}:
+    delete:
+      tags:
+        - scouts
+      summary: Delete a subscription.
+      operationId: deleteWebhook
+      description: Delete a subscription. Returns 404 when not found or owned by another scout.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Webhook subscription row ID
+      responses:
+        '200':
+          description: '{ success: true, data: { removed: true, id } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid id'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch'
+        '404':
+          description: '{ success: false, error: string } - Subscription not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:webhooks
+      x-required-role:
+        - scout
+      x-api-key-scope: write:webhooks
+      x-owner-only: true
+  /scouts/{wallet}/webhooks/{id}/test:
+    post:
+      tags:
+        - scouts
+      summary: Send a test ping to the registered URL, signed with the subscription secret.
+      operationId: testWebhook
+      description: |-
+        Send a test ping to the registered URL, signed with the subscription secret.
+        Returns 502 when the remote server does not respond with 2xx or is unreachable.
+
+        Rate limited separately from — and more tightly than — other scout write
+        endpoints (#1037), since each call makes the backend issue an outbound
+        HTTP request to a caller-supplied URL. Default: 5 requests/minute per
+        wallet (WEBHOOK_TEST_RATE_LIMIT_MAX / WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS).
+        Exceeding it returns 429 before any outbound request is attempted.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Webhook subscription row ID
+      responses:
+        '200':
+          description: '{ success: true, data: { id, url, statusCode } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid subscription id'
+        '403':
+          description: >-
+            { success: false, error: string } - Wallet mismatch or subscription belongs to another
+            scout
+        '404':
+          description: '{ success: false, error: string } - Subscription not found'
+        '429':
+          description: '{ success: false, error: string } - Webhook-test rate limit exceeded'
+        '502':
+          description: >-
+            { success: false, error: string, data: { id, url, statusCode? } } - Remote server
+            returned non-2xx or was unreachable
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:webhooks
+      x-required-role:
+        - scout
+      x-api-key-scope: write:webhooks
+      x-owner-only: true
+  /validators/milestone:
+    post:
+      tags:
+        - validators
+      summary: Submit evidence for a player milestone.
+      operationId: submitMilestoneEvidence
+      description: |-
+        Submit evidence for a player milestone. `evidenceUri` may be an
+        `https://` URL (downloaded and re-pinned to IPFS) or an `ipfs://` CID
+        (recorded directly). Invalidates the player's milestone cache on success.
+      requestBody:
+        required: true
+        description: >-
+          { playerId: string, milestoneType: 'identity'|'performance'|'trial_offer', evidenceUri:
+          string }
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                playerId:
+                  type: string
+                  minLength: 1
+                milestoneType:
+                  type: string
+                  enum:
+                    - identity
+                    - performance
+                    - trial_offer
+                evidenceUri:
+                  type: string
+                  minLength: 1
+                  description: Additional validation is applied beyond this schema — see the route handler.
+              required:
+                - playerId
+                - milestoneType
+                - evidenceUri
+      responses:
+        '201':
+          description: '{ success: true, data: { evidenceCid: string } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid body'
+        '413':
+          description: '{ success: false, error: string } - Remote evidence file too large'
+        '422':
+          description: '{ success: false, error: string } - Remote evidence has an unsupported content type'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - validator
+  /validators/milestones/approve-bulk:
+    post:
+      tags:
+        - validators
+      summary: Approve a batch of milestones assigned to the authenticated validator in one call.
+      operationId: approveBulkMilestones
+      description: |-
+        Approve a batch of milestones assigned to the authenticated validator in
+        one call. Each ID is processed independently — a failure on one does not
+        abort the batch; per-ID outcomes are returned in `data`.
+      requestBody:
+        required: true
+        description: '{ milestoneIds: string[] } - At least one ID required'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                milestoneIds:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+              required:
+                - milestoneIds
+      responses:
+        '200':
+          description: >-
+            { success: true, data: Array<{ milestoneId, status:
+            'approved'|'invalid'|'unauthorized'|'error', error? }> }
+        '400':
+          description: '{ success: false, error: string } - Empty milestoneIds'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - validator
+  /validators/milestones/pending:
+    get:
+      tags:
+        - validators
+      summary: >-
+        List pending milestones for the authenticated validator, optionally filtered by
+        region/position/playerId and paginated.
+      operationId: getPendingMilestones
+      description: |-
+        List pending milestones for the authenticated validator, optionally
+        filtered by region/position/playerId and paginated.
+      parameters:
+        - name: region
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: position
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: playerId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: '{ success: true, data: PendingMilestone[], total, page, pageSize }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - validator
+  /validators/{wallet}/milestones/pending:
+    get:
+      tags:
+        - validators
+      summary: >-
+        Same as GET /api/validators/milestones/pending, scoped explicitly to the given validator
+        wallet rather than the caller's own token.
+      operationId: getPendingMilestones
+      description: |-
+        Same as GET /api/validators/milestones/pending, scoped explicitly to the
+        given validator wallet rather than the caller's own token.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Validator's Stellar public key
+        - name: region
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: position
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: playerId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: '{ success: true, data: PendingMilestone[], total, page, pageSize }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - validator
+  /versioning/demo:
+    servers:
+      - url: /api/v2
+        description: API v2 only — not available on /api or /api/v1
+    get:
+      tags:
+        - v2
+      summary: >-
+        Deliberate v2-only example endpoint used to demonstrate intentional divergence and exercise
+        the parity allowlist/test.
+      operationId: getVersioningDemo
+      description: |-
+        Deliberate v2-only example endpoint used to demonstrate intentional
+        divergence and exercise the parity allowlist/test. Not mounted under
+        /api or /api/v1.
+      responses:
+        '200':
+          description: '{ version: 2, demo: true }'
+      security: []

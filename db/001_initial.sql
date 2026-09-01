@@ -3,11 +3,12 @@
 -- This file is the canonical reference for the DB schema.
 
 CREATE TABLE IF NOT EXISTS events (
-  id        INTEGER PRIMARY KEY AUTOINCREMENT,
-  type      TEXT    NOT NULL,
-  ledger    INTEGER NOT NULL,
-  tx_hash   TEXT    NOT NULL UNIQUE,
-  payload   TEXT    NOT NULL
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  type       TEXT    NOT NULL,
+  ledger     INTEGER NOT NULL,
+  tx_hash    TEXT    NOT NULL UNIQUE,
+  payload    TEXT    NOT NULL,
+  created_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS indexer_state (

@@ -30,4 +30,35 @@ describe('Malformed JSON body guarding', () => {
     expect(res.body.success).toBe(false);
     expect(res.body.correlationId).toBe('test-zod-id');
   });
+
+  it('returns 415 when a body is sent without an application/json Content-Type', async () => {
+    const token = jwt.sign({ sub: 'G' + 'A'.repeat(55), role: 'player' }, SECRET, { expiresIn: '1h' });
+    const res = await request(app)
+      .post('/api/players/register')
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-correlation-id', 'test-no-content-type-id')
+      // Raw string body with no prior Content-Type set — the HTTP client defaults
+      // to application/x-www-form-urlencoded, the common "forgot to set it" case.
+      .send('wallet=abc&position=Midfielder&region=West+Africa');
+
+    expect(res.status).toBe(415);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toBe('Content-Type must be application/json');
+    expect(res.body.correlationId).toBe('test-no-content-type-id');
+  });
+
+  it('returns 415 for an incorrect Content-Type header on a JSON-body route', async () => {
+    const token = jwt.sign({ sub: 'G' + 'A'.repeat(55), role: 'player' }, SECRET, { expiresIn: '1h' });
+    const res = await request(app)
+      .post('/api/players/register')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'text/plain')
+      .set('x-correlation-id', 'test-wrong-content-type-id')
+      .send(JSON.stringify({ wallet: 'G' + 'A'.repeat(55), position: 'Midfielder', region: 'West Africa', metadata: {} }));
+
+    expect(res.status).toBe(415);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toBe('Content-Type must be application/json');
+    expect(res.body.correlationId).toBe('test-wrong-content-type-id');
+  });
 });

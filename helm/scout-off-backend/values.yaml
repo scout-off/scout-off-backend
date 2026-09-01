@@ -1,0 +1,327 @@
+# =============================================================================
+# scout-off-backend Helm values
+#
+# Every tunable parameter is documented with a comment describing its purpose
+# and the accepted values. Override any of these in a separate values file:
+#
+#   helm upgrade --install scout-off-backend ./helm/scout-off-backend \
+#     -f my-prod-values.yaml
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Image
+# -----------------------------------------------------------------------------
+image:
+  # Container registry + image name
+  repository: ghcr.io/scoutoff/scout-off-backend
+  # Image tag to deploy. Defaults to the chart's appVersion when set to "".
+  tag: ""
+  # Pull policy: Always | IfNotPresent | Never
+  pullPolicy: IfNotPresent
+
+# Secrets required to pull from a private registry.
+# Each entry is the name of an existing imagePullSecret in the namespace.
+imagePullSecrets: []
+# - name: regcred
+
+# -----------------------------------------------------------------------------
+# Replica count & update strategy
+# -----------------------------------------------------------------------------
+# Number of replicas to run.
+#
+# The default deployment is a SINGLE replica backed by SQLite
+# (env.DB_DRIVER: sqlite below). SQLite is a single-process, single-file
+# database with no support for concurrent access from independent processes,
+# so with replicaCount > 1 every pod would silently get its own unshared,
+# ephemeral database file: writes to one pod would be invisible to the others
+# and data would be lost on pod restart.
+#
+# Do NOT raise this above 1 while env.DB_DRIVER=sqlite. To scale horizontally:
+#   1. switch the database to PostgreSQL (env.DB_DRIVER=postgres +
+#      env.DATABASE_URL), then
+#   2. increase replicaCount and/or enable the HPA below.
+# See docs/postgres-migration.md for the migration procedure.
+replicaCount: 1
+
+# Rolling update strategy — zero downtime: never take a pod down before a new
+# one is healthy (maxUnavailable: 0) and allow one extra pod during rollout.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# -----------------------------------------------------------------------------
+# Horizontal Pod Autoscaler
+# -----------------------------------------------------------------------------
+hpa:
+  # Horizontal Pod Autoscaler.
+  #
+  # Disabled by default because the default deployment is a single
+  # SQLite-backed replica (see replicaCount above) and SQLite cannot be
+  # shared across multiple pods. Enable the HPA only after switching to
+  # PostgreSQL (env.DB_DRIVER=postgres + env.DATABASE_URL). If you enable it
+  # while still on SQLite, the chart's NOTES.txt prints a loud warning.
+  enabled: false
+  # Lower bound — only meaningful when enabled.
+  minReplicas: 1
+  # Upper bound — expand to handle traffic spikes.
+  maxReplicas: 10
+  # Scale up when average CPU across all pods exceeds this percentage.
+  targetCPUUtilizationPercentage: 70
+  # Scale up when average memory across all pods exceeds this percentage.
+  targetMemoryUtilizationPercentage: 80
+
+# -----------------------------------------------------------------------------
+# PodDisruptionBudget
+# -----------------------------------------------------------------------------
+pdb:
+  # PodDisruptionBudget.
+  #
+  # Disabled by default to match the single-replica default: with exactly one
+  # pod, minAvailable: 1 would block ALL voluntary disruptions (node drains,
+  # cluster upgrades) indefinitely. Enable it for multi-replica
+  # (PostgreSQL-backed) deployments.
+  enabled: false
+  # At least one pod must remain available during voluntary disruptions
+  # (node drain, rolling upgrade, etc.).
+  minAvailable: 1
+
+# -----------------------------------------------------------------------------
+# Resource requests & limits
+#
+# requests: guaranteed resources; used by the scheduler for placement.
+# limits:   hard cap; container is OOM-killed / throttled when exceeded.
+# -----------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# -----------------------------------------------------------------------------
+# Service
+# -----------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 80
+  # Port the container listens on. Must match PORT env var.
+  targetPort: 4000
+
+# -----------------------------------------------------------------------------
+# Ingress (optional)
+#
+# Set ingress.enabled=true to expose the service outside the cluster.
+# TLS termination is handled at the Ingress level; the backend sees plain HTTP.
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: false
+  # Ingress class name (e.g. "nginx", "traefik", "alb").
+  className: "nginx"
+  annotations: {}
+  #  kubernetes.io/ingress.class: nginx
+  #  cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: api.scoutoff.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: scout-off-tls
+      hosts:
+        - api.scoutoff.io
+
+# -----------------------------------------------------------------------------
+# Liveness probe
+#
+# Kubernetes restarts a container when liveness fails failureThreshold times.
+# /health/liveness is a lightweight "am I alive?" check (no external deps).
+# -----------------------------------------------------------------------------
+livenessProbe:
+  httpGet:
+    path: /health/liveness
+    port: 4000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 5
+
+# -----------------------------------------------------------------------------
+# Readiness probe
+#
+# Kubernetes removes a pod from Service endpoints until readiness passes.
+# /health/readiness checks DB write-ability and IPFS connectivity.
+# A shorter period catches startup slowness faster than the liveness probe.
+# -----------------------------------------------------------------------------
+readinessProbe:
+  httpGet:
+    path: /health/readiness
+    port: 4000
+  initialDelaySeconds: 15
+  periodSeconds: 5
+  failureThreshold: 2
+  timeoutSeconds: 5
+
+# -----------------------------------------------------------------------------
+# Kubernetes Secret reference
+#
+# ALL sensitive values are sourced from a pre-existing Kubernetes Secret named
+# "scout-off-secrets". Create it before deploying:
+#
+#   kubectl create secret generic scout-off-secrets \
+#     --from-literal=JWT_SECRET=<min-32-char-random-string> \
+#     --from-literal=SEP10_SERVER_SECRET=<stellar-secret-key-starting-with-S> \
+#     --from-literal=PLATFORM_SECRET_KEY=<stellar-secret-key-starting-with-S> \
+#     --from-literal=API_KEY_LOOKUP_SECRET=<openssl rand -hex 32> \
+#     --from-literal=ADMIN_WALLETS=<comma-separated-stellar-addresses> \
+#     --from-literal=PINATA_API_KEY=<your-pinata-api-key> \
+#     --from-literal=PINATA_SECRET=<your-pinata-secret> \
+#     --from-literal=WEBHOOK_SECRET_ENCRYPTION_KEY=<openssl rand -hex 32> \
+#     --from-literal=REGISTER_CONTRACT_ID=<value> \
+#     --from-literal=PROGRESS_CONTRACT_ID=<value> \
+#     --from-literal=SUBSCRIPTION_CONTRACT_ID=<value> \
+#     --from-literal=CONNECTION_CONTRACT_ID=<value> \
+#     --namespace <your-namespace>
+#
+# PostgreSQL deployments must also include:
+#     --from-literal=DATABASE_URL=postgresql://user:pass@host:5432/db
+#
+# Optional rotation / legacy keys:
+#     --from-literal=CONTRACT_ID=<legacy-single-contract-id>
+#     --from-literal=JWT_SECRET_PREVIOUS=<old-secret-during-rotation>
+#     --from-literal=JWT_SECRET_PREVIOUS_UNTIL=<ISO-8601-or-unix-seconds>
+#     --from-literal=ADMIN_WALLET=<single-admin-address-for-compat>
+#     --from-literal=REDIS_URL=redis://:password@host:6379
+#     --from-literal=WEBHOOK_SECRET=<hmac-secret-for-legacy-webhook-url>
+#
+# The secret name can be overridden here if your naming convention differs.
+# -----------------------------------------------------------------------------
+secretName: scout-off-secrets
+
+# -----------------------------------------------------------------------------
+# Non-sensitive environment variables (ConfigMap)
+#
+# Add any env var here that does NOT contain a secret. Each key/value pair is
+# mounted into the pod via a ConfigMap named <release>-config.
+# Sensitive vars (JWT_SECRET, SEP10_SERVER_SECRET, PLATFORM_SECRET_KEY,
+# API_KEY_LOOKUP_SECRET, ADMIN_WALLET/ADMIN_WALLETS, PINATA_API_KEY/SECRET,
+# DATABASE_URL, WEBHOOK_SECRET_ENCRYPTION_KEY, WEBHOOK_SECRET, REDIS_URL,
+# and all CONTRACT_ID vars) are always sourced from the Secret.
+# -----------------------------------------------------------------------------
+env:
+  NODE_ENV: production
+  PORT: "4000"
+  NETWORK: mainnet
+  # Stellar network passphrase matching the NETWORK above.
+  # Mainnet: Public Global Stellar Network ; September 2015
+  # Testnet: Test SDF Network ; September 2015
+  NETWORK_PASSPHRASE: "Public Global Stellar Network ; September 2015"
+  HORIZON_URL: https://horizon.stellar.org
+  SOROBAN_RPC_URL: https://soroban-rpc.mainnet.stellar.gateway.fm
+  LOG_LEVEL: info
+  METRICS_ENABLED: "true"
+  # Database driver: sqlite | postgres
+  #
+  # sqlite  (default): single-process, single-file database. Suitable for the
+  #   default single-replica deployment only. SQLite has no support for
+  #   concurrent access from multiple processes, so do NOT scale beyond one
+  #   replica while this is set.
+  # postgres: required for horizontal scaling (replicaCount > 1 or HPA). Also
+  #   requires DATABASE_URL in the Secret. See docs/postgres-migration.md.
+  DB_DRIVER: sqlite
+  DB_PATH: /data/scout-off.db
+  # Platform fee in basis points (100 bps = 1%). Default: 500 (5%).
+  PLATFORM_FEE_BPS: "500"
+  # SSE keep-alive interval in ms
+  SSE_KEEPALIVE_INTERVAL_MS: "15000"
+  # Maximum concurrent SSE connections (0 = unlimited)
+  SSE_MAX_CONNECTIONS: "0"
+  # Request timeout in ms
+  REQUEST_TIMEOUT_MS: "30000"
+  # Rate limiting
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_WINDOW_MS: "60000"
+  RATE_LIMIT_MAX: "60"
+  AUTH_RATE_LIMIT_WINDOW_MS: "60000"
+  AUTH_RATE_LIMIT_MAX: "5"
+  # JWT access token TTL (seconds). Default: 900 = 15 min.
+  JWT_ACCESS_TTL_SECONDS: "900"
+  # Stellar health check (set false in staging)
+  STELLAR_HEALTH_CHECK: "true"
+  # CORS allowed origins (comma-separated). Override per environment.
+  # Production default defined in config.ts: https://app.scoutoff.io,https://scoutoff.io
+  CORS_ALLOWED_ORIGINS: "https://app.scoutoff.io,https://scoutoff.io"
+  # Subscription grace period after expiry (hours). Default: 24.
+  SUBSCRIPTION_GRACE_PERIOD_HOURS: "24"
+  # Number of trusted reverse proxy hops in front of this server. Default: 1.
+  TRUSTED_PROXY_COUNT: "1"
+  # Webhook delivery (non-sensitive settings — URL and secrets live in the Secret)
+  WEBHOOK_ENABLED: "false"
+  WEBHOOK_TIMEOUT_MS: "10000"
+  # Slow-query warning threshold in ms. Default: 50.
+  SLOW_QUERY_THRESHOLD_MS: "50"
+  # Admin multi-sig action TTL in ms. Default: 3600000 (1 hour).
+  ADMIN_ACTION_TTL_MS: "3600000"
+  # Player cache TTL in ms. Default: 60000 (1 min).
+  PLAYER_CACHE_TTL_MS: "60000"
+
+# -----------------------------------------------------------------------------
+# Pod annotations
+# Useful for Prometheus scraping or Datadog APM injection.
+# -----------------------------------------------------------------------------
+podAnnotations: {}
+# prometheus.io/scrape: "true"
+# prometheus.io/path: "/metrics"
+# prometheus.io/port: "4000"
+
+# -----------------------------------------------------------------------------
+# Pod security context
+# Runs as a non-root user for defence-in-depth.
+# -----------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# -----------------------------------------------------------------------------
+# Container security context
+# -----------------------------------------------------------------------------
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false   # set true if you mount a writable volume for DB
+  capabilities:
+    drop:
+      - ALL
+
+# -----------------------------------------------------------------------------
+# Service account
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  # Annotations to add to the service account (e.g. IAM role for EKS).
+  annotations: {}
+  name: ""
+
+# -----------------------------------------------------------------------------
+# Node selection / tolerations / affinity
+# -----------------------------------------------------------------------------
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# -----------------------------------------------------------------------------
+# Extra volumes / volume mounts
+# Use to mount a PersistentVolumeClaim for the SQLite database file.
+# Example:
+#   extraVolumes:
+#     - name: data
+#       persistentVolumeClaim:
+#         claimName: scout-off-data
+#   extraVolumeMounts:
+#     - name: data
+#       mountPath: /data
+# -----------------------------------------------------------------------------
+extraVolumes: []
+extraVolumeMounts: []

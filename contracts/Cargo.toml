@@ -6,10 +6,16 @@ members = [
     "progress",
     "subscription",
     "connection",
+    "player_token",
 ]
 
 [workspace.dependencies]
-soroban-sdk = { version = "21.7.7", features = [] }
+# testutils is NOT listed here: it's unsupported on the wasm target (see
+# soroban-sdk's own compile_error!), so it must only be enabled by the
+# non-wasm dev-dependencies declarations in each member crate below, not
+# inherited into every crate's default (wasm-targeted) [dependencies].
+soroban-sdk = { version = "21.7.7" }
+proptest = { version = "1", default-features = false, features = ["std"] }
 
 [profile.release]
 opt-level = "z"

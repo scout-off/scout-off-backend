@@ -30,6 +30,18 @@ if (isNaN(fromLedger) || fromLedger < 0) {
 if (!process.env.CONTRACT_ID) process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
 if (!process.env.JWT_SECRET)   process.env.JWT_SECRET  = 'backfill-script';
 
+// Guard: check that the compiled output exists before attempting to require it.
+// A raw MODULE_NOT_FOUND error gives no hint that 'npm run build' is the fix.
+const distDbPath = require('path').resolve(__dirname, '../dist/db');
+const fs = require('fs');
+if (!fs.existsSync(distDbPath)) {
+  console.error(
+    'Error: compiled output not found at dist/db.\n' +
+    'Run "npm run build" first, then re-run this script.'
+  );
+  process.exit(1);
+}
+
 const { initDb, getLastLedger, setLastLedger } = require('../dist/db');
 
 initDb();
