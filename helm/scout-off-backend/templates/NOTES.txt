@@ -1,0 +1,74 @@
+========================================================
+  scout-off-backend — {{ .Chart.Version }} — deployed to {{ .Release.Namespace }}
+========================================================
+
+Release name : {{ .Release.Name }}
+Image        : {{ .Values.image.repository }}:{{ include "scout-off-backend.imageTag" . }}
+Replicas     : {{ .Values.replicaCount }} (HPA: {{ if .Values.hpa.enabled }}{{ .Values.hpa.minReplicas }}–{{ .Values.hpa.maxReplicas }}{{ else }}disabled{{ end }})
+
+{{- /* ------------------------------------------------------------------ */}}
+{{- /* SQLite cannot be shared across pods — flag the broken combination. */}}
+{{- /* ------------------------------------------------------------------ */}}
+{{- if and (eq .Values.env.DB_DRIVER "sqlite") (or (gt (int .Values.replicaCount) 1) (and .Values.hpa.enabled (gt (int .Values.hpa.maxReplicas) 1))) }}
+
+⚠️  WARNING: DB_DRIVER=sqlite combined with a multi-replica deployment
+   (replicaCount={{ .Values.replicaCount }}, HPA maxReplicas={{ if .Values.hpa.enabled }}{{ .Values.hpa.maxReplicas }}{{ else }}n/a{{ end }}).
+
+   SQLite is a single-process, single-file database — it does not support
+   concurrent access from multiple processes. Each pod would get its own
+   unshared, ephemeral database file: writes to one pod would be invisible
+   to the others and data would be lost on pod restart.
+
+   To run multiple replicas safely:
+     1. Switch to PostgreSQL:  --set env.DB_DRIVER=postgres
+     2. Provide DATABASE_URL (e.g. --set env.DATABASE_URL=...)
+     3. Then raise replicaCount / enable the HPA.
+   See docs/postgres-migration.md and DEPLOYMENT.md for details.
+
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Ensure the Kubernetes Secret exists BEFORE deploying:
+
+   kubectl create secret generic {{ .Values.secretName }} \
+     --from-literal=CONTRACT_ID=<your-contract-id> \
+     --from-literal=JWT_SECRET=<min-32-char-secret> \
+     --namespace {{ .Release.Namespace }}
+
+2. Check rollout status:
+
+   kubectl rollout status deployment/{{ include "scout-off-backend.fullname" . }} \
+     --namespace {{ .Release.Namespace }}
+
+3. Smoke-test the service:
+
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+   curl https://{{ .host }}/health
+   curl https://{{ .host }}/health/readiness
+{{- end }}
+{{- else }}
+   kubectl port-forward svc/{{ include "scout-off-backend.fullname" . }} 4000:{{ .Values.service.port }} \
+     --namespace {{ .Release.Namespace }}
+   # then in another terminal:
+   curl http://localhost:4000/health
+   curl http://localhost:4000/health/readiness
+{{- end }}
+
+4. View logs:
+
+   kubectl logs -l app.kubernetes.io/name={{ include "scout-off-backend.name" . }} \
+     --namespace {{ .Release.Namespace }} --follow
+
+5. Check HPA status:
+{{- if .Values.hpa.enabled }}
+   kubectl get hpa {{ include "scout-off-backend.fullname" . }} \
+     --namespace {{ .Release.Namespace }}
+{{- else }}
+   HPA is disabled by default (single-replica SQLite deployment). To enable
+   autoscaling, switch the database to PostgreSQL first:
+   --set env.DB_DRIVER=postgres --set env.DATABASE_URL=... --set hpa.enabled=true
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+See DEPLOYMENT.md for full configuration and upgrade procedures.

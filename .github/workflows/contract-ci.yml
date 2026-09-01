@@ -5,9 +5,18 @@ on:
   pull_request:
     paths: ['contracts/**']
 
+# Cancel in-progress runs for the same branch/ref when a new push arrives.
+# Rust/Cargo builds are slow — redundant parallel runs are proportionally
+# costly, so cancelling stale runs as early as possible saves significant
+# CI minutes on rapid iterative pushes.
+concurrency:
+  group: contract-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -22,13 +31,30 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
+            contracts/target
           key: cargo-${{ hashFiles('**/Cargo.lock') }}-${{ runner.os }}-contracts
 
       - name: Build contracts (WASM)
         run: cargo build --target wasm32-unknown-unknown --release
         working-directory: contracts
 
-      - name: Run contract tests
-        run: cargo test --workspace --tests
+      # contracts/.cargo/config.toml sets wasm32-unknown-unknown as the
+      # default build target for this workspace, so host-target commands
+      # must pass --target explicitly or they'll silently try to build (and
+      # fail to link/run) against wasm instead.
+      - name: Run unit tests
+        run: cargo test --workspace --lib --target x86_64-unknown-linux-gnu
+        working-directory: contracts
+
+      # Property-based invariant fuzz tests live in each contract's tests/ directory.
+      # PROPTEST_CASES controls the number of random inputs per test via each
+      # file's own proptest_cases() helper (ProptestConfig::with_cases doesn't
+      # read the env itself once a literal case count is passed to it). The
+      # default is 10 000, matching the in-code default; CI overrides this to
+      # a lower number for fast feedback within its time budget, keeping the
+      # full 10 000 run available locally and on nightly.
+      - name: Run invariant fuzz tests
+        env:
+          PROPTEST_CASES: ${{ vars.PROPTEST_CASES || '256' }}
+        run: cargo test --workspace --tests --target x86_64-unknown-linux-gnu -- invariants
         working-directory: contracts

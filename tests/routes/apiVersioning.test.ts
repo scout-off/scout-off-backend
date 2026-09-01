@@ -10,7 +10,7 @@ async function getAdminToken(): Promise<string> {
   tx.sign(kp);
   const tokenRes = await request(app)
     .post('/auth/token')
-    .send({ transaction: tx.toXDR(), role: 'admin' });
+    .send({ transaction: tx.toXdr(), role: 'admin' });
   return tokenRes.body.token;
 }
 

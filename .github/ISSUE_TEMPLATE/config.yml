@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contributing Guide
+    url: https://github.com/scout-off/scout-off-backend/blob/main/CONTRIBUTING.md
+    about: Read the contributing guide before filing an issue.
+  - name: Security Issues
+    url: https://github.com/scout-off/scout-off-backend/blob/main/SECURITY.md
+    about: Do NOT file security vulnerabilities as public issues. Read the Security Policy for the private disclosure process.

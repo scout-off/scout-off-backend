@@ -1,0 +1,21 @@
+-- Migration 025: grace-period key rotation (#676)
+--
+-- Rotating a key previously meant issuing a new one and separately revoking
+-- the old one — two non-atomic steps with real operational failure modes: if
+-- the old key is revoked before the new one is deployed everywhere that
+-- consumes it, the integration goes down; if the caller crashes after
+-- issuing the new key but before revoking the old one, the old key stays
+-- live indefinitely.
+--
+-- revoke_after lets POST .../api-keys/:id/rotate schedule the OLD key to
+-- stop authenticating at a specific future time (default 24h, caller
+-- configurable) instead of immediately, giving integrators a grace window to
+-- roll the replacement key out everywhere before the old one stops working.
+-- NULL (the default, and the value for every key that has never been
+-- rotated) means "no scheduled revocation".
+--
+-- Enforcement is live, not a background sweep: every active-key query used
+-- for authentication (src/db/index.ts) additionally requires
+-- `revoke_after IS NULL OR revoke_after > <now>`, so a key past its deadline
+-- simply stops resolving with no cron job needed to expire it.
+ALTER TABLE api_keys ADD COLUMN revoke_after INTEGER;
