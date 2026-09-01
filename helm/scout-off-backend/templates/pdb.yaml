@@ -1,0 +1,16 @@
+{{- if .Values.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "scout-off-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "scout-off-backend.labels" . | nindent 4 }}
+spec:
+  # At least one pod must remain available during voluntary disruptions such
+  # as node drain or cluster upgrades, preventing a complete outage.
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "scout-off-backend.selectorLabels" . | nindent 6 }}
+{{- end }}

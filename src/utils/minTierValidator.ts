@@ -1,7 +1,12 @@
 import { ProgressLevel } from '../types';
 
 const VALID_TIERS: ProgressLevel[] = [0, 1, 2, 3];
-const VALID_TIERS_STR = VALID_TIERS.join(', ');
+const TIER_NAMES: Record<ProgressLevel, string> = {
+  0: 'Unverified',
+  1: 'Verified',
+  2: 'Performance',
+  3: 'Elite',
+};
 
 export interface TierValidationResult {
   valid: boolean;
@@ -23,14 +28,21 @@ export function validateMinTier(raw: unknown): TierValidationResult {
   if (Array.isArray(normalizedRaw)) {
     return {
       valid: false,
-      error: `minTier must be an integer. Valid values: ${VALID_TIERS_STR}.`,
+      error: 'minTier must be an integer between 0 and 3',
+    };
+  }
+
+  if (typeof normalizedRaw === 'string' && /^-?\d+\.\d+$/.test(normalizedRaw)) {
+    return {
+      valid: false,
+      error: 'minTier must be an integer between 0 and 3',
     };
   }
 
   if (typeof normalizedRaw === 'string' && !/^-?\d+$/.test(normalizedRaw)) {
     return {
       valid: false,
-      error: `minTier must be an integer. Valid values: ${VALID_TIERS_STR}.`,
+      error: 'minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite',
     };
   }
 
@@ -39,14 +51,14 @@ export function validateMinTier(raw: unknown): TierValidationResult {
   if (!Number.isInteger(num) || isNaN(num)) {
     return {
       valid: false,
-      error: `minTier must be an integer. Valid values: ${VALID_TIERS_STR}.`,
+      error: 'minTier must be an integer between 0 and 3',
     };
   }
 
   if (!VALID_TIERS.includes(num as ProgressLevel)) {
     return {
       valid: false,
-      error: `minTier ${num} is out of range. Valid values: ${VALID_TIERS_STR}.`,
+      error: 'minTier must be between 0 (Unverified) and 3 (Elite Tier)',
     };
   }
 

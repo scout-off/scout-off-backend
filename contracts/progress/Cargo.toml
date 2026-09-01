@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 soroban-sdk = { workspace = true }
 scout-off-shared = { path = "../shared" }
 
-[dev-dependencies]
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
 register = { path = "../register" }
+proptest = { workspace = true }

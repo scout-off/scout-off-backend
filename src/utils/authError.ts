@@ -1,9 +1,11 @@
 import { Response } from 'express';
+import { ErrorCode } from './errorCodes';
 
 export interface AuthErrorPayload {
   success: false;
   errorCode: number;
   error: string;
+  code: string;
   reason?: Record<string, unknown>;
 }
 
@@ -16,7 +18,7 @@ export function sendUnauthorized(
   message: string,
   reason?: Record<string, unknown>,
 ): void {
-  const body: AuthErrorPayload = { success: false, errorCode: 9, error: message };
+  const body: AuthErrorPayload = { success: false, errorCode: 9, error: message, code: ErrorCode.UNAUTHORIZED };
   if (reason !== undefined) body.reason = reason;
   res.status(401).json(body);
 }
@@ -30,7 +32,7 @@ export function sendForbidden(
   message: string,
   reason?: Record<string, unknown>,
 ): void {
-  const body: AuthErrorPayload = { success: false, errorCode: 9, error: message };
+  const body: AuthErrorPayload = { success: false, errorCode: 9, error: message, code: ErrorCode.FORBIDDEN };
   if (reason !== undefined) body.reason = reason;
   res.status(403).json(body);
 }

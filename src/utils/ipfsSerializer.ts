@@ -1,10 +1,12 @@
-import { gatewayUrl } from '../services/ipfs';
+import { gatewayUrl, gatewayUrls } from '../services/ipfs';
 
 export interface IpfsSerializedResult {
   /** IPFS content identifier */
   cid: string;
-  /** Full gateway URI for the content */
+  /** Full primary gateway URI for the content */
   uri: string;
+  /** Full list of gateway URIs for the content (fallbacks included) */
+  uris: string[];
   /** Optional metadata associated with the pinned object */
   metadata: Record<string, unknown>;
   /** Storage backend identifier */
@@ -26,6 +28,7 @@ export function serializeIpfsResult(
   return {
     cid,
     uri: gatewayUrl(cid),
+    uris: gatewayUrls(cid),
     metadata,
     storageProvider,
   };

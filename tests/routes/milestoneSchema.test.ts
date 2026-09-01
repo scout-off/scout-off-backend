@@ -9,7 +9,7 @@ async function getValidatorToken(): Promise<string> {
   tx.sign(kp);
   const tokenRes = await request(app)
     .post('/auth/token')
-    .send({ transaction: tx.toXDR(), role: 'validator' });
+    .send({ transaction: tx.toXdr(), role: 'validator' });
   return tokenRes.body.token;
 }
 
@@ -51,7 +51,7 @@ describe('POST /api/validators/milestone schema validation (#29)', () => {
     const res = await request(app)
       .post('/api/validators/milestone')
       .set('Authorization', `Bearer ${token}`)
-      .send({ playerId: 'player1', milestoneType: 'performance', evidenceUri: 'ipfs://cid123' });
+      .send({ playerId: 'player1', milestoneType: 'performance', evidenceUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG' });
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
   });
@@ -63,7 +63,7 @@ describe('POST /api/validators/milestone schema validation (#29)', () => {
       .send({
         playerId: 'player1',
         milestoneType: 'trial_offer',
-        evidenceUri: 'ipfs://cid456',
+        evidenceUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
         notes: 'Exceptional performance',
         validatorComment: 'Approved by coach',
       });

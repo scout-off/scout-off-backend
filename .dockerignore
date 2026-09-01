@@ -1,0 +1,34 @@
+# Dependencies — reinstalled inside the image
+node_modules/
+
+# Test files
+tests/
+__mocks__/
+coverage/
+
+# Build artifacts already copied by the builder stage
+dist/
+
+# Environment secrets — never bake these into the image
+.env
+.env.*
+!.env.example
+
+# Git and CI
+.git/
+.github/
+.claude/
+
+# Dev tooling
+.eslintrc.cjs
+
+# Docs and scripts (not needed at runtime)
+docs/
+scripts/
+contracts/
+*.md
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
