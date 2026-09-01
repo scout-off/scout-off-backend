@@ -769,4 +769,18 @@ router.get('/webhooks/:id/deliveries', requireRole('admin'), getWebhookDeliverie
  */
 router.get('/webhooks/:id/summary', requireRole('admin'), getWebhookDeliverySummaryEndpoint);
 
+/**
+ * POST /api/admin/fees/config
+ *
+ * Propose and execute an update_platform_fee multi-sig action.
+ * Updates the on-chain platform fee in basis points (0–10000).
+ *
+ * @body actionId {string} - Unique multi-sig action identifier
+ * @body newFeeBps {number} - New fee in basis points (0–10000)
+ * @response 202 { success: true, data: { actionId, transactionId, newFeeBps } }
+ * @response 400 { success: false, error: string }
+ * @auth Bearer (admin role required)
+ */
+router.post('/fees/config', requireRole('admin'), updatePlatformFeeController);
+
 export default router;

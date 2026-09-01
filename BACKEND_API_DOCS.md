@@ -657,6 +657,42 @@ curl "http://localhost:4000/api/scouts/${WALLET}/saved-searches/7/run?page=2&pag
 
 ---
 
+#### `POST /api/admin/fees/config`
+
+Propose and execute an `update_platform_fee` multi-sig action to update the on-chain platform fee. **Requires Bearer auth (admin role).**
+
+**Request body**
+```json
+{
+  "actionId": "action-uuid-001",
+  "newFeeBps": 300
+}
+```
+
+| Field       | Type    | Required | Description                            |
+|-------------|---------|----------|----------------------------------------|
+| `actionId`  | string  | ✅       | Unique identifier for this action      |
+| `newFeeBps` | integer | ✅       | New fee in basis points (0–10000)      |
+
+**Response `202`**
+```json
+{
+  "success": true,
+  "data": {
+    "actionId": "action-uuid-001",
+    "transactionId": "stub-fee-txid-...",
+    "newFeeBps": 300
+  }
+}
+```
+
+**Error `400`** — out-of-range value
+```json
+{ "success": false, "error": "newFeeBps must be between 0 and 10000" }
+```
+
+---
+
 ## Stubbed Routes
 
 The following routes currently return data sourced entirely from indexed on-chain events and have no corresponding write/mutation endpoint in the backend:
