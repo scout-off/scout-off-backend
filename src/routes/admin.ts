@@ -234,6 +234,21 @@ router.route('/validators/register')
   .all(methodNotAllowed(['POST']));
 
 /**
+ * POST /api/admin/validators/bulk-import
+ *
+ * Atomically import a batch of validators as a single multi-sig action.
+ * Returns a per-wallet manifest; partial failures return 207 for targeted retry.
+ *
+ * @body actionId {string} - Unique identifier for this multi-sig action
+ * @body wallets {string[]} - Array of Stellar public keys (max 100)
+ * @response 202 { success: true, data: { actionId, manifest } }
+ * @response 207 { success: false, error, data: { manifest } } - Partial failure
+ * @response 400 { success: false, error: string } - Validation error
+ * @auth Bearer (admin role required)
+ */
+router.post('/validators/bulk-import', requireRole('admin'), bulkValidatorImport);
+
+/**
  * POST /api/admin/validators/revoke
  *
  * Submits a request to revoke an existing validator on the Soroban contract.
