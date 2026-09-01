@@ -113,6 +113,8 @@ export const milestoneSchema = z.object({
   evidenceUri: z.string().min(1).refine(isValidMetadataUri, URI_VALIDATION_ERROR),
 }).strict();
 
+export const MAX_PAGE_SIZE = 100;
+
 export const pendingQuerySchema = z.object({
   region: z.string().optional(),
   position: z.string().optional(),
