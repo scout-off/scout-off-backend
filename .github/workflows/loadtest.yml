@@ -1,0 +1,114 @@
+name: Load Test (Nightly)
+
+on:
+  # Run every night at 02:00 UTC against the staging environment.
+  schedule:
+    - cron: '0 2 * * *'
+
+  # Allow manual dispatch from the GitHub Actions UI — useful for
+  # pre-release performance checks.
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Run a single scenario (leave blank to run all 6)'
+        required: false
+        default: ''
+      base_url:
+        description: 'Base URL of the target server'
+        required: false
+        default: 'https://staging.scoutoff.io'
+
+# Never run two load tests at the same time — concurrent runs would distort
+# results and could overwhelm the staging environment.
+concurrency:
+  group: loadtest
+  cancel-in-progress: false
+
+jobs:
+  k6-load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Resolve target URL: manual-dispatch input takes priority over the
+      # default staging URL.  The nightly schedule always hits staging.
+      K6_BASE_URL: ${{ github.event.inputs.base_url || 'https://staging.scoutoff.io' }}
+      K6_SCENARIO: ${{ github.event.inputs.scenario || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Install k6 ───────────────────────────────────────────────────────
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \
+            https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq
+          sudo apt-get install -y k6
+
+      # ── Health check — fail fast if staging is down ───────────────────────
+      - name: Wait for staging to be healthy
+        run: |
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "${K6_BASE_URL}/health" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Staging is healthy (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i: status=${STATUS}, waiting 15s..."
+            sleep 15
+          done
+          echo "ERROR: Staging did not become healthy within 150s"
+          exit 1
+
+      # ── Run the k6 suite ─────────────────────────────────────────────────
+      # Pre-generated test JWTs are stored as repository secrets.
+      # They are short-lived (1 h) tokens signed with the staging JWT_SECRET
+      # — generate new ones when they expire:
+      #   node scripts/generate-test-jwt.js --role admin  --secret <JWT_SECRET>
+      #   node scripts/generate-test-jwt.js --role scout  --secret <JWT_SECRET>
+      - name: Run k6 suite
+        env:
+          TEST_ADMIN_JWT: ${{ secrets.STAGING_ADMIN_JWT }}
+          TEST_SCOUT_JWT: ${{ secrets.STAGING_SCOUT_JWT }}
+          K6_PLAYER_ID:   ${{ vars.STAGING_SEED_PLAYER_ID || 'seed-player-001' }}
+        run: |
+          k6 run \
+            --env K6_BASE_URL="${K6_BASE_URL}" \
+            --env K6_SCENARIO="${K6_SCENARIO}" \
+            --env TEST_ADMIN_JWT="${TEST_ADMIN_JWT}" \
+            --env TEST_SCOUT_JWT="${TEST_SCOUT_JWT}" \
+            --env K6_PLAYER_ID="${K6_PLAYER_ID}" \
+            --out json=k6-results.json \
+            scripts/k6/suite.js
+
+      # k6 exits with code 99 on threshold breach — the step above will fail
+      # automatically, marking the workflow as failed.
+
+      # ── Upload results artefact ───────────────────────────────────────────
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results-${{ github.run_id }}
+          path: k6-results.json
+          retention-days: 30
+
+      # ── Summary comment on threshold breach ──────────────────────────────
+      - name: Print threshold summary
+        if: always()
+        run: |
+          echo "=== k6 results summary ==="
+          if [ -f k6-results.json ]; then
+            # Print the last 40 lines which contain the k6 summary table.
+            tail -n 40 k6-results.json || true
+          else
+            echo "(no results file — k6 may have failed before writing output)"
+          fi

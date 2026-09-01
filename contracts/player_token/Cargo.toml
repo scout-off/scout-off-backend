@@ -1,0 +1,15 @@
+[package]
+name = "player-token"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+scout-off-shared = { path = "../shared" }
+
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+proptest = { workspace = true }

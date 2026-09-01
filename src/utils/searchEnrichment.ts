@@ -1,4 +1,5 @@
 import { ProgressLevel } from '../types';
+import { normalizePositionOrFallback } from './positionAliases';
 
 /** UI-friendly label for each progress tier */
 const PROGRESS_LABELS: Record<number, string> = {
@@ -37,4 +38,19 @@ export function enrichPlayerResult(
     progressLabel: PROGRESS_LABELS[level] ?? 'Unknown',
     verificationBadge: VERIFICATION_BADGES[level] ?? 'none',
   };
+}
+
+/**
+ * Normalise a raw position query string as part of query enrichment.
+ *
+ * Converts abbreviated or aliased position terms (case-insensitive) to their
+ * canonical stored values (e.g. 'ST' -> 'forward', 'CM' -> 'midfielder').
+ * Unknown positions are returned unchanged so callers never receive an error.
+ *
+ * @param position - Raw position string from a query param or request body.
+ * @returns The canonical position name, or the original trimmed string if no
+ *          alias mapping exists.
+ */
+export function normalizePositionQuery(position: string): string {
+  return normalizePositionOrFallback(position);
 }

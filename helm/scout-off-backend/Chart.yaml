@@ -1,0 +1,19 @@
+apiVersion: v2
+name: scout-off-backend
+description: >
+  Production-grade Helm chart for the ScoutOff backend API.
+  Deploys the Express/Node.js service with HPA, PodDisruptionBudget,
+  liveness/readiness probes, Kubernetes Secret references for sensitive
+  env vars, and optional TLS Ingress.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - scoutoff
+  - nodejs
+  - express
+  - stellar
+home: https://github.com/scoutoff/scout-off-backend
+maintainers:
+  - name: ScoutOff Engineering
+    email: engineering@scoutoff.io

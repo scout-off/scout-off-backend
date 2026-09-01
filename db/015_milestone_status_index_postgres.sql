@@ -1,0 +1,11 @@
+-- Migration 015: composite index for filtered milestone queries (PostgreSQL)
+--
+-- The SQLite version (015_milestone_status_index.sql) indexes
+-- events (type, created_at). Under PostgreSQL the events table (owned by
+-- the event-indexing subsystem, out of scope here — see the identical note
+-- in 010_admin_indexes_postgres.sql) has no created_at column, so that
+-- index can't be replicated as-is. Index on (type, ledger) instead — ledger
+-- is monotonically increasing and closely correlated with created_at, giving
+-- the same equality-then-range shape the SQLite index provides for the
+-- ?status=/?sort= filtered milestone query.
+CREATE INDEX IF NOT EXISTS idx_events_type_ledger ON events (type, ledger);

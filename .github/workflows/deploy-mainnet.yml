@@ -1,0 +1,340 @@
+# Deploy ScoutOff backend to mainnet.
+#
+# Triggers:
+#   • Push to main with a commit message that starts with "[deploy-mainnet]"
+#   • Manual workflow_dispatch trigger (with optional override inputs)
+#
+# Required GitHub Environment: mainnet
+# Configure at Settings → Environments → mainnet
+#
+# Secrets (scoped to the mainnet environment):
+#   MAINNET_HOST              — mainnet server hostname or IP
+#   MAINNET_SSH_USER          — SSH user for deployment
+#   MAINNET_SSH_PRIVATE_KEY   — private key for SSH/SCP (PEM)
+#   MAINNET_DEPLOY_PATH       — absolute path on the server (e.g. /var/www/scout-off-mainnet)
+#   MAINNET_URL               — public mainnet base URL (e.g. https://api.scoutoff.io)
+#   WEBHOOK_SECRET_ENCRYPTION_KEY — key used by reencrypt-webhook-secrets.js
+#   NOTIFY_WEBHOOK_URL        — (optional) Slack/Discord webhook for deploy notifications
+#
+# Runtime env vars (CONTRACT_ID, JWT_SECRET, etc.) live in the server .env file;
+# see DEPLOYMENT.md.
+
+name: Deploy Mainnet
+
+on:
+  push:
+    branches: [main]
+    # Only trigger when the commit message starts with the deploy prefix
+    # This filter is implemented in the pre-deploy-check job below because
+    # GitHub Actions does not support regex commit-message filters natively.
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deploy'
+        required: false
+        default: 'Manual mainnet deployment'
+
+concurrency:
+  group: deploy-mainnet
+  cancel-in-progress: false   # Never cancel a mainnet deploy mid-flight
+
+permissions:
+  contents: read
+
+jobs:
+  # ─── Gate: only proceed on [deploy-mainnet] prefix or workflow_dispatch ──────
+  check-trigger:
+    name: Check deploy trigger
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      should_deploy: ${{ steps.gate.outputs.should_deploy }}
+    steps:
+      - name: Evaluate trigger
+        id: gate
+        env:
+          # Passed via env rather than interpolated directly into the script
+          # below — a commit message is attacker-influenceable content, and
+          # ${{ }} substitution into `run:` is a literal text splice that
+          # would let shell metacharacters in the message inject commands.
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          DISPATCH_REASON: ${{ inputs.reason }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            echo "Triggered manually: ${DISPATCH_REASON}"
+          elif echo "${COMMIT_MESSAGE}" | grep -q '^\[deploy-mainnet\]'; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            echo "Commit message has [deploy-mainnet] prefix — proceeding."
+          else
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Commit message does not start with [deploy-mainnet] — skipping mainnet deploy."
+          fi
+
+  # ─── Pre-deploy checks ────────────────────────────────────────────────────────
+  pre-deploy:
+    name: Pre-deploy checks (test / lint / audit)
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate env example
+        run: node scripts/validate-env.js
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+        env:
+          CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
+          JWT_SECRET: test-secret
+          DB_PATH: ':memory:'
+
+      - name: Security audit
+        # Fail on high-severity vulnerabilities; moderate are logged but not blocking
+        run: npm audit --audit-level=high
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify dist/index.js produced
+        run: |
+          test -f dist/index.js || (echo "ERROR: dist/index.js not found after build" && exit 1)
+
+      - name: Write build commit
+        run: echo "${{ github.sha }}" > BUILD_COMMIT
+
+      - name: Package release
+        run: |
+          # Write the archive outside the directory being archived. Even with
+          # --exclude=release.tar.gz, tar still stats the containing directory
+          # (`.`) as it walks it — creating the output file inside that same
+          # directory changes its mtime mid-walk and tar unconditionally exits
+          # 1 for "file changed as we read it" (--warning=KEYWORD only
+          # silences the message, it doesn't stop the exit). Writing to
+          # RUNNER_TEMP sidesteps the self-reference entirely.
+          tar -czf "$RUNNER_TEMP/release.tar.gz" \
+            --exclude=node_modules \
+            --exclude=.git \
+            --exclude=coverage \
+            .
+          mv "$RUNNER_TEMP/release.tar.gz" release.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mainnet-release
+          path: release.tar.gz
+          retention-days: 1
+
+  # ─── Deploy ───────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to mainnet
+    needs: pre-deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: mainnet
+      # environment.url does not support the secrets context directly, so
+      # resolve it through a step output instead (steps.<id>.outputs.* is
+      # allowed here).
+      url: ${{ steps.set-url.outputs.url }}
+    steps:
+      - name: Resolve mainnet URL
+        id: set-url
+        run: echo "url=${{ secrets.MAINNET_URL }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mainnet-release
+
+      - name: Upload release to mainnet server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.MAINNET_HOST }}
+          username: ${{ secrets.MAINNET_SSH_USER }}
+          key: ${{ secrets.MAINNET_SSH_PRIVATE_KEY }}
+          source: release.tar.gz
+          target: ${{ secrets.MAINNET_DEPLOY_PATH }}
+
+      - name: Extract and deploy (blue-green)
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_PATH: ${{ secrets.MAINNET_DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.MAINNET_HOST }}
+          username: ${{ secrets.MAINNET_SSH_USER }}
+          key: ${{ secrets.MAINNET_SSH_PRIVATE_KEY }}
+          envs: DEPLOY_PATH
+          script: |
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            tar xzf release.tar.gz
+            rm -f release.tar.gz
+            chmod +x scripts/deploy-staging.sh
+            bash scripts/deploy-staging.sh "$DEPLOY_PATH" deploy mainnet
+
+  # ─── Health gate ──────────────────────────────────────────────────────────────
+  health-gate:
+    name: Health gate (readiness probe)
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: mainnet
+    steps:
+      - name: Poll /health/readiness (up to 2 minutes)
+        env:
+          MAINNET_URL: ${{ secrets.MAINNET_URL }}
+        run: |
+          READY_URL="${MAINNET_URL%/}/health/readiness"
+          echo "Polling readiness: ${READY_URL}"
+          MAX_ATTEMPTS=24   # 24 × 5s = 120s = 2 minutes
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$READY_URL" || echo "000")
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "Readiness check passed on attempt ${attempt} (HTTP ${HTTP_STATUS})"
+              exit 0
+            fi
+            echo "Attempt ${attempt}/${MAX_ATTEMPTS}: HTTP ${HTTP_STATUS} — retrying in 5s..."
+            sleep 5
+          done
+          echo "Health gate FAILED: /health/readiness did not return 200 within 2 minutes."
+          exit 1
+
+      - name: Rollback on readiness failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_PATH: ${{ secrets.MAINNET_DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.MAINNET_HOST }}
+          username: ${{ secrets.MAINNET_SSH_USER }}
+          key: ${{ secrets.MAINNET_SSH_PRIVATE_KEY }}
+          envs: DEPLOY_PATH
+          script: |
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            echo "Health gate failed — rolling back mainnet deployment..."
+            bash scripts/deploy-staging.sh "$DEPLOY_PATH" rollback mainnet
+            echo "Rollback complete."
+
+  # ─── Secrets rotation (post-deploy) ──────────────────────────────────────────
+  rotate-secrets:
+    name: Rotate webhook secrets
+    needs: health-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: mainnet
+    steps:
+      - name: Re-encrypt webhook secrets on server
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_PATH: ${{ secrets.MAINNET_DEPLOY_PATH }}
+          WEBHOOK_SECRET_ENCRYPTION_KEY: ${{ secrets.WEBHOOK_SECRET_ENCRYPTION_KEY }}
+        with:
+          host: ${{ secrets.MAINNET_HOST }}
+          username: ${{ secrets.MAINNET_SSH_USER }}
+          key: ${{ secrets.MAINNET_SSH_PRIVATE_KEY }}
+          envs: DEPLOY_PATH,WEBHOOK_SECRET_ENCRYPTION_KEY
+          script: |
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            echo "Running webhook secret re-encryption..."
+            WEBHOOK_SECRET_ENCRYPTION_KEY="$WEBHOOK_SECRET_ENCRYPTION_KEY" \
+              node scripts/reencrypt-webhook-secrets.js
+            echo "Webhook secret re-encryption complete."
+
+  # ─── Notify success ───────────────────────────────────────────────────────────
+  notify-success:
+    name: Notify deployment success
+    needs: [health-gate, rotate-secrets]
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send success notification
+        env:
+          WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          # Passed via env and JSON-encoded with jq below rather than spliced
+          # directly into the payload string — a commit message is
+          # attacker-influenceable content, and both raw ${{ }} substitution
+          # into `run:` and unescaped interpolation into a JSON string are
+          # injection risks.
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          REPO_AT_SHA: ${{ github.repository }}@${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "${WEBHOOK_URL}" ]; then
+            echo "NOTIFY_WEBHOOK_URL not configured; skipping notification"
+            exit 0
+          fi
+          text="✅ Mainnet deployment *succeeded* for ${REPO_AT_SHA}
+          Commit: ${COMMIT_MESSAGE}
+          Run: ${RUN_URL}"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
+          curl -fsSL -X POST "${WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -d "${payload}"
+
+  # ─── Notify failure ───────────────────────────────────────────────────────────
+  notify-failure:
+    name: Notify deployment failure
+    needs: [pre-deploy, deploy, health-gate, rotate-secrets]
+    if: >-
+      always() && (
+        needs.pre-deploy.result == 'failure' ||
+        needs.deploy.result == 'failure' ||
+        needs.health-gate.result == 'failure' ||
+        needs.rotate-secrets.result == 'failure'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send failure notification
+        env:
+          WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          # Passed via env and JSON-encoded with jq below rather than spliced
+          # directly into the payload string — a commit message is
+          # attacker-influenceable content, and both raw ${{ }} substitution
+          # into `run:` and unescaped interpolation into a JSON string are
+          # injection risks.
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          REPO_AT_SHA: ${{ github.repository }}@${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "${WEBHOOK_URL}" ]; then
+            echo "NOTIFY_WEBHOOK_URL not configured; skipping notification"
+            exit 0
+          fi
+          # Determine which stage failed
+          FAILED_STAGE="unknown"
+          if [ "${{ needs.pre-deploy.result }}" = "failure" ]; then
+            FAILED_STAGE="pre-deploy checks (test/lint/audit)"
+          elif [ "${{ needs.deploy.result }}" = "failure" ]; then
+            FAILED_STAGE="deployment"
+          elif [ "${{ needs.health-gate.result }}" = "failure" ]; then
+            FAILED_STAGE="health gate (rollback triggered)"
+          elif [ "${{ needs.rotate-secrets.result }}" = "failure" ]; then
+            FAILED_STAGE="secrets rotation"
+          fi
+          text="🔴 Mainnet deployment *FAILED* at stage: ${FAILED_STAGE}
+          Repository: ${REPO_AT_SHA}
+          Commit: ${COMMIT_MESSAGE}
+          Run: ${RUN_URL}"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
+          curl -fsSL -X POST "${WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -d "${payload}"

@@ -25,7 +25,7 @@ const adminQuerySchema = z.object({
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeBodyReq(body: unknown) {
-  return { body } as Request;
+  return { body, headers: { 'content-type': 'application/json' } } as unknown as Request;
 }
 
 function makeQueryReq(query: unknown) {
@@ -98,6 +98,43 @@ describe('validateBody — player registerSchema', () => {
     expect(jsonArg.success).toBe(false);
     expect(typeof jsonArg.error).toBe('string');
     expect(jsonArg.error.length).toBeGreaterThan(0);
+  });
+
+  it('returns 415 when a body is sent with a missing Content-Type, before Zod validation runs', () => {
+    const req = {
+      body: { wallet: 'G'.repeat(56), position: 'striker', region: 'Africa', metadata: {} },
+      headers: { 'content-length': '123' },
+    } as unknown as Request;
+    const res = makeRes();
+    const next = jest.fn() as NextFunction;
+    middleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(415);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('returns 415 when a body is sent with a non-JSON Content-Type', () => {
+    const req = {
+      body: { wallet: 'G'.repeat(56), position: 'striker', region: 'Africa', metadata: {} },
+      headers: { 'content-length': '123', 'content-type': 'text/plain' },
+    } as unknown as Request;
+    const res = makeRes();
+    const next = jest.fn() as NextFunction;
+    middleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(415);
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0];
+    expect(jsonArg.error).toBe('Content-Type must be application/json');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('does not require a Content-Type when the request carries no body', () => {
+    // Some JSON-validated routes accept a body-less request (e.g. an all-optional
+    // schema) — the 415 check must not block those.
+    const req = { body: undefined, headers: {} } as unknown as Request;
+    const res = makeRes();
+    const next = jest.fn() as NextFunction;
+    middleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(400); // still fails Zod (wallet required), but not 415
+    expect(next).not.toHaveBeenCalled();
   });
 });
 

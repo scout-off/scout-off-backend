@@ -1,102 +1,96 @@
-/**
- * Generic circuit breaker.
- *
- * States:
- *   closed   — normal operation, calls pass through
- *   open     — fast-fail, calls rejected immediately
- *   half-open — one probe call allowed; success closes, failure re-opens
- *
- * Configuration via constructor options or environment variables:
- *   CIRCUIT_BREAKER_FAILURE_THRESHOLD  (default: 5)
- *   CIRCUIT_BREAKER_RESET_TIMEOUT_MS   (default: 30000)
- */
+export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
-export type CircuitState = 'closed' | 'open' | 'half-open';
-
-export interface CircuitBreakerOptions {
-  /** Number of consecutive failures before opening. Default: 5 */
-  failureThreshold?: number;
-  /** Milliseconds to wait before moving from open → half-open. Default: 30000 */
-  resetTimeoutMs?: number;
-  /** Human-readable name used in error messages and logs. */
-  name?: string;
+export class CircuitBreakerError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CircuitBreakerError';
+  }
 }
 
-export class CircuitBreakerOpenError extends Error {
-  constructor(name: string) {
-    super(`Circuit breaker open: ${name} is temporarily unavailable`);
-    this.name = 'CircuitBreakerOpenError';
-  }
+export interface CircuitBreakerConfig {
+  failureThreshold: number;
+  resetTimeoutMs: number;
+  maxRetries: number;
+  baseBackoffMs: number;
 }
 
 export class CircuitBreaker {
-  private state: CircuitState = 'closed';
-  private failures = 0;
-  private lastOpenedAt: number | null = null;
+  public state: CircuitBreakerState = 'CLOSED';
+  private failureCount = 0;
+  private nextAttemptAt = 0;
+  private config: CircuitBreakerConfig;
 
-  private readonly failureThreshold: number;
-  private readonly resetTimeoutMs: number;
-  readonly name: string;
-
-  constructor(options: CircuitBreakerOptions = {}) {
-    this.name = options.name ?? 'unknown';
-    this.failureThreshold =
-      options.failureThreshold ??
-      parseInt(process.env.CIRCUIT_BREAKER_FAILURE_THRESHOLD ?? '5', 10);
-    this.resetTimeoutMs =
-      options.resetTimeoutMs ??
-      parseInt(process.env.CIRCUIT_BREAKER_RESET_TIMEOUT_MS ?? '30000', 10);
+  constructor(config: Partial<CircuitBreakerConfig> = {}) {
+    this.config = {
+      failureThreshold: 3,
+      resetTimeoutMs: 10000,
+      maxRetries: 3,
+      baseBackoffMs: 1000,
+      ...config,
+    };
   }
 
-  getState(): CircuitState {
-    if (this.state === 'open' && this.lastOpenedAt !== null) {
-      if (Date.now() - this.lastOpenedAt >= this.resetTimeoutMs) {
-        this.state = 'half-open';
-      }
-    }
-    return this.state;
-  }
-
-  /** Execute fn through the breaker. Throws CircuitBreakerOpenError when open. */
   async execute<T>(fn: () => Promise<T>): Promise<T> {
-    const state = this.getState();
-
-    if (state === 'open') {
-      throw new CircuitBreakerOpenError(this.name);
+    if (this.state === 'OPEN') {
+      if (Date.now() >= this.nextAttemptAt) {
+        this.state = 'HALF_OPEN';
+      } else {
+        throw new CircuitBreakerError('ServiceUnavailable: Circuit breaker is OPEN');
+      }
     }
 
     try {
-      const result = await fn();
+      const result = await this.executeWithRetry(fn);
       this.onSuccess();
       return result;
-    } catch (err) {
+    } catch (error) {
       this.onFailure();
-      throw err;
+      throw error;
     }
   }
 
-  isOpen(): boolean {
-    return this.getState() === 'open';
-  }
-
-  private onSuccess(): void {
-    this.failures = 0;
-    this.state = 'closed';
-    this.lastOpenedAt = null;
-  }
-
-  private onFailure(): void {
-    this.failures += 1;
-    if (this.state === 'half-open' || this.failures >= this.failureThreshold) {
-      this.state = 'open';
-      this.lastOpenedAt = Date.now();
+  private async executeWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    let attempt = 0;
+    while (attempt <= this.config.maxRetries) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        if (!this.isRetryable(error) || attempt === this.config.maxRetries) {
+          throw error;
+        }
+        attempt++;
+        // Exponential backoff with jitter
+        const backoff = this.config.baseBackoffMs * Math.pow(2, attempt - 1) + Math.random() * 100;
+        await new Promise((resolve) => setTimeout(resolve, backoff));
+      }
     }
+    throw new Error('Unreachable');
   }
 
-  /** Reset for testing purposes. */
-  reset(): void {
-    this.state = 'closed';
-    this.failures = 0;
-    this.lastOpenedAt = null;
+  private isRetryable(error: any): boolean {
+    const status = error?.response?.status;
+    if (typeof status === 'number') {
+      // 408 Request Timeout and 429 Too Many Requests are retryable
+      if (status === 408 || status === 429) return true;
+      // 4xx errors are generally validation/client errors -> fail fast
+      if (status >= 400 && status < 500) return false;
+    }
+    // Network errors (no response, timeouts) or 5xx server errors are retryable
+    return true;
+  }
+
+  private onSuccess() {
+    this.failureCount = 0;
+    this.state = 'CLOSED';
+  }
+
+  private onFailure() {
+    this.failureCount++;
+    if (this.failureCount >= this.config.failureThreshold) {
+      this.state = 'OPEN';
+      this.nextAttemptAt = Date.now() + this.config.resetTimeoutMs;
+    }
   }
 }
+
+export const stellarBreaker = new CircuitBreaker();

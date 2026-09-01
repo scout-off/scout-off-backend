@@ -1,0 +1,73 @@
+# Nightly / on-demand Soroban sandbox E2E (#1117)
+#
+# Builds & deploys all five contracts on a local quickstart network, then runs
+# the backend E2E suite against the live contracts. Kept separate from the fast
+# unit CI because it is slow and requires Docker + Rust + Stellar CLI.
+
+name: Soroban sandbox E2E
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 05:15 UTC daily
+    - cron: '15 5 * * *'
+
+concurrency:
+  group: soroban-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soroban-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start local Soroban network
+        run: |
+          docker compose -f scripts/soroban-sandbox/docker-compose.yml up -d
+          chmod +x scripts/soroban-sandbox/wait-for-rpc.sh scripts/soroban-sandbox/deploy.sh
+          ./scripts/soroban-sandbox/wait-for-rpc.sh
+
+      - name: Install Rust (wasm32)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSf https://github.com/stellar/stellar-cli/releases/latest/download/stellar-cli-x86_64-unknown-linux-gnu.tar.gz \
+            | sudo tar -xz -C /usr/local/bin stellar || \
+          cargo install --locked stellar-cli --features opt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Deploy and initialize contracts
+        run: |
+          # Register a "local" network profile for the CLI when supported.
+          stellar network add local \
+            --rpc-url http://localhost:8000/soroban/rpc \
+            --network-passphrase "Standalone Network ; February 2017" || true
+          ./scripts/soroban-sandbox/deploy.sh
+
+      - name: Run Soroban E2E suite
+        env:
+          SOROBAN_E2E: '1'
+          JWT_SECRET: ci-jwt-secret-soroban-e2e
+          NODE_ENV: test
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source scripts/soroban-sandbox/.env.contracts
+          set +a
+          npx jest --runInBand --testPathPattern=tests/e2e/soroban
+
+      - name: Dump sandbox logs on failure
+        if: failure()
+        run: docker compose -f scripts/soroban-sandbox/docker-compose.yml logs --tail=200 || true

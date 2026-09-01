@@ -1,0 +1,240 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "scout-off-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "scout-off-backend.labels" . | nindent 4 }}
+spec:
+  # replicas is managed by the HPA when hpa.enabled=true.
+  # We still set it here so `helm template` produces a valid manifest and the
+  # initial rollout starts with at least replicaCount pods.
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "scout-off-backend.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+    {{- if eq .Values.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.strategy.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.strategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "scout-off-backend.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "scout-off-backend.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ include "scout-off-backend.imageTag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          # ── Environment: non-sensitive values from ConfigMap ─────────────────
+          envFrom:
+            - configMapRef:
+                name: {{ include "scout-off-backend.fullname" . }}-config
+          # ── Environment: sensitive values from Secret ────────────────────────
+          # All production-required secrets are injected from the Kubernetes
+          # Secret so they never appear in the ConfigMap, audit logs, or
+          # Helm templates.  Required keys have optional: false (the default);
+          # optional keys that are only used during rotation or specific
+          # feature enablement carry optional: true.
+          #
+          # CONTRACT_ID is kept for backward compatibility with single-contract
+          # deployments; new deployments should set the per-contract IDs.
+          env:
+            # ── Contract IDs ────────────────────────────────────────────────
+            - name: CONTRACT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: CONTRACT_ID
+                  optional: true
+            - name: REGISTER_CONTRACT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: REGISTER_CONTRACT_ID
+                  optional: true
+            - name: PROGRESS_CONTRACT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: PROGRESS_CONTRACT_ID
+                  optional: true
+            - name: SUBSCRIPTION_CONTRACT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: SUBSCRIPTION_CONTRACT_ID
+                  optional: true
+            - name: CONNECTION_CONTRACT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: CONNECTION_CONTRACT_ID
+                  optional: true
+            # ── JWT secrets ────────────────────────────────────────────────
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: JWT_SECRET
+            - name: JWT_SECRET_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: JWT_SECRET_PREVIOUS
+                  optional: true
+            - name: JWT_SECRET_PREVIOUS_UNTIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: JWT_SECRET_PREVIOUS_UNTIL
+                  optional: true
+            # ── SEP-10 server keypair ──────────────────────────────────────
+            # Required in production: every backend instance must share the
+            # same keypair so that a SEP-10 challenge issued by one pod can
+            # be verified by any other pod behind the load balancer.
+            # Without it, cross-instance auth failures occur at rate (N-1)/N.
+            - name: SEP10_SERVER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: SEP10_SERVER_SECRET
+            # ── Platform signing key ───────────────────────────────────────
+            # Required in production: used by src/utils/contract.ts to sign
+            # on-chain transactions. config.ts throws at startup if absent.
+            - name: PLATFORM_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: PLATFORM_SECRET_KEY
+            # ── API-key lookup pepper ──────────────────────────────────────
+            # Required in production: must be identical across every instance
+            # so X-API-Key auth can find the right row via lookup_hash (#1033).
+            - name: API_KEY_LOOKUP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: API_KEY_LOOKUP_SECRET
+            # ── Admin wallet(s) ────────────────────────────────────────────
+            # Required in production: config.ts throws at startup if absent.
+            # Use ADMIN_WALLETS (comma-separated) for multi-admin deployments;
+            # ADMIN_WALLET is the single-address backward-compat form.
+            - name: ADMIN_WALLET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: ADMIN_WALLET
+                  optional: true
+            - name: ADMIN_WALLETS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: ADMIN_WALLETS
+                  optional: true
+            # ── IPFS / Pinata credentials ──────────────────────────────────
+            # Required in production: config.ts (via ipfs.ts) throws at
+            # startup when NODE_ENV=production and these are absent.
+            - name: PINATA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: PINATA_API_KEY
+            - name: PINATA_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: PINATA_SECRET
+            # ── Database connection URL (PostgreSQL) ───────────────────────
+            # Required when DB_DRIVER=postgres. Contains username + password
+            # so it belongs in the Secret, not the ConfigMap.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: DATABASE_URL
+                  optional: true
+            # ── Webhook encryption key ─────────────────────────────────────
+            # Required in production when any webhook subscriptions exist.
+            # 32-byte hex key used to encrypt webhook_subscriptions.secret
+            # at rest. Generate with: openssl rand -hex 32
+            - name: WEBHOOK_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: WEBHOOK_SECRET_ENCRYPTION_KEY
+                  optional: true
+            # ── Legacy single-subscriber webhook HMAC secret ───────────────
+            # Optional. Only needed when WEBHOOK_ENABLED=true and you use
+            # the legacy WEBHOOK_URL single-subscriber mode.
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: WEBHOOK_SECRET
+                  optional: true
+            # ── Redis connection URL ───────────────────────────────────────
+            # Optional. Contains credentials, so it belongs in the Secret.
+            # Falls back to in-memory caching when unset.
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: REDIS_URL
+                  optional: true
+          # ── Liveness probe ────────────────────────────────────────────────────
+          # Restarts the container if this fails failureThreshold times in a row.
+          # /health/liveness is a lightweight check with no external dependencies.
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          # ── Readiness probe ────────────────────────────────────────────────────
+          # Removes the pod from the Service endpoint slice until it passes.
+          # /health/readiness checks DB writability and IPFS connectivity.
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          # ── Resources ──────────────────────────────────────────────────────────
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
