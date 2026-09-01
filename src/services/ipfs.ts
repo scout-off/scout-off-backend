@@ -325,6 +325,7 @@ export async function getCid(uriOrCid: string): Promise<string> {
  * Health check for the Pinata/IPFS dependency.
  * Resolves immediately (with a warning) when credentials are absent in non-production.
  * Rejects with a clear error in production without credentials.
+ * Also reports breaker state — if open, reports unavailable immediately.
  */
 export async function checkHealth(): Promise<void> {
   const start = Date.now();
