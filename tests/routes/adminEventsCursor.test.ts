@@ -87,7 +87,9 @@ jest.mock('../../src/services/stellar', () => ({ queryMilestones: jest.fn().mock
 jest.mock('../../src/services/ipfs', () => ({ pinJson: jest.fn(), checkHealth: jest.fn().mockResolvedValue(undefined), gatewayUrl: jest.fn() }));
 jest.mock('../../src/services/webhooks', () => ({ dispatchEventWebhook: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../../src/services/tokenBlocklist', () => ({ revokeToken: jest.fn(), isTokenRevoked: jest.fn().mockReturnValue(false) }));
-jest.mock('../../src/services/cache', () => ({ cacheGet: jest.fn().mockResolvedValue(null), cacheSet: jest.fn().mockResolvedValue(undefined), invalidatePlayerCache: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../../src/services/cache', () => ({
+  getPlayerListLastModified: jest.fn(() => 0),
+  __setPlayerListLastModifiedForTests: jest.fn(), cacheGet: jest.fn().mockResolvedValue(null), cacheSet: jest.fn().mockResolvedValue(undefined), invalidatePlayerCache: jest.fn().mockResolvedValue(undefined) }));
 
 describe('GET /api/admin/events — keyset cursor pagination (#1140)', () => {
   it('returns first page with nextCursor when more rows exist', async () => {

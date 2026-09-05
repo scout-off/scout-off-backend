@@ -18,6 +18,8 @@ jest.mock('../../src/services/ipfs', () => ({
 }));
 
 jest.mock('../../src/services/cache', () => ({
+  getPlayerListLastModified: jest.fn(() => 0),
+  __setPlayerListLastModifiedForTests: jest.fn(),
   invalidatePlayerCache: jest.fn().mockResolvedValue(undefined),
 }));
 

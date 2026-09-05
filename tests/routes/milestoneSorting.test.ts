@@ -86,6 +86,8 @@ jest.mock('../../src/services/webhooks', () => ({
 }));
 
 jest.mock('../../src/services/cache', () => ({
+  getPlayerListLastModified: jest.fn(() => 0),
+  __setPlayerListLastModifiedForTests: jest.fn(),
   invalidatePlayerCache: jest.fn(),
 }));
 

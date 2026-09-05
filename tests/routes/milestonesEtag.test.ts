@@ -72,6 +72,8 @@ jest.mock('../../src/services/webhooks', () => ({
   dispatchEventWebhook: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../src/services/cache', () => ({
+  getPlayerListLastModified: jest.fn(() => 0),
+  __setPlayerListLastModifiedForTests: jest.fn(),
   cacheGet: jest.fn().mockResolvedValue(null),
   cacheSet: jest.fn().mockResolvedValue(undefined),
   invalidatePlayerCache: jest.fn().mockResolvedValue(undefined),
