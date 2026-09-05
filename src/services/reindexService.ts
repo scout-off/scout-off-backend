@@ -111,6 +111,10 @@ export interface ReindexState {
   errorMessage: string | null;
   /** Current operating mode — updated on each mode transition. */
   mode: IndexerMode;
+  /** Admin wallet that requested cancellation, if the job was cancelled. */
+  cancelledBy?: string;
+  /** Last ledger processed before the job completed or was cancelled. */
+  lastProcessedLedger?: number;
 }
 
 const initialState = (): ReindexState => ({

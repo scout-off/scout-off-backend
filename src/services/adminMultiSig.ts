@@ -25,6 +25,7 @@ import {
   withdrawFees as stellarWithdrawFees,
   registerValidatorOnChain,
   revokeValidatorOnChain,
+  updatePlatformFee as stellarUpdatePlatformFee,
   type FeeWithdrawalResult,
   type ContractActionResult,
 } from './stellar';
@@ -53,12 +54,31 @@ export interface ApprovalResult {
 export interface ExecutionResult {
   success: boolean;
   transactionId?: string;
+  newFeeBps?: number;
   error?: string;
   errorCode?: string;
 }
 
+/** Per-wallet outcome for a bulk_validator_import action. */
+export interface BulkImportManifestEntry {
+  wallet: string;
+  success: boolean;
+  transactionId?: string;
+  error?: string;
+}
+
+export interface AdminActionResult {
+  actionId: string;
+  type: AdminActionType;
+  success: boolean;
+  transactionId?: string;
+  newFeeBps?: number;
+  manifest?: BulkImportManifestEntry[];
+  error?: string;
+}
+
 // ─── Execute the privileged operation for a specific action type ──────────────
-async function executeAdminAction(
+async function runAdminActionInternal(
   actionType: AdminActionType,
   payload: Record<string, unknown>,
   proposer: string,
@@ -155,9 +175,12 @@ async function executeAdminAction(
       }
 
       case 'update_platform_fee': {
-        // This would require a stellar contract function that doesn't exist yet
-        logger.warn(`[multisig] update_platform_fee not yet implemented in stellar service`);
-        return { success: false, error: 'update_platform_fee not yet implemented', errorCode: 'NOT_IMPLEMENTED' };
+        const newFeeBps = Number(payload.newFeeBps);
+        if (!Number.isInteger(newFeeBps) || newFeeBps < 0 || newFeeBps > 10000) {
+          return { success: false, error: 'newFeeBps must be an integer between 0 and 10000', errorCode: 'INVALID_PAYLOAD' };
+        }
+        const result = await stellarUpdatePlatformFee(newFeeBps);
+        return { success: true, transactionId: result.transactionId, newFeeBps: result.newFeeBps };
       }
 
       default: {
@@ -179,6 +202,79 @@ async function executeAdminAction(
       errorCode: (err as NodeJS.ErrnoException)?.code ?? 'EXECUTION_FAILED',
     };
   }
+}
+
+// ─── Direct action execution (client-supplied actionId) ──────────────────────
+//
+// Used by admin endpoints that propose *and* execute an action in one call
+// (bulk validator import #1134, update platform fee #1133). The privileged
+// operation runs immediately; the caller-supplied actionId is echoed back for
+// audit correlation and, for bulk imports, a per-wallet manifest is returned so
+// a partial failure can be retried for exactly the wallets that failed.
+export async function executeAdminAction(
+  actionId: string,
+  actionType: AdminActionType,
+  payload: Record<string, unknown>,
+  proposer: string,
+): Promise<AdminActionResult> {
+  logAuditEvent({
+    action: `${actionType}_proposed`,
+    adminWallet: proposer,
+    queryParams: { actionId, actionType, outcome: 'direct_execute' },
+    timestamp: new Date().toISOString(),
+  }).catch(() => {});
+
+  if (actionType === 'bulk_validator_import') {
+    const wallets = Array.isArray(payload.wallets) ? (payload.wallets as string[]) : [];
+    const manifest: BulkImportManifestEntry[] = [];
+
+    for (const wallet of wallets) {
+      const result = await runAdminActionInternal('bulk_validator_import', { wallet }, proposer);
+      manifest.push(
+        result.success
+          ? { wallet, success: true, transactionId: result.transactionId }
+          : { wallet, success: false, error: result.error },
+      );
+    }
+
+    const failed = manifest.filter((m) => !m.success).length;
+    const success = failed === 0;
+
+    logAuditEvent({
+      action: success ? 'bulk_validator_import_executed' : 'bulk_validator_import_execution_failed',
+      adminWallet: proposer,
+      queryParams: { actionId, total: wallets.length, failed },
+      timestamp: new Date().toISOString(),
+    }).catch(() => {});
+
+    return {
+      actionId,
+      type: actionType,
+      success,
+      manifest,
+      error: success
+        ? undefined
+        : `Partial import: ${failed} of ${wallets.length} wallets failed. Retry using the manifest.`,
+    };
+  }
+
+  const result = await runAdminActionInternal(actionType, payload, proposer);
+
+  logAuditEvent({
+    action: result.success ? `${actionType}_executed` : `${actionType}_execution_failed`,
+    adminWallet: proposer,
+    queryParams: { actionId, actionType, transactionId: result.transactionId, error: result.error },
+    timestamp: new Date().toISOString(),
+  }).catch(() => {});
+
+  return {
+    actionId,
+    type: actionType,
+    success: result.success,
+    transactionId: result.transactionId,
+    newFeeBps: result.newFeeBps,
+    error: result.error,
+  };
 }
 
 // ─── Propose a high-value action ──────────────────────────────────────────────
@@ -340,7 +436,7 @@ export async function approveAction(
   );
 
   const payload = JSON.parse(action.payload) as Record<string, unknown>;
-  const executionResult = await executeAdminAction(
+  const executionResult = await runAdminActionInternal(
     action.action_type as AdminActionType,
     payload,
     action.proposer,

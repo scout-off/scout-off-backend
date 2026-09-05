@@ -175,7 +175,7 @@ export async function processEventBatches(
           ledgersTotal: toLedger - fromLedger + 1,
           eventsInserted,
           currentBatchStart,
-          currentBatchEnd,
+          currentBatchEnd: batchEnd,
         });
       }
 

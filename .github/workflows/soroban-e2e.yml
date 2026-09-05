@@ -39,11 +39,11 @@ jobs:
         run: |
           curl -sSf https://github.com/stellar/stellar-cli/releases/latest/download/stellar-cli-x86_64-unknown-linux-gnu.tar.gz \
             | sudo tar -xz -C /usr/local/bin stellar || \
-          cargo install --locked stellar-cli --features opt
+          cargo install --locked stellar-cli
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci

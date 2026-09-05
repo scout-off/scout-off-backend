@@ -332,6 +332,14 @@ paths:
           schema:
             type: string
           description: Action proposal ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, message, data } - Threshold met, action executed'
@@ -408,6 +416,14 @@ paths:
       description: |-
         Stub endpoint that simulates pausing the Soroban smart contract.
         Contract-level behavior is simulated — no real on-chain transaction is issued.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '202':
           description: '{ success: true, message: string, transactionId: string }'
@@ -428,6 +444,14 @@ paths:
       description: |-
         Stub endpoint that simulates unpausing the Soroban smart contract.
         Contract-level behavior is simulated — no real on-chain transaction is issued.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '202':
           description: '{ success: true, message: string, transactionId: string }'
@@ -491,6 +515,79 @@ paths:
         - bearerAuth: []
       x-required-role:
         - admin
+  /admin/events/replay:
+    post:
+      tags:
+        - admin
+      summary: >-
+        Trigger a targeted event replay for a small ledger range without modifying the main indexer
+        cursor.
+      operationId: triggerReplay
+      description: |-
+        Trigger a targeted event replay for a small ledger range without modifying
+        the main indexer cursor. This is a surgical tool for fixing narrow historical
+        gaps (e.g., "we think ledgers 500123-500130 were missed") while the indexer
+        is live near tip.
+
+        Maximum range is 200 ledgers. Events are upserted using INSERT OR IGNORE,
+        so duplicates are silently skipped. Returns a count of newly inserted events.
+      requestBody:
+        required: true
+        description: '{ fromLedger: number, toLedger: number }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fromLedger:
+                  type: integer
+                  minimum: 0
+                toLedger:
+                  type: integer
+                  minimum: 1
+              required:
+                - fromLedger
+                - toLedger
+              additionalProperties: false
+      responses:
+        '200':
+          description: '{ success: true, data: { fromLedger, toLedger, eventsInserted } }'
+        '409':
+          description: '{ success: false, error: string } - job already running'
+        '422':
+          description: '{ success: false, error: string } - range ≥ 200 or invalid range'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/events/replay/status:
+    get:
+      tags:
+        - admin
+      summary: Return the current state of the replay job.
+      operationId: replayStatusHandler
+      description: Return the current state of the replay job.
+      responses:
+        '200':
+          description: |-
+            {
+              success: true,
+              data: {
+                status: 'idle' | 'running' | 'complete' | 'error',
+                from_ledger: number,
+                to_ledger: number,
+                ledgers_processed: number,
+                ledgers_total: number,
+                events_inserted: number,
+                started_at: string | null,
+                completed_at: string | null,
+                error_message: string | null
+              }
+            }
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
   /admin/feature-flags:
     get:
       tags:
@@ -515,6 +612,24 @@ paths:
       description: |-
         Updates a feature flag without restarting the process.
         Writes a feature_flag_toggled audit entry on every change.
+      requestBody:
+        required: true
+        description: '{ name: string, enabled: boolean }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                enabled:
+                  type: boolean
+              required:
+                - name
+                - enabled
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: FeatureFlag }'
@@ -539,6 +654,19 @@ paths:
           schema:
             type: string
           description: snake_case flag name
+      requestBody:
+        required: true
+        description: '{ enabled: boolean }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+              required:
+                - enabled
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { name, enabled, updated_by, updated_at } }'
@@ -572,6 +700,20 @@ paths:
       summary: Withdraws accumulated platform fees from the Soroban contract to a specified recipient.
       operationId: withdrawFeesController
       description: Withdraws accumulated platform fees from the Soroban contract to a specified recipient.
+      requestBody:
+        required: true
+        description: recipient {string} - Stellar public key of the withdrawal recipient
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                recipient:
+                  type: string
+                  description: Additional validation is applied beyond this schema — see the route handler.
+              required:
+                - recipient
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { transactionId, recipient, amount, token } }'
@@ -587,6 +729,24 @@ paths:
         - bearerAuth: []
       x-required-role:
         - admin
+  /admin/fees/config:
+    post:
+      tags:
+        - admin
+      summary: Propose and execute an update_platform_fee multi-sig action.
+      operationId: updatePlatformFeeController
+      description: |-
+        Propose and execute an update_platform_fee multi-sig action.
+        Updates the on-chain platform fee in basis points (0–10000).
+      responses:
+        '202':
+          description: '{ success: true, data: { actionId, transactionId, newFeeBps } }'
+        '400':
+          description: '{ success: false, error: string }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
   /admin/fees/withdraw:
     post:
       tags:
@@ -596,6 +756,30 @@ paths:
       description: |-
         Withdraw accumulated platform fees from the Soroban contract to a treasury
         address. This is the fully-specified replacement for POST /api/admin/fees.
+      requestBody:
+        required: true
+        description: |-
+          amountStroops   {string|number} — positive integer ≤ contract fee balance
+
+          Optional header: Idempotency-Key — prevents double-submission; cached result
+          is returned on repeat requests with the same key (24-hour TTL).
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                treasuryAddress:
+                  type: string
+                  description: Additional validation is applied beyond this schema — see the route handler.
+                amountStroops:
+                  oneOf:
+                    - type: string
+                    - type: number
+                  description: Additional validation is applied beyond this schema — see the route handler.
+              required:
+                - treasuryAddress
+                - amountStroops
+              additionalProperties: false
       responses:
         '200':
           description: >-
@@ -631,6 +815,20 @@ paths:
       description: |-
         Resets the indexer's stored last_ledger to the given fromLedger value,
         causing the next poll cycle to replay all events from that ledger onward.
+      requestBody:
+        required: true
+        description: fromLedger {number} - Ledger sequence number to replay from
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fromLedger:
+                  type: integer
+                  minimum: 0
+              required:
+                - fromLedger
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { fromLedger, previous } }'
@@ -650,6 +848,14 @@ paths:
         Decodes the caller's own bearer token and returns its payload metadata.
         The token is extracted from the Authorization header only — no body input is accepted.
         Useful for admins to inspect their own token claims (subject, role, expiry).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { sub, role, iat, exp } }'
@@ -672,6 +878,25 @@ paths:
         - body { ip, score: 0 }   → whitelist the IP (score pinned at 0, immune to decay)
         - body { ip, score: 100 } → blacklist the IP (immediate 429 for all requests)
         - body { ip, score: N }   → any 0–100 value (admin override)
+      requestBody:
+        required: true
+        description: '{ ip: string, score: number }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ip:
+                  type: string
+                  minLength: 1
+                score:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+              required:
+                - ip
+                - score
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { ip, score } }'
@@ -749,6 +974,21 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        description: '{ reason: string } — required, max 500 chars'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+              required:
+                - reason
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { playerId, cancelledMilestones, notifiedScouts } }'
@@ -778,6 +1018,14 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { playerId } }'
@@ -803,6 +1051,24 @@ paths:
 
         Timeout: disabled (0). The endpoint returns 202 immediately — the actual
         backfill runs as a background job and must never be killed by a network timeout.
+      requestBody:
+        required: true
+        description: '{ fromLedger: number, toLedger: number }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fromLedger:
+                  type: integer
+                  minimum: 0
+                toLedger:
+                  type: integer
+                  minimum: 1
+              required:
+                - fromLedger
+                - toLedger
+              additionalProperties: false
       responses:
         '202':
           description: '{ success: true, data: { fromLedger, toLedger, status: ''running'' } }'
@@ -810,6 +1076,30 @@ paths:
           description: '{ success: false, error: string } - job already running'
         '422':
           description: '{ success: false, error: string } - range > 10 000 ledgers or invalid range'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/reindex/cancel:
+    post:
+      tags:
+        - admin
+      summary: Cooperatively cancel a running background reindex job.
+      operationId: cancelReindexHandler
+      description: |-
+        Cooperatively cancel a running background reindex job. Sets a cancel flag
+        that the batch loop checks after each batch; the job transitions to
+        'cancelled' within one batch iteration and persists the last-processed ledger.
+
+        Returns 409 when no job is currently running.
+
+        NOTE: process-local flag only — multi-instance support requires a shared
+        flag (e.g. Redis) and is tracked as a follow-up.
+      responses:
+        '200':
+          description: '{ success: true, data: { status: ''cancel_requested'', message } }'
+        '409':
+          description: '{ success: false, error: string } - no job running'
       security:
         - bearerAuth: []
       x-required-role:
@@ -827,7 +1117,7 @@ paths:
             {
               success: true,
               data: {
-                status: 'idle' | 'running' | 'complete' | 'error',
+                status: 'idle' | 'running' | 'complete' | 'error' | 'cancelled',
                 from_ledger, to_ledger,
                 ledgers_processed, ledgers_total,
                 events_inserted,
@@ -861,6 +1151,23 @@ paths:
       description: |-
         Adds a JWT's jti claim to the revocation blocklist so requireAuth/requireRole
         reject it on subsequent requests, even if it has not yet expired.
+      requestBody:
+        required: true
+        description: |-
+          { jti?: string, token?: string } - Provide either the jti directly or a
+            full token to extract it from.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jti:
+                  type: string
+                  minLength: 1
+                token:
+                  type: string
+                  minLength: 1
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { jti } }'
@@ -886,6 +1193,26 @@ paths:
       responses:
         '200':
           description: '{ success: true, data: ValidatorRow[] }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/validators/bulk-import:
+    post:
+      tags:
+        - admin
+      summary: Atomically import a batch of validators as a single multi-sig action.
+      operationId: bulkValidatorImport
+      description: |-
+        Atomically import a batch of validators as a single multi-sig action.
+        Returns a per-wallet manifest; partial failures return 207 for targeted retry.
+      responses:
+        '202':
+          description: '{ success: true, data: { actionId, manifest } }'
+        '207':
+          description: '{ success: false, error, data: { manifest } } - Partial failure'
+        '400':
+          description: '{ success: false, error: string } - Validation error'
       security:
         - bearerAuth: []
       x-required-role:
@@ -927,6 +1254,19 @@ paths:
       description: |-
         Submits a request to register a new validator on the Soroban contract.
         Only platform admins may call this endpoint.
+      requestBody:
+        required: true
+        description: validatorWallet {string} - Stellar public key of the validator to register
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                validatorWallet:
+                  type: string
+              required:
+                - validatorWallet
+              additionalProperties: false
       responses:
         '202':
           description: '{ success: true, message: string }'
@@ -949,6 +1289,19 @@ paths:
       description: |-
         Submits a request to revoke an existing validator on the Soroban contract.
         Only platform admins may call this endpoint.
+      requestBody:
+        required: true
+        description: validatorWallet {string} - Stellar public key of the validator to revoke
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                validatorWallet:
+                  type: string
+              required:
+                - validatorWallet
+              additionalProperties: false
       responses:
         '202':
           description: '{ success: true, message: string }'
@@ -1070,6 +1423,14 @@ paths:
           schema:
             type: integer
           description: Dead letter row ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, message, data: { id, status: ''replayed'' } }'
@@ -1083,6 +1444,41 @@ paths:
           description: >-
             { success: false, message, error, data: { id, status: 'pending', retryCount } } -
             Delivery failed
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/webhooks/{id}/deliveries:
+    get:
+      tags:
+        - admin
+      summary: Returns paginated delivery-attempt records (success + failure) for a webhook subscription.
+      operationId: getWebhookDeliveriesEndpoint
+      description: |-
+        Returns paginated delivery-attempt records (success + failure) for a webhook
+        subscription. `:id` should be the URL-encoded subscription identifier
+        (typically the endpoint URL).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Page size 1–100 (default 20)
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Row offset (default 0)
+      responses:
+        '200':
+          description: '{ success: true, data: WebhookDeliveryRow[], total, limit, offset }'
       security:
         - bearerAuth: []
       x-required-role:
@@ -1106,6 +1502,14 @@ paths:
           schema:
             type: integer
           description: Dead letter row ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, message, data: { id, status: ''replayed'' } }'
@@ -1119,6 +1523,36 @@ paths:
           description: >-
             { success: false, message, error, data: { id, status: 'pending', retryCount } } -
             Delivery failed
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/webhooks/{id}/summary:
+    get:
+      tags:
+        - admin
+      summary: >-
+        Returns a rolled-up success-rate summary (total, successes, failures, success_rate,
+        last_success_at) for a subscription over a configurab...
+      operationId: getWebhookDeliverySummaryEndpoint
+      description: |-
+        Returns a rolled-up success-rate summary (total, successes, failures,
+        success_rate, last_success_at) for a subscription over a configurable window.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: windowMs
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Window in milliseconds (default 86400000 = 24 h)
+      responses:
+        '200':
+          description: '{ success: true, data: WebhookDeliverySummary }'
       security:
         - bearerAuth: []
       x-required-role:
@@ -1157,6 +1591,18 @@ paths:
       description: |-
         Revoke the caller's access token and any associated refresh token
         (identified by the `jti` in the bearer token).
+      requestBody:
+        required: true
+        description: '{ refreshToken?: string }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+                  minLength: 1
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true }'
@@ -1175,6 +1621,20 @@ paths:
       description: |-
         Exchange a valid refresh token for a new access token + refresh token pair
         (refresh token rotation). The old refresh token is revoked immediately.
+      requestBody:
+        required: true
+        description: '{ refreshToken: string }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+                  minLength: 1
+              required:
+                - refreshToken
+              additionalProperties: false
       responses:
         '200':
           description: '{ accessToken, refreshToken, expiresAt }'
@@ -1192,6 +1652,27 @@ paths:
         pair. The caller's role is derived from the verified account: configured
         admin wallets always get `admin`, otherwise the requested `role` (default
         `player`) is used.
+      requestBody:
+        required: true
+        description: '{ transaction: string, role?: ''validator'' | ''player'' | ''scout'' } - Signed challenge XDR'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transaction:
+                  type: string
+                  minLength: 1
+                role:
+                  type: string
+                  enum:
+                    - player
+                    - scout
+                    - validator
+                    - admin
+              required:
+                - transaction
+              additionalProperties: false
       responses:
         '200':
           description: '{ token, accessToken, refreshToken, account, expiresAt }'
@@ -1304,9 +1785,13 @@ paths:
     get:
       tags:
         - players
-      summary: optionalAuth so req.account is set when a Bearer token is present (for audit logging)
+      summary: >-
+        optionalAuth so req.account is set when a Bearer token is present (for audit logging)
+        Supports conditional GET (If-None-Match / If-Modifi...
       operationId: filterPlayers
-      description: optionalAuth so req.account is set when a Bearer token is present (for audit logging)
+      description: |-
+        optionalAuth so req.account is set when a Bearer token is present (for audit logging)
+        Supports conditional GET (If-None-Match / If-Modified-Since → 304) and HEAD.
       parameters:
         - name: region
           in: query
@@ -1357,8 +1842,6 @@ paths:
           schema:
             type: integer
             minimum: 1
-            maximum: 100
-            default: 20
         - name: cursor
           in: query
           required: false
@@ -1372,6 +1855,8 @@ paths:
       responses:
         '200':
           description: '{ success: true, data: PlayerSummary[], total, page, pageSize, pages }'
+        '304':
+          description: Not Modified
         '400':
           description: '{ success: false, error: string } - Invalid query parameters'
         '422':
@@ -1418,6 +1903,7 @@ paths:
                     - position
                     - region
                     - metadata
+                  additionalProperties: false
                 - type: object
                   properties:
                     wallet:
@@ -1439,6 +1925,7 @@ paths:
                     - position
                     - region
                     - metadataUri
+                  additionalProperties: false
       responses:
         '201':
           description: '{ success: true, data: { playerId, metadataUri, gatewayUrl } }'
@@ -1519,6 +2006,7 @@ paths:
                       additionalProperties: {}
                   required:
                     - metadata
+                  additionalProperties: false
                 - type: object
                   properties:
                     metadataUri:
@@ -1527,6 +2015,7 @@ paths:
                       description: Additional validation is applied beyond this schema — see the route handler.
                   required:
                     - metadataUri
+                  additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { metadataUri, playerId } }'
@@ -1590,6 +2079,14 @@ paths:
           schema:
             type: string
           description: Player's unique identifier (cuid2)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { playerId } }'
@@ -1616,6 +2113,14 @@ paths:
           schema:
             type: string
           description: Player's unique identifier (cuid2)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, message: string }'
@@ -1733,14 +2238,18 @@ paths:
       tags:
         - players
       summary: >-
-        List a player's milestones, merging on-chain milestone events with
-        pending/approved/rejected submission events.
+        List a player's milestones, merging on-chain milestone events with pending/approved/rejected
+        submission events.
       operationId: getPlayerMilestones
       description: |-
         List a player's milestones, merging on-chain milestone events with
         pending/approved/rejected submission events. Supports `status`
-        (pending|approved|rejected; omit for all), `sortBy`, `order`/`sort`,
-        and `limit` (max 50) query params.
+        (pending|approved|rejected; omit for all), `sortBy`, `order`/`sort`, and
+        `limit` (max 50) query params.
+
+        Supports conditional GET via ETag / If-None-Match (returns 304 when the
+        list has not changed since the previous fetch). Cache-Control is set to
+        no-cache, matching the player-profile endpoint (#1139).
       parameters:
         - name: playerId
           in: path
@@ -1748,57 +2257,11 @@ paths:
           schema:
             type: string
           description: Player's unique identifier (cuid2)
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - pending
-              - approved
-              - rejected
-          description: >-
-            Filter by milestone status. Omit to include approved, pending, and
-            on-chain milestones. `rejected` returns milestone_rejected events only.
-        - name: sortBy
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - submittedAt
-              - approvedAt
-            default: submittedAt
-        - name: order
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - asc
-              - desc
-            default: asc
-          description: Sort direction (`sort` is accepted as an alias)
-        - name: sort
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - asc
-              - desc
-          description: Alias for `order`; takes precedence when both are set
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 50
-            default: 20
       responses:
         '200':
           description: '{ success: true, data: Milestone[] }'
+        '304':
+          description: Not Modified (when If-None-Match matches the current ETag)
         '400':
           description: '{ success: false, error: string } - Invalid playerId, limit, or query params'
         '404':
@@ -1820,6 +2283,14 @@ paths:
           schema:
             type: string
           description: Player's unique identifier (cuid2)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, message: string }'
@@ -1872,6 +2343,24 @@ paths:
           schema:
             type: string
           description: The player's on-chain identifier
+      requestBody:
+        required: true
+        description: '{ amount: number, buyerWallet: string }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: integer
+                  minimum: 1
+                buyerWallet:
+                  type: string
+                  minLength: 1
+              required:
+                - amount
+                - buyerWallet
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { playerId, buyerWallet, amount, newBalance } }'
@@ -1906,6 +2395,14 @@ paths:
           schema:
             type: string
           description: The trial offer identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { offerId, playerId, status: ''accepted'', respondedAt } }'
@@ -1952,6 +2449,7 @@ paths:
                 reason:
                   type: string
                   maxLength: 500
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { offerId, playerId, status: ''rejected'', reason, respondedAt } }'
@@ -2004,6 +2502,26 @@ paths:
           schema:
             type: string
           description: Scout's Stellar public key
+      requestBody:
+        required: true
+        description: '{ label: string, scopes?: string[] } - Omitted scopes = legacy/unrestricted key'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                  maxLength: 100
+                  default: ''
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                expiresInDays:
+                  type: integer
+                  minimum: 0
+              additionalProperties: false
       responses:
         '201':
           description: '{ success: true, data: { id, key, label, created_at, scopes } }'
@@ -2080,6 +2598,20 @@ paths:
           schema:
             type: integer
           description: API key row ID to rotate
+      requestBody:
+        required: true
+        description: >-
+          { gracePeriodSeconds?: number } - How long the old key stays valid (default 24h, max 7d);
+          0 revokes it immediately
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                gracePeriodSeconds:
+                  type: integer
+                  minimum: 0
+              additionalProperties: false
       responses:
         '201':
           description: >-
@@ -2132,6 +2664,21 @@ paths:
           schema:
             type: string
           description: Scout's Stellar public key
+      requestBody:
+        required: true
+        description: '{ name: string }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+              required:
+                - name
+              additionalProperties: false
       responses:
         '201':
           description: '{ success: true, data: { id, scout_wallet, name, created_at } }'
@@ -2225,6 +2772,27 @@ paths:
           schema:
             type: string
           description: Scout's Stellar public key
+      requestBody:
+        required: true
+        description: '{ playerId: string, folderId?: number, note?: string }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                playerId:
+                  type: string
+                  minLength: 1
+                folderId:
+                  type: integer
+                  nullable: true
+                note:
+                  type: string
+                  maxLength: 2000
+                  nullable: true
+              required:
+                - playerId
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { scout_wallet, player_id, folder_id, note, created_at } }'
@@ -2398,6 +2966,41 @@ paths:
         - scout
       x-api-key-scope: write:contacts
       x-owner-only: true
+  /scouts/{wallet}/dashboard:
+    get:
+      tags:
+        - scouts
+      summary: Consolidated home-screen dashboard for a scout.
+      operationId: getScoutDashboard
+      description: |-
+        Consolidated home-screen dashboard for a scout. Returns four independently
+        bounded sections in a single authenticated call:
+          - subscription: current subscription status
+          - contacts:     first 10 unlocked contacts (with `_links.full` for pagination)
+          - bookmarks:    first 10 bookmarked players (with `_links.full` for pagination)
+          - savedSearches: first 10 saved searches (with `_links.full` for pagination)
+
+        Each section is fetched via the existing per-resource service functions —
+        no duplicated queries.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+      responses:
+        '200':
+          description: '{ success: true, data: { wallet, subscription, contacts, bookmarks, savedSearches } }'
+        '401':
+          description: '{ success: false, error: string } - Missing or invalid token'
+        '403':
+          description: '{ success: false, error: string } - Wallet mismatch'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - scout
+      x-owner-only: true
   /scouts/{wallet}/notes:
     get:
       tags:
@@ -2471,6 +3074,21 @@ paths:
           schema:
             type: string
           description: Player's unique identifier (cuid2)
+      requestBody:
+        required: true
+        description: '{ note: string } - 1-10 000 characters'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  minLength: 1
+                  maxLength: 10000
+              required:
+                - note
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { scout_wallet, player_id, note, updated_at } }'
@@ -2601,6 +3219,20 @@ paths:
           schema:
             type: string
           description: Player's unique identifier (cuid2)
+      requestBody:
+        required: true
+        description: '{ content: string } - 1-2 000 characters'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+              required:
+                - content
+              additionalProperties: false
       responses:
         '201':
           description: >-
@@ -2644,6 +3276,20 @@ paths:
           schema:
             type: integer
           description: Note row ID
+      requestBody:
+        required: true
+        description: '{ content: string } - 1-2 000 characters'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+              required:
+                - content
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { id, scout_wallet, player_id, content, updated_at } }'
@@ -2787,6 +3433,33 @@ paths:
           schema:
             type: string
           description: Scout's Stellar public key
+      requestBody:
+        required: true
+        description: '{ name: string, filters: { region?, position?, minTier? } }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                filters:
+                  type: object
+                  properties:
+                    region:
+                      type: string
+                    position:
+                      type: string
+                    minTier:
+                      type: integer
+                      minimum: 0
+                      maximum: 3
+              required:
+                - name
+                - filters
+              additionalProperties: false
       responses:
         '201':
           description: '{ success: true, data: { id, scout_wallet, name, filters, created_at } }'
@@ -2824,6 +3497,30 @@ paths:
           schema:
             type: integer
           description: Row id of the saved search to update
+      requestBody:
+        required: true
+        description: '{ name?: string, filters?: { region?, position?, minTier? } }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                filters:
+                  type: object
+                  properties:
+                    region:
+                      type: string
+                    position:
+                      type: string
+                    minTier:
+                      type: integer
+                      minimum: 0
+                      maximum: 3
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { id, scout_wallet, name, filters, created_at } }'
@@ -2947,6 +3644,27 @@ paths:
           description: |-
             Optional. Ensures safe retries: duplicate keys return
               the cached response for 24 hours without triggering a new on-chain transaction.
+      requestBody:
+        required: true
+        description: '{ tier: ''basic'' | ''premium'', duration: number (1–365 days) }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tier:
+                  type: string
+                  enum:
+                    - basic
+                    - premium
+                duration:
+                  type: integer
+                  minimum: 1
+                  maximum: 365
+              required:
+                - tier
+                - duration
+              additionalProperties: false
       responses:
         '201':
           description: '{ success: true, data: { transactionId, tier, expiresAt, status } }'
@@ -2980,6 +3698,27 @@ paths:
           schema:
             type: string
           description: Scout's Stellar public key
+      requestBody:
+        required: true
+        description: '{ tier: ''basic'' | ''premium'', duration: number (1–365 days) }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tier:
+                  type: string
+                  enum:
+                    - basic
+                    - premium
+                duration:
+                  type: integer
+                  minimum: 1
+                  maximum: 365
+              required:
+                - tier
+                - duration
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { transactionId, tier, expiresAt, status } } - Renewal'
@@ -3094,6 +3833,7 @@ paths:
               required:
                 - playerId
                 - detailsUri
+              additionalProperties: false
       responses:
         '201':
           description: >-
@@ -3175,6 +3915,7 @@ paths:
               required:
                 - playerId
                 - detailsUri
+              additionalProperties: false
       responses:
         '201':
           description: >-
@@ -3285,6 +4026,27 @@ paths:
           schema:
             type: string
           description: Scout's Stellar public key
+      requestBody:
+        required: true
+        description: '{ url: string, eventTypes?: ContractEventType[] }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: Additional validation is applied beyond this schema — see the route handler.
+                eventTypes:
+                  type: array
+                  items:
+                    type: string
+                    enum: []
+                  minItems: 1
+              required:
+                - url
+              additionalProperties: false
       responses:
         '201':
           description: '{ success: true, data: { id, url, secret, eventTypes, createdAt } }'
@@ -3365,6 +4127,14 @@ paths:
           schema:
             type: integer
           description: Webhook subscription row ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { id, url, statusCode } }'
@@ -3400,6 +4170,8 @@ paths:
         Submit evidence for a player milestone. `evidenceUri` may be an
         `https://` URL (downloaded and re-pinned to IPFS) or an `ipfs://` CID
         (recorded directly). Invalidates the player's milestone cache on success.
+
+        Rate-limited per IP, per validator wallet, and per target player_id (#1137).
       requestBody:
         required: true
         description: >-
@@ -3427,6 +4199,7 @@ paths:
                 - playerId
                 - milestoneType
                 - evidenceUri
+              additionalProperties: false
       responses:
         '201':
           description: '{ success: true, data: { evidenceCid: string } }'
@@ -3436,6 +4209,10 @@ paths:
           description: '{ success: false, error: string } - Remote evidence file too large'
         '422':
           description: '{ success: false, error: string } - Remote evidence has an unsupported content type'
+        '429':
+          description: >-
+            { success: false, error: string } - Per-player rate limit exceeded; Retry-After header
+            set
       security:
         - bearerAuth: []
       x-required-role:
@@ -3465,6 +4242,7 @@ paths:
                   minItems: 1
               required:
                 - milestoneIds
+              additionalProperties: false
       responses:
         '200':
           description: >-
@@ -3576,6 +4354,40 @@ paths:
         - bearerAuth: []
       x-required-role:
         - validator
+  /validators/{wallet}/stats:
+    get:
+      tags:
+        - validators
+      summary: >-
+        Dashboard summary for a validator: pending count, all-time approved/rejected totals,
+        approvals in the last 30 days, and up to 20 recent a...
+      operationId: getValidatorDashboardStats
+      description: |-
+        Dashboard summary for a validator: pending count, all-time approved/rejected
+        totals, approvals in the last 30 days, and up to 20 recent activity events.
+
+        Counts are derived from indexed milestone events — no separate write path.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Validator's Stellar public key
+      responses:
+        '200':
+          description: >-
+            { success: true, data: { wallet, pending, approvedTotal, rejectedTotal, approvedLast30d,
+            recent: [...] } }
+        '401':
+          description: '{ success: false, error: string } - Missing or invalid token'
+        '403':
+          description: '{ success: false, error: string } - Insufficient permissions or wallet mismatch'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - validator
+      x-owner-only: true
   /versioning/demo:
     servers:
       - url: /api/v2

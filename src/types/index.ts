@@ -210,6 +210,7 @@ export type ContractEventType =
   | 'player_registered'
   | 'milestone_submitted'
   | 'milestone_approved'
+  | 'milestone_rejected'
   | 'scout_subscribed'
   | 'contact_unlocked'
   | 'trial_offer_logged'

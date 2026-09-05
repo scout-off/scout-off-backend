@@ -18,14 +18,14 @@ Welcome! This guide covers contribution workflows, code standards, and critical 
 
 ### Prerequisites
 
-- Node.js — supported range is `>=18.0.0 <23.0.0` (see `engines.node` in [`package.json`](package.json)). [`.nvmrc`](.nvmrc) pins the version used for local dev and for the primary CI coverage upload (currently Node 20)
+- Node.js — supported range is `>=22.0.0 <25.0.0` (see `engines.node` in [`package.json`](package.json)). [`.nvmrc`](.nvmrc) pins the version used for local dev and for the primary CI coverage upload (currently Node 22). The floor is Node 22 because `@stellar/stellar-sdk` (via `@stellar/js-xdr`) requires it.
   - If you use **nvm**: `nvm install && nvm use` (reads `.nvmrc` automatically)
   - If you use **fnm**: `fnm install && fnm use`
   - If you use **asdf**: `asdf install nodejs` (reads `.nvmrc` via the Node.js plugin)
-- npm ≥ 9
+- npm ≥ 10
 - Git
 
-> CI's `lint` and `test` jobs run across a matrix of Node 18, 20, and 22 (`.github/workflows/ci.yml`) so a regression that only manifests on one supported version is caught before merge. `.nvmrc` remains the default for local dev; bump `engines.node` in `package.json` alongside the CI matrix if the supported range changes.
+> CI's `lint` and `test` jobs run across a matrix of Node 22 and 24 (`.github/workflows/ci.yml`) so a regression that only manifests on one supported version is caught before merge. `.nvmrc` remains the default for local dev; bump `engines.node` in `package.json` alongside the CI matrix if the supported range changes.
 
 ### Setup
 

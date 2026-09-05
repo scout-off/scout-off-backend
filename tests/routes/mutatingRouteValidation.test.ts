@@ -41,7 +41,7 @@ function splitPath(thing: string | RegExp | undefined): string[] {
     .toString()
     .replace('\\/?', '')
     .replace('(?=\\/|$)', '$')
-    .match(/^\/\^((?:\\[.*+?^${}()|[\]\\\/]|[^.*+?^${}()|[\]\\\/])*)\$\//);
+    .match(/^\/\^((?:\\[.*+?^${}()|[\]\\/]|[^.*+?^${}()|[\]\\/])*)\$\//);
   if (!match) return [];
   return match[1].replace(/\\(.)/g, '$1').split('/').filter(Boolean);
 }

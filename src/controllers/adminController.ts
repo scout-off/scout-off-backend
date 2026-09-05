@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
-import { queryEvents, countEventsFiltered, getEventsPage, getEventsPageKeyset, encodeEventsCursor, decodeEventsCursor, fetchLastIndexedLedger, persistLastIndexedLedger, getValidatorStats, getAuditLogs, getAuditLogsCount, AuditLogRow, getNewPlayersTimeSeries, getMilestonesApprovedTimeSeries, getContactUnlocksTimeSeries, getSubscriptionsStartedTimeSeries, getNewPlayersByRegionTimeSeries, TimeSeriesPoint, RegionBreakdownPoint, insertFeeWithdrawal } from '../db';
+import { queryEvents, countEventsFiltered, getEventsPage, getEventsPageKeyset, encodeEventsCursor, decodeEventsCursor, fetchLastIndexedLedger, persistLastIndexedLedger, getValidatorStats, getAuditLogs, getAuditLogsCount, AuditLogRow, getNewPlayersTimeSeries, getMilestonesApprovedTimeSeries, getContactUnlocksTimeSeries, getSubscriptionsStartedTimeSeries, getNewPlayersByRegionTimeSeries, TimeSeriesPoint, RegionBreakdownPoint, insertFeeWithdrawal, getWebhookDeliveries, getWebhookDeliverySummary } from '../db';
 import { getAllValidators, insertValidator, revokeValidatorRow, getValidatorByWallet } from '../services/indexer';
 import { isValidStellarAddress } from '../utils/stellarAddress';
 import { STELLAR_ADDRESS_RE } from '../utils/validators';
@@ -13,7 +13,7 @@ import { cacheGet, cacheSet } from '../services/cache';
 import config from '../config';
 import { logger } from '../utils/logger';
 import { ErrorCode } from '../utils/errorCodes';
-import { proposeAction, approveAction, listPendingActions, getActionDetails } from '../services/adminMultiSig';
+import { proposeAction, approveAction, listPendingActions, getActionDetails, executeAdminAction } from '../services/adminMultiSig';
 import { withConcurrencyLimit } from '../utils/concurrency';
 import type { ApiResponse, EventRecord, ContractEventType } from '../types';
 
@@ -1141,51 +1141,154 @@ export async function reindex(req: Request, res: Response, next: NextFunction): 
   res.json({ success: true, data: { fromLedger, previous } });
 }
 
-const updatePlatformFeeSchema = z.object({
-  platformFeeBps: z.number().int().min(0).max(10000), // 0-100% in basis points
+export const updatePlatformFeeSchema = z.object({
+  actionId: z.string().min(1),
+  newFeeBps: z.number().int().min(0).max(10000),
 });
 
 /**
- * POST /api/admin/platform-fee
- * Update platform fee configuration on-chain
+ * POST /api/admin/fees/config
+ *
+ * Propose an update_platform_fee multi-sig action and execute it.
+ * Routes through the existing admin multi-sig action dispatcher.
  */
-export async function updatePlatformFee(req: Request, res: Response, next: NextFunction): Promise<void> {
-  if (req.role !== 'admin') {
-    res.status(403).json({ success: false, error: 'Insufficient permissions' });
-    return;
-  }
+export async function updatePlatformFeeController(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const adminWallet = req.account ?? 'unknown';
+    const parsed = updatePlatformFeeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid request body' });
+      return;
+    }
 
-  const adminWallet = req.account ?? 'unknown';
-  const parsed = updatePlatformFeeSchema.safeParse(req.body);
+    const { actionId, newFeeBps } = parsed.data;
+    logger.info(`[admin] action=update_platform_fee actionId=${actionId} newFeeBps=${newFeeBps} admin=${adminWallet}`);
 
-  if (!parsed.success) {
-    await logAuditEvent({
-      action: 'platform_fee_update_attempt',
+    const result = await executeAdminAction(
+      actionId,
+      'update_platform_fee',
+      { newFeeBps },
       adminWallet,
-      queryParams: { error: 'validation_failed', reason: parsed.error.errors[0]?.message },
-      timestamp: new Date().toISOString(),
-    }).catch(() => {});
-    res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid request body' });
-    return;
+    );
+
+    if (!result.success) {
+      res.status(400).json({ success: false, error: result.error });
+      return;
+    }
+
+    res.status(202).json({
+      success: true,
+      data: { actionId, transactionId: result.transactionId, newFeeBps: result.newFeeBps },
+    });
+  } catch (err) {
+    next(err);
   }
+}
 
-  const { platformFeeBps } = parsed.data;
+const STELLAR_ADDRESS_RE_BULK = /^G[A-Z2-7]{55}$/;
 
-  logger.info(`[admin] action=update_platform_fee admin=${adminWallet} platformFeeBps=${platformFeeBps}`);
-  await logAuditEvent({
-    action: 'platform_fee_update_attempt',
-    adminWallet,
-    queryParams: { platformFeeBps, outcome: 'submitted' },
-    timestamp: new Date().toISOString(),
-    contractAction: 'set_platform_fee_bps',
-  }).catch(() => {});
+export const bulkValidatorImportSchema = z.object({
+  actionId: z.string().min(1),
+  wallets: z
+    .array(z.string().regex(STELLAR_ADDRESS_RE_BULK, 'Each wallet must be a valid Stellar address'))
+    .min(1, 'wallets must contain at least one address')
+    .max(100, 'wallets may contain at most 100 addresses per batch'),
+});
 
-  // NOTE: Contract-level update is simulated. Real invocation will call set_platform_fee_bps() on the Soroban contract.
-  res.status(202).json({
-    success: true,
-    message: `Platform fee update to ${platformFeeBps} bps submitted (simulated)`,
-    transactionId: 'stub-platform-fee-txn-placeholder',
-  });
+/**
+ * POST /api/admin/validators/bulk-import
+ *
+ * Propose and execute an atomic bulk validator import as a single multi-sig action.
+ * All wallets are processed together; partial success is reported via a manifest.
+ */
+export async function bulkValidatorImport(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const adminWallet = req.account ?? 'unknown';
+    const parsed = bulkValidatorImportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid request body' });
+      return;
+    }
+
+    const { actionId, wallets } = parsed.data;
+    logger.info(`[admin] action=bulk_validator_import actionId=${actionId} count=${wallets.length} admin=${adminWallet}`);
+
+    const result = await executeAdminAction(
+      actionId,
+      'bulk_validator_import',
+      { wallets },
+      adminWallet,
+    );
+
+    if (!result.success) {
+      // Partial failure — 207 Multi-Status with manifest for retry
+      res.status(207).json({ success: false, error: result.error, data: { manifest: result.manifest } });
+      return;
+    }
+
+    res.status(202).json({ success: true, data: { actionId, manifest: result.manifest } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── Webhook delivery history (#1121) ─────────────────────────────────────────
+
+const webhookDeliveryQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+  windowMs: z.coerce.number().int().min(1).optional(),
+});
+
+/**
+ * GET /api/admin/webhooks/:id/deliveries
+ *
+ * Returns paginated delivery-attempt records for a given webhook subscription.
+ * `:id` is the subscription identifier (URL-encoded endpoint URL).
+ */
+export async function getWebhookDeliveriesEndpoint(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const subscriptionId = decodeURIComponent(req.params.id as string);
+    const parsed = webhookDeliveryQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: parsed.error.errors[0]?.message ?? 'Invalid query parameters',
+        code: ErrorCode.VALIDATION_ERROR,
+      });
+      return;
+    }
+    const { limit, offset } = parsed.data;
+    const { data, total } = getWebhookDeliveries({ subscriptionId, limit, offset });
+    res.json({ success: true, data, total, limit, offset });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/admin/webhooks/:id/summary
+ *
+ * Returns a rolled-up success-rate summary for a subscription over a time window.
+ */
+export async function getWebhookDeliverySummaryEndpoint(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const subscriptionId = decodeURIComponent(req.params.id as string);
+    const parsed = webhookDeliveryQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: parsed.error.errors[0]?.message ?? 'Invalid query parameters',
+        code: ErrorCode.VALIDATION_ERROR,
+      });
+      return;
+    }
+    const windowMs = parsed.data.windowMs ?? 24 * 60 * 60 * 1000;
+    const summary = getWebhookDeliverySummary(subscriptionId, windowMs);
+    res.json({ success: true, data: summary });
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**

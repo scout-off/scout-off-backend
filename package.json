@@ -4,8 +4,8 @@
   "description": "Backend API for ScoutOff \u2014 decentralized football scouting platform on Stellar",
   "main": "dist/index.js",
   "engines": {
-    "node": "20.x",
-    "npm": ">=9.0.0"
+    "node": ">=22.0.0 <25.0.0",
+    "npm": ">=10.0.0"
   },
   "scripts": {
     "prepare": "husky",

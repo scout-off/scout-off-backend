@@ -27,6 +27,10 @@ import {
   revokeTokenSchema,
   reindexSchema,
   importValidatorsBodySchema,
+  bulkValidatorImport,
+  updatePlatformFeeController,
+  getWebhookDeliveriesEndpoint,
+  getWebhookDeliverySummaryEndpoint,
 } from '../controllers/adminController';
 import { importPlayers, importPlayersBodySchema } from '../controllers/adminPlayerImportController';
 import { adminDeactivatePlayer, adminReactivatePlayer, deactivateBodySchema } from '../controllers/adminPlayerDeactivationController';

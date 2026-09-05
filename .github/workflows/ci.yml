@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18, 20, 22]
+        node-version: [22, 24]
 
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18, 20, 22]
+        node-version: [22, 24]
 
     steps:
       - uses: actions/checkout@v4
@@ -114,10 +114,10 @@ jobs:
           CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
 
       # Coverage is only representative once, so upload it from the Node
-      # version .nvmrc pins (20) to keep this identical to the prior
-      # single-version behavior instead of uploading/overwriting 3x.
+      # version .nvmrc pins (22) to keep this identical to the prior
+      # single-version behavior instead of uploading/overwriting Nx.
       - name: Upload coverage to Codecov
-        if: matrix.node-version == 20
+        if: matrix.node-version == 22
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -125,7 +125,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Upload coverage report as artifact
-        if: matrix.node-version == 20
+        if: matrix.node-version == 22
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report

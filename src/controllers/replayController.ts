@@ -93,7 +93,7 @@ export async function triggerReplay(
       res.status(500).json({
         success: false,
         error: result.error,
-        code: ErrorCode.INTERNAL_ERROR,
+        code: ErrorCode.INTERNAL_SERVER_ERROR,
       });
       return;
     }
