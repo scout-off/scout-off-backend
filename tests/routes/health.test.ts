@@ -14,9 +14,16 @@ jest.mock('../../src/services/ipfs', () => ({
   checkHealth: jest.fn(),
 }));
 
-// Mock the indexer module to control indexerLedgerLag in tests
+// Mock the indexer module to control indexerLedgerLag in tests. A
+// getter/setter pair keeps `import { indexerLedgerLag }` in src/app.ts a live
+// read while letting tests reassign `indexerModule.indexerLedgerLag = N`
+// (a plain value export is defined non-writable by the module mocker).
+const mockIndexerLagState = { value: 0 };
 jest.mock('../../src/services/indexer', () => ({
-  indexerLedgerLag: 0,
+  get indexerLedgerLag() {
+    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+    return mockIndexerLagState.value;
+  },
 }));
 
 // Partially mock the stellar service so tests can drive the RPC probe result
@@ -96,8 +103,16 @@ const READINESS_PATHS = ['/ready', '/health/readiness'];
 
 describe.each(READINESS_PATHS)('%s', (path) => {
   const previousBreakerState = stellarService.stellarBreaker.state;
+  const previousGracePeriodMs = config.readinessGracePeriodMs;
+
+  beforeEach(() => {
+    // The indexer-lag probe short-circuits to 'ok' during the post-boot grace
+    // window; these tests assert lag behaviour directly, so disable it.
+    (config as { readinessGracePeriodMs: number }).readinessGracePeriodMs = 0;
+  });
 
   afterEach(() => {
+    (config as { readinessGracePeriodMs: number }).readinessGracePeriodMs = previousGracePeriodMs;
     mockCheckHealth.mockReset();
     mockStellarHealth.mockReset();
     mockStellarHealth.mockResolvedValue(true);
@@ -105,7 +120,7 @@ describe.each(READINESS_PATHS)('%s', (path) => {
     // Restore to the real implementation between tests
     mockGetDriver.mockImplementation(getRealDriver);
     // Reset indexer lag to 0
-    (indexerModule as any).indexerLedgerLag = 0;
+    mockIndexerLagState.value = 0;
   });
 
   it('returns 200 and status ok when all dependencies are healthy (#1226)', async () => {
@@ -204,37 +219,37 @@ describe.each(READINESS_PATHS)('%s', (path) => {
     mockCheckHealth.mockResolvedValueOnce(undefined);
     const res = await request(app).get(path);
     expect(res.body.services).toHaveProperty('indexer');
-    expect(['ok', 'unavailable', 'disabled']).toContain(res.body.services.indexer);
+    expect(['ok', 'unavailable', 'disabled']).toContain(probeStatus(res.body.services.indexer));
   });
 
   it('returns 503 with indexer:unavailable when indexer lag exceeds threshold', async () => {
     mockCheckHealth.mockResolvedValueOnce(undefined);
     // Set indexer lag to exceed default threshold (100)
-    (indexerModule as any).indexerLedgerLag = 150;
+    mockIndexerLagState.value = 150;
     const res = await request(app).get(path);
     expect(res.status).toBe(503);
     expect(res.body.status).toBe('degraded');
-    expect(res.body.services.indexer).toBe('unavailable');
+    expect(probeStatus(res.body.services.indexer)).toBe('unavailable');
   });
 
   it('returns 200 with indexer:ok when indexer lag is within threshold', async () => {
     mockCheckHealth.mockResolvedValueOnce(undefined);
     // Set indexer lag within default threshold (100)
-    (indexerModule as any).indexerLedgerLag = 50;
+    mockIndexerLagState.value = 50;
     const res = await request(app).get(path);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
-    expect(res.body.services.indexer).toBe('ok');
+    expect(probeStatus(res.body.services.indexer)).toBe('ok');
   });
 
   it('returns 200 with indexer:ok when indexer lag is exactly at threshold', async () => {
     mockCheckHealth.mockResolvedValueOnce(undefined);
     // Set indexer lag exactly at default threshold (100)
-    (indexerModule as any).indexerLedgerLag = 100;
+    mockIndexerLagState.value = 100;
     const res = await request(app).get(path);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
-    expect(res.body.services.indexer).toBe('ok');
+    expect(probeStatus(res.body.services.indexer)).toBe('ok');
   });
 
 
