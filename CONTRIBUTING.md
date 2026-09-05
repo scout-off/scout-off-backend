@@ -14,6 +14,27 @@ Welcome! This guide covers contribution workflows, code standards, and critical 
 - [Filing Issues](#filing-backend-issues)
 - [Getting Help](#getting-help)
 
+## Glossary
+
+A quick reference for domain terms used across the codebase and docs.
+
+| Term | Definition |
+|------|------------|
+| **Scout** | A talent evaluator (club representative, agent, or independent recruiter) who browses verified player profiles and initiates contact. |
+| **Player** | A footballer who creates and maintains an on-chain profile, uploads stats and highlight reels, and progresses through verified milestones. |
+| **Validator** | A certified real-world authority (coach, academy director, or licensed trainer) who digitally signs off on player milestones. |
+| **Milestone** | A specific, measurable achievement in a player's development path (e.g., completing a training block, match performance target). |
+| **Progress Tier** | One of four verification levels a player can reach, from unverified up to elite, each requiring increasing real-world confirmation. |
+| **CID** | Content Identifier — the IPFS hash that uniquely addresses a player's highlight reel or photo stored on decentralized storage. |
+| **SEP-10** | [Stellar Ecosystem Proposal 10](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0010.md) — the Stellar authentication standard used for wallet-based login. See `docs/auth.md` for our implementation. |
+| **Strkey** | The human-readable encoded string format for Stellar public keys and addresses (e.g., `G...`, `M...`). |
+| **Soroban** | Stellar's native smart-contract platform (Rust/WASM) that powers ScoutOff's on-chain verification logic. |
+| **Horizon** | Stellar's official API server that provides ledger data, transaction submission, and account queries. |
+| **Ledger** | The Stellar blockchain's immutable record of all transactions and state changes. |
+| **Reorg** | Reorganisation — a rare event where the consensus network switches to a different chain tip; our indexer handles this by rewinding and replaying. |
+
+---
+
 ## Getting Started
 
 ### Prerequisites
