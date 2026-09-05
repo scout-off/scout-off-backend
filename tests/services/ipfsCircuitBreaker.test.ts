@@ -7,15 +7,31 @@ process.env.PINATA_API_KEY = 'test-key';
 process.env.PINATA_SECRET = 'test-secret-pinata';
 
 import axios from 'axios';
+import config from '../../src/config';
 import { ipfsBreaker } from '../../src/services/ipfs';
-import { pinJson, pinFile, checkHealth } from '../../src/services/ipfs';
+import { pinJson, pinFile, checkHealth, clearPinJsonCache } from '../../src/services/ipfs';
 import { CircuitBreakerOpenError } from '../../src/utils/circuitBreaker';
 
 jest.mock('axios');
 const mockAxios = axios as jest.Mocked<typeof axios>;
 
+// config.pinata is read once at module load, before this file's top-level
+// process.env assignments take effect, so set the credentials on the live
+// config object instead — pinJson/pinFile/checkHealth must see Pinata as
+// configured or they short-circuit to the dev stub and never touch the breaker.
+const originalPinata = { ...config.pinata };
+beforeAll(() => {
+  config.pinata.apiKey = 'test-key';
+  config.pinata.secret = 'test-secret-pinata';
+});
+afterAll(() => {
+  config.pinata.apiKey = originalPinata.apiKey;
+  config.pinata.secret = originalPinata.secret;
+});
+
 beforeEach(() => {
   ipfsBreaker.reset();
+  clearPinJsonCache();
   jest.clearAllMocks();
 });
 
@@ -74,10 +90,13 @@ describe('CircuitBreaker — unit', () => {
     const breaker = new (await import('../../src/utils/circuitBreaker')).CircuitBreaker({
       name: 'test',
       failureThreshold: 1,
-      resetTimeoutMs: 0,
+      resetTimeoutMs: 10,
     });
     await breaker.execute(() => Promise.reject(new Error('fail'))).catch(() => {});
-    // half-open probe fails → back to open
+    // wait out the reset window so the next call is treated as a half-open probe
+    await new Promise((r) => setTimeout(r, 15));
+    expect(breaker.getState()).toBe('half-open');
+    // half-open probe fails → back to open (reset window not yet re-elapsed)
     await breaker.execute(() => Promise.reject(new Error('still failing'))).catch(() => {});
     expect(breaker.getState()).toBe('open');
   });

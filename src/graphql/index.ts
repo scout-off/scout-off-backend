@@ -15,8 +15,9 @@
 
 import { createYoga, createSchema } from 'graphql-yoga';
 import { useValidationRule } from '@envelop/core';
-import { Application } from 'express';
+import { Application, Request, Response, NextFunction } from 'express';
 import { GraphQLError, Kind } from 'graphql';
+import { isEnabled, GRAPHQL_ENABLED } from '../services/featureFlags';
 import { typeDefs } from './schema';
 import { resolvers } from './resolvers';
 import { createContext } from './context';
@@ -96,11 +97,22 @@ export function mountGraphQL(app: Application): void {
     },
   });
 
+  // Dynamic per-request feature-flag guard (#1126). The /graphql endpoint is
+  // served only when `graphql_enabled` is on; otherwise it 404s exactly like an
+  // unmounted route. Toggle takes effect within one flag-cache TTL, no restart.
+  app.use('/graphql', (req: Request, res: Response, next: NextFunction) => {
+    if (!isEnabled(GRAPHQL_ENABLED)) {
+      res.status(404).json({ success: false, error: 'Not Found', code: 'NOT_FOUND' });
+      return;
+    }
+    next();
+  });
+
   // graphql-yoga returns a standard request handler compatible with Express
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   app.use('/graphql', yoga as any);
 
   logger.info(
-    `[graphql] endpoint mounted at /graphql (introspection=${!isProduction}, maxDepth=${MAX_DEPTH}, maxQueryCost=${MAX_QUERY_COST})`,
+    `[graphql] endpoint mounted at /graphql (introspection=${!isProduction}, maxDepth=${MAX_DEPTH}, maxQueryCost=${MAX_QUERY_COST}, flag=${GRAPHQL_ENABLED})`,
   );
 }

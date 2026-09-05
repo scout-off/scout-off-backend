@@ -1,3 +1,119 @@
+/**
+ * Circuit breakers for outbound dependency calls.
+ *
+ * Two implementations live here because the two call sites have genuinely
+ * different needs:
+ *
+ *   • {@link CircuitBreaker} — a plain breaker (closed / open / half-open) with
+ *     no retry logic. Used for IPFS / Pinata (issue #1142): a single failing
+ *     call counts as one failure, and once the breaker is open every call
+ *     fast-fails with {@link CircuitBreakerOpenError} until the reset timeout
+ *     elapses and a single probe is allowed through.
+ *
+ *   • {@link RetryingCircuitBreaker} — wraps each call in bounded exponential
+ *     backoff retries before counting a failure. Used for the Stellar RPC
+ *     client (see src/services/stellar.ts), where transient RPC errors are
+ *     common and worth retrying in-line.
+ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plain breaker (IPFS / Pinata) — issue #1142
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type CircuitState = 'closed' | 'open' | 'half-open';
+
+export interface CircuitBreakerOptions {
+  /** Number of consecutive failures before opening. Default: 5 */
+  failureThreshold?: number;
+  /** Milliseconds to wait before moving from open → half-open. Default: 30000 */
+  resetTimeoutMs?: number;
+  /** Human-readable name used in error messages and logs. */
+  name?: string;
+}
+
+export class CircuitBreakerOpenError extends Error {
+  constructor(name: string) {
+    super(`Circuit breaker open: ${name} is temporarily unavailable`);
+    this.name = 'CircuitBreakerOpenError';
+  }
+}
+
+export class CircuitBreaker {
+  private state: CircuitState = 'closed';
+  private failures = 0;
+  private lastOpenedAt: number | null = null;
+
+  private readonly failureThreshold: number;
+  private readonly resetTimeoutMs: number;
+  readonly name: string;
+
+  constructor(options: CircuitBreakerOptions = {}) {
+    this.name = options.name ?? 'unknown';
+    this.failureThreshold =
+      options.failureThreshold ??
+      parseInt(process.env.CIRCUIT_BREAKER_FAILURE_THRESHOLD ?? '5', 10);
+    this.resetTimeoutMs =
+      options.resetTimeoutMs ??
+      parseInt(process.env.CIRCUIT_BREAKER_RESET_TIMEOUT_MS ?? '30000', 10);
+  }
+
+  getState(): CircuitState {
+    if (this.state === 'open' && this.lastOpenedAt !== null) {
+      if (Date.now() - this.lastOpenedAt >= this.resetTimeoutMs) {
+        this.state = 'half-open';
+      }
+    }
+    return this.state;
+  }
+
+  /** Execute fn through the breaker. Throws CircuitBreakerOpenError when open. */
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    const state = this.getState();
+
+    if (state === 'open') {
+      throw new CircuitBreakerOpenError(this.name);
+    }
+
+    try {
+      const result = await fn();
+      this.onSuccess();
+      return result;
+    } catch (err) {
+      this.onFailure();
+      throw err;
+    }
+  }
+
+  isOpen(): boolean {
+    return this.getState() === 'open';
+  }
+
+  private onSuccess(): void {
+    this.failures = 0;
+    this.state = 'closed';
+    this.lastOpenedAt = null;
+  }
+
+  private onFailure(): void {
+    this.failures += 1;
+    if (this.state === 'half-open' || this.failures >= this.failureThreshold) {
+      this.state = 'open';
+      this.lastOpenedAt = Date.now();
+    }
+  }
+
+  /** Reset for testing purposes. */
+  reset(): void {
+    this.state = 'closed';
+    this.failures = 0;
+    this.lastOpenedAt = null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retrying breaker (Stellar RPC)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 export class CircuitBreakerError extends Error {
@@ -14,7 +130,7 @@ export interface CircuitBreakerConfig {
   baseBackoffMs: number;
 }
 
-export class CircuitBreaker {
+export class RetryingCircuitBreaker {
   public state: CircuitBreakerState = 'CLOSED';
   private failureCount = 0;
   private nextAttemptAt = 0;
@@ -93,4 +209,4 @@ export class CircuitBreaker {
   }
 }
 
-export const stellarBreaker = new CircuitBreaker();
+export const stellarBreaker = new RetryingCircuitBreaker();

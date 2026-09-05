@@ -82,6 +82,7 @@ export async function registerPlayer(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+ try {
   const parsed = registerSchema.parse(req.body);
 
   // Ensure the wallet in the request body belongs to the authenticated account.
@@ -141,6 +142,9 @@ export async function registerPlayer(
     data: { ...ipfsResult, playerId, metadataUri, gatewayUrl: ipfsResult.uri },
   };
   res.status(201).json(body);
+ } catch (err) {
+   next(err);
+ }
 }
 
 /**

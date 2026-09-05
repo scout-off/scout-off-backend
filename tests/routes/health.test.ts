@@ -293,6 +293,18 @@ describe('GET /ready and GET /health/readiness return identical responses', () =
     mockCheckHealth.mockReset();
   });
 
+  // Each probe reports its own measured latency (`ms`), so two requests issued
+  // in parallel can legitimately differ by a millisecond. Zero the timing
+  // fields before comparing — this suite asserts the two routes return the
+  // same *shape*, not the same wall-clock measurement.
+  const normalizeTiming = (body: Record<string, unknown>): Record<string, unknown> => {
+    const services = (body.services ?? {}) as Record<string, { ms?: number }>;
+    for (const probe of Object.values(services)) {
+      if (probe && typeof probe === 'object' && 'ms' in probe) probe.ms = 0;
+    }
+    return body;
+  };
+
   it('both return ok when IPFS is healthy', async () => {
     mockCheckHealth.mockResolvedValue(undefined);
     const [a, b] = await Promise.all([
@@ -300,7 +312,7 @@ describe('GET /ready and GET /health/readiness return identical responses', () =
       request(app).get('/health/readiness'),
     ]);
     expect(a.status).toBe(b.status);
-    expect(a.body).toEqual(b.body);
+    expect(normalizeTiming(a.body)).toEqual(normalizeTiming(b.body));
   });
 
   it('both return degraded when IPFS is down', async () => {
@@ -310,6 +322,6 @@ describe('GET /ready and GET /health/readiness return identical responses', () =
       request(app).get('/health/readiness'),
     ]);
     expect(a.status).toBe(b.status);
-    expect(a.body).toEqual(b.body);
+    expect(normalizeTiming(a.body)).toEqual(normalizeTiming(b.body));
   });
 });
