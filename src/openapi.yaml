@@ -738,6 +738,24 @@ paths:
       description: |-
         Propose and execute an update_platform_fee multi-sig action.
         Updates the on-chain platform fee in basis points (0–10000).
+      requestBody:
+        required: true
+        description: newFeeBps {number} - New fee in basis points (0–10000)
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actionId:
+                  type: string
+                  minLength: 1
+                newFeeBps:
+                  type: integer
+                  minimum: 0
+                  maximum: 10000
+              required:
+                - actionId
+                - newFeeBps
       responses:
         '202':
           description: '{ success: true, data: { actionId, transactionId, newFeeBps } }'
@@ -1095,6 +1113,14 @@ paths:
 
         NOTE: process-local flag only — multi-instance support requires a shared
         flag (e.g. Redis) and is tracked as a follow-up.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { status: ''cancel_requested'', message } }'
@@ -1206,6 +1232,26 @@ paths:
       description: |-
         Atomically import a batch of validators as a single multi-sig action.
         Returns a per-wallet manifest; partial failures return 207 for targeted retry.
+      requestBody:
+        required: true
+        description: wallets {string[]} - Array of Stellar public keys (max 100)
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actionId:
+                  type: string
+                  minLength: 1
+                wallets:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+                  maxItems: 100
+              required:
+                - actionId
+                - wallets
       responses:
         '202':
           description: '{ success: true, data: { actionId, manifest } }'
