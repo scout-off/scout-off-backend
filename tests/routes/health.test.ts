@@ -19,6 +19,14 @@ jest.mock('../../src/services/indexer', () => ({
   indexerLedgerLag: 0,
 }));
 
+// Partially mock the stellar service so tests can drive the RPC probe result
+// via mockStellarHealth without a real network call. Everything else
+// (stellarBreaker, server, …) stays real.
+jest.mock('../../src/services/stellar', () => {
+  const actual = jest.requireActual<typeof import('../../src/services/stellar')>('../../src/services/stellar');
+  return { ...actual, stellarHealth: jest.fn().mockResolvedValue(true) };
+});
+
 // Partially mock the db module so individual tests can control getDriver() —
 // src/app.ts's /health and /ready probes go through the DbDriver, not the raw
 // getDb() handle, so they work identically under DB_DRIVER=sqlite and

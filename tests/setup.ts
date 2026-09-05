@@ -43,6 +43,19 @@ process.env.API_KEY_LOOKUP_SECRET =
   process.env.API_KEY_LOOKUP_SECRET ??
   "a".repeat(63) + "b";
 
+// jest-circus (the default runner since Jest 27, sole runner in Jest 30)
+// removed the global `fail()` helper that jest-jasmine2 provided. Several
+// suites still call it. Restore a minimal equivalent.
+if (typeof (globalThis as { fail?: unknown }).fail !== "function") {
+  (globalThis as { fail?: (reason?: unknown) => never }).fail = (
+    reason: unknown = "fail() was called",
+  ): never => {
+    throw reason instanceof Error
+      ? reason
+      : new Error(typeof reason === "string" ? reason : JSON.stringify(reason));
+  };
+}
+
 import { initDb } from "../src/db";
 
 // initDb() is async (required to support DB_DRIVER=postgres's async

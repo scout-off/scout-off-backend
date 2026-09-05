@@ -86,7 +86,7 @@ jest.mock('../../src/services/indexer', () => ({ indexEvents: jest.fn(), normali
 jest.mock('../../src/services/stellar', () => ({ queryMilestones: jest.fn().mockResolvedValue([]), pauseContractOnChain: jest.fn(), unpauseContractOnChain: jest.fn(), registerValidatorOnChain: jest.fn(), revokeValidatorOnChain: jest.fn(), withdrawFees: jest.fn(), getFeeBalance: jest.fn().mockResolvedValue(0) }));
 jest.mock('../../src/services/ipfs', () => ({ pinJson: jest.fn(), checkHealth: jest.fn().mockResolvedValue(undefined), gatewayUrl: jest.fn() }));
 jest.mock('../../src/services/webhooks', () => ({ dispatchEventWebhook: jest.fn().mockResolvedValue(undefined) }));
-jest.mock('../../src/services/tokenBlocklist', () => ({ revokeToken: jest.fn(), isTokenRevoked: jest.fn().mockReturnValue(false) }));
+jest.mock('../../src/services/tokenBlocklist', () => ({ revokeToken: jest.fn(), isTokenRevoked: jest.fn().mockResolvedValue(false) }));
 jest.mock('../../src/services/cache', () => ({
   getPlayerListLastModified: jest.fn(() => 0),
   __setPlayerListLastModifiedForTests: jest.fn(), cacheGet: jest.fn().mockResolvedValue(null), cacheSet: jest.fn().mockResolvedValue(undefined), invalidatePlayerCache: jest.fn().mockResolvedValue(undefined) }));

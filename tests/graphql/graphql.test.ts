@@ -25,7 +25,7 @@ jest.mock('../../src/services/stellar', () => ({
 }));
 
 jest.mock('../../src/services/tokenBlocklist', () => ({
-  isTokenRevoked: jest.fn().mockReturnValue(false),
+  isTokenRevoked: jest.fn().mockResolvedValue(false),
 }));
 
 // ─── Imports ──────────────────────────────────────────────────────────────────
