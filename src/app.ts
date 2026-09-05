@@ -30,7 +30,6 @@ import { versionRouting } from './middleware/versionRouting';
 import docsRouter from './routes/docs';
 import eventsRoutes from './routes/events';
 import { logger } from './utils/logger';
-import { withTimeout } from './utils/withTimeout';
 import { requireRole } from './middleware/auth';
 import { getHealthDependencies } from './controllers/healthDependenciesController';
 import {
@@ -316,10 +315,12 @@ async function checkReadiness(): Promise<Record<string, ProbeResult>> {
     })(),
   ]);
 
-  services.db = dbResult;
-  services.ipfs = ipfsResult;
-  services.stellar = stellarResult;
-  services.indexer = indexerResult;
+  const services: Record<string, ProbeResult> = {
+    db: { status: dbResult, ms: 0 },
+    ipfs: ipfsResult,
+    stellar: stellarResult,
+    indexer: { status: indexerResult, ms: 0 },
+  };
 
   return services;
 }

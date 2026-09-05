@@ -107,6 +107,16 @@ class BoundedInMemoryCacheStore implements CacheStore {
     await this.evictIfNeeded();
   }
 
+  async has(key: string): Promise<boolean> {
+    const exists = await this.store.has(key);
+    if (exists) {
+      this.touch(key);
+    } else if (this.accessOrder.delete(key)) {
+      await this.store.del(key);
+    }
+    return exists;
+  }
+
   async del(key: string): Promise<void> {
     await this.store.del(key);
     this.accessOrder.delete(key);

@@ -1,5 +1,5 @@
 # ─── Stage 1: Build ──────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Accept the Git commit SHA at build time (defaults to "unknown")
 ARG GIT_COMMIT=unknown
@@ -22,7 +22,7 @@ RUN npm run build
 RUN npm ci --omit=dev --ignore-scripts
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 
 # Re-declare ARG so the value is available in this stage, then bake it into
 # the image as an ENV so the running container can read it via process.env.

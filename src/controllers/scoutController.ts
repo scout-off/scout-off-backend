@@ -876,7 +876,10 @@ export async function getScoutDashboard(
       subscriptionData = {
         active: true,
         tier: 'basic',
-        expiresAt: onChain.expiresAt,
+        // The on-chain contract exposes only a boolean subscription flag, not
+        // an expiry timestamp (isSubscribed returns '' when active), so there
+        // is no numeric expiresAt to surface here.
+        expiresAt: null,
         remainingDays: null,
         gracePeriodActive: false,
       };

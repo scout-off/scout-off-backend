@@ -21,6 +21,19 @@ declare module '@opentelemetry/api' {
     spanId: string;
     traceFlags: number;
   }
+
+  export enum SpanKind {
+    INTERNAL = 0,
+    SERVER = 1,
+    CLIENT = 2,
+    PRODUCER = 3,
+    CONSUMER = 4,
+  }
+
+  export interface Link {
+    context: SpanContext;
+    attributes?: Record<string, string | number | boolean>;
+  }
   
   export function isSpanContextValid(context: SpanContext): boolean;
   

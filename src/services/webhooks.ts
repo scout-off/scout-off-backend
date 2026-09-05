@@ -1,12 +1,11 @@
 import fetch from 'node-fetch';
 import crypto from 'crypto';
-import { listWebhookSubscriptions, insertWebhookDeadLetter, WebhookSubscription } from '../db';
+import { listWebhookSubscriptions, insertWebhookDeadLetter, insertWebhookDelivery, WebhookSubscription } from '../db';
 import { logger } from '../utils/logger';
 import { recordWebhookDelivery, incrementWebhookDeadLettersTotal } from '../middleware/metrics';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
-import { insertWebhookDelivery } from '../db';
-import { logger } from '../utils/logger';
+import { getCorrelationId } from '../utils/requestContext';
 
 /**
  * Generate a unique, stable delivery identifier for a webhook event.
@@ -159,18 +158,57 @@ export async function dispatchEventWebhook(eventType: string, payload: unknown):
   );
 }
 
+/**
+ * Persist a webhook delivery-history row (#1121). Best-effort: a DB failure here
+ * must never affect the delivery outcome or the dead-letter path.
+ */
+function recordDeliveryHistory(
+  subscription: WebhookSubscription,
+  eventType: string,
+  deliveryId: string,
+  outcome: {
+    status: 'success' | 'failure';
+    errorMessage?: string;
+    attemptCount?: number;
+    latencyMs?: number;
+  },
+): void {
+  try {
+    insertWebhookDelivery({
+      subscriptionId: String(subscription.id),
+      eventType,
+      deliveryId,
+      attemptCount: outcome.attemptCount ?? 1,
+      status: outcome.status,
+      errorMessage: outcome.errorMessage ?? null,
+      latencyMs: outcome.latencyMs ?? null,
+    });
+  } catch (dbErr) {
+    logger.warn(
+      `[webhooks] failed to persist delivery-history row — subscriptionId=${subscription.id} delivery_id=${deliveryId} err=${
+        dbErr instanceof Error ? dbErr.message : String(dbErr)
+      }`,
+    );
+  }
+}
+
 async function deliverToSubscription(
   subscription: WebhookSubscription,
   eventType: string,
   body: unknown,
   deliveryId: string,
 ): Promise<void> {
+  const startedAt = Date.now();
   try {
     await postWebhookWithRetry(subscription.url, body, {
       ...RETRY_OPTIONS,
       secret: subscription.secret,
     });
     recordWebhookDelivery('success');
+    recordDeliveryHistory(subscription, eventType, deliveryId, {
+      status: 'success',
+      latencyMs: Date.now() - startedAt,
+    });
   } catch (err) {
     const failureReason = err instanceof Error ? err.message : String(err);
     logger.warn(
@@ -187,5 +225,11 @@ async function deliverToSubscription(
     });
     incrementWebhookDeadLettersTotal();
     recordWebhookDelivery('dead_letter');
+    recordDeliveryHistory(subscription, eventType, deliveryId, {
+      status: 'failure',
+      errorMessage: failureReason,
+      attemptCount: RETRY_OPTIONS.retries,
+      latencyMs: Date.now() - startedAt,
+    });
   }
 }

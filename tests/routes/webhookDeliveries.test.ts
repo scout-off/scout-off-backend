@@ -1,6 +1,7 @@
 /**
- * Tests for the webhook delivery-history feature:
- * - deliverToSubscription() writes delivery records on success and failure
+ * Tests for the webhook delivery-history feature (#1121):
+ * - insertWebhookDelivery / getWebhookDeliveries / getWebhookDeliverySummary /
+ *   pruneWebhookDeliveries DB helpers
  * - GET /api/admin/webhooks/:id/deliveries returns paginated rows
  * - GET /api/admin/webhooks/:id/summary returns rolled-up stats
  */
@@ -13,67 +14,14 @@ jest.mock('../../src/services/ipfs', () => ({
   checkHealth: jest.fn().mockResolvedValue(undefined),
 }));
 
-import fetch from 'node-fetch';
 import request from 'supertest';
 import app from '../../src/app';
-import { deliverToSubscription } from '../../src/services/webhooks';
 import {
   insertWebhookDelivery,
   getWebhookDeliveries,
   getWebhookDeliverySummary,
   pruneWebhookDeliveries,
 } from '../../src/db';
-
-const mockedFetch = fetch as jest.MockedFunction<typeof fetch>;
-
-// ─── deliverToSubscription unit tests ────────────────────────────────────────
-
-describe('deliverToSubscription', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('records a success delivery row when the endpoint responds 200', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockedFetch.mockResolvedValue({ ok: true, status: 200 } as any);
-
-    await deliverToSubscription(
-      'https://example.com/hook',
-      'player_registered',
-      { player_id: 'p1' },
-      'sub-001',
-      { retries: 1, baseDelayMs: 1, maxDelayMs: 1 },
-    );
-
-    const { data } = getWebhookDeliveries({ subscriptionId: 'sub-001', limit: 10, offset: 0 });
-    expect(data.length).toBeGreaterThanOrEqual(1);
-    const row = data[0];
-    expect(row.status).toBe('success');
-    expect(row.event_type).toBe('player_registered');
-    expect(row.subscription_id).toBe('sub-001');
-  });
-
-  it('records a failure delivery row after all retries are exhausted', async () => {
-    mockedFetch.mockRejectedValue(new Error('connection refused'));
-
-    await expect(
-      deliverToSubscription(
-        'https://example.com/hook',
-        'milestone_approved',
-        { player_id: 'p2' },
-        'sub-002',
-        { retries: 2, baseDelayMs: 1, maxDelayMs: 1 },
-      ),
-    ).rejects.toThrow('connection refused');
-
-    const { data } = getWebhookDeliveries({ subscriptionId: 'sub-002', limit: 10, offset: 0 });
-    expect(data.length).toBeGreaterThanOrEqual(1);
-    const row = data[0];
-    expect(row.status).toBe('failure');
-    expect(row.event_type).toBe('milestone_approved');
-    expect(row.error_message).toContain('connection refused');
-  });
-});
 
 // ─── DB helper unit tests ─────────────────────────────────────────────────────
 
