@@ -83,9 +83,11 @@ function makeToken(wallet: string, role = 'scout'): string {
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-const SCOUT_WALLET = 'GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const OTHER_WALLET = 'GSCOUT2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const ADMIN_WALLET = 'GADMIN1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+// Real (checksum-valid) Stellar public keys — the :wallet route param is
+// validated by requireWalletOwner() → isValidStellarAddress().
+const SCOUT_WALLET = 'GDMORGT5QIO3SBTPCY46GGNEX65ZETWLRDJVKN3KMHEVNXGSCLL6G66N';
+const OTHER_WALLET = 'GDWC3R4A4RW3UUXR55LZQSXR3HCT5H3VZDT3ZASKQVHDIQIK5GDOUT77';
+const ADMIN_WALLET = 'GAWZFQBR2WTCZLVSU7HEY5ZPWSVDBUJCEFYOHNBELRFNENORNQSZOK5G';
 
 const nowSeconds = Math.floor(Date.now() / 1000);
 

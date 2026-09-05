@@ -115,7 +115,7 @@ router.route('/milestones/approve-bulk')
  * @auth Bearer (validator role required; own wallet only — admins may query any wallet)
  */
 router.route('/:wallet/stats')
-  .get(requireRole('validator'), requireWalletOwner(), getValidatorDashboardStats)
+  .get(requireRole('validator', 'admin'), requireWalletOwner(), getValidatorDashboardStats)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 export default router;

@@ -144,7 +144,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
  * Returns 403 if the token's role does not match.
  * All 401 and 403 responses are persisted to the audit trail.
  */
-export function requireRole(role: string) {
+export function requireRole(...allowedRoles: string[]) {
+  // The first role is the "primary" one — used for the X-API-Key path (API keys
+  // are scoped to a single role) and for audit/log messages. Additional roles
+  // (e.g. 'admin') are accepted on the JWT path only.
+  const role = allowedRoles[0];
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     // ── X-API-Key path ──────────────────────────────────────────────────────────
     const apiKeyHeader = req.headers['x-api-key'];
@@ -167,7 +171,7 @@ export function requireRole(role: string) {
       const token = header.slice(7);
       const payload = verifyToken(token);
 
-      if (payload.role !== role) {
+      if (!payload.role || !allowedRoles.includes(payload.role)) {
         logger.warn({
           method: req.method,
           path: req.path,

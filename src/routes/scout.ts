@@ -757,7 +757,7 @@ router.route('/:wallet/webhooks/:id/test')
  * @auth Bearer (scout role required; own wallet or admin)
  */
 router.route('/:wallet/dashboard')
-  .get(requireRole('scout'), requireWalletOwner(), getScoutDashboard)
+  .get(requireRole('scout', 'admin'), requireWalletOwner(), getScoutDashboard)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 export default router;
