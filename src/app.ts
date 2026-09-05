@@ -18,6 +18,7 @@ import { stellarHealth, stellarBreaker } from './services/stellar';
 import { checkHealth } from './services/ipfs';
 import { API_PREFIX, API_V1_PREFIX, API_V2_PREFIX } from './config';
 import { mountGraphQL } from './graphql';
+import { ErrorCode } from './utils/errorCodes';
 import { metricsMiddleware, createMetricsHandler } from './middleware/metrics';
 import { ipReputationMiddleware } from './middleware/ipReputation';
 import { createTimeout, requestTimeout } from './middleware/timeout';
@@ -417,7 +418,12 @@ mountGraphQL(app);
 // Returns JSON so API clients never receive an HTML error page.
 // Must be registered after all other routes and before the error handler.
 app.use((req, res) => {
-  res.status(404).json({ error: 'Not Found', path: req.path });
+  res.status(404).json({
+    success: false,
+    error: 'Not Found',
+    code: ErrorCode.NOT_FOUND,
+    path: req.path,
+  });
 });
 
 app.use(errorHandler);

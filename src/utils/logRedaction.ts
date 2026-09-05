@@ -112,9 +112,9 @@ function redactString(str: string): string {
   // Check for correlation ID patterns (if configured to hash)
   if (config.logRedaction.hashCorrelationIds) {
     // Look for correlationId= or cid= patterns
-    const cidMatch = str.match(/(?:correlationId|cid)=([a-zA-Z0-9-]+)/);
+    const cidMatch = str.match(/(correlationId|cid)=([a-zA-Z0-9-]+)/);
     if (cidMatch) {
-      return str.replace(cidMatch[0], `correlationId=${hashCorrelationId(cidMatch[1])}`);
+      return str.replace(cidMatch[0], `${cidMatch[1]}=${hashCorrelationId(cidMatch[2])}`);
     }
   }
   

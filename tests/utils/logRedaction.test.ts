@@ -16,27 +16,27 @@ describe('logRedaction', () => {
     });
 
     it('masks Stellar public key (G...) keeping prefix and suffix', () => {
-      const wallet = 'GABCD1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890AB';
+      const wallet = 'G' + 'A'.repeat(47) + 'WXYZ2345';
       const redacted = redactLogArg(wallet) as string;
-      expect(redacted).toBe('G...0AB');
+      expect(redacted).toBe('G...2345');
     });
 
     it('masks Stellar secret key (S...) keeping prefix and suffix', () => {
-      const secret = 'SABCD1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890AB';
+      const secret = 'S' + 'A'.repeat(47) + 'WXYZ2345';
       const redacted = redactLogArg(secret) as string;
-      expect(redacted).toBe('S...0AB');
+      expect(redacted).toBe('S...2345');
     });
 
     it('masks muxed account (M...) keeping prefix and suffix', () => {
-      const muxed = 'MABCD1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890AB1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890AB';
+      const muxed = 'M' + 'A'.repeat(60) + 'WXYZ2345';
       const redacted = redactLogArg(muxed) as string;
-      expect(redacted).toBe('M...0AB');
+      expect(redacted).toBe('M...2345');
     });
 
-    it('handles short wallet addresses gracefully', () => {
+    it('leaves strings shorter than a strkey untouched', () => {
       const shortWallet = 'GABC';
       const redacted = redactLogArg(shortWallet) as string;
-      expect(redacted).toBe('G***');
+      expect(redacted).toBe('GABC');
     });
 
     it('does not mask non-strkey strings', () => {
@@ -128,13 +128,13 @@ describe('logRedaction', () => {
     it('recursively redacts nested objects', () => {
       const obj = {
         user: {
-          wallet: 'GABCD1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890AB',
+          wallet: 'G' + 'A'.repeat(47) + 'WXYZ2345',
           token: 'secret',
         },
         safe: 'value',
       };
       const redacted = redactLogArg(obj) as Record<string, unknown>;
-      expect((redacted.user as Record<string, unknown>).wallet).toBe('G...0AB');
+      expect((redacted.user as Record<string, unknown>).wallet).toBe('G...2345');
       expect((redacted.user as Record<string, unknown>).token).toBeUndefined();
       expect(redacted.safe).toBe('value');
     });
@@ -160,9 +160,9 @@ describe('logRedaction', () => {
     });
 
     it('redacts wallet addresses in arrays', () => {
-      const arr = ['GABCD1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890AB', 'other'];
+      const arr = ['G' + 'A'.repeat(47) + 'WXYZ2345', 'other'];
       const redacted = redactLogArg(arr) as unknown[];
-      expect(redacted[0]).toBe('G...0AB');
+      expect(redacted[0]).toBe('G...2345');
       expect(redacted[1]).toBe('other');
     });
 
@@ -207,13 +207,12 @@ describe('logRedaction', () => {
   });
 
   describe('environment-based redaction', () => {
-    it('disables redaction in development', async () => {
-      process.env.NODE_ENV = 'development';
-      jest.resetModules();
-      const configModule = await import('../../src/config');
-      const devConfig = configModule.default;
-      
-      const wallet = 'GABCD1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890AB';
+    it('disables redaction when config.logRedaction.enabled is false (development default)', () => {
+      // redactLogArg closes over the singleton config; toggle it directly
+      // rather than re-importing (the top-level import is already bound).
+      config.logRedaction.enabled = false;
+
+      const wallet = 'G' + 'A'.repeat(47) + 'WXYZ2345';
       const redacted = redactLogArg(wallet);
       expect(redacted).toBe(wallet);
     });

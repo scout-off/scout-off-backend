@@ -397,7 +397,18 @@ export async function approveAction(
   }
 
   const now = Date.now();
-  await insertAdminActionSignature({ action_id: actionId, signer, signed_at: now });
+  // INSERT … ON CONFLICT DO NOTHING returns false when the signer already had a
+  // row — the authoritative duplicate check for concurrent same-signer calls
+  // that both passed the getAdminActionSignature() read above.
+  const inserted = await insertAdminActionSignature({ action_id: actionId, signer, signed_at: now });
+  if (!inserted) {
+    return {
+      actionId,
+      collected: action.collected_signatures,
+      required: action.required_signatures,
+      status: 'duplicate',
+    };
+  }
   await incrementActionSignatures(actionId);
 
   const updated = await getPendingAdminActionById(actionId);
@@ -416,10 +427,8 @@ export async function approveAction(
     timestamp: new Date().toISOString(),
   }).catch(() => {});
 
-  if (collected >= action.required_signatures) {
-    await updatePendingAdminActionStatus(actionId, 'executed');
-    logger.info(`[multisig] action=${action.action_type} id=${actionId} threshold=${action.required_signatures} collected=${collected} — executing`);
-    return { actionId, collected, required: action.required_signatures, status: 'approved' };
+  if (collected < action.required_signatures) {
+    return { actionId, collected, required: action.required_signatures, status: 'pending' };
   }
 
   // ── Quorum reached — mark as executed then fire the real operation ────────

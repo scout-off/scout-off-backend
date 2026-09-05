@@ -143,7 +143,7 @@ jest.mock('../../src/services/audit', () => ({
 }));
 
 jest.mock('../../src/utils/logger', () => ({
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), critical: jest.fn(), debug: jest.fn() },
 }));
 
 // Mock stellar calls so quorum-reached tests don't hit the network
@@ -374,7 +374,7 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
     Object.assign(mockConfig, threshold2Config);
 
     try {
-      const { actionId } = proposeAction('pause_contract', {}, ADMIN_1);
+      const { actionId } = await proposeAction('pause_contract', {}, ADMIN_1);
       const result = await approveAction(actionId, ADMIN_2);
       expect(result.status).toBe('approved');
       expect(stellar.pauseContractOnChain).toHaveBeenCalledWith(ADMIN_1);
@@ -390,7 +390,7 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
     Object.assign(mockConfig, threshold2Config);
 
     try {
-      const { actionId } = proposeAction('unpause_contract', {}, ADMIN_1);
+      const { actionId } = await proposeAction('unpause_contract', {}, ADMIN_1);
       const result = await approveAction(actionId, ADMIN_2);
       expect(result.status).toBe('approved');
       expect(stellar.unpauseContractOnChain).toHaveBeenCalledWith(ADMIN_1);
@@ -407,7 +407,7 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
 
     try {
       const validatorWallet = 'GVAL123XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-      const { actionId } = proposeAction('register_validator', { validatorWallet }, ADMIN_1);
+      const { actionId } = await proposeAction('register_validator', { validatorWallet }, ADMIN_1);
       const result = await approveAction(actionId, ADMIN_2);
       expect(result.status).toBe('approved');
       expect(stellar.registerValidatorOnChain).toHaveBeenCalledWith(validatorWallet);
@@ -424,7 +424,7 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
 
     try {
       const validatorWallet = 'GVAL123XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-      const { actionId } = proposeAction('revoke_validator', { validatorWallet }, ADMIN_1);
+      const { actionId } = await proposeAction('revoke_validator', { validatorWallet }, ADMIN_1);
       const result = await approveAction(actionId, ADMIN_2);
       expect(result.status).toBe('approved');
       expect(stellar.revokeValidatorOnChain).toHaveBeenCalledWith(validatorWallet);
@@ -441,7 +441,7 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
 
     try {
       const recipient = 'GTREASURY123XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-      const { actionId } = proposeAction('withdraw_fees', { recipient }, ADMIN_1);
+      const { actionId } = await proposeAction('withdraw_fees', { recipient }, ADMIN_1);
       const result = await approveAction(actionId, ADMIN_2);
       expect(result.status).toBe('approved');
       expect(stellar.withdrawFees).toHaveBeenCalledWith(recipient);
@@ -458,7 +458,7 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
 
     try {
       const wallet = 'GVAL123XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-      const { actionId } = proposeAction('bulk_validator_import', { wallet, label: 'Test', region: 'US' }, ADMIN_1);
+      const { actionId } = await proposeAction('bulk_validator_import', { wallet, label: 'Test', region: 'US' }, ADMIN_1);
       const result = await approveAction(actionId, ADMIN_2);
       expect(result.status).toBe('approved');
       expect(stellar.registerValidatorOnChain).toHaveBeenCalledWith(wallet);
@@ -558,7 +558,7 @@ describe('Below-threshold: 2 of 3 signatures', () => {
 
 describe('Concurrent same-signer approval atomicity', () => {
   it('counts a signer at most once even with simultaneous calls', async () => {
-    const actionId = proposeAction('pause_contract', {}, ADMIN_1).actionId;
+    const actionId = (await proposeAction('pause_contract', {}, ADMIN_1)).actionId;
 
     // Fire two approvals from ADMIN_2 simultaneously
     const [r1, r2] = await Promise.all([

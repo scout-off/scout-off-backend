@@ -92,7 +92,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
 
   describe('Acceptance Criteria 1: Real operations execute when quorum is reached', () => {
     test('pause_contract executes pauseContractOnChain', async () => {
-      const proposal = proposeAction('pause_contract', {}, adminWallet1);
+      const proposal = await proposeAction('pause_contract', {}, adminWallet1);
       expect(proposal.status).toBe('proposed');
 
       const result = await approveAction(proposal.actionId, adminWallet2);
@@ -101,7 +101,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     });
 
     test('unpause_contract executes unpauseContractOnChain', async () => {
-      const proposal = proposeAction('unpause_contract', {}, adminWallet1);
+      const proposal = await proposeAction('unpause_contract', {}, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
       
       expect(result.status).toBe('approved');
@@ -109,7 +109,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     });
 
     test('register_validator executes registerValidatorOnChain', async () => {
-      const proposal = proposeAction('register_validator', { validatorWallet }, adminWallet1);
+      const proposal = await proposeAction('register_validator', { validatorWallet }, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
       
       expect(result.status).toBe('approved');
@@ -117,7 +117,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     });
 
     test('revoke_validator executes revokeValidatorOnChain', async () => {
-      const proposal = proposeAction('revoke_validator', { validatorWallet }, adminWallet1);
+      const proposal = await proposeAction('revoke_validator', { validatorWallet }, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
       
       expect(result.status).toBe('approved');
@@ -125,7 +125,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     });
 
     test('withdraw_fees executes withdrawFees', async () => {
-      const proposal = proposeAction('withdraw_fees', { recipient: treasuryAddress }, adminWallet1);
+      const proposal = await proposeAction('withdraw_fees', { recipient: treasuryAddress }, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
       
       expect(result.status).toBe('approved');
@@ -133,7 +133,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     });
 
     test('bulk_validator_import executes registerValidatorOnChain', async () => {
-      const proposal = proposeAction('bulk_validator_import', { 
+      const proposal = await proposeAction('bulk_validator_import', { 
         wallet: validatorWallet, 
         label: 'Test Validator',
         region: 'US' 
@@ -212,7 +212,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     });
 
     test('prevents duplicate signatures from same signer', async () => {
-      const proposal = proposeAction('pause_contract', {}, adminWallet1);
+      const proposal = await proposeAction('pause_contract', {}, adminWallet1);
 
       // First approval from adminWallet2 brings collected to 2 of 3 —
       // still short of quorum, so the action stays pending.
@@ -227,7 +227,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     });
 
     test('concurrent approvals from same signer are atomic', async () => {
-      const proposal = proposeAction('pause_contract', {}, adminWallet1);
+      const proposal = await proposeAction('pause_contract', {}, adminWallet1);
 
       // Simulate concurrent approvals racing for the same signature slot.
       const promises = [
@@ -255,7 +255,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
   describe('Acceptance Criteria 4: Schema equivalence between drivers', () => {
     const testMultiSigFlow = async () => {
       // Create a pending action
-      const proposal = proposeAction('register_validator', { validatorWallet }, adminWallet1);
+      const proposal = await proposeAction('register_validator', { validatorWallet }, adminWallet1);
       expect(proposal.status).toBe('proposed');
       
       // Approve to reach quorum
@@ -284,7 +284,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
       // Mock stellar operation to fail
       mockStellar.pauseContractOnChain.mockRejectedValue(new Error('Network timeout'));
       
-      const proposal = proposeAction('pause_contract', {}, adminWallet1);
+      const proposal = await proposeAction('pause_contract', {}, adminWallet1);
       
       // Approval should fail due to execution error
       await expect(approveAction(proposal.actionId, adminWallet2)).rejects.toThrow('Network timeout');
@@ -295,7 +295,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     });
 
     test('execution success is properly logged', async () => {
-      const proposal = proposeAction('pause_contract', {}, adminWallet1);
+      const proposal = await proposeAction('pause_contract', {}, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
       
       expect(result.status).toBe('approved');
@@ -313,7 +313,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
       const criticalSpy = jest.spyOn(logger, 'critical').mockImplementation(() => {});
       const before = getFeeWithdrawalDbWriteFailuresTotal();
 
-      const proposal = proposeAction('withdraw_fees', { recipient: treasuryAddress }, adminWallet1);
+      const proposal = await proposeAction('withdraw_fees', { recipient: treasuryAddress }, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
 
       expect(result.status).toBe('approved');
@@ -331,7 +331,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
 
   describe('Edge cases and error handling', () => {
     test('missing payload fields cause execution to fail gracefully', async () => {
-      const proposal = proposeAction('register_validator', {}, adminWallet1); // Missing validatorWallet
+      const proposal = await proposeAction('register_validator', {}, adminWallet1); // Missing validatorWallet
       
       await expect(approveAction(proposal.actionId, adminWallet2)).rejects.toThrow('Missing validatorWallet in payload');
     });
@@ -363,7 +363,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
       config.adminThreshold = 1;
       
       try {
-        const proposal = proposeAction('pause_contract', {}, adminWallet1);
+        const proposal = await proposeAction('pause_contract', {}, adminWallet1);
         expect(proposal.status).toBe('immediate');
         // With threshold=1, the action should execute immediately in the controller
       } finally {

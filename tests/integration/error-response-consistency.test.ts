@@ -87,8 +87,8 @@ describe('Error Response Consistency — application/json invariant', () => {
   describe('Method not allowed / wrong HTTP verb', () => {
     it('returns application/json for GET /api/players/register (POST-only)', async () => {
       const res = await request(app).get('/api/players/register');
-      expect(res.status).toBe(404);
-      // Unmatched GET → 404 from catch-all
+      // Route defines .all(methodNotAllowed(['POST'])) → 405 for a wrong verb
+      expect(res.status).toBe(405);
       expect(res.type).toBe('application/json');
       expectValidErrorResponse(res.body);
     });
@@ -97,7 +97,7 @@ describe('Error Response Consistency — application/json invariant', () => {
       const res = await request(app)
         .patch('/api/players/register')
         .send({});
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(405);
       expect(res.type).toBe('application/json');
       expectValidErrorResponse(res.body);
     });
@@ -110,11 +110,12 @@ describe('Error Response Consistency — application/json invariant', () => {
 
   describe('Handler throws an error', () => {
     it('returns application/json when middleware throws ZodError (validation)', async () => {
-      // POST /api/players/register without required wallet field triggers Zod validation
+      // POST /auth/token with an empty body triggers validateBody's Zod schema.
+      // This route has no auth guard ahead of validateBody, so the request
+      // actually reaches the validation layer (unlike the role-gated routes).
       const res = await request(app)
-        .post('/api/players/register')
-        .set('Authorization', `Bearer token`)
-        .send({ position: 'striker', region: 'europe' });
+        .post('/auth/token')
+        .send({});
       // Missing required fields → ZodError → 400
       expect(res.status).toBe(400);
       expect(res.type).toBe('application/json');
@@ -175,11 +176,12 @@ describe('Error Response Consistency — application/json invariant', () => {
 
   describe('Payload size limits', () => {
     it('returns application/json when payload exceeds size limit', async () => {
-      // The default bodyParser.json limit is 100kb; send a very large payload
+      // /api/players/register is an upload path (10mb limit); exceed it so the
+      // body parser rejects the request with 413 before it reaches any route.
       const largePayload = JSON.stringify({
         wallet: 'G' + 'A'.repeat(55),
-        position: 'x'.repeat(1024 * 200), // 200KB string
-        region: 'y'.repeat(1024 * 200),
+        position: 'x'.repeat(1024 * 1024 * 6), // ~6MB
+        region: 'y'.repeat(1024 * 1024 * 6), // ~6MB → ~12MB total
       });
 
       const res = await request(app)

@@ -20,7 +20,13 @@ import { ErrorCode } from '../utils/errorCodes';
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
-export const reindexBodySchema = z
+/**
+ * Structural body schema (field types only, no cross-field range rules).
+ * Used by the route-level validateBody() so it rejects malformed payloads with
+ * 400 but lets range violations through to triggerReindex(), which classifies
+ * an over-limit range as 422 (see the safeParse in that handler).
+ */
+export const reindexBodyShapeSchema = z
   .object({
     fromLedger: z
       .number({ required_error: 'fromLedger is required' })
@@ -31,7 +37,9 @@ export const reindexBodySchema = z
       .int('toLedger must be an integer')
       .min(1, 'toLedger must be ≥ 1'),
   })
-  .strict()
+  .strict();
+
+export const reindexBodySchema = reindexBodyShapeSchema
   .refine((d) => d.fromLedger < d.toLedger, {
     message: 'fromLedger must be less than toLedger',
     path: ['fromLedger'],

@@ -5,7 +5,12 @@ describe('404 fallback handler', () => {
   it('returns 404 JSON for unknown path', async () => {
     const res = await request(app).get('/api/does-not-exist');
     expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: 'Not Found', path: '/api/does-not-exist' });
+    expect(res.body).toEqual({
+      success: false,
+      error: 'Not Found',
+      code: 'NOT_FOUND',
+      path: '/api/does-not-exist',
+    });
   });
 
   it('returns application/json content-type for unknown path', async () => {

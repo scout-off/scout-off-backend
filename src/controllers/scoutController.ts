@@ -103,7 +103,7 @@ export const trialOfferSchema = z.object({
  * so the body is intentionally empty. Defining it explicitly ensures
  * unexpected fields are stripped and the route is ready for future body fields.
  */
-export const unlockContactSchema = z.object({}).strict();
+export const unlockContactSchema = z.object({}).strict().default({});
 
 export const subscribeSchema = z.object({
   tier: z.enum(['basic', 'premium']),

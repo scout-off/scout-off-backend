@@ -34,7 +34,12 @@ describe('405 Method Not Allowed', () => {
   it('completely unknown paths still return 404, not 405', async () => {
     const res = await request(app).delete('/api/does-not-exist');
     expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: 'Not Found', path: '/api/does-not-exist' });
+    expect(res.body).toEqual({
+      success: false,
+      error: 'Not Found',
+      code: 'NOT_FOUND',
+      path: '/api/does-not-exist',
+    });
   });
 
   // ── Response shape ────────────────────────────────────────────────────────

@@ -18,7 +18,13 @@ import { ErrorCode } from '../utils/errorCodes';
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
-export const replayBodySchema = z
+/**
+ * Structural body schema (field types only, no cross-field range rules).
+ * Route-level validateBody() uses this so malformed payloads 400 but range
+ * violations pass through to triggerReplay(), which classifies an over-limit
+ * range as 422.
+ */
+export const replayBodyShapeSchema = z
   .object({
     fromLedger: z
       .number({ required_error: 'fromLedger is required' })
@@ -29,7 +35,9 @@ export const replayBodySchema = z
       .int('toLedger must be an integer')
       .min(1, 'toLedger must be ≥ 1'),
   })
-  .strict()
+  .strict();
+
+export const replayBodySchema = replayBodyShapeSchema
   .refine((d) => d.fromLedger < d.toLedger, {
     message: 'fromLedger must be less than toLedger',
     path: ['fromLedger'],

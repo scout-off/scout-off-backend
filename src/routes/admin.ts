@@ -28,7 +28,9 @@ import {
   reindexSchema,
   importValidatorsBodySchema,
   bulkValidatorImport,
+  bulkValidatorImportSchema,
   updatePlatformFeeController,
+  updatePlatformFeeSchema,
   getWebhookDeliveriesEndpoint,
   getWebhookDeliverySummaryEndpoint,
 } from '../controllers/adminController';
@@ -38,8 +40,8 @@ import { getFeatureFlags, updateFeatureFlag, toggleFeatureFlag, updateFeatureFla
 import { exportEvents } from '../controllers/exportController';
 import { listDeadLetters, replayDeadLetter, purgeOldDeadLetters, requeueDeadLetter, purgeDeadLetter } from '../controllers/webhookAdminController';
 import { setIpReputationController, getIpReputationController, setIpReputationSchema } from '../controllers/ipReputationController';
-import { triggerReindex, reindexStatusHandler, reindexBodySchema, cancelReindexHandler } from '../controllers/reindexController';
-import { triggerReplay, replayStatusHandler, replayBodySchema } from '../controllers/replayController';
+import { triggerReindex, reindexStatusHandler, reindexBodySchema, reindexBodyShapeSchema, cancelReindexHandler } from '../controllers/reindexController';
+import { triggerReplay, replayStatusHandler, replayBodySchema, replayBodyShapeSchema } from '../controllers/replayController';
 import { requireRole } from '../middleware/auth';
 import { idempotency } from '../middleware/idempotency';
 import { ipAllowlistMiddleware } from '../middleware/ipAllowlist';
@@ -250,7 +252,7 @@ router.route('/validators/register')
  * @response 400 { success: false, error: string } - Validation error
  * @auth Bearer (admin role required)
  */
-router.post('/validators/bulk-import', requireRole('admin'), bulkValidatorImport);
+router.post('/validators/bulk-import', requireRole('admin'), validateBody(bulkValidatorImportSchema), bulkValidatorImport);
 
 /**
  * POST /api/admin/validators/revoke
@@ -566,7 +568,7 @@ router.route('/actions/:id/approve')
  * @auth Bearer (admin role required)
  */
 router.route('/reindex')
-  .post(createTimeout(0), requireRole('admin'), validateBody(reindexBodySchema), triggerReindex)
+  .post(createTimeout(0), requireRole('admin'), validateBody(reindexBodyShapeSchema), triggerReindex)
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -607,7 +609,7 @@ router.route('/reindex/status')
  * @auth Bearer (admin role required)
  */
 router.route('/reindex/cancel')
-  .post(requireRole('admin'), cancelReindexHandler)
+  .post(requireRole('admin'), validateBody(emptyBodySchema), cancelReindexHandler)
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -628,7 +630,7 @@ router.route('/reindex/cancel')
  * @auth Bearer (admin role required)
  */
 router.route('/events/replay')
-  .post(requireRole('admin'), validateBody(replayBodySchema), triggerReplay)
+  .post(requireRole('admin'), validateBody(replayBodyShapeSchema), triggerReplay)
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -800,6 +802,6 @@ router.get('/webhooks/:id/summary', requireRole('admin'), getWebhookDeliverySumm
  * @response 400 { success: false, error: string }
  * @auth Bearer (admin role required)
  */
-router.post('/fees/config', requireRole('admin'), updatePlatformFeeController);
+router.post('/fees/config', requireRole('admin'), validateBody(updatePlatformFeeSchema), updatePlatformFeeController);
 
 export default router;

@@ -27,6 +27,12 @@ export const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
 
   /**
+   * HTTP 405 — The HTTP method is not allowed for this route.
+   * Client should: Use one of the methods listed in the `Allow` response header.
+   */
+  METHOD_NOT_ALLOWED: 'METHOD_NOT_ALLOWED',
+
+  /**
    * HTTP 400 — Request validation failed (Zod schema, required fields, etc.).
    * Client should: Fix the request payload; check field names and types against API docs.
    */
