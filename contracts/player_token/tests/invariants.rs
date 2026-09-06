@@ -147,7 +147,7 @@ mod player_token_invariants {
             client.buy_token(&1u64, &30u64, &b2);
             client.buy_token(&1u64, &20u64, &b3);
 
-            let queued = client.distribute_fee(&1u64, &fee, &0u32);
+            let queued = client.distribute_fee(&1u64, &fee, &1u128, &0u32);
             prop_assert_eq!(queued, 3);
 
             let payouts = client.get_pending_payouts(&1u64, &0u32);
@@ -185,7 +185,7 @@ mod player_token_invariants {
                 buyers.push(b);
             }
 
-            let queued = client.distribute_fee(&player_id, &fee, &0u32);
+            let queued = client.distribute_fee(&player_id, &fee, &1u128, &0u32);
             prop_assert!(queued as usize <= n_holders);
 
             let payouts = client.get_pending_payouts(&player_id, &0u32);
@@ -268,7 +268,7 @@ mod player_token_invariants {
                 client.buy_token(&player_id, &5u64, &b);
             }
 
-            let queued = client.distribute_fee(&player_id, &1_000u128, &page);
+            let queued = client.distribute_fee(&player_id, &1_000u128, &1u128, &page);
             prop_assert_eq!(queued, 0, "page {} beyond holder count must return 0 queued", page);
         }
     }

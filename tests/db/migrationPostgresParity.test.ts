@@ -21,6 +21,7 @@ const ALLOWLIST = new Set([
   '013_composite_indexes.sql', // CREATE INDEX only, no dialect-specific syntax
   '014_api_key_scopes.sql', // ALTER TABLE ADD COLUMN + partial index, portable
   '025_api_key_rotation.sql', // ALTER TABLE ADD COLUMN, portable
+  '029_events_type_ledger_index.sql', // CREATE INDEX IF NOT EXISTS only, portable
 ]);
 
 describe('db/ migration Postgres parity', () => {

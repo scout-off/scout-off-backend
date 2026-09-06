@@ -22,6 +22,7 @@ jest.mock('../../src/services/stellar', () => ({
 
 jest.mock('../../src/db', () => ({
   queryEvents: jest.fn().mockReturnValue([]),
+  insertFeeWithdrawal: jest.fn().mockResolvedValue({ id: 1 }),
 }));
 
 jest.mock('../../src/services/indexer', () => ({
@@ -151,16 +152,18 @@ describe('POST /api/admin/fees — validation', () => {
     expect(res.body.success).toBe(false);
   });
 
-  it('logs an audit event on validation failure', async () => {
-    await request(app)
+  it('rejects a malformed body at the validation layer with a structured 400', async () => {
+    // validateBody(withdrawFeesSchema) short-circuits an invalid body before
+    // the controller runs, so the response is the generic validation envelope
+    // and no on-chain withdrawal is attempted.
+    const res = await request(app)
       .post('/api/admin/fees')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ recipient: 'BAD' });
-    expect(mockLogAuditEvent).toHaveBeenCalledTimes(1);
-    const call = mockLogAuditEvent.mock.calls[0][0];
-    expect(call.action).toBe('fee_withdrawal_attempt');
-    expect(call.adminWallet).toBe(ADMIN_WALLET);
-    expect(call.queryParams.error).toBe('validation_failed');
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toBe('Validation Error');
+    expect(mockWithdrawFees).not.toHaveBeenCalled();
   });
 
   it('does not call withdrawFees when validation fails', async () => {

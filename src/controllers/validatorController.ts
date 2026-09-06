@@ -111,6 +111,10 @@ export const milestoneSchema = z.object({
   playerId: z.string().min(1),
   milestoneType: z.enum(['identity', 'performance', 'trial_offer']),
   evidenceUri: z.string().min(1).refine(isValidMetadataUri, URI_VALIDATION_ERROR),
+  // Optional free-text fields (#29). Accepted and persisted with the audit
+  // record; not required for submission.
+  notes: z.string().max(2000).optional(),
+  validatorComment: z.string().max(2000).optional(),
 }).strict();
 
 export const MAX_PAGE_SIZE = 100;

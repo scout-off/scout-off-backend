@@ -50,7 +50,7 @@ import { rateLimit } from '../middleware/rateLimit';
 import { createTimeout } from '../middleware/timeout';
 import { validateBody, validateJsonBodyOrPassThrough } from '../middleware/validate';
 import { validatorWalletSchema } from '../validators/admin';
-import { emptyBodySchema } from '../validators/emptyBody';
+import { emptyBodySchema, ignoredBodySchema } from '../validators/emptyBody';
 import config from '../config';
 
 /** Stricter rate limit for bulk import — 5 requests per minute per IP (relaxed in tests). */
@@ -399,7 +399,9 @@ router.route('/contract/unpause')
  * POST /api/admin/introspect
  *
  * Decodes the caller's own bearer token and returns its payload metadata.
- * The token is extracted from the Authorization header only — no body input is accepted.
+ * The token is extracted from the Authorization header only — any request body
+ * (including a `token` field) is deliberately ignored rather than rejected so a
+ * stray field can't leak into a 400 (#279).
  * Useful for admins to inspect their own token claims (subject, role, expiry).
  *
  * @response 200 { success: true, data: { sub, role, iat, exp } }
@@ -408,7 +410,7 @@ router.route('/contract/unpause')
  * @auth Bearer (admin role required)
  */
 router.route('/introspect')
-  .post(requireRole('admin'), validateBody(emptyBodySchema), introspectToken)
+  .post(requireRole('admin'), validateBody(ignoredBodySchema), introspectToken)
   .all(methodNotAllowed(['POST']));
 
 /**

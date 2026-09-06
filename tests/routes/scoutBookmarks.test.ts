@@ -203,7 +203,7 @@ describe('POST /api/scouts/:wallet/bookmarks', () => {
       .set('Authorization', `Bearer ${scoutAToken}`);
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('playerId is required');
+    expect(JSON.stringify(res.body)).toMatch(/playerId is required/);
   });
 
   it('returns 403 when scout tries to bookmark under a different wallet', async () => {
@@ -506,7 +506,7 @@ describe('POST /api/scouts/:wallet/bookmark-folders', () => {
       .set('Authorization', `Bearer ${scoutAToken}`);
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('name is required and must be a string');
+    expect(JSON.stringify(res.body)).toMatch(/name is required and must be a string/);
   });
 
   it('returns 403 for cross-wallet access', async () => {

@@ -1210,15 +1210,14 @@
         ],
         "summary": "Decodes the caller's own bearer token and returns its payload metadata.",
         "operationId": "introspectToken",
-        "description": "Decodes the caller's own bearer token and returns its payload metadata.\nThe token is extracted from the Authorization header only — no body input is accepted.\nUseful for admins to inspect their own token claims (subject, role, expiry).",
+        "description": "Decodes the caller's own bearer token and returns its payload metadata.\nThe token is extracted from the Authorization header only — any request body\n(including a `token` field) is deliberately ignored rather than rejected so a\nstray field can't leak into a 400 (#279).\nUseful for admins to inspect their own token claims (subject, role, expiry).",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {},
-                "additionalProperties": false
+                "properties": {}
               }
             }
           }
@@ -5976,6 +5975,14 @@
                     "type": "string",
                     "minLength": 1,
                     "description": "Additional validation is applied beyond this schema — see the route handler."
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "validatorComment": {
+                    "type": "string",
+                    "maxLength": 2000
                   }
                 },
                 "required": [

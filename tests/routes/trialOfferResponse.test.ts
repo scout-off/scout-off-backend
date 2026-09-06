@@ -44,6 +44,7 @@ jest.mock('../../src/db', () => ({
   insertTrialOffer: jest.fn(),
   respondToTrialOffer: jest.fn(),
   cancelTrialOffer: jest.fn(),
+  insertAuditLog: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Ensure we can update the player_registered event wallet in tests
