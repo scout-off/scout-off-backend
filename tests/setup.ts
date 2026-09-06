@@ -56,7 +56,7 @@ if (typeof (globalThis as { fail?: unknown }).fail !== "function") {
   };
 }
 
-import { initDb } from "../src/db";
+import { closeDb, initDb } from "../src/db";
 
 // initDb() is async (required to support DB_DRIVER=postgres's async
 // connection setup) — this file runs as setupFilesAfterEnv rather than
@@ -64,4 +64,15 @@ import { initDb } from "../src/db";
 // framework) is available here to await it before any test in the file runs.
 beforeAll(async () => {
   await initDb();
+});
+
+// Close the database at the end of every suite so better-sqlite3 finalizes
+// every prepared Statement while the Node environment is still alive. Without
+// this, `jest --forceExit` tears the process down with live Statement wrappers
+// still pending GC; their C++ destructors then call RemoveEnvironmentCleanupHook
+// after the environment is gone, which aborts the process on Node 24
+// ("Assertion failed: (env) != nullptr"). closeDb() is idempotent, so suites
+// that already close explicitly are unaffected.
+afterAll(async () => {
+  await closeDb();
 });
