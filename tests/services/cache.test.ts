@@ -193,7 +193,7 @@ describe('RedisCacheStore deleteByPrefix (SCAN + DEL)', () => {
     expect(pipelineDels).toEqual([['players:list:a']]);
   });
 
-  it('propagates Redis errors from SCAN so the cache layer can degrade gracefully', async () => {
+  it('swallows Redis errors from SCAN so a Redis outage cannot fail the caller (#1041)', async () => {
     const client = {
       get: jest.fn(),
       set: jest.fn(),
@@ -204,7 +204,10 @@ describe('RedisCacheStore deleteByPrefix (SCAN + DEL)', () => {
     } as unknown as RedisLike;
     const store = new RedisCacheStore(client);
 
-    await expect(store.deleteByPrefix('players:list')).rejects.toThrow('connection lost');
+    // deleteByPrefix() degrades gracefully: the SCAN error is logged at warn
+    // and the promise resolves rather than rejecting (all cache.ts callers
+    // run it best-effort during invalidation).
+    await expect(store.deleteByPrefix('players:list')).resolves.toBeUndefined();
   });
 
   it('Redis wildcard invalidation leaves single-player entries (players:<id>) untouched', async () => {
