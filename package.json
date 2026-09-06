@@ -1,7 +1,7 @@
 {
   "name": "scout-off-backend",
   "version": "1.0.0",
-  "description": "Backend API for ScoutOff \u2014 decentralized football scouting platform on Stellar",
+  "description": "Backend API for ScoutOff — decentralized football scouting platform on Stellar",
   "main": "dist/index.js",
   "engines": {
     "node": ">=22.0.0 <25.0.0",
@@ -48,7 +48,7 @@
     "@opentelemetry/sdk-node": "^0.221.0",
     "@stellar/stellar-sdk": "17.0.0",
     "axios": "1.18.1",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^13.0.3",
     "compression": "^1.8.1",
     "cors": "2.8.5",
     "dataloader": "2.2.3",
