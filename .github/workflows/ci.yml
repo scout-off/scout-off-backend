@@ -134,9 +134,12 @@ jobs:
   # Runs the same suite as `test` above but against a real PostgreSQL service
   # container with DB_DRIVER=postgres, so the Postgres driver path (#1014)
   # can never silently regress. Excludes suites that still use sync getDb() /
-  # SQLite-specific APIs (see docs/postgres-migration.md FAQ). Keep this list
-  # aligned with package.json `test:postgres`. adminPagination is included
-  # (fully mocked). playerListFreshness and trialOffers remain excluded.
+  # SQLite-specific APIs, or that assume synchronous DB writes / re-init the
+  # module registry with jest.resetModules() (which strips the awaited
+  # initDb() the Postgres driver needs) — see docs/postgres-migration.md FAQ.
+  # Keep this list aligned with package.json `test:postgres`. adminPagination
+  # is included (fully mocked). playerListFreshness and trialOffers remain
+  # excluded.
   postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -189,6 +192,16 @@ jobs:
           --testPathIgnorePatterns="tests/services/indexerDispatch.test.ts"
           --testPathIgnorePatterns="tests/services/tierPromotion.test.ts"
           --testPathIgnorePatterns="tests/services/webhooks.test.ts"
+          --testPathIgnorePatterns="tests/routes/cors.test.ts"
+          --testPathIgnorePatterns="tests/routes/replay.test.ts"
+          --testPathIgnorePatterns="tests/routes/webhookDeliveries.test.ts"
+          --testPathIgnorePatterns="tests/services/replayService.test.ts"
+          --testPathIgnorePatterns="tests/services/adminMultiSigExecution.test.ts"
+          --testPathIgnorePatterns="tests/db/apiKeyLookup.test.ts"
+          --testPathIgnorePatterns="tests/services/reindexService.test.ts"
+          --testPathIgnorePatterns="tests/db/apiKeyRotation.test.ts"
+          --testPathIgnorePatterns="tests/services/reindexCatchupMode.test.ts"
+          --testPathIgnorePatterns="tests/services/txCorrelation.test.ts"
         env:
           DB_DRIVER: postgres
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/scout_off_ci
