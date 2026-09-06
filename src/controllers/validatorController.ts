@@ -123,7 +123,12 @@ export const pendingQuerySchema = z.object({
   region: z.string().optional(),
   position: z.string().optional(),
   playerId: z.string().optional(),
+  // Inclusive bounds on submitted_at (Unix seconds), issue #1135.
+  submittedAfter: z.coerce.number().int().optional(),
+  submittedBefore: z.coerce.number().int().optional(),
   page: z.coerce.number().int().min(1).optional(),
+  // Literal 100 (== MAX_PAGE_SIZE) so the OpenAPI generator's static analysis
+  // can emit `maximum: 100`.
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
 });
 
@@ -179,13 +184,16 @@ try {
 
 /** GET /api/validators/milestones/pending or /api/validators/:wallet/milestones/pending */
 export async function getPendingMilestones(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const { region, position, playerId, page, pageSize } = pendingQuerySchema.parse(req.query);
+  const { region, position, playerId, submittedAfter, submittedBefore, page, pageSize } =
+    pendingQuerySchema.parse(req.query);
   const validatorWallet = req.params.wallet as string || req.account;
   const { data, total } = await getPendingMilestonesFromDb({
     validatorWallet: validatorWallet,
     region,
     position,
     playerId,
+    submittedAfter,
+    submittedBefore,
     page,
     pageSize,
   });
@@ -212,12 +220,15 @@ export async function getPendingMilestones(req: Request, res: Response, next: Ne
     'pending milestones viewed'
   );
 
-  res.json({ 
-    success: true, 
-    data: milestones, 
-    total, 
-    page: page || 1, 
-    pageSize: pageSize || 20 
+  const effectivePage = page || 1;
+  const effectivePageSize = pageSize || 20;
+  res.json({
+    success: true,
+    data: milestones,
+    total,
+    page: effectivePage,
+    pageSize: effectivePageSize,
+    hasMore: effectivePage * effectivePageSize < total,
   });
 }
 

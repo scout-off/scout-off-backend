@@ -781,6 +781,10 @@ export interface GetPendingMilestonesOptions {
   position?: string;
   region?: string;
   playerId?: string;
+  /** Inclusive lower bound on pm.submitted_at (Unix seconds). */
+  submittedAfter?: number;
+  /** Inclusive upper bound on pm.submitted_at (Unix seconds). */
+  submittedBefore?: number;
   page?: number;
   pageSize?: number;
 }
@@ -806,6 +810,14 @@ export async function getPendingMilestones(options: GetPendingMilestonesOptions)
   if (options.playerId) {
     whereConditions.push('pm.player_id = ?');
     params.push(options.playerId);
+  }
+  if (options.submittedAfter !== undefined) {
+    whereConditions.push('pm.submitted_at >= ?');
+    params.push(options.submittedAfter);
+  }
+  if (options.submittedBefore !== undefined) {
+    whereConditions.push('pm.submitted_at <= ?');
+    params.push(options.submittedBefore);
   }
 
   const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';

@@ -4334,6 +4334,16 @@ paths:
           required: false
           schema:
             type: string
+        - name: submittedAfter
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: submittedBefore
+          in: query
+          required: false
+          schema:
+            type: integer
         - name: page
           in: query
           required: false
@@ -4387,6 +4397,16 @@ paths:
           required: false
           schema:
             type: string
+        - name: submittedAfter
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: submittedBefore
+          in: query
+          required: false
+          schema:
+            type: integer
         - name: page
           in: query
           required: false
