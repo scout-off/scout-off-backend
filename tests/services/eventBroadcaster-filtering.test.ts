@@ -187,8 +187,11 @@ describe('EventBroadcaster: playerId filter', () => {
     expect(sub.sentEvents).toEqual([player1Event]);
   });
 
-  it('finds playerId in various payload fields (player_id, wallet, scout)', () => {
-    const sub = createMockSubscriber(WALLET_A, {
+  it('finds playerId in various payload fields (player_id, wallet, scout, recipient)', () => {
+    // The subscriber is PLAYER_1's own SSE connection filtering to their own
+    // id, so the wallet-relevance check (always applied) passes for every
+    // event that references them — the playerId filter is what's under test.
+    const sub = createMockSubscriber(PLAYER_1, {
       eventTypes: new Set([]),
       playerId: PLAYER_1,
     });

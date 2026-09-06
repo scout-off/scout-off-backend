@@ -265,7 +265,11 @@ export async function indexEvents(): Promise<void> {
           const milestoneType = payload.milestone_type as string;
           const evidenceUri = payload.evidence_uri as string;
           const submittedAt = raw.ledger;
-          if (milestoneId && playerId && validatorWallet) {
+          // milestone_type / evidence_uri back non-nullable columns, so a
+          // malformed on-chain event that omits either is skipped (logged)
+          // rather than allowed to abort the whole batch with a constraint
+          // error — the raw event row is still recorded above.
+          if (milestoneId && playerId && validatorWallet && milestoneType && evidenceUri) {
             await insertPendingMilestone(
               milestoneId,
               playerId,
@@ -273,6 +277,17 @@ export async function indexEvents(): Promise<void> {
               milestoneType,
               evidenceUri,
               submittedAt,
+            );
+          } else {
+            logger.warn(
+              `[indexer] skipping malformed milestone_submitted event tx=${event.txHash} ` +
+              `(missing ${[
+                !milestoneId && 'milestone_id',
+                !playerId && 'player_id',
+                !validatorWallet && 'validator',
+                !milestoneType && 'milestone_type',
+                !evidenceUri && 'evidence_uri',
+              ].filter(Boolean).join(', ')})`,
             );
           }
           webhookEvents.push({ type, payload, txHash: event.txHash });
