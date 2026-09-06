@@ -33,6 +33,7 @@ jest.mock('../../src/db', () => ({
   insertPlayerProfileHistory: jest.fn(),
   getPlayerProfileHistory: jest.fn().mockReturnValue([]),
   getLatestSubscription: jest.fn().mockReturnValue(null),
+  getSubscriptionsByScout: jest.fn().mockReturnValue([]),
   insertSubscription: jest.fn(),
   getContactUnlocksByScout: jest.fn().mockReturnValue([]),
   hasContactUnlock: jest.fn().mockReturnValue(false),
