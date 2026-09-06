@@ -4,7 +4,7 @@ import { setIpScore, getReputation } from '../services/ipReputation';
 import { isValidIpAddress } from '../utils/validators';
 
 export const setIpReputationSchema = z.object({
-  ip: z.string().min(1),
+  ip: z.string({ required_error: 'ip is required' }).min(1, 'ip is required'),
   score: z.number().int().min(0).max(100),
 }).strict();
 

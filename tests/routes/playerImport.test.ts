@@ -214,7 +214,9 @@ describe('POST /api/admin/players/import — JSON body', () => {
       .send({ players: oversized });
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.error).toMatch(/maximum/i);
+    // validateJsonBodyOrPassThrough() returns the generic "Validation Error"
+    // label; the schema's custom message lands in `details`.
+    expect(JSON.stringify(res.body)).toMatch(/maximum/i);
   });
 });
 
