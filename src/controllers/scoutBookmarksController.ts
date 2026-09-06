@@ -29,13 +29,18 @@ import { logger } from '../utils/logger';
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 export const addBookmarkSchema = z.object({
-  playerId: z.string().min(1),
+  playerId: z
+    .string({ required_error: 'playerId is required' })
+    .min(1, 'playerId is required'),
   folderId: z.number().int().optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
 }).strict();
 
 export const createBookmarkFolderSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z
+    .string({ required_error: 'name is required and must be a string' })
+    .min(1, 'name is required and must be a string')
+    .max(100),
 }).strict();
 
 // ─── Serialization (mirrors filterPlayers in playerController.ts) ─────────────

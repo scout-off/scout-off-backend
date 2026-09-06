@@ -389,44 +389,6 @@ describe('POST /api/scouts/:wallet/api-keys', () => {
 
     expect(res.status).toBe(403);
   });
-  it('rotation inherits the old key\'s expiry lifetime for the new key', async () => {
-    const now = Math.floor(Date.now() / 1000);
-    // Old key was created 10 days ago with a 90-day lifetime → 80 days remain
-    const oldCreatedAt = now - 10 * 86400;
-    const oldExpiresAt = oldCreatedAt + 90 * 86400;
-    mockOldKey({ created_at: oldCreatedAt, expires_at: oldExpiresAt });
-    mockInsertApiKey.mockReturnValueOnce(13);
-    mockScheduleRevoke.mockReturnValueOnce(true);
-
-    const res = await request(app)
-      .post(`/api/scouts/${SCOUT_A}/api-keys/3/rotate`)
-      .set('Authorization', `Bearer ${scoutAToken}`)
-      .send({});
-
-    expect(res.status).toBe(201);
-    const newExpiry = res.body.data.newKey.expires_at as number;
-    // The new key gets the original 90-day lifetime from now.
-    expect(newExpiry).toBeGreaterThanOrEqual(now + 90 * 86400 - 2);
-    expect(newExpiry).toBeLessThanOrEqual(now + 90 * 86400 + 2);
-    const insertArg = mockInsertApiKey.mock.calls[0][0];
-    expect(insertArg.expires_at).toEqual(newExpiry);
-  });
-
-  it('rotation preserves null expiry when the old key had no expiry', async () => {
-    mockOldKey({ expires_at: null });
-    mockInsertApiKey.mockReturnValueOnce(14);
-    mockScheduleRevoke.mockReturnValueOnce(true);
-
-    const res = await request(app)
-      .post(`/api/scouts/${SCOUT_A}/api-keys/3/rotate`)
-      .set('Authorization', `Bearer ${scoutAToken}`)
-      .send({});
-
-    expect(res.status).toBe(201);
-    expect(res.body.data.newKey.expires_at).toBeNull();
-    const insertArg = mockInsertApiKey.mock.calls[0][0];
-    expect(insertArg.expires_at).toBeNull();
-  });
 });
 
 // ─── GET /api/scouts/:wallet/api-keys ────────────────────────────────────────
@@ -684,6 +646,45 @@ describe('POST /api/scouts/:wallet/api-keys/:id/rotate', () => {
       .send({});
 
     expect(res.status).toBe(401);
+  });
+
+  it('inherits the old key\'s expiry lifetime for the new key', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    // Old key was created 10 days ago with a 90-day lifetime → 80 days remain
+    const oldCreatedAt = now - 10 * 86400;
+    const oldExpiresAt = oldCreatedAt + 90 * 86400;
+    mockOldKey({ created_at: oldCreatedAt, expires_at: oldExpiresAt });
+    mockInsertApiKey.mockReturnValueOnce(13);
+    mockScheduleRevoke.mockReturnValueOnce(true);
+
+    const res = await request(app)
+      .post(`/api/scouts/${SCOUT_A}/api-keys/3/rotate`)
+      .set('Authorization', `Bearer ${scoutAToken}`)
+      .send({});
+
+    expect(res.status).toBe(201);
+    const newExpiry = res.body.data.newKey.expires_at as number;
+    // The new key gets the original 90-day lifetime from now.
+    expect(newExpiry).toBeGreaterThanOrEqual(now + 90 * 86400 - 2);
+    expect(newExpiry).toBeLessThanOrEqual(now + 90 * 86400 + 2);
+    const insertArg = mockInsertApiKey.mock.calls[0][0];
+    expect(insertArg.expires_at).toEqual(newExpiry);
+  });
+
+  it('preserves null expiry when the old key had no expiry', async () => {
+    mockOldKey({ expires_at: null });
+    mockInsertApiKey.mockReturnValueOnce(14);
+    mockScheduleRevoke.mockReturnValueOnce(true);
+
+    const res = await request(app)
+      .post(`/api/scouts/${SCOUT_A}/api-keys/3/rotate`)
+      .set('Authorization', `Bearer ${scoutAToken}`)
+      .send({});
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.newKey.expires_at).toBeNull();
+    const insertArg = mockInsertApiKey.mock.calls[0][0];
+    expect(insertArg.expires_at).toBeNull();
   });
 });
 

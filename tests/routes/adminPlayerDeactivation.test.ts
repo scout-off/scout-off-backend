@@ -131,7 +131,9 @@ describe('POST /api/admin/players/:playerId/deactivate', () => {
       .set('Authorization', `Bearer ${adminToken()}`)
       .send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/reason/i);
+    // validateBody() reports the offending field in `details`; `error` is the
+    // generic "Validation Error" label.
+    expect(JSON.stringify(res.body)).toMatch(/reason/i);
   });
 
   it('returns 400 when reason is empty string', async () => {

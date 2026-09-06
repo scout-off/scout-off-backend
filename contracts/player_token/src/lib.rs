@@ -961,7 +961,7 @@ mod tests {
         client.buy_token(&7u64, &1u64, &buyer);
 
         // Pass empty auth list to override `env.mock_all_auths()`
-        let result = client.mock_auths(&[]).try_distribute_fee(&7u64, &1_000u128, &0u32);
+        let result = client.mock_auths(&[]).try_distribute_fee(&7u64, &1_000u128, &8001u128, &0u32);
         assert!(result.is_err());
     }
 
@@ -976,7 +976,7 @@ mod tests {
         // Try to call distribute_fee with a page value that would overflow
         // when multiplied by MAX_HOLDERS_PER_PAGE.
         // u32::MAX * 20 would overflow, so this should return Error::Overflow.
-        let result = client.try_distribute_fee(&8u64, &1_000u128, &u32::MAX);
+        let result = client.try_distribute_fee(&8u64, &1_000u128, &8002u128, &u32::MAX);
         assert_eq!(result, Err(Ok(Error::Overflow)));
     }
 
@@ -992,7 +992,7 @@ mod tests {
         // (u32::MAX - 1) * 20 could still overflow depending on the value.
         // This tests boundary values to ensure proper overflow detection.
         let large_page = u32::MAX / 2;
-        let result = client.try_distribute_fee(&9u64, &1_000u128, &large_page);
+        let result = client.try_distribute_fee(&9u64, &1_000u128, &8003u128, &large_page);
         // Should either succeed (if the page is beyond holders) or fail with Overflow.
         // The important thing is that it doesn't panic.
         assert!(result.is_ok() || result == Err(Ok(Error::Overflow)));
@@ -1016,21 +1016,22 @@ mod tests {
             client.buy_token(&player_id, &1u64, &buyers.get_unchecked(i).clone());
         }
 
-        // Distribute across normal page values (0, 1, 2)
+        // Distribute across normal page values (0, 1, 2) for one transfer.
+        let transfer_id = 8004u128;
         // Page 0: holders 0-19
-        let page0_queued = client.distribute_fee(&player_id, &1_000_000u128, &0u32);
+        let page0_queued = client.distribute_fee(&player_id, &1_000_000u128, &transfer_id, &0u32);
         assert_eq!(page0_queued, 20);
 
         // Page 1: holders 20-39
-        let page1_queued = client.distribute_fee(&player_id, &1_000_000u128, &1u32);
+        let page1_queued = client.distribute_fee(&player_id, &1_000_000u128, &transfer_id, &1u32);
         assert_eq!(page1_queued, 20);
 
         // Page 2: holders 40-49 (only 10 holders)
-        let page2_queued = client.distribute_fee(&player_id, &1_000_000u128, &2u32);
+        let page2_queued = client.distribute_fee(&player_id, &1_000_000u128, &transfer_id, &2u32);
         assert_eq!(page2_queued, 10);
 
         // Page 3: beyond holders, should return 0
-        let page3_queued = client.distribute_fee(&player_id, &1_000_000u128, &3u32);
+        let page3_queued = client.distribute_fee(&player_id, &1_000_000u128, &transfer_id, &3u32);
         assert_eq!(page3_queued, 0);
     }
 }

@@ -68,6 +68,7 @@ jest.mock("../../src/db", () => ({
     event_source: "app_event",
   }),
   getLatestSubscription: jest.fn().mockResolvedValue(null),
+  getPlayerProfileHistory: jest.fn().mockResolvedValue([]),
 }));
 
 jest.mock("../../src/services/stellar", () => ({
@@ -96,6 +97,7 @@ jest.mock("../../src/services/cache", () => ({
   cacheGet: jest.fn().mockResolvedValue(null),
   cacheSet: jest.fn().mockResolvedValue(undefined),
   invalidatePlayerCache: jest.fn(),
+  getPlayerListLastModified: jest.fn().mockReturnValue(0),
 }));
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -314,12 +316,15 @@ const ALLOWLIST: Record<string, string> = {
   "POST /admin/contract/unpause": "admin-only write; requires admin JWT",
   "GET /admin/events": "admin-only read; requires admin JWT + indexed events",
   "GET /admin/events/export": "CSV stream; requires admin JWT",
+  "POST /admin/events/replay": "admin-only background job; mutates indexer state",
+  "GET /admin/events/replay/status": "admin-only read; requires admin JWT + replay job state",
   "GET /admin/feature-flags": "admin-only read; requires admin JWT + seeded flags",
   "PUT /admin/feature-flags": "admin-only write; requires admin JWT + seeded flags",
   "PUT /admin/feature-flags/{name}": "admin-only write; requires admin JWT + seeded flag",
   "GET /admin/fees": "admin-only read; requires admin JWT + fee events",
   "POST /admin/fees": "admin-only write; requires admin JWT + on-chain fee state",
   "POST /admin/fees/withdraw": "admin-only write; requires admin JWT + on-chain fee state",
+  "POST /admin/fees/config": "admin-only write; requires admin JWT + on-chain fee state",
   "POST /admin/indexer/reindex": "admin-only write; mutates indexer state",
   "POST /admin/introspect": "admin-only read; requires admin JWT",
   "POST /admin/ip-allowlist": "admin-only write; requires admin JWT",
@@ -328,11 +333,13 @@ const ALLOWLIST: Record<string, string> = {
   "POST /admin/players/{playerId}/deactivate": "admin-only write; requires admin JWT",
   "POST /admin/players/{playerId}/reactivate": "admin-only write; requires admin JWT",
   "POST /admin/reindex": "admin-only background job; mutates indexer state",
+  "POST /admin/reindex/cancel": "admin-only write; cancels a running reindex job",
   "GET /admin/reindex/status": "admin-only read; requires admin JWT",
   "GET /admin/stats": "admin-only read; requires admin JWT + indexed events",
   "POST /admin/tokens/revoke": "admin-only write; requires admin JWT",
   "GET /admin/validators": "admin-only read; requires admin JWT + validators",
   "POST /admin/validators/import": "admin-only bulk write; requires admin JWT",
+  "POST /admin/validators/bulk-import": "admin-only bulk write; requires admin JWT",
   "POST /admin/validators/register": "admin-only write; on-chain registration",
   "POST /admin/validators/revoke": "admin-only write; on-chain revocation",
   "GET /admin/validators/{wallet}/stats": "admin-only read; requires admin JWT",
@@ -341,6 +348,8 @@ const ALLOWLIST: Record<string, string> = {
   "DELETE /admin/webhooks/dead-letters/{id}": "admin-only write; requires admin JWT",
   "POST /admin/webhooks/dead-letters/{id}/requeue": "admin-only write; re-signs webhook payload",
   "POST /admin/webhooks/{id}/replay": "deprecated alias; admin-only write",
+  "GET /admin/webhooks/{id}/deliveries": "admin-only read; requires admin JWT + delivery rows",
+  "GET /admin/webhooks/{id}/summary": "admin-only read; requires admin JWT + delivery rows",
 
   // Auth — SEP-10 challenge flow requires signed XDR fixtures.
   "GET /auth/challenge": "SEP-10 challenge; response is an XDR string, not a JSON envelope",
@@ -384,6 +393,7 @@ const ALLOWLIST: Record<string, string> = {
   "DELETE /scouts/{wallet}/bookmarks/{playerId}": "write op; requires scout JWT",
   "GET /scouts/{wallet}/contacts": "requires scout JWT + unlock fixtures",
   "GET /scouts/{wallet}/contacts/{playerId}": "requires scout JWT + unlock fixtures",
+  "GET /scouts/{wallet}/dashboard": "requires scout JWT + aggregated dashboard state",
   "POST /scouts/{wallet}/contacts/{playerId}/unlock": "write op; requires scout JWT + on-chain payment",
   "GET /scouts/{wallet}/notes": "requires scout JWT + note fixtures",
   "GET /scouts/{wallet}/notes/{playerId}": "requires scout JWT + note fixtures",
@@ -416,6 +426,7 @@ const ALLOWLIST: Record<string, string> = {
   "POST /validators/milestones/approve-bulk": "write op; requires validator JWT + pending milestones",
   "GET /validators/milestones/pending": "requires validator JWT + pending milestones",
   "GET /validators/{wallet}/milestones/pending": "requires validator JWT + pending milestones",
+  "GET /validators/{wallet}/stats": "requires validator JWT + validator_stats rows",
 
   // v2
   "GET /versioning/demo": "v2-only demo route",

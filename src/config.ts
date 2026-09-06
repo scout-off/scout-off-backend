@@ -99,7 +99,8 @@ if (!sep10ServerSecretValue) {
       'SEP10_SERVER_SECRET is required in production but is not set. ' +
       'Generate a Stellar keypair secret with `stellar keys generate` and set this variable. ' +
       'All backend instances must share the same value for challenge verification to work ' +
-      'across a horizontally-scaled deployment.',
+      'across a horizontally-scaled deployment; otherwise each process generates its own ' +
+      'ephemeral keypair, causing cross-instance SEP-10 verification failures under load balancing.',
     );
   }
   if (nodeEnv === 'staging') {

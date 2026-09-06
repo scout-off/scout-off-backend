@@ -12,10 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          override: true
+          targets: wasm32-unknown-unknown
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -23,7 +22,10 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      # contracts/.cargo/config.toml pins wasm32-unknown-unknown as the default
+      # build target for the workspace, so host-target test runs must pass
+      # --target explicitly or rustc fails to find `core` for the host.
       - name: Run cargo test for player-token
         run: |
           cd contracts/player_token
-          cargo test -p player-token --verbose
+          cargo test -p player-token --target x86_64-unknown-linux-gnu --verbose

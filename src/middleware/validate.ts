@@ -63,7 +63,12 @@ export function validateBody<T>(schema: ZodSchema<T>, options?: ValidationOption
       });
       return;
     }
-    const result = schema.safeParse(req.body);
+    // Express 5's body parser leaves `req.body` undefined for a body-less
+    // request (Express 4 defaulted it to {}). Routes with an all-optional or
+    // empty schema must keep accepting no body, so normalise undefined/null to
+    // an empty object before validating.
+    const body = req.body ?? {};
+    const result = schema.safeParse(body);
     if (!result.success) {
       const correlationId = getCorrelationId(req);
       const details = result.error.errors.map((err) => ({
