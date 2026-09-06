@@ -790,6 +790,13 @@ mod tests {
     #[test]
     fn storage_growth_mitigation_pages_and_persistent_storage() {
         let env = Env::default();
+        // This test drives 200 sequential buy_token calls plus multi-page fee
+        // distribution through a single Env. The host budget accumulates across
+        // every call in a test (unlike on-chain, where each transaction gets a
+        // fresh budget), so the volume here trips the default limit partway
+        // through. Lift it — the assertions below are about storage layout, not
+        // metering.
+        env.budget().reset_unlimited();
         let (client, _admin) = setup(&env);
 
         let player_id = 42u64;
@@ -812,18 +819,28 @@ mod tests {
             assert!(queued <= MAX_HOLDERS_PER_PAGE);
         }
 
+        // Direct storage inspection is only permitted inside a contract context.
+        let (holder_page_in_instance, meta_in_instance, p0) =
+            env.as_contract(&client.address, || {
+                let holder_page_in_instance =
+                    env.storage().instance().has(&DataKey::HolderPage(player_id, 0u32));
+                let meta_in_instance =
+                    env.storage().instance().has(&DataKey::TokenMeta(player_id));
+                let p0: Vec<PendingPayout> = env
+                    .storage()
+                    .persistent()
+                    .get(&DataKey::PendingPayouts(player_id, 0u32))
+                    .unwrap_or_else(|| Vec::new(&env));
+                (holder_page_in_instance, meta_in_instance, p0)
+            });
+
         // Ensure we do not have a monolithic HolderList stored in instance storage
-        assert!(!env.storage().instance().has(&DataKey::HolderPage(player_id, 0u32)));
+        assert!(!holder_page_in_instance);
 
         // TokenMeta should be in persistent storage, not instance storage.
-        assert!(!env.storage().instance().has(&DataKey::TokenMeta(player_id)));
+        assert!(!meta_in_instance);
 
         // Pending payouts should be stored in persistent storage per page.
-        let p0: Vec<PendingPayout> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::PendingPayouts(player_id, 0u32))
-            .unwrap_or_else(|| Vec::new(&env));
         assert!(p0.len() > 0);
     }
 
@@ -835,31 +852,37 @@ mod tests {
         let player_id = 99u64;
         client.issue_tokens(&player_id, &1_000u64);
 
-        // Create a legacy in-instance holder list of 45 addresses.
+        // Create a legacy in-instance holder list of 45 addresses. Seeding
+        // instance storage directly requires a contract context.
         let mut legacy: Vec<Address> = Vec::new(&env);
         for _ in 0..45 {
             legacy.push_back(Address::generate(&env));
         }
-        env.storage()
-            .instance()
-            .set(&DataKey::LegacyHolderList(player_id), &legacy);
+        env.as_contract(&client.address, || {
+            env.storage()
+                .instance()
+                .set(&DataKey::LegacyHolderList(player_id), &legacy);
+        });
 
-        // Admin calls migrate in batches of 20.
+        // Admin calls migrate in batches of 20. Each step consumes holders from
+        // the front of the legacy list and compacts what remains, so every call
+        // starts at index 0.
         let first = client.migrate_player_step(&player_id, &0u32, &20u32);
         assert_eq!(first, 20);
 
-        let second = client.migrate_player_step(&player_id, &20u32, &20u32);
+        let second = client.migrate_player_step(&player_id, &0u32, &20u32);
         assert_eq!(second, 20);
 
-        let third = client.migrate_player_step(&player_id, &40u32, &20u32);
+        let third = client.migrate_player_step(&player_id, &0u32, &20u32);
         assert_eq!(third, 5);
 
         // Legacy list should now be empty.
-        let rem: Vec<Address> = env
-            .storage()
-            .instance()
-            .get(&DataKey::LegacyHolderList(player_id))
-            .unwrap_or_else(|| Vec::new(&env));
+        let rem: Vec<Address> = env.as_contract(&client.address, || {
+            env.storage()
+                .instance()
+                .get(&DataKey::LegacyHolderList(player_id))
+                .unwrap_or_else(|| Vec::new(&env))
+        });
         assert_eq!(rem.len(), 0);
 
         // TokenMeta holder_pages should reflect the stored pages (45/20 => 3 pages).
