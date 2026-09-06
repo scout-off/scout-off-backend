@@ -28,6 +28,29 @@ permissions:
   contents: read
 
 jobs:
+  # GitHub Actions forbids the `secrets` context in a job-level `if:`, so probe
+  # for the deploy credentials in a step and expose the result as an output the
+  # deploy job can gate on. When the `staging` environment has no
+  # STAGING_SSH_PRIVATE_KEY configured, the deploy + smoke-test jobs are skipped
+  # (a neutral result) instead of failing every push to main.
+  preflight:
+    name: Check deploy config
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -n "$STAGING_SSH_PRIVATE_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Staging deploy skipped::STAGING_SSH_PRIVATE_KEY is not configured on the staging environment; the deploy and smoke-test jobs will be skipped."
+          fi
+
   build:
     name: Build & test
     runs-on: ubuntu-latest
@@ -101,7 +124,8 @@ jobs:
 
   deploy:
     name: Deploy to staging
-    needs: build
+    needs: [preflight, build]
+    if: needs.preflight.outputs.configured == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
