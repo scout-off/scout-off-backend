@@ -11,7 +11,7 @@
  */
 
 import request from 'supertest';
-import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
+import { Keypair, Transaction, Networks, nativeToScVal } from '@stellar/stellar-sdk';
 
 // ── Mock the Soroban RPC ──────────────────────────────────────────────────────
 //
@@ -68,13 +68,13 @@ function makeFakeRpcResponse(ledger: number, txHash: string) {
         ledger,
         txHash,
         ledgerClosedAt: new Date().toISOString(),
-        topic: [{ value: () => 'player_registered' }],
-        value: {
-          value: () => ({
-            player_id: `player-${txHash.slice(0, 6)}`,
-            wallet: Keypair.random().publicKey(),
-          }),
-        },
+        // @stellar/stellar-sdk v16+: topic entries and value are xdr.ScVal
+        // objects that the batch processor decodes with scValToNative().
+        topic: [nativeToScVal('player_registered', { type: 'symbol' })],
+        value: nativeToScVal({
+          player_id: `player-${txHash.slice(0, 6)}`,
+          wallet: Keypair.random().publicKey(),
+        }),
       },
     ],
   };
@@ -194,16 +194,25 @@ describe('POST /api/admin/events/replay — triggers replay', () => {
   });
 
   it('returns 409 when a job is already running', async () => {
-    // Keep the first job running by never resolving the mock.
-    mockGetEvents.mockReturnValue(new Promise(() => { /* intentionally pending */ }));
+    // Hold the first job open on a gate we resolve during cleanup, so the
+    // job is genuinely "running" for the second request but still winds down.
+    let releaseJob!: () => void;
+    mockGetEvents.mockReturnValue(
+      new Promise((resolve) => {
+        releaseJob = () => resolve({ latestLedger: 9_999_999, events: [] });
+      }),
+    );
 
+    // supertest only dispatches a request once it's awaited / .then()'d, so
+    // attach a noop handler to fire it now without blocking on completion.
     const promise1 = request(app)
       .post('/api/admin/events/replay')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ fromLedger: 1_000, toLedger: 1_100 });
+    promise1.catch(() => {});
 
     // Wait a bit for the first job to start
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 50));
 
     const res = await request(app)
       .post('/api/admin/events/replay')
@@ -213,8 +222,8 @@ describe('POST /api/admin/events/replay — triggers replay', () => {
     expect(res.status).toBe(409);
     expect(res.body.success).toBe(false);
 
-    // Clean up the pending promise
-    mockGetEvents.mockResolvedValue({ events: [] });
+    // Let the first job finish and drain its request.
+    releaseJob();
     await promise1.catch(() => {});
   });
 });
@@ -242,15 +251,23 @@ describe('GET /api/admin/events/replay/status', () => {
   });
 
   it('returns running status while a job is in progress', async () => {
-    mockGetEvents.mockReturnValue(new Promise(() => { /* intentionally pending */ }));
+    let releaseJob!: () => void;
+    mockGetEvents.mockReturnValue(
+      new Promise((resolve) => {
+        releaseJob = () => resolve({ latestLedger: 9_999_999, events: [] });
+      }),
+    );
 
+    // supertest only dispatches a request once it's awaited / .then()'d, so
+    // attach a noop handler to fire it now without blocking on completion.
     const promise = request(app)
       .post('/api/admin/events/replay')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ fromLedger: 5_000, toLedger: 5_050 });
+    promise.catch(() => {});
 
     // Wait a bit for the job to start
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 50));
 
     const res = await request(app)
       .get('/api/admin/events/replay/status')
@@ -263,8 +280,8 @@ describe('GET /api/admin/events/replay/status', () => {
     expect(res.body.data.ledgers_total).toBe(51);
     expect(res.body.data.started_at).not.toBeNull();
 
-    // Clean up
-    mockGetEvents.mockResolvedValue({ events: [] });
+    // Let the job finish and drain its request.
+    releaseJob();
     await promise.catch(() => {});
   });
 });
