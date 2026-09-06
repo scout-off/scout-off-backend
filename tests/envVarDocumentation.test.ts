@@ -2,8 +2,27 @@ import fs from 'fs';
 import path from 'path';
 
 describe('Environment variable documentation completeness', () => {
-  const configPath = path.join(__dirname, '../src/config.ts');
+  const srcDir = path.join(__dirname, '../src');
   const envExamplePath = path.join(__dirname, '../.env.example');
+
+  /**
+   * Recursively collect the contents of every *.ts file under src/. Env vars
+   * are no longer all funnelled through config.ts — middleware, services and
+   * route modules read process.env directly — so the "is this var still used"
+   * check has to look at the whole source tree.
+   */
+  function readAllSource(dir: string): string {
+    let out = '';
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        out += readAllSource(full);
+      } else if (entry.name.endsWith('.ts')) {
+        out += '\n' + fs.readFileSync(full, 'utf-8');
+      }
+    }
+    return out;
+  }
 
   // Platform-provided vars that don't need documentation
   const PLATFORM_VARS = new Set(['NODE_ENV', 'PORT']);
@@ -29,7 +48,7 @@ describe('Environment variable documentation completeness', () => {
   let envExampleContent: string;
 
   beforeAll(() => {
-    configContent = fs.readFileSync(configPath, 'utf-8');
+    configContent = readAllSource(srcDir);
     envExampleContent = fs.readFileSync(envExamplePath, 'utf-8');
   });
 
@@ -40,9 +59,12 @@ describe('Environment variable documentation completeness', () => {
     const usage = new Map<string, EnvVarUsage>();
     const lines = configContent.split('\n');
 
-    // Pattern to match process.env.VARIABLE or process.env['VARIABLE']
-    const envPattern = /process\.env\.([A-Z_][A-Z0-9_]*)/g;
-    
+    // Pattern to match process.env.VARIABLE, process.env['VARIABLE'], or the
+    // config.ts `required('VARIABLE')` helper (which reads process.env[name]
+    // internally via a bracket access the simpler pattern can't see).
+    const envPattern =
+      /process\.env\.([A-Z_][A-Z0-9_]*)|process\.env\[['"`]([A-Z_][A-Z0-9_]*)['"`]\]|\brequired\(\s*['"`]([A-Z_][A-Z0-9_]*)['"`]\s*\)/g;
+
     // Pattern to match parseNumericEnv calls to extract min/max/default
     const parseNumericPattern = /parseNumericEnv\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*process\.env\.\1\s*,\s*([\d.]+)\s*,\s*(\{[^}]*\})/g;
 
@@ -78,8 +100,9 @@ describe('Environment variable documentation completeness', () => {
 
       // Then extract all process.env references
       while ((match = envPattern.exec(line)) !== null) {
-        const varName = match[1];
-        
+        const varName = match[1] ?? match[2] ?? match[3];
+        if (!varName) continue;
+
         // Skip if we already have detailed info from parseNumericEnv
         if (usage.has(varName)) continue;
 
@@ -124,12 +147,22 @@ describe('Environment variable documentation completeness', () => {
     const entries = new Map<string, EnvExampleEntry>();
     const lines = envExampleContent.split('\n');
     let currentComment: string[] = [];
+    // A run of consecutive `KEY=VALUE` lines shares the comment block that
+    // precedes it (the file groups related vars, e.g. `# FOO / BAR — ...`
+    // then `FOO=` `BAR=`). Only a blank line or a fresh comment block after a
+    // key clears the association.
+    let lastWasKey = false;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      
-      // Accumulate comment lines
+
+      // Accumulate comment lines. A comment immediately after a key starts a
+      // new block rather than extending the previous one.
       if (line.startsWith('#')) {
+        if (lastWasKey) {
+          currentComment = [];
+          lastWasKey = false;
+        }
         currentComment.push(line.substring(1).trim());
         continue;
       }
@@ -147,12 +180,12 @@ describe('Environment variable documentation completeness', () => {
               line: i + 1,
             });
           }
+          lastWasKey = true;
         }
-        // Reset comment for next entry
-        currentComment = [];
       } else if (!line) {
         // Empty line resets comment
         currentComment = [];
+        lastWasKey = false;
       }
     }
 
