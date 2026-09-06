@@ -26,7 +26,14 @@ const { invalidatePlayerCache: mockedInvalidatePlayerCache } = require('../../sr
   invalidatePlayerCache: jest.Mock;
 };
 
-function makeEvent(type: string, payload: Record<string, unknown>, txHash: string, ledger = 100) {
+function makeEvent(
+  type: string,
+  payload: Record<string, unknown>,
+  txHash: string,
+  ledger = 100,
+  ledgerHash?: string,
+  txIndex?: number,
+) {
   // In @stellar/stellar-sdk v16+, topic items and value are xdr.ScVal objects.
   const { nativeToScVal } = require('@stellar/stellar-sdk');
   return {
@@ -34,6 +41,8 @@ function makeEvent(type: string, payload: Record<string, unknown>, txHash: strin
     value: nativeToScVal(payload),
     ledger,
     txHash,
+    ...(ledgerHash !== undefined ? { ledgerHash } : {}),
+    ...(txIndex !== undefined ? { txIndex } : {}),
   };
 }
 
@@ -168,9 +177,11 @@ describe('indexEvents — milestone_approved webhook dispatch', () => {
 
     server.getEvents.mockResolvedValue({
       latestLedger: 150,
+      // Explicit txIndex so the deterministic ordering applies OK before CRASH
+      // regardless of txHash-alphabetical tie-breaking.
       events: [
-        makeEvent('player_registered', { player_id: 'OK', wallet: 'GWALLETOKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-OK', 150),
-        makeEvent('player_registered', { player_id: 'CRASH', wallet: 'GWALLETCRASHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-CRASH', 150)
+        makeEvent('player_registered', { player_id: 'OK', wallet: 'GWALLETOKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-OK', 150, undefined, 0),
+        makeEvent('player_registered', { player_id: 'CRASH', wallet: 'GWALLETCRASHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-CRASH', 150, undefined, 1)
       ],
     });
 
