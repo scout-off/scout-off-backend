@@ -910,6 +910,8 @@ All error codes used in REST and GraphQL responses are defined in `src/utils/err
 |------|------------|-------------|--------------|
 | `EXPIRED_ACTION` | 410 | A multi-sig admin action has expired and can no longer be approved | Propose the action again to create a fresh request |
 | `ACTION_EXECUTED` | 409 | A multi-sig admin action has already been executed | Check the action status; cannot re-approve completed actions |
+| `WALLET_BLOCKLISTED` | 403 | The authenticated wallet is blocklisted and may not open an SSE stream | Do not reconnect; contact support if you believe this is an error |
+| `SSE_CAPACITY` | 503 | The server has reached its SSE connection limit (`SSE_MAX_CONNECTIONS`) | Reconnect after the number of seconds given in the `Retry-After` header |
 
 ---
 

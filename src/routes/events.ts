@@ -8,6 +8,7 @@ import {
 } from '../services/eventBroadcaster';
 import { ContractEventType } from '../types';
 import { logger } from '../utils/logger';
+import { ErrorCode } from '../utils/errorCodes';
 import {
   isWalletBlocklisted,
   refreshBlockedWallets,
@@ -16,6 +17,9 @@ import {
 import * as tokenBlocklistModule from '../services/tokenBlocklist';
 
 const router = Router();
+
+/** Seconds a client should wait before retrying when the SSE connection limit is hit. */
+const SSE_CAPACITY_RETRY_AFTER_SECONDS = 30;
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -179,8 +183,8 @@ let authSweepTimer: NodeJS.Timeout | null = null;
  * @auth Bearer token required (any role)
  * @response 200 text/event-stream — long-lived SSE connection
  * @response 401 { success: false, error: string } — missing or invalid token
- * @response 403 { success: false, error: string } — wallet is blocklisted
- * @response 503 { success: false, error: string } — connection limit reached
+ * @response 403 { success: false, error: string, code: 'WALLET_BLOCKLISTED' } — wallet is blocklisted
+ * @response 503 { success: false, error: string, code: 'SSE_CAPACITY' } — connection limit reached (sets Retry-After)
  */
 router.get('/stream', requireAuth, async (req: Request, res: Response) => {
   const wallet = req.account!;
@@ -191,6 +195,7 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
     res.status(403).json({
       success: false,
       error: 'Account is blocklisted; SSE access revoked',
+      code: ErrorCode.WALLET_BLOCKLISTED,
     });
     return;
   }
@@ -198,9 +203,11 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
   // ── Connection limit guard ─────────────────────────────────────────────────
   const maxSseConnections = getMaxSseConnections();
   if (maxSseConnections > 0 && broadcaster.subscriberCount >= maxSseConnections) {
+    res.setHeader('Retry-After', String(SSE_CAPACITY_RETRY_AFTER_SECONDS));
     res.status(503).json({
       success: false,
       error: 'SSE connection limit reached. Please try again later.',
+      code: ErrorCode.SSE_CAPACITY,
     });
     return;
   }

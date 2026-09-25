@@ -42,8 +42,8 @@ Response codes:
 | ------ | ----------------------------------------------------------------------- |
 | `200`  | Stream opened; frames start arriving                                    |
 | `401`  | Missing or invalid token (`{ success: false, error }`)                  |
-| `403`  | Wallet is blocklisted — stream access revoked                           |
-| `503`  | Connection limit reached (`SSE_MAX_CONNECTIONS`) — retry later          |
+| `403`  | Wallet is blocklisted — stream access revoked (`code: WALLET_BLOCKLISTED`) |
+| `503`  | Connection limit reached (`SSE_MAX_CONNECTIONS`) — `code: SSE_CAPACITY`; retry after the `Retry-After` header (seconds) |
 
 ## Connecting
 

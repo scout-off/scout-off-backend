@@ -193,6 +193,19 @@ export const ErrorCode = {
    * Client should: Check the action status; cannot re-approve completed actions.
    */
   ACTION_EXECUTED: 'ACTION_EXECUTED',
+
+  // ── Server-Sent Events ─────────────────────────────────────────────────────
+  /**
+   * HTTP 403 — The authenticated wallet is blocklisted and may not open an SSE stream.
+   * Client should: Do not reconnect; contact support if you believe this is an error.
+   */
+  WALLET_BLOCKLISTED: 'WALLET_BLOCKLISTED',
+
+  /**
+   * HTTP 503 — The server has reached its SSE connection limit (SSE_MAX_CONNECTIONS).
+   * Client should: Reconnect after the number of seconds given in the Retry-After header.
+   */
+  SSE_CAPACITY: 'SSE_CAPACITY',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

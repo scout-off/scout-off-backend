@@ -274,8 +274,13 @@ describe('SSE — wallet blocklisting terminates the stream', () => {
       '/api/events/stream',
       makeToken(WALLET_A),
     );
+    await conn.waitForChunks(1);
     conn.destroy();
     expect(statusCode).toBe(403);
+    expect(JSON.parse(conn.chunks.join(''))).toMatchObject({
+      success: false,
+      code: 'WALLET_BLOCKLISTED',
+    });
   });
 
   it('allows the wallet again after it is unblocked', async () => {

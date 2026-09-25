@@ -573,15 +573,21 @@ describe('GET /api/events/stream — SSE_MAX_CONNECTIONS', () => {
       // Now a second connection should get 503.
       // We use supertest-style direct HTTP call with the test server but
       // open as an SSE connection to get the status code.
-      const { statusCode, conn } = await openSseConnection(
+      const { statusCode, headers, conn } = await openSseConnection(
         testServer,
         '/api/events/stream',
         makeToken(WALLET_A),
       );
+      await conn.waitForChunks(1);
       conn.destroy();
 
       broadcaster.unsubscribe(fakeSub);
       expect(statusCode).toBe(503);
+      expect(headers['retry-after']).toBe('30');
+      expect(JSON.parse(conn.chunks.join(''))).toMatchObject({
+        success: false,
+        code: 'SSE_CAPACITY',
+      });
     } finally {
       process.env.SSE_MAX_CONNECTIONS = originalEnv ?? '0';
       await new Promise<void>((res) => testServer.close(res));
