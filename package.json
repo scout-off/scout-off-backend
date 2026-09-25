@@ -42,6 +42,7 @@
     ]
   },
   "dependencies": {
+    "@envelop/core": "^5.5.1",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.78.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
@@ -85,6 +86,7 @@
     "autocannon": "^8.0.0",
     "dezalgo": "^1.0.4",
     "eslint": "^8.57.1",
+    "eslint-plugin-import": "^2.31.0",
     "fast-check": "^4.9.0",
     "husky": "^9.1.7",
     "ioredis-mock": "8.13.1",
