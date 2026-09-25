@@ -125,8 +125,8 @@ impl RegisterContract {
     /// Pause the contract, preventing all state-changing operations.
     ///
     /// Only the admin address set during [`initialize`] may call this function.
-    /// The guard is checked by [`subscribe`], [`pay_to_contact`], and other
-    /// state-changing entrypoints via [`is_paused`] from the shared storage
+    /// The guard is checked by [`register_player`], [`update_profile`], and
+    /// [`update_progress_level`] via [`is_paused`] from the shared storage
     /// module.  If the contract is already paused the call is a no-op.
     ///
     /// # Errors

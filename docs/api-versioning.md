@@ -34,10 +34,28 @@ to a request, the following precedence is used, highest first:
    alias is v1 for backward compatibility with clients that predate
    versioning.
 
-Every response also carries an `API-Version: <major>` header
-(`src/middleware/apiVersion.ts`), stating which version actually served the
-request, independent of which of the three forms the client used to ask for
-it.
+## Response version headers
+
+Every response carries **two** headers that both report the version that
+actually served the request, independent of which of the three forms the
+client used to ask for it.
+
+| Header | Status | Notes |
+|---|---|---|
+| `API-Version` | **Canonical** — read this one | e.g. `API-Version: 1` or `API-Version: 2` |
+| `X-API-Version` | **Deprecated alias** — same value | Will be removed; see below |
+
+Both headers are set by `src/middleware/apiVersion.ts` in the same call, so
+they are always in agreement — a client can never see `API-Version: 1` and
+`X-API-Version: 2` on the same response.
+
+**Clients should migrate from `X-API-Version` to `API-Version`.**
+`X-API-Version` will be removed when the v1 sunset is scheduled (see
+§Deprecation policy below). Because the two headers are kept in sync until
+then, the migration is a drop-in rename with no behaviour change.
+
+Both headers are listed in the CORS `Access-Control-Expose-Headers` response
+so browser-based clients can read either header without extra configuration.
 
 ## Current state of v2
 
@@ -54,8 +72,11 @@ alias) remain fully supported. When a v1 sunset is eventually scheduled:
 - It will be announced in this file and in `BACKEND_API_DOCS.md` with a
   concrete removal date, giving clients a minimum notice window.
 - Requests to a deprecated version will start returning a `Deprecation`
-  response header ahead of removal (in addition to the existing
-  `API-Version` header) so automated clients can detect it.
+  response header ahead of removal (in addition to the existing `API-Version`
+  header) so automated clients can detect it.
+- The `X-API-Version` deprecated alias will be removed at the same milestone,
+  since clients will have had the full notice window to migrate to
+  `API-Version`.
 - Unversioned `/api/...` requests already log a deprecation warning in
   production (see `versionRouting.ts`) encouraging callers to pin
   `/api/v1` or `/api/v2` explicitly ahead of any future policy change.

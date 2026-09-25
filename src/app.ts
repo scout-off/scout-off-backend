@@ -123,8 +123,9 @@ const corsOptions: CorsOptions = {
     'X-Correlation-ID',
     'X-Idempotency-Key',
     'X-API-Version',
+    'API-Version',
   ],
-  exposedHeaders: ['ETag', 'X-Correlation-ID', 'X-Response-Time', 'X-API-Version'],
+  exposedHeaders: ['ETag', 'X-Correlation-ID', 'X-Response-Time', 'API-Version', 'X-API-Version'],
   // credentials cannot be used with a wildcard origin (CORS spec); only enable
   // it when we are using an explicit allowlist
   credentials: !isWildcard,
@@ -193,7 +194,7 @@ app.use(helmet({
 }));
 app.use(securityHeaders);
 app.use(responseTime);
-// Set X-API-Version on every response before route handlers run
+// Set API-Version (canonical) and X-API-Version (deprecated alias) on every response
 app.use(apiVersion);
 // Configure Express body parser with per-route JSON payload size limits.
 // Upload endpoints (player registration, milestone evidence) accept larger payloads.
@@ -366,24 +367,10 @@ app.get('/metrics', createMetricsHandler(() => indexerLedgerLag));
 
 app.use('/auth', authRoutes);
 
-// ── API-Version response header ───────────────────────────────────────────────
-// Set the API-Version response header based on the URL prefix (or header override).
-// This runs on every /api/* request so clients always know which version handled them.
-app.use((req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
-  const url = req.originalUrl;
-  if (url.startsWith(API_PREFIX + '/') || url.startsWith(API_PREFIX + '?') || url === API_PREFIX) {
-    let servedVersion = 1;
-    if (
-      req.apiVersionOverride === 2 ||
-      url.startsWith(API_V2_PREFIX + '/') ||
-      url === API_V2_PREFIX
-    ) {
-      servedVersion = 2;
-    }
-    res.setHeader('API-Version', String(servedVersion));
-  }
-  next();
-});
+// API-Version and X-API-Version response headers are set globally by the
+// apiVersion middleware (registered above, before route handlers).  Both
+// headers always carry the same served-version value.  See
+// src/middleware/apiVersion.ts for the version-determination logic.
 
 // Mount API routes under both /api (backwards-compatible alias) and /api/v1
 const prefixes = [API_PREFIX, API_V1_PREFIX];
@@ -407,8 +394,9 @@ app.use(`${API_V2_PREFIX}/versioning`, versioningDemoRoutesV2);
 
 // Header-based v2 routing: when a client sends API-Version: 2 on an unversioned
 // /api/ path, the versionRouting middleware records req.apiVersionOverride = 2 and
-// the API-Version response header above reflects that. The request is handled by
-// the same v1 handler set (v2 is currently identical to v1).
+// the apiVersion middleware (registered above) picks that up to set both response
+// headers to "2". The request is handled by the same v1 handler set (v2 is
+// currently identical to v1).
 
 // Mount the GraphQL endpoint alongside the REST API.
 // Must be registered before the 404 catch-all.

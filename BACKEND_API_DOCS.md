@@ -51,19 +51,31 @@ Send `API-Version: 2` on any unversioned `/api/` path to be routed to v2 handler
 curl -H "API-Version: 2" http://localhost:4000/api/players
 ```
 
-### `API-Version` response header
+### Response version headers
 
-Every response from an `/api/` path includes an `API-Version` response header indicating which version actually handled the request:
+Every response includes two headers that both report the version that actually handled the request:
 
+| Header | Status |
+|---|---|
+| `API-Version` | **Canonical** — use this one |
+| `X-API-Version` | **Deprecated alias** — same value; will be removed at v1 sunset |
+
+Example (v1 request):
 ```
 API-Version: 1
+X-API-Version: 1
 ```
 
-or
-
+Example (v2 request):
 ```
 API-Version: 2
+X-API-Version: 2
 ```
+
+Both headers always carry the same value. Clients should migrate from
+`X-API-Version` to `API-Version`; the alias will be removed when the v1
+sunset is scheduled. See [docs/api-versioning.md](docs/api-versioning.md)
+for the full deprecation timeline.
 
 ### Deprecation policy
 
@@ -297,28 +309,36 @@ curl -X GET http://localhost:4000/api/players/player-001 \
 # All logs from this request will include the correlation ID for easy filtering
 ```
 
-### `X-API-Version`
+### `API-Version` and `X-API-Version`
 
 **Type:** Integer (major version)  
 **Sent on:** Every response  
 **Purpose:** Indicate which API major version handled the request.
 
-The value is the major component of the version in `package.json` (e.g., `1` for version `1.2.3`):
+Every response carries both headers with the same value:
+
+| Header | Status |
+|---|---|
+| `API-Version` | **Canonical** — use this one |
+| `X-API-Version` | **Deprecated alias** — same value; will be removed at v1 sunset |
 
 ```
+API-Version: 1
 X-API-Version: 1
 ```
 
-Use this to detect version mismatches or version-specific behaviour in production:
+Use `API-Version` (the canonical header) to detect the served version:
 
 ```typescript
-const apiVersion = parseInt(response.headers['x-api-version'], 10);
-if (apiVersion !== expectedVersion) {
-  console.warn(`Expected API v${expectedVersion}, got v${apiVersion}`);
+const servedVersion = parseInt(response.headers['api-version'], 10);
+if (servedVersion !== expectedVersion) {
+  console.warn(`Expected API v${expectedVersion}, got v${servedVersion}`);
 }
 ```
 
-**Related:** See [API Versioning](#api-versioning) for request-side version selection via `/api/v1` or `/api/v2` URL prefixes and the `API-Version` request header.
+**Migration note:** If you are currently reading `X-API-Version`, rename it to `API-Version` — the values are identical so this is a drop-in change.
+
+**Related:** See [API Versioning](#api-versioning) and [docs/api-versioning.md](docs/api-versioning.md) for request-side version selection and the full deprecation timeline.
 
 ### `X-Response-Time`
 

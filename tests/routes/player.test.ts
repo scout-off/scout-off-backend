@@ -451,20 +451,33 @@ describe('GET /api/players — ?fields= query parameter', () => {
   });
 });
 
-// ─── X-API-Version header ─────────────────────────────────────────────────────
+// ─── API-Version / X-API-Version headers ──────────────────────────────────────
 
-describe('X-API-Version response header', () => {
-  it('is present on GET /api/players', async () => {
+describe('API version response headers', () => {
+  it('API-Version (canonical) is present on GET /api/players', async () => {
+    const res = await request(app).get('/api/players');
+    expect(res.headers['api-version']).toBeDefined();
+    expect(res.headers['api-version']).toMatch(/^\d+$/);
+  });
+
+  it('X-API-Version (deprecated alias) is present on GET /api/players', async () => {
     const res = await request(app).get('/api/players');
     expect(res.headers['x-api-version']).toBeDefined();
     expect(res.headers['x-api-version']).toMatch(/^\d+$/);
   });
 
-  it('is present on GET /api/players/:playerId 404', async () => {
+  it('both headers carry the same value on GET /api/players', async () => {
+    const res = await request(app).get('/api/players');
+    expect(res.headers['api-version']).toBe(res.headers['x-api-version']);
+  });
+
+  it('both headers are present on GET /api/players/:playerId 404', async () => {
     const { getPlayerById } = require('../../src/db');
     (getPlayerById as jest.Mock).mockReturnValue(null);
     const res = await request(app).get('/api/players/nonexistent');
+    expect(res.headers['api-version']).toBeDefined();
     expect(res.headers['x-api-version']).toBeDefined();
+    expect(res.headers['api-version']).toBe(res.headers['x-api-version']);
   });
 });
 
