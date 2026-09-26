@@ -7,12 +7,17 @@ import { isTokenRevoked } from '../services/tokenBlocklist';
 import { logAuditEvent } from '../services/audit';
 import { verifyJwt } from '../utils/jwt';
 import { hasApiKeyScope, ApiKeyScope } from '../utils/apiKeyScopes';
+import { ErrorCode } from '../utils/errorCodes';
 
 export interface AuthPayload extends jwt.JwtPayload, Partial<JwtPayload> {}
 
 /** Verify a token against the current secret, then the previous secret (grace window). */
 function verifyToken(token: string): AuthPayload {
   return verifyJwt(token) as AuthPayload;
+}
+
+function tokenErrorCode(err: unknown): ErrorCode {
+  return err instanceof jwt.TokenExpiredError ? ErrorCode.TOKEN_EXPIRED : ErrorCode.TOKEN_INVALID;
 }
 
 /** Shape returned by the API-key controller's resolver. */
@@ -112,7 +117,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     isTokenRevoked(payload.jti).then((revoked) => {
       if (revoked) {
         logger.warn({ method: req.method, path: req.path, error: 'Token revoked' });
-        sendUnauthorized(res, 'Token has been revoked');
+        sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
         return;
       }
       req.account = payload.sub;
@@ -128,10 +133,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       req.jti = payload.jti;
       next();
     });
-  } catch {
+  } catch (err) {
     logger.warn({ method: req.method, path: req.path, error: 'Invalid or expired token' });
     logAuditEvent({ action: 'auth_failed', path: req.path, reason: 'Invalid or expired token', timestamp: new Date().toISOString() }).catch(() => {});
-    sendUnauthorized(res, 'Invalid or expired token');
+    sendUnauthorized(res, 'Invalid or expired token', undefined, tokenErrorCode(err));
   }
 }
 
@@ -187,7 +192,7 @@ export function requireRole(...allowedRoles: string[]) {
       isTokenRevoked(payload.jti).then((revoked) => {
         if (revoked) {
           logger.warn({ method: req.method, path: req.path, error: 'Token revoked', requiredRole: role });
-          sendUnauthorized(res, 'Token has been revoked');
+          sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
           return;
         }
         req.account = payload.sub;
@@ -200,10 +205,10 @@ export function requireRole(...allowedRoles: string[]) {
         req.jti = payload.jti;
         next();
       });
-    } catch {
+    } catch (err) {
       logger.warn({ method: req.method, path: req.path, error: 'Invalid or expired token', requiredRole: role });
       logAuditEvent({ action: 'auth_failed', path: req.path, reason: 'Invalid or expired token', requiredRole: role, timestamp: new Date().toISOString() }).catch(() => {});
-      sendUnauthorized(res, 'Invalid or expired token');
+      sendUnauthorized(res, 'Invalid or expired token', undefined, tokenErrorCode(err));
     }
   };
 }
@@ -299,8 +304,8 @@ export function requireRoles(...roles: string[]) {
       req.role = payload.role;
       req.jti = payload.jti;
       next();
-    } catch {
-      sendUnauthorized(res, 'Invalid or expired token');
+    } catch (err) {
+      sendUnauthorized(res, 'Invalid or expired token', undefined, tokenErrorCode(err));
     }
   };
 }

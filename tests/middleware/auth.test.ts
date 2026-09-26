@@ -47,6 +47,7 @@ describe('requireAuth', () => {
     requireAuth(req, res, next);
     await flushPromises();
     expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -55,6 +56,7 @@ describe('requireAuth', () => {
     requireAuth(req, res, next);
     await flushPromises();
     expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOKEN_INVALID' }));
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -64,6 +66,7 @@ describe('requireAuth', () => {
     requireAuth(req, res, next);
     await flushPromises();
     expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOKEN_EXPIRED' }));
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -116,6 +119,7 @@ describe('requireAuth', () => {
     await flushPromises();
 
     expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOKEN_INVALID' }));
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -172,6 +176,7 @@ describe('requireRole', () => {
     requireRole('validator')(req, res, next);
     await flushPromises();
     expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -181,6 +186,7 @@ describe('requireRole', () => {
     requireRole('validator')(req, res, next);
     await flushPromises();
     expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOKEN_EXPIRED' }));
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -191,6 +197,7 @@ describe('requireRole', () => {
     requireRole('validator')(req, res, next);
     await flushPromises();
     expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOKEN_EXPIRED' }));
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -237,6 +244,7 @@ describe('requireRole', () => {
     await flushPromises();
 
     expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOKEN_INVALID' }));
     expect(next).not.toHaveBeenCalled();
   });
 });
@@ -246,12 +254,12 @@ describe('token rejection matrix (#1220)', () => {
   const revokedToken = jwt.sign({ sub: 'GTEST', role: 'player', jti: revokedJti }, SECRET, { expiresIn: '1h' });
 
   it.each([
-    ['missing token', undefined, 'Missing auth token'],
-    ['malformed token', 'not.a.valid.token', 'Invalid or expired token'],
-    ['expired token', sign({ sub: 'GTEST' }, SECRET, -1), 'Invalid or expired token'],
-    ['wrong-signature token', sign({ sub: 'GTEST' }, 'wrong-secret'), 'Invalid or expired token'],
-    ['revoked token', revokedToken, 'Token has been revoked'],
-  ])('returns 401 with the documented error for a %s', async (_label, token, expectedError) => {
+    ['missing token', undefined, 'Missing auth token', 'UNAUTHORIZED'],
+    ['malformed token', 'not.a.valid.token', 'Invalid or expired token', 'TOKEN_INVALID'],
+    ['expired token', sign({ sub: 'GTEST' }, SECRET, -1), 'Invalid or expired token', 'TOKEN_EXPIRED'],
+    ['wrong-signature token', sign({ sub: 'GTEST' }, 'wrong-secret'), 'Invalid or expired token', 'TOKEN_INVALID'],
+    ['revoked token', revokedToken, 'Token has been revoked', 'TOKEN_INVALID'],
+  ])('returns 401 with the documented error for a %s', async (_label, token, expectedError, expectedCode) => {
     if (token === revokedToken) {
       jest.spyOn(tokenBlocklist, 'isTokenRevoked').mockResolvedValueOnce(true);
     }
@@ -260,6 +268,7 @@ describe('token rejection matrix (#1220)', () => {
     await flushPromises();
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expectedError }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: expectedCode }));
     expect(next).not.toHaveBeenCalled();
   });
 

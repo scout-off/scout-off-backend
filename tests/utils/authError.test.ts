@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { sendUnauthorized, sendForbidden, AuthErrorPayload } from '../../src/utils/authError';
+import { ErrorCode } from '../../src/utils/errorCodes';
 
 function makeRes() {
   const res = {
@@ -59,6 +60,13 @@ describe('sendUnauthorized', () => {
     sendUnauthorized(res, 'Invalid or expired token');
     const payload = (res.json as jest.Mock).mock.calls[0][0] as AuthErrorPayload;
     expect('reason' in payload).toBe(false);
+  });
+
+  it('allows an explicit token error code while preserving the default', () => {
+    const res = makeRes();
+    sendUnauthorized(res, 'Invalid or expired token', undefined, ErrorCode.TOKEN_EXPIRED);
+    const payload = (res.json as jest.Mock).mock.calls[0][0] as AuthErrorPayload;
+    expect(payload.code).toBe(ErrorCode.TOKEN_EXPIRED);
   });
 });
 

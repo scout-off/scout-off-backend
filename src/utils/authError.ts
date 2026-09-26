@@ -17,8 +17,9 @@ export function sendUnauthorized(
   res: Response,
   message: string,
   reason?: Record<string, unknown>,
+  code: ErrorCode = ErrorCode.UNAUTHORIZED,
 ): void {
-  const body: AuthErrorPayload = { success: false, errorCode: 9, error: message, code: ErrorCode.UNAUTHORIZED };
+  const body: AuthErrorPayload = { success: false, errorCode: 9, error: message, code };
   if (reason !== undefined) body.reason = reason;
   res.status(401).json(body);
 }
