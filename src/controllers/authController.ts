@@ -137,7 +137,11 @@ try {
           attemptedWallet,
           reason: error.message,
         });
-        res.status(401).json({ success: false, error: error.message });
+        res.status(401).json({
+          success: false,
+          error: error.message,
+          code: error.message === 'Challenge has expired' ? ErrorCode.TOKEN_EXPIRED : ErrorCode.TOKEN_INVALID,
+        });
         return;
       }
       logger.warn('[auth] failed_token_request malformed_xdr', {
@@ -179,13 +183,21 @@ try {
       payload = verifyJwt(refreshToken);
     } catch (err) {
       logger.warn('[auth] refresh_token_invalid', { reason: err instanceof Error ? err.message : String(err) });
-      res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
+      res.status(401).json({
+        success: false,
+        error: 'Invalid or expired refresh token',
+        code: err instanceof jwt.TokenExpiredError ? ErrorCode.TOKEN_EXPIRED : ErrorCode.TOKEN_INVALID,
+      });
       return;
     }
 
     // Must carry type:'refresh' to prevent access tokens being used here.
     if (payload.type !== 'refresh') {
-      res.status(401).json({ success: false, error: 'Token is not a refresh token' });
+      res.status(401).json({
+        success: false,
+        error: 'Token is not a refresh token',
+        code: ErrorCode.TOKEN_INVALID,
+      });
       return;
     }
 
@@ -194,14 +206,22 @@ try {
     const role = payload.role as string | undefined;
 
     if (!jti || !account) {
-      res.status(401).json({ success: false, error: 'Malformed refresh token' });
+      res.status(401).json({
+        success: false,
+        error: 'Malformed refresh token',
+        code: ErrorCode.TOKEN_INVALID,
+      });
       return;
     }
 
     // Check revocation blocklist.
     if (await isTokenRevoked(jti)) {
       logger.warn('[auth] refresh_token_revoked', { jti });
-      res.status(401).json({ success: false, error: 'Refresh token has been revoked' });
+      res.status(401).json({
+        success: false,
+        error: 'Refresh token has been revoked',
+        code: ErrorCode.TOKEN_INVALID,
+      });
       return;
     }
 
