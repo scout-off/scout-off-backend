@@ -12,6 +12,7 @@ describe('ErrorCode', () => {
     expect(ErrorCode.VALIDATION_ERROR).toBe('VALIDATION_ERROR');
     expect(ErrorCode.MALFORMED_JSON).toBe('MALFORMED_JSON');
     expect(ErrorCode.PAYLOAD_TOO_LARGE).toBe('PAYLOAD_TOO_LARGE');
+    expect(ErrorCode.RATE_LIMITED).toBe('RATE_LIMITED');
   });
 
   it('contains expected auth error codes', () => {

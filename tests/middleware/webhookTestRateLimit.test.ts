@@ -72,7 +72,11 @@ describe.each(stores)('webhook test-delivery rate limit (#1037) ($name)', ({ cre
 
     const blocked = await request(app).post('/webhooks/1/test').set('x-wallet', wallet);
     expect(blocked.status).toBe(429);
-    expect(blocked.body).toEqual({ success: false, error: 'Too many requests, please try again later' });
+    expect(blocked.body).toEqual({
+      success: false,
+      error: 'Too many requests, please try again later',
+      code: 'RATE_LIMITED',
+    });
 
     // The rejection must happen before the handler runs — no 3rd outbound call.
     expect(mockOutboundFetch).toHaveBeenCalledTimes(2);

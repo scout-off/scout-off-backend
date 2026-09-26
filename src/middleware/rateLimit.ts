@@ -5,6 +5,7 @@ import { InMemoryRateLimitStore } from './inMemoryRateLimitStore';
 import { RedisRateLimitStore } from './redisRateLimitStore';
 import { getRedisClient } from '../services/redis';
 import { logger } from '../utils/logger';
+import { ErrorCode } from '../utils/errorCodes';
 
 function createStore(): RateLimitStore {
   const redis = getRedisClient();
@@ -77,7 +78,11 @@ export function rateLimit(options: RateLimitOptions = {}) {
         const now = Date.now();
         const retryAfterSec = Math.ceil(Math.max(0, resetAt - now) / 1000);
         res.set('Retry-After', String(retryAfterSec || 1));
-        res.status(429).json({ success: false, error: 'Too many requests, please try again later' });
+        res.status(429).json({
+          success: false,
+          error: 'Too many requests, please try again later',
+          code: ErrorCode.RATE_LIMITED,
+        });
         return;
       }
       next();
@@ -133,6 +138,7 @@ export function playerRateLimit(options: RateLimitOptions = {}) {
         res.status(429).json({
           success: false,
           error: 'Too many milestone submissions for this player, please try again later',
+          code: ErrorCode.RATE_LIMITED,
         });
         return;
       }
@@ -179,7 +185,11 @@ export function walletRateLimit(options: RateLimitOptions = {}) {
       const { count } = await store.increment(`${namespace}:wallet:${wallet}`, windowMs);
 
       if (count > max) {
-        res.status(429).json({ success: false, error: 'Too many requests, please try again later' });
+        res.status(429).json({
+          success: false,
+          error: 'Too many requests, please try again later',
+          code: ErrorCode.RATE_LIMITED,
+        });
         return;
       }
       next();

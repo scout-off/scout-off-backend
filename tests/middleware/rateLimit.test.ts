@@ -52,6 +52,7 @@ describe.each(stores)('rateLimit middleware ($name)', ({ create }) => {
     const { req, res, next } = makeReqRes(ip);
     await mw(req, res, next);
     expect(res.status).toHaveBeenCalledWith(429);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'RATE_LIMITED' }));
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -164,6 +165,7 @@ describe.each(stores)('walletRateLimit middleware ($name)', ({ create }) => {
     const { req, res, next } = makeReqResWithWallet(wallet);
     await mw(req, res, next);
     expect(res.status).toHaveBeenCalledWith(429);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'RATE_LIMITED' }));
     expect(next).not.toHaveBeenCalled();
   });
 

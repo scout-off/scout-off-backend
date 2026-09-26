@@ -6,7 +6,7 @@
  *  - Exceeding the per-player limit from two different validator wallets/IPs is also blocked
  *  - Requests for a different player_id are not affected by the first player's limit
  *  - Requests with no playerId body fall through (IP / wallet limiters only)
- *  - The 429 response uses the standard shape { success: false, error: string }
+ *  - The 429 response includes a machine-readable rate-limit error code
  */
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
@@ -179,9 +179,10 @@ describe('POST /api/validators/milestone — per-player rate limit (#1137)', () 
       await limiter({ body: { playerId: PLAYER_ID } } as never, res as never, next);
 
       expect(res.status).toHaveBeenCalledWith(429);
-      const body = jsonMock.mock.calls[0]?.[0] as { success: boolean; error: string };
+      const body = jsonMock.mock.calls[0]?.[0] as { success: boolean; error: string; code: string };
       expect(body.success).toBe(false);
       expect(typeof body.error).toBe('string');
+      expect(body.code).toBe('RATE_LIMITED');
     });
   });
 });

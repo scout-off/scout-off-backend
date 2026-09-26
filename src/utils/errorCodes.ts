@@ -51,6 +51,12 @@ export const ErrorCode = {
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
 
   /**
+   * HTTP 429 — The client exceeded a request rate limit.
+   * Client should: Wait for the duration in the `Retry-After` response header before retrying.
+   */
+  RATE_LIMITED: 'RATE_LIMITED',
+
+  /**
    * HTTP 415 — Request Content-Type is not supported (e.g., text/plain instead of application/json).
    * Client should: Set Content-Type: application/json in request headers.
    */
