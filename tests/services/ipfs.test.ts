@@ -6,8 +6,12 @@ process.env.JWT_SECRET = 'test-secret';
 
 // ── mock IPFS service ─────────────────────────────────────────────────────────
 const mockPinJson = jest.fn();
+const mockPinFile = jest.fn();
+const mockIsPinataConfigured = jest.fn(() => false);
 jest.mock('../../src/services/ipfs', () => ({
   pinJson: mockPinJson,
+  pinFile: mockPinFile,
+  isPinataConfigured: mockIsPinataConfigured,
   gatewayUrl: (cid: string) => `https://gateway.pinata.cloud/ipfs/${cid}`,
   gatewayUrls: (cid: string) => [`https://gateway.pinata.cloud/ipfs/${cid}`],
 }));
@@ -42,9 +46,10 @@ jest.mock('../../src/db', () => ({
 }));
 
 import { registerPlayer } from '../../src/controllers/playerController';
-import { submitMilestoneEvidence } from '../../src/controllers/validatorController';
+import { submitMilestoneEvidence, downloadAndPinEvidence } from '../../src/controllers/validatorController';
 import { invalidatePlayerCache } from '../../src/services/cache';
 import { invalidateMilestoneCache } from '../../src/services/cache';
+import config from '../../src/config';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function makeRes() {
@@ -175,6 +180,40 @@ describe('submitMilestoneEvidence – IPFS pinning', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPinJson.mockResolvedValue(MOCK_CID);
+  });
+
+  describe('downloadAndPinEvidence without Pinata credentials', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockPinJson.mockResolvedValue('bafymock');
+    });
+
+    it('returns a local metadata stub instead of pinning an empty evidence file', async () => {
+      const evidenceUrl = 'https://evidence.example.com/report.pdf';
+
+      await expect(downloadAndPinEvidence(evidenceUrl)).resolves.toBe('bafymock');
+
+      expect(mockPinJson).toHaveBeenCalledWith({
+        evidenceUri: evidenceUrl,
+        filename: 'report.pdf',
+      });
+      expect(mockPinFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects in staging when Pinata credentials are missing', async () => {
+      const originalNodeEnv = config.nodeEnv;
+      config.nodeEnv = 'staging';
+
+      try {
+        await expect(
+          downloadAndPinEvidence('https://evidence.example.com/report.pdf')
+        ).rejects.toThrow('PINATA_API_KEY and PINATA_SECRET must be set in staging and production');
+        expect(mockPinJson).not.toHaveBeenCalled();
+        expect(mockPinFile).not.toHaveBeenCalled();
+      } finally {
+        config.nodeEnv = originalNodeEnv;
+      }
+    });
   });
 
   it('calls pinJson with evidence payload and returns evidenceCid', async () => {

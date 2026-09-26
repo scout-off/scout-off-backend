@@ -12,6 +12,7 @@ jest.mock('../../src/config', () => ({
 // Mock axios so we can control Pinata responses
 jest.mock('axios');
 import axios from 'axios';
+import config from '../../src/config';
 const mockedPost = jest.fn();
 (axios as jest.Mocked<typeof axios>).post = mockedPost;
 
@@ -56,6 +57,35 @@ describe('pinJson IPFS failure handling (#346)', () => {
       expect.stringContaining('[ipfs] Pinata unavailable'),
       expect.any(String)
     );
+  });
+
+  describe('Pinata credentials in staging', () => {
+    it('rejects pin and health operations instead of returning local stubs', async () => {
+      const previousNodeEnv = process.env.NODE_ENV;
+      const previousApiKey = config.pinata.apiKey;
+      const previousSecret = config.pinata.secret;
+      process.env.NODE_ENV = 'staging';
+      config.pinata.apiKey = '';
+      config.pinata.secret = '';
+
+      try {
+        await expect(pinJson({ staging: 'missing-pinata-config' })).rejects.toThrow(
+          'PINATA_API_KEY and PINATA_SECRET must be set in staging and production'
+        );
+        const { pinFile, checkHealth } = await import('../../src/services/ipfs');
+        await expect(pinFile(Buffer.from('evidence'), 'evidence.txt', 'text/plain')).rejects.toThrow(
+          'PINATA_API_KEY and PINATA_SECRET must be set in staging and production'
+        );
+        await expect(checkHealth()).rejects.toThrow(
+          'PINATA_API_KEY and PINATA_SECRET must be set in staging and production'
+        );
+        expect(mockedPost).not.toHaveBeenCalled();
+      } finally {
+        process.env.NODE_ENV = previousNodeEnv;
+        config.pinata.apiKey = previousApiKey;
+        config.pinata.secret = previousSecret;
+      }
+    });
   });
 
   it('queues payload to pending_pins when Pinata throws', async () => {

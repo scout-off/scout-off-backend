@@ -3,7 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import axios from 'axios';
 import { logger } from '../utils/logger';
-import { pinJson, pinFile } from '../services/ipfs';
+import { pinJson, pinFile, isPinataConfigured } from '../services/ipfs';
 import { getPendingMilestones as getPendingMilestonesFromDb, getDriver, removePendingMilestone, incrementValidatorApproved, queryEvents, updatePlayerProgress, getValidatorStats } from '../db';
 import { invalidateMilestoneCache } from '../services/cache';
 import { recordAudit } from '../utils/audit';
@@ -33,16 +33,16 @@ function isAllowedContentType(contentType: string): boolean {
  *   - { status: 413, message } — file exceeds EVIDENCE_MAX_BYTES
  */
 export async function downloadAndPinEvidence(url: string): Promise<string> {
-  // In non-production without Pinata credentials the IPFS service returns stub
-  // CIDs without hitting any network.  Mirror that behaviour here so local dev
-  // and test environments work without real external HTTP.
-  if (!config.pinata.apiKey && !config.pinata.secret) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('IPFS service unavailable: PINATA_API_KEY and PINATA_SECRET must be set in production');
+  // In local development/test, preserve offline evidence submission without
+  // pretending an empty file was pinned. Deployments must never persist a
+  // synthetic evidence CID.
+  if (!isPinataConfigured()) {
+    if (config.nodeEnv === 'development' || config.nodeEnv === 'test') {
+      const stubFilename = path.basename(new URL(url).pathname) || 'evidence';
+      logger.warn('[validator] Pinata not configured — returning local evidence stub CID');
+      return pinJson({ evidenceUri: url, filename: stubFilename });
     }
-    logger.warn('[validator] Pinata not configured — returning dev stub CID for HTTPS evidence download');
-    const stubFilename = path.basename(new URL(url).pathname) || 'evidence';
-    return pinFile(Buffer.alloc(0), stubFilename, 'application/octet-stream');
+    throw new Error('IPFS service unavailable: PINATA_API_KEY and PINATA_SECRET must be set in staging and production');
   }
 
   // Step 1: HEAD request to check Content-Type and Content-Length before downloading.
