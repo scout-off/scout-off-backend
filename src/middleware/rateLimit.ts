@@ -182,9 +182,12 @@ export function walletRateLimit(options: RateLimitOptions = {}) {
     }
 
     try {
-      const { count } = await store.increment(`${namespace}:wallet:${wallet}`, windowMs);
+      const { count, resetAt } = await store.increment(`${namespace}:wallet:${wallet}`, windowMs);
 
       if (count > max) {
+        const now = Date.now();
+        const retryAfterSec = Math.ceil(Math.max(0, resetAt - now) / 1000);
+        res.set('Retry-After', String(retryAfterSec || 1));
         res.status(429).json({
           success: false,
           error: 'Too many requests, please try again later',
