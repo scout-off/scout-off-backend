@@ -77,10 +77,13 @@ es.onopen = () => console.log('stream open');
 es.onmessage = (e) => console.log('event:', e.data);
 ```
 
-On connect the server immediately sends an initial frame so the client knows
+On connect the server immediately sends a `retry:` frame (with small random jitter
+to avoid reconnect storms) alongside the `connected` event so the client knows
 the stream is live:
 
 ```
+retry: 5234
+
 event: connected
 data: {"wallet":"GABCDEF..."}
 
@@ -148,6 +151,7 @@ Other frames you may see:
 
 | Frame type     | When                                            | Payload                                   |
 | -------------- | ----------------------------------------------- | ----------------------------------------- |
+| `retry:`       | Once, immediately on connect                    | Integer milliseconds (e.g. `5234`); sets client reconnect delay |
 | `connected`    | Once, immediately after the stream opens        | `{ "wallet": "<your wallet>" }`           |
 | `session_ended`| The stream is being closed (see live auth below)| `{ "reason": "token_revoked" \| "wallet_blocklisted" }` |
 | `: ping`       | Keep-alive comment every `SSE_KEEPALIVE_INTERVAL_MS` (default 15 s) | — (comment only, ignored by EventSource) |
@@ -204,6 +208,10 @@ relevance check (wildcard behaviour).
 
 ## Reconnection and replay behaviour (known limitations)
 
+- **Reconnection delay (`retry:` hint):** On connect, the server sends a `retry: <ms>`
+  hint (configured by `SSE_RETRY_MS`, default `5000` ms, plus up to 20% random jitter per
+  connection). Standard SSE clients (including `EventSource`) honour this hint to avoid
+  synchronized reconnect storms across clients.
 - There is **no `id:` field in event frames and no `Last-Event-ID` replay**.
   If the connection drops, the server does not buffer missed events and cannot
   resume the stream from a client-supplied offset.
@@ -235,6 +243,7 @@ for the full model.
 
 | Variable                    | Default | Description                                             |
 | --------------------------- | ------- | ------------------------------------------------------- |
+| `SSE_RETRY_MS`              | `5000`  | Base reconnect delay hint sent in `retry:` frame (ms)   |
 | `SSE_KEEPALIVE_INTERVAL_MS` | `15000` | Interval between keep-alive `: ping` comments (ms)      |
 | `SSE_MAX_CONNECTIONS`       | `0`     | Max concurrent streams; `0` = unlimited                 |
 | `SSE_AUTH_SWEEP_INTERVAL_MS`| `30000` | Cross-process auth sweep interval (ms)                  |

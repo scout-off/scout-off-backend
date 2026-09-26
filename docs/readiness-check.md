@@ -35,10 +35,35 @@ The readiness check reports the indexer service status based on:
 
 - **Purpose**: Startup grace period to allow initial sync from persisted cursor
 - **Default**: `300000` (5 minutes)
+- **Unit**: Milliseconds (integer >= 0)
 - **Set to `0`**: Disables the grace period (check starts immediately)
 - **Recommended**: 
   - Production: `300000-600000` (5-10 minutes for typical sync)
   - Development: `0` (if you want immediate feedback)
+
+### `READINESS_DB_TIMEOUT_MS`
+
+- **Purpose**: Per-probe timeout for database writability heartbeat probe (`probeDbWritable()`)
+- **Default**: `2000` (2 seconds)
+- **Unit**: Milliseconds (integer >= 1)
+- **Effect**: If the heartbeat row write into `indexer_state` does not resolve within this timeout (e.g. disk contention, lock starvation in SQLite, or connection pool exhaustion in PostgreSQL), the DB check marks `status: 'unavailable'` and readiness returns `503`. Running probes concurrently with individual timeouts prevents a locked DB from blocking or hanging the entire readiness check.
+- **Recommended**: `1000-3000` ms (keep lower than your orchestrator's HTTP probe timeout).
+
+### `READINESS_IPFS_TIMEOUT_MS`
+
+- **Purpose**: Per-probe timeout for Pinata / IPFS API connectivity probe (`checkHealth()`)
+- **Default**: `5000` (5 seconds)
+- **Unit**: Milliseconds (integer >= 1)
+- **Effect**: Sets the maximum time allowed for Pinata's `/data/testAuthentication` call to complete. If Pinata is degraded or slow, the IPFS probe reports `status: 'unavailable'` and records the latency (`ms`) rather than hanging the overall readiness check.
+- **Recommended**: `3000-10000` ms.
+
+### `READINESS_STELLAR_TIMEOUT_MS`
+
+- **Purpose**: Per-probe timeout for Soroban / Stellar RPC connectivity probe (`stellarHealth()`)
+- **Default**: `5000` (5 seconds)
+- **Unit**: Milliseconds (integer >= 1)
+- **Effect**: Sets the maximum time allowed for the Stellar Horizon/RPC ledger check to respond. If RPC times out, the probe reports `status: 'unavailable'`. Note that if the Stellar circuit breaker is currently open, this check short-circuits immediately with `unavailable` without making a network call. If `config.stellarHealthCheckEnabled` is false, it reports `disabled`.
+- **Recommended**: `3000-10000` ms.
 
 ## Use Cases
 
@@ -138,6 +163,9 @@ The indexer lag check works alongside these existing indexer configuration optio
 - `INDEXER_LAG_WARN_THRESHOLD`: Threshold for logging warnings (default: 100)
 - `INDEXER_FINALITY_MARGIN`: Finality margin for reorg protection (default: 10)
 - `INDEXER_BACKFILL_FROM_LEDGER`: Starting ledger for initial sync (optional)
+- `READINESS_DB_TIMEOUT_MS`: Timeout for DB writability heartbeat probe, in ms (default: 2000)
+- `READINESS_IPFS_TIMEOUT_MS`: Timeout for Pinata IPFS connectivity probe, in ms (default: 5000)
+- `READINESS_STELLAR_TIMEOUT_MS`: Timeout for Stellar RPC connectivity probe, in ms (default: 5000)
 
 ## Implementation Details
 

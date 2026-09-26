@@ -8,6 +8,11 @@ import config from '../config';
 
 const router = Router();
 
+router.use((_req, res, next) => {
+  res.set({ 'Cache-Control': 'no-store', Pragma: 'no-cache' });
+  next();
+});
+
 const authRateLimit = rateLimit({
   name: 'auth',
   windowMs: config.authRateLimit.windowMs,

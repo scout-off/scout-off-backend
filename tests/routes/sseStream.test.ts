@@ -23,6 +23,7 @@ import http from 'http';
 import jwt from 'jsonwebtoken';
 import app from '../../src/app';
 import { EventBroadcaster, broadcaster, BroadcastEvent } from '../../src/services/eventBroadcaster';
+import { getSseRetryMs } from '../../src/routes/events';
 
 const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 
@@ -207,6 +208,68 @@ describe('GET /api/events/stream — connected event', () => {
     const all = conn.chunks.join('');
     expect(all).toContain('event: connected');
     expect(all).toContain(`"wallet":"${WALLET_A}"`);
+  });
+
+  it('sends a retry: frame with sensible delay on connection', async () => {
+    const { conn } = await openSseConnection(
+      server,
+      '/api/events/stream',
+      makeToken(WALLET_A),
+    );
+
+    await conn.waitForChunks(1, 1000).catch(() => {});
+    conn.destroy();
+
+    const all = conn.chunks.join('');
+    expect(all).toMatch(/retry:\s*\d+/);
+    const match = all.match(/retry:\s*(\d+)/);
+    expect(match).not.toBeNull();
+    const retryVal = parseInt(match![1], 10);
+    // Default base is 5000; jitter (up to 20%) gives range [5000, 6000)
+    expect(retryVal).toBeGreaterThanOrEqual(5000);
+    expect(retryVal).toBeLessThanOrEqual(6000);
+  });
+
+  it('uses configurable SSE_RETRY_MS when set in environment', async () => {
+    const originalRetry = process.env.SSE_RETRY_MS;
+    try {
+      process.env.SSE_RETRY_MS = '2500';
+      const { conn } = await openSseConnection(
+        server,
+        '/api/events/stream',
+        makeToken(WALLET_A),
+      );
+
+      await conn.waitForChunks(1, 1000).catch(() => {});
+      conn.destroy();
+
+      const all = conn.chunks.join('');
+      const match = all.match(/retry:\s*(\d+)/);
+      expect(match).not.toBeNull();
+      const retryVal = parseInt(match![1], 10);
+      // Base is 2500; jitter (up to 20%) gives range [2500, 3000)
+      expect(retryVal).toBeGreaterThanOrEqual(2500);
+      expect(retryVal).toBeLessThanOrEqual(3000);
+    } finally {
+      if (originalRetry !== undefined) {
+        process.env.SSE_RETRY_MS = originalRetry;
+      } else {
+        delete process.env.SSE_RETRY_MS;
+      }
+    }
+  });
+
+  it('produces jittered retry values across connections', () => {
+    const samples = new Set<number>();
+    for (let i = 0; i < 30; i++) {
+      samples.add(getSseRetryMs(5000));
+    }
+    // With 30 samples drawn from [5000, 5999], multiple distinct values must exist
+    expect(samples.size).toBeGreaterThan(1);
+    for (const val of samples) {
+      expect(val).toBeGreaterThanOrEqual(5000);
+      expect(val).toBeLessThanOrEqual(6000);
+    }
   });
 });
 

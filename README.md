@@ -835,6 +835,16 @@ Operator topics (secrets rotation, data privacy, Postgres migration, deployment)
 | `SLOW_QUERY_THRESHOLD_MS`         | Log a structured warning for DB queries slower than this, in milliseconds (default: `50`)                             |
 | `SSE_KEEPALIVE_INTERVAL_MS`       | Interval in milliseconds to send SSE keep-alive comments (default: `15000` = 15 seconds)                              |
 | `SSE_MAX_CONNECTIONS`             | Maximum number of concurrent SSE connections (default: `0` = unlimited)                                               |
+| `SSE_RETRY_MS`                     | Base reconnection delay in milliseconds sent to SSE clients in `retry:` frame (default: `5000` = 5 seconds)             |
+| `READINESS_DB_TIMEOUT_MS`         | Per-probe timeout for DB readiness heartbeat check, in milliseconds (default: `2000`)                                  |
+| `READINESS_IPFS_TIMEOUT_MS`       | Per-probe timeout for Pinata IPFS connectivity readiness check, in milliseconds (default: `5000`)                      |
+| `READINESS_STELLAR_TIMEOUT_MS`    | Per-probe timeout for Stellar RPC connectivity readiness check, in milliseconds (default: `5000`)                     |
+| `MILESTONE_RATE_WINDOW_MS`        | Rolling time window for validator milestone evidence submissions, in milliseconds (default: `60000`)                  |
+| `MILESTONE_RATE_MAX`              | Max milestone evidence submissions per window per caller (default: `10`)                                              |
+| `CIRCUIT_BREAKER_FAILURE_THRESHOLD`| Consecutive failures before generic circuit breaker trips open (default: `5`)                                          |
+| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS`| Cooldown period in milliseconds before generic circuit breaker tests dependency recovery (default: `30000`)          |
+| `IPFS_BREAKER_FAILURE_THRESHOLD`  | Consecutive failures before Pinata IPFS circuit breaker trips open (default: `5`)                                      |
+| `IPFS_BREAKER_RESET_TIMEOUT_MS`   | Cooldown period in milliseconds before Pinata IPFS circuit breaker tests recovery (default: `30000`)                  |
 
 ## Testing
 

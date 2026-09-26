@@ -271,3 +271,17 @@ default 5 min) should log zero mismatches.
 | `TIER_DIVERGENCE_INTERVAL_MS` | `300000` (5 min) | How often to run the reconciliation pass |
 | `TIER_DIVERGENCE_SAMPLE_SIZE` | `100` | Max players sampled per pass |
 
+## Circuit breaker tuning
+
+The backend maintains circuit breakers to fail fast when downstream dependencies degrade:
+
+| Variable | Default | Unit | Effect |
+| -------- | ------- | ---- | ------ |
+| `CIRCUIT_BREAKER_FAILURE_THRESHOLD` | `5` | count | Consecutive failures before generic circuit breaker trips open |
+| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | `30000` (30 s) | ms | Cooldown duration before generic breaker tests dependency recovery |
+| `IPFS_BREAKER_FAILURE_THRESHOLD` | `5` | count | Consecutive failures before Pinata IPFS circuit breaker trips open |
+| `IPFS_BREAKER_RESET_TIMEOUT_MS` | `30000` (30 s) | ms | Cooldown duration before IPFS breaker tests Pinata recovery |
+
+When open, calls fail immediately with `CircuitBreakerOpenError` rather than consuming sockets while waiting on network timeouts. See [docs/degradation-contracts.md](degradation-contracts.md#circuit-breakers) for degradation contracts and behavior under failure.
+
+

@@ -522,6 +522,9 @@ const config = {
   /** Minimum response size in bytes to trigger compression (default: 1024 bytes). */
   compressionThresholdBytes: parseNumericEnv('COMPRESSION_THRESHOLD', process.env.COMPRESSION_THRESHOLD ?? process.env.COMPRESSION_THRESHOLD_BYTES, 1024, { min: 1, integer: true }),
 
+  /** Base retry interval in milliseconds for SSE reconnect hints (default: 5000 ms). */
+  sseRetryMs: parseNumericEnv('SSE_RETRY_MS', process.env.SSE_RETRY_MS, 5000, { min: 1, integer: true }),
+
   /**
    * Maximum indexer ledger lag (in ledgers) allowed for readiness check.
    * If the indexer is more than this many ledgers behind the chain tip,

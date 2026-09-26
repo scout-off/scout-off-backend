@@ -122,3 +122,22 @@ describe('POST /auth/token — admin role pre-verification regression (#694)', (
     expect(res.body.token).toBeUndefined();
   });
 });
+
+describe('Cache-Control and Pragma headers on /auth/*', () => {
+  it('sets Cache-Control: no-store and Pragma: no-cache on /auth/token responses', async () => {
+    const res = await request(app)
+      .post('/auth/token')
+      .send({ transaction: 'this-is-not-valid-xdr' });
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['pragma']).toBe('no-cache');
+  });
+
+  it('sets Cache-Control: no-store and Pragma: no-cache on /auth/refresh responses', async () => {
+    const res = await request(app)
+      .post('/auth/refresh')
+      .send({});
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['pragma']).toBe('no-cache');
+  });
+});
+

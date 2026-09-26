@@ -153,6 +153,17 @@ describe('POST /auth/refresh', () => {
     expect(res.body.refreshToken).not.toBe(refreshToken);
   });
 
+  it('sets Cache-Control: no-store and Pragma: no-cache on /auth/refresh responses', async () => {
+    const refreshToken = makeRefreshToken('GACCOUNT123', 'scout');
+    const res = await request(app)
+      .post('/auth/refresh')
+      .send({ refreshToken });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['pragma']).toBe('no-cache');
+  });
+
   it('new access token carries the correct role', async () => {
     const refreshToken = makeRefreshToken('GSCOUT', 'scout');
     const res = await request(app)

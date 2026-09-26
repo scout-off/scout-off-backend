@@ -23,3 +23,38 @@
 ## Combinations (critical paths)
 - redis + rpc down → `/ready` 503; `/health/liveness` 200; rate limit fail-open
 - db + ipfs down → `/ready` 503; liveness 200
+
+## Circuit Breakers
+
+Circuit breakers isolate dependency failures to prevent cascading latency spikes and connection exhaustion. When open, requests fast-fail immediately rather than waiting for network timeouts.
+
+### Generic Outbound Circuit Breaker
+
+Configured in `src/utils/circuitBreaker.ts` and used as the default for outbound services:
+
+- `CIRCUIT_BREAKER_FAILURE_THRESHOLD`
+  - **Default:** `5`
+  - **Unit:** Count (integer >= 1) of consecutive failures
+  - **Effect:** Consecutive failures before the breaker trips to `OPEN`. Once open, calls immediately throw `CircuitBreakerOpenError` and fail fast.
+  - **Safe values:** `3`–`10`. Lower values fail faster during outages; higher values tolerate transient network jitter.
+- `CIRCUIT_BREAKER_RESET_TIMEOUT_MS`
+  - **Default:** `30000` (30 seconds)
+  - **Unit:** Milliseconds (integer >= 1)
+  - **Effect:** Cooldown duration in milliseconds before moving from `OPEN` to `HALF_OPEN` to permit a single probe request to check if the dependency has recovered.
+  - **Safe values:** `10000`–`60000` ms. Shorter windows detect recovery faster; longer windows reduce load on struggling upstream services.
+
+### IPFS / Pinata Circuit Breaker
+
+Dedicated circuit breaker for Pinata API uploads and health probes (`src/services/ipfs.ts`):
+
+- `IPFS_BREAKER_FAILURE_THRESHOLD`
+  - **Default:** `5`
+  - **Unit:** Count (integer >= 1) of consecutive failures
+  - **Effect:** Number of consecutive Pinata request failures before `ipfsBreaker` opens. When open, upload/pin requests fail immediately, JSON payloads are queued in `pending_pins` for background reconciliation, and `/ready` reports `ipfs: unavailable`.
+  - **Safe values:** `3`–`10`.
+- `IPFS_BREAKER_RESET_TIMEOUT_MS`
+  - **Default:** `30000` (30 seconds)
+  - **Unit:** Milliseconds (integer >= 1)
+  - **Effect:** Cooldown duration in milliseconds while the breaker remains `OPEN` before allowing a trial request to Pinata.
+  - **Safe values:** `10000`–`60000` ms.
+

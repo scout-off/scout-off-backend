@@ -14,6 +14,7 @@ import {
   onWalletBlocked,
 } from '../services/walletBlocklist';
 import * as tokenBlocklistModule from '../services/tokenBlocklist';
+import config from '../config';
 
 const router = Router();
 
@@ -47,6 +48,21 @@ const AUTH_SWEEP_INTERVAL_MS = parseInt(
  *  (not cached at module load) so tests can flip it per-case. */
 function getMaxSseConnections(): number {
   return parseInt(process.env.SSE_MAX_CONNECTIONS ?? '0', 10);
+}
+
+/**
+ * Compute the SSE reconnect retry interval in milliseconds.
+ * Read live so tests can override process.env.SSE_RETRY_MS per-test.
+ * Applies a small random jitter (up to 20% of base) per connection to prevent
+ * synchronized reconnect storms across clients.
+ */
+export function getSseRetryMs(baseMs: number = config.sseRetryMs): number {
+  const envVal = process.env.SSE_RETRY_MS;
+  const parsed = envVal !== undefined ? parseInt(envVal, 10) : baseMs;
+  const effectiveBase = Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
+  const maxJitter = Math.max(1, Math.floor(effectiveBase * 0.2));
+  const jitter = Math.floor(Math.random() * maxJitter);
+  return effectiveBase + jitter;
 }
 
 // ─── Valid event type set (for query param validation) ────────────────────────
@@ -173,6 +189,9 @@ let authSweepTimer: NodeJS.Timeout | null = null;
  *     DB query per keep-alive tick).
  *   - Blocklisted wallets cannot open a new connection (403).
  *
+ * Reconnection: initial `retry:` hint is sent on connect (configured via
+ * SSE_RETRY_MS, default 5000 ms + up to 20% random jitter) to prevent reconnect storms.
+ *
  * Keep-alive: a `: ping` comment is sent every SSE_KEEPALIVE_INTERVAL_MS ms
  * (default 15 s) to prevent idle-connection timeouts.
  *
@@ -232,8 +251,9 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
   res.setHeader('X-Accel-Buffering', 'no'); // disable nginx proxy buffering
   res.flushHeaders();
 
-  // Send an initial connected event so the client knows the stream is open.
-  res.write(`event: connected\ndata: ${JSON.stringify({ wallet })}\n\n`);
+  // Send an initial retry hint (with random jitter) and connected event.
+  const retryMs = getSseRetryMs();
+  res.write(`retry: ${retryMs}\n\nevent: connected\ndata: ${JSON.stringify({ wallet })}\n\n`);
 
   // ── Session lifecycle (termination + cleanup) ──────────────────────────────
   let terminated = false;
