@@ -22,18 +22,16 @@ import {
   getPendingActionById,
   approvePendingAction,
   getAuditTrail,
-  withdrawFeesSchema,
-  withdrawFeesV2Schema,
-  revokeTokenSchema,
-  reindexSchema,
   importValidatorsBodySchema,
   bulkValidatorImport,
-  bulkValidatorImportSchema,
   updatePlatformFeeController,
-  updatePlatformFeeSchema,
   getWebhookDeliveriesEndpoint,
   getWebhookDeliverySummaryEndpoint,
 } from '../controllers/adminController';
+import { withdrawFeesSchema, withdrawFeesV2Schema } from '../controllers/adminFeesController';
+import { revokeTokenSchema } from '../controllers/adminTokenController';
+import { reindexSchema } from '../controllers/adminIndexerController';
+import { bulkValidatorImportSchema, updatePlatformFeeSchema } from '../controllers/adminActionsController';
 import { importPlayers, importPlayersBodySchema } from '../controllers/adminPlayerImportController';
 import { adminDeactivatePlayer, adminReactivatePlayer, deactivateBodySchema } from '../controllers/adminPlayerDeactivationController';
 import { getFeatureFlags, updateFeatureFlag, toggleFeatureFlag, updateFeatureFlagBodySchema, toggleFlagBodySchema } from '../controllers/featureFlagsController';
