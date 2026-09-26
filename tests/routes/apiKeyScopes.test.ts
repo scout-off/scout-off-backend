@@ -216,6 +216,33 @@ describe('API-key scopes — legacy/unrestricted keys', () => {
 // ─── Restricted keys — denied ─────────────────────────────────────────────────
 
 describe('API-key scopes — restricted keys denied on missing scope', () => {
+  it.each([
+    ['/contacts', 'read:contacts'],
+    [`/contacts/${PLAYER_ID}`, 'read:contacts'],
+    ['/payments', 'read:payments'],
+    ['/trial-offers', 'read:milestones'],
+    ['/notes', 'read:notes'],
+    [`/notes/${PLAYER_ID}`, 'read:notes'],
+    [`/players/${PLAYER_ID}/notes`, 'read:notes'],
+    ['/bookmarks', 'read:bookmarks'],
+    ['/bookmark-folders', 'read:bookmarks'],
+    ['/api-keys', 'read:api_keys'],
+    ['/webhooks', 'read:webhooks'],
+    ['/saved-searches', 'read:saved_searches'],
+    ['/saved-searches/1/run', 'read:saved_searches'],
+    ['/recommendations', 'read:recommendations'],
+    ['/dashboard', 'read:dashboard'],
+  ])('403 on GET %s without %s', async (path, requiredScope) => {
+    const f = seedKey(['read:players']);
+
+    const res = await request(app)
+      .get(`/api/scouts/${SCOUT}${path}`)
+      .set('X-API-Key', f.key);
+
+    expect(res.status).toBe(403);
+    expect(res.body.reason?.requiredScope).toBe(requiredScope);
+  });
+
   it('403 on subscribe without write:subscriptions', async () => {
     const f = seedKey(['read:milestones']);
 
@@ -291,11 +318,32 @@ describe('API-key scopes — restricted keys denied on missing scope', () => {
     expect(res.status).toBe(403);
     expect(res.body.reason?.requiredScope).toBe('read:subscription');
   });
+
+  it('requires read:saved_searches rather than write:saved_searches for listing', async () => {
+    const f = seedKey(['write:saved_searches']);
+
+    const res = await request(app)
+      .get(`/api/scouts/${SCOUT}/saved-searches`)
+      .set('X-API-Key', f.key);
+
+    expect(res.status).toBe(403);
+    expect(res.body.reason?.requiredScope).toBe('read:saved_searches');
+  });
 });
 
 // ─── Restricted keys — allowed with the matching scope ────────────────────────
 
 describe('API-key scopes — restricted keys allowed when scope matches', () => {
+  it('allows private note reads with read:notes', async () => {
+    const f = seedKey(['read:notes']);
+
+    const res = await request(app)
+      .get(`/api/scouts/${SCOUT}/notes`)
+      .set('X-API-Key', f.key);
+
+    expect(res.status).toBe(200);
+  });
+
   it('allows subscribe with write:subscriptions', async () => {
     const f = seedKey(['write:subscriptions']);
     mockGetLatestSubscription.mockReturnValue(null);

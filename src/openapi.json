@@ -3493,11 +3493,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:api_keys"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:api_keys",
         "x-owner-only": true
       },
       "post": {
@@ -3729,11 +3735,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:bookmarks"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:bookmarks",
         "x-owner-only": true
       },
       "post": {
@@ -3893,11 +3905,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:bookmarks"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:bookmarks",
         "x-owner-only": true
       },
       "post": {
@@ -4068,11 +4086,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:contacts"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:contacts",
         "x-owner-only": true
       }
     },
@@ -4121,11 +4145,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:contacts"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:contacts",
         "x-owner-only": true
       }
     },
@@ -4239,11 +4269,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:dashboard"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:dashboard",
         "x-owner-only": true
       }
     },
@@ -4274,11 +4310,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:notes"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:notes",
         "x-owner-only": true
       }
     },
@@ -4321,11 +4363,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:notes"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:notes",
         "x-owner-only": true
       },
       "put": {
@@ -4486,11 +4534,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:payments"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:payments",
         "x-owner-only": true
       }
     },
@@ -4533,11 +4587,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:notes"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:notes",
         "x-owner-only": true
       },
       "post": {
@@ -4819,11 +4879,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:recommendations"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:recommendations",
         "x-owner-only": true
       }
     },
@@ -4860,14 +4926,14 @@
           },
           {
             "apiKeyAuth": [
-              "write:saved_searches"
+              "read:saved_searches"
             ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
-        "x-api-key-scope": "write:saved_searches",
+        "x-api-key-scope": "read:saved_searches",
         "x-owner-only": true
       },
       "post": {
@@ -5169,11 +5235,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:saved_searches"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:saved_searches",
         "x-owner-only": true
       }
     },
@@ -5547,11 +5619,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:milestones"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
-        ]
+        ],
+        "x-api-key-scope": "read:milestones"
       },
       "post": {
         "tags": [
@@ -5724,11 +5802,17 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "read:webhooks"
+            ]
           }
         ],
         "x-required-role": [
           "scout"
         ],
+        "x-api-key-scope": "read:webhooks",
         "x-owner-only": true
       },
       "post": {

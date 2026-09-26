@@ -2531,8 +2531,11 @@ paths:
             revoked_at, scopes }> }
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:api_keys
       x-required-role:
         - scout
+      x-api-key-scope: read:api_keys
       x-owner-only: true
     post:
       tags:
@@ -2695,8 +2698,11 @@ paths:
           description: '{ success: true, data: Array<{ id, scout_wallet, name, created_at, bookmark_count }> }'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:bookmarks
       x-required-role:
         - scout
+      x-api-key-scope: read:bookmarks
       x-owner-only: true
     post:
       tags:
@@ -2801,8 +2807,11 @@ paths:
           description: '{ success: true, data: Array<PlayerSummary & { bookmarked_at, folder_id, note }> }'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:bookmarks
       x-required-role:
         - scout
+      x-api-key-scope: read:bookmarks
       x-owner-only: true
     post:
       tags:
@@ -2917,8 +2926,11 @@ paths:
           description: '{ success: false, error: string } - Wallet mismatch or missing token'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:contacts
       x-required-role:
         - scout
+      x-api-key-scope: read:contacts
       x-owner-only: true
   /scouts/{wallet}/contacts/{playerId}:
     get:
@@ -2951,8 +2963,11 @@ paths:
           description: '{ success: false, error: string } - Player not found'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:contacts
       x-required-role:
         - scout
+      x-api-key-scope: read:contacts
       x-owner-only: true
   /scouts/{wallet}/contacts/{playerId}/unlock:
     post:
@@ -3045,8 +3060,11 @@ paths:
           description: '{ success: false, error: string } - Wallet mismatch'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:dashboard
       x-required-role:
         - scout
+      x-api-key-scope: read:dashboard
       x-owner-only: true
   /scouts/{wallet}/notes:
     get:
@@ -3067,8 +3085,11 @@ paths:
           description: '{ success: true, data: Array<{ scout_wallet, player_id, note, updated_at }> }'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:notes
       x-required-role:
         - scout
+      x-api-key-scope: read:notes
       x-owner-only: true
   /scouts/{wallet}/notes/{playerId}:
     get:
@@ -3097,8 +3118,11 @@ paths:
           description: '{ success: false, error: string } - No note exists yet'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:notes
       x-required-role:
         - scout
+      x-api-key-scope: read:notes
       x-owner-only: true
     put:
       tags:
@@ -3212,8 +3236,11 @@ paths:
           description: '{ success: false, error: string } - Invalid query parameters or dates'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:payments
       x-required-role:
         - scout
+      x-api-key-scope: read:payments
       x-owner-only: true
   /scouts/{wallet}/players/{playerId}/notes:
     get:
@@ -3244,8 +3271,11 @@ paths:
           description: '{ success: false, error: string } - Wallet mismatch'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:notes
       x-required-role:
         - scout
+      x-api-key-scope: read:notes
       x-owner-only: true
     post:
       tags:
@@ -3434,8 +3464,11 @@ paths:
           description: '{ success: false, error: string } - Invalid query parameters'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:recommendations
       x-required-role:
         - scout
+      x-api-key-scope: read:recommendations
       x-owner-only: true
   /scouts/{wallet}/saved-searches:
     get:
@@ -3459,10 +3492,10 @@ paths:
       security:
         - bearerAuth: []
         - apiKeyAuth:
-            - write:saved_searches
+            - read:saved_searches
       x-required-role:
         - scout
-      x-api-key-scope: write:saved_searches
+      x-api-key-scope: read:saved_searches
       x-owner-only: true
     post:
       tags:
@@ -3666,8 +3699,11 @@ paths:
           description: '{ success: false, error: string } - Saved search not found'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:saved_searches
       x-required-role:
         - scout
+      x-api-key-scope: read:saved_searches
       x-owner-only: true
   /scouts/{wallet}/subscribe:
     post:
@@ -3925,8 +3961,11 @@ paths:
           description: '{ success: true, data: TrialOfferEvent[] }'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:milestones
       x-required-role:
         - scout
+      x-api-key-scope: read:milestones
     post:
       tags:
         - scouts
@@ -4054,8 +4093,11 @@ paths:
           description: '{ success: false, error: string } - Wallet mismatch'
       security:
         - bearerAuth: []
+        - apiKeyAuth:
+            - read:webhooks
       x-required-role:
         - scout
+      x-api-key-scope: read:webhooks
       x-owner-only: true
     post:
       tags:

@@ -155,7 +155,7 @@ router.route('/:wallet/subscribe')
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
 router.route('/:wallet/contacts')
-  .get(requireRole('scout'), requireWalletOwner({ mismatchStatus: 401 }), getUnlockedContacts)
+  .get(requireRole('scout'), requireApiKeyScope('read:contacts'), requireWalletOwner({ mismatchStatus: 401 }), getUnlockedContacts)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -172,7 +172,7 @@ router.route('/:wallet/contacts')
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
 router.route('/:wallet/contacts/:playerId')
-  .get(requireRole('scout'), requireWalletOwner({ mismatchStatus: 401, validateAddress: false }), getContactDetails)
+  .get(requireRole('scout'), requireApiKeyScope('read:contacts'), requireWalletOwner({ mismatchStatus: 401, validateAddress: false }), getContactDetails)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -230,7 +230,7 @@ router.route("/:wallet/contacts/:playerId/unlock")
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
 router.route('/:wallet/payments')
-  .get(requireRole('scout'), requireWalletOwner(), getPaymentHistory)
+  .get(requireRole('scout'), requireApiKeyScope('read:payments'), requireWalletOwner(), getPaymentHistory)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -291,7 +291,7 @@ router.route('/:wallet/trial-offer')
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
 router.route('/:wallet/trial-offers')
-  .get(requireRole('scout'), listTrialOffers)
+  .get(requireRole('scout'), requireApiKeyScope('read:milestones'), listTrialOffers)
   .post(
     requireRole('scout'),
     requireWalletOwner({ validateAddress: false }),
@@ -347,6 +347,7 @@ router.route('/:wallet/trial-offers/:offerId')
 router.route('/:wallet/recommendations')
   .get(
     requireRole('scout'),
+    requireApiKeyScope('read:recommendations'),
     requireWalletOwner(),
     getScoutRecommendations,
   )
@@ -377,7 +378,7 @@ router.route('/:wallet/recommendations')
  */
 router.route('/:wallet/notes/:playerId')
   .put(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:notes'), validateBody(upsertNoteSchema), putScoutNote)
-  .get(requireRole('scout'), requireWalletOwner(), getScoutNoteHandler)
+  .get(requireRole('scout'), requireApiKeyScope('read:notes'), requireWalletOwner(), getScoutNoteHandler)
   .all(methodNotAllowed(['PUT', 'GET', 'HEAD']));
 
 /**
@@ -389,7 +390,7 @@ router.route('/:wallet/notes/:playerId')
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
 router.route('/:wallet/notes')
-  .get(requireRole('scout'), requireWalletOwner(), listScoutNotesHandler)
+  .get(requireRole('scout'), requireApiKeyScope('read:notes'), requireWalletOwner(), listScoutNotesHandler)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 // ─── Multi-note CRUD for scout-player notes ───────────────────────────────────
@@ -417,7 +418,7 @@ router.route('/:wallet/notes')
  */
 router.route('/:wallet/players/:playerId/notes')
   .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:notes'), validateBody(noteContentSchema), createPlayerNote)
-  .get(requireRole('scout'), requireWalletOwner(), listPlayerNotes)
+  .get(requireRole('scout'), requireApiKeyScope('read:notes'), requireWalletOwner(), listPlayerNotes)
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -473,7 +474,7 @@ router.route('/:wallet/players/:playerId/notes/:noteId')
  */
 router.route('/:wallet/api-keys')
   .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:api_keys'), validateBody(issueKeySchema), issueApiKey)
-  .get(requireRole('scout'), requireWalletOwner(), listApiKeys)
+  .get(requireRole('scout'), requireApiKeyScope('read:api_keys'), requireWalletOwner(), listApiKeys)
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -535,7 +536,7 @@ router.route('/:wallet/api-keys/:id/rotate')
  */
 router.route('/:wallet/bookmarks')
   .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:bookmarks'), validateBody(addBookmarkSchema), addBookmark)
-  .get(requireRole('scout'), requireWalletOwner(), listBookmarks)
+  .get(requireRole('scout'), requireApiKeyScope('read:bookmarks'), requireWalletOwner(), listBookmarks)
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -571,7 +572,7 @@ router.route('/:wallet/bookmarks/:playerId')
  */
 router.route('/:wallet/bookmark-folders')
   .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:bookmarks'), validateBody(createBookmarkFolderSchema), createBookmarkFolder)
-  .get(requireRole('scout'), requireWalletOwner(), listBookmarkFolders)
+  .get(requireRole('scout'), requireApiKeyScope('read:bookmarks'), requireWalletOwner(), listBookmarkFolders)
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -615,7 +616,7 @@ router.route('/:wallet/bookmark-folders/:folderId')
  */
 router.route('/:wallet/saved-searches')
   .post(requireRole('scout'), requireApiKeyScope('write:saved_searches'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), validateBody(createSavedSearchSchema), createSavedSearch)
-  .get(requireRole('scout'), requireApiKeyScope('write:saved_searches'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), listSavedSearches)
+  .get(requireRole('scout'), requireApiKeyScope('read:saved_searches'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), listSavedSearches)
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -663,7 +664,7 @@ router.route('/:wallet/saved-searches/:id')
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
 router.route('/:wallet/saved-searches/:id/run')
-  .get(requireRole('scout'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), runSavedSearch)
+  .get(requireRole('scout'), requireApiKeyScope('read:saved_searches'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), runSavedSearch)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 // ─── Webhook subscription management (#806) ───────────────────────────────────
@@ -693,7 +694,7 @@ router.route('/:wallet/saved-searches/:id/run')
  */
 router.route('/:wallet/webhooks')
   .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), walletRateLimit(), validateBody(registerWebhookSchema), registerWebhook)
-  .get(requireRole('scout'), requireWalletOwner(), listWebhooks)
+  .get(requireRole('scout'), requireApiKeyScope('read:webhooks'), requireWalletOwner(), listWebhooks)
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -757,7 +758,7 @@ router.route('/:wallet/webhooks/:id/test')
  * @auth Bearer (scout role required; own wallet or admin)
  */
 router.route('/:wallet/dashboard')
-  .get(requireRole('scout', 'admin'), requireWalletOwner(), getScoutDashboard)
+  .get(requireRole('scout', 'admin'), requireApiKeyScope('read:dashboard'), requireWalletOwner(), getScoutDashboard)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 export default router;

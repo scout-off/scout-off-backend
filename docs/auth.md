@@ -366,9 +366,17 @@ surfaces can never drift apart.
 | Scope | Operations |
 |-------|------------|
 | `read:players` | Read player profiles (public data) |
-| `read:milestones` | Read player milestones |
+| `read:milestones` | Read player milestones and trial-offer history |
 | `read:subscription` | Read subscription status (`GET /scouts/:wallet/subscription`, GraphQL `scoutSubscription`) |
 | `read:contacts` | Read unlocked contact details |
+| `read:payments` | Read payment history |
+| `read:notes` | Read private scout notes |
+| `read:bookmarks` | Read bookmarks and bookmark folders |
+| `read:api_keys` | List API-key metadata |
+| `read:webhooks` | Read webhook configuration |
+| `read:saved_searches` | List or run saved searches |
+| `read:recommendations` | Read scout recommendations |
+| `read:dashboard` | Read the scout dashboard |
 | `write:contacts` | Unlock contacts |
 | `write:subscriptions` | Subscribe / renew / cancel subscriptions |
 | `write:trial_offers` | Create trial offers |
