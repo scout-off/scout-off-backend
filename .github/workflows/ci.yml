@@ -137,9 +137,7 @@ jobs:
   # SQLite-specific APIs, or that assume synchronous DB writes / re-init the
   # module registry with jest.resetModules() (which strips the awaited
   # initDb() the Postgres driver needs) — see docs/postgres-migration.md FAQ.
-  # Keep this list aligned with package.json `test:postgres`. adminPagination
-  # is included (fully mocked). playerListFreshness and trialOffers remain
-  # excluded.
+  # Keep exclusions aligned with tests/postgres-exclusions.json (via npm run test:postgres).
   postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -173,35 +171,7 @@ jobs:
         run: node node_modules/.bin/tsc --noEmit
 
       - name: Run test suite against DB_DRIVER=postgres
-        run: >
-          node node_modules/jest/bin/jest.js --runInBand
-          --testPathIgnorePatterns="/node_modules/"
-          --testPathIgnorePatterns="tests/controllers/webhookAdminController.test.ts"
-          --testPathIgnorePatterns="tests/db/backfill.test.ts"
-          --testPathIgnorePatterns="tests/db/sqlInjectionRegression.test.ts"
-          --testPathIgnorePatterns="tests/e2e/milestonePromotion.e2e.test.ts"
-          --testPathIgnorePatterns="tests/e2e/scoutUnlock.e2e.test.ts"
-          --testPathIgnorePatterns="tests/routes/adminAuditTrail.test.ts"
-          --testPathIgnorePatterns="tests/routes/adminExport.test.ts"
-          --testPathIgnorePatterns="tests/routes/adminQuerySchema.test.ts"
-          --testPathIgnorePatterns="tests/routes/exportStreaming.test.ts"
-          --testPathIgnorePatterns="tests/routes/reindex.test.ts"
-          --testPathIgnorePatterns="tests/routes/playerListFreshness.test.ts"
-          --testPathIgnorePatterns="tests/routes/trialOffers.test.ts"
-          --testPathIgnorePatterns="tests/services/indexer.test.ts"
-          --testPathIgnorePatterns="tests/services/indexerDispatch.test.ts"
-          --testPathIgnorePatterns="tests/services/tierPromotion.test.ts"
-          --testPathIgnorePatterns="tests/services/webhooks.test.ts"
-          --testPathIgnorePatterns="tests/routes/cors.test.ts"
-          --testPathIgnorePatterns="tests/routes/replay.test.ts"
-          --testPathIgnorePatterns="tests/routes/webhookDeliveries.test.ts"
-          --testPathIgnorePatterns="tests/services/replayService.test.ts"
-          --testPathIgnorePatterns="tests/services/adminMultiSigExecution.test.ts"
-          --testPathIgnorePatterns="tests/db/apiKeyLookup.test.ts"
-          --testPathIgnorePatterns="tests/services/reindexService.test.ts"
-          --testPathIgnorePatterns="tests/db/apiKeyRotation.test.ts"
-          --testPathIgnorePatterns="tests/services/reindexCatchupMode.test.ts"
-          --testPathIgnorePatterns="tests/services/txCorrelation.test.ts"
+        run: npm run test:postgres
         env:
           DB_DRIVER: postgres
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/scout_off_ci

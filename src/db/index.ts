@@ -8,6 +8,7 @@ import { runMigrations } from './migrate';
 import { logger } from '../utils/logger';
 import { computeChainHash, auditChainContent, GENESIS_HASH } from '../utils/hashChain';
 import { encryptWebhookSecret, decryptWebhookSecret } from '../utils/webhookSecretCipher';
+import { decryptField, encryptField } from '../utils/fieldCipher';
 import { DbDriver } from './driver';
 import { SqliteDriver } from './sqlite-driver';
 import { PostgresDriver } from './postgres-driver';
@@ -1803,6 +1804,22 @@ export interface ScoutPlayerNoteRow {
  * Uses upsert semantics: calling twice for the same (scout_wallet, player_id)
  * pair overwrites the note rather than creating a duplicate row.
  */
+function encryptScoutNoteContent(plaintext: string): string {
+  return encryptField(plaintext, { purpose: 'notes' });
+}
+
+function decryptScoutNoteContent(stored: string): string {
+  return decryptField(stored, { purpose: 'notes' });
+}
+
+function mapScoutPlayerNoteRow(row: ScoutPlayerNoteRow): ScoutPlayerNoteRow {
+  return { ...row, note_text: decryptScoutNoteContent(row.note_text) };
+}
+
+function mapScoutPlayerNoteV2Row(row: ScoutPlayerNoteV2Row): ScoutPlayerNoteV2Row {
+  return { ...row, content: decryptScoutNoteContent(row.content) };
+}
+
 export async function upsertScoutNote(p: {
   scout_wallet: string;
   player_id: string;
@@ -1816,8 +1833,9 @@ export async function upsertScoutNote(p: {
       note_text  = excluded.note_text,
       updated_at = excluded.updated_at
   `;
+  const encryptedNote = encryptScoutNoteContent(p.note_text);
   await timedQueryAsync(sql, () =>
-    getDriver().run(sql, [p.scout_wallet, p.player_id, p.note_text, p.updated_at]),
+    getDriver().run(sql, [p.scout_wallet, p.player_id, encryptedNote, p.updated_at]),
   );
 }
 
@@ -1831,9 +1849,10 @@ export async function getScoutNote(
 ): Promise<ScoutPlayerNoteRow | null> {
   const sql =
     'SELECT * FROM scout_player_notes WHERE scout_wallet = ? AND player_id = ? LIMIT 1';
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<ScoutPlayerNoteRow>(sql, [scoutWallet, playerId])) ?? null,
-  );
+  return timedQueryAsync(sql, async () => {
+    const row = await getDriver().get<ScoutPlayerNoteRow>(sql, [scoutWallet, playerId]);
+    return row ? mapScoutPlayerNoteRow(row) : null;
+  });
 }
 
 /**
@@ -1842,9 +1861,10 @@ export async function getScoutNote(
 export async function getScoutNotes(scoutWallet: string): Promise<ScoutPlayerNoteRow[]> {
   const sql =
     'SELECT * FROM scout_player_notes WHERE scout_wallet = ? ORDER BY updated_at DESC';
-  return timedQueryAsync(sql, () =>
-    getDriver().all<ScoutPlayerNoteRow>(sql, [scoutWallet]),
-  );
+  return timedQueryAsync(sql, async () => {
+    const rows = await getDriver().all<ScoutPlayerNoteRow>(sql, [scoutWallet]);
+    return rows.map(mapScoutPlayerNoteRow);
+  });
 }
 
 // ─── Scout player notes v2 helpers (multi-note CRUD) ─────────────────────────
@@ -1874,8 +1894,15 @@ export async function insertScoutPlayerNote(p: {
     VALUES (?, ?, ?, ?, ?)
     RETURNING id
   `;
+  const encryptedContent = encryptScoutNoteContent(p.content);
   return timedQueryAsync(sql, async () => {
-    const info = await getDriver().run(sql, [p.scout_wallet, p.player_id, p.content, p.created_at, p.updated_at]);
+    const info = await getDriver().run(sql, [
+      p.scout_wallet,
+      p.player_id,
+      encryptedContent,
+      p.created_at,
+      p.updated_at,
+    ]);
     return info.lastId;
   });
 }
@@ -1892,9 +1919,10 @@ export async function getScoutPlayerNotes(
     WHERE scout_wallet = ? AND player_id = ?
     ORDER BY created_at DESC
   `;
-  return timedQueryAsync(sql, () =>
-    getDriver().all<ScoutPlayerNoteV2Row>(sql, [scoutWallet, playerId]),
-  );
+  return timedQueryAsync(sql, async () => {
+    const rows = await getDriver().all<ScoutPlayerNoteV2Row>(sql, [scoutWallet, playerId]);
+    return rows.map(mapScoutPlayerNoteV2Row);
+  });
 }
 
 /**
@@ -1913,8 +1941,9 @@ export async function updateScoutPlayerNote(p: {
     SET content = ?, updated_at = ?
     WHERE id = ? AND scout_wallet = ?
   `;
+  const encryptedContent = encryptScoutNoteContent(p.content);
   return timedQueryAsync(sql, async () => {
-    const info = await getDriver().run(sql, [p.content, p.updated_at, p.id, p.scout_wallet]);
+    const info = await getDriver().run(sql, [encryptedContent, p.updated_at, p.id, p.scout_wallet]);
     return info.changes > 0;
   });
 }

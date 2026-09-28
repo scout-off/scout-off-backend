@@ -4,6 +4,7 @@ import app from '../../src/app';
 import * as db from '../../src/db';
 import * as ipfs from '../../src/services/ipfs';
 import * as cache from '../../src/services/cache';
+import { getDriver } from '../../src/db';
 
 const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 
@@ -21,6 +22,7 @@ jest.mock('../../src/services/cache', () => ({
   getPlayerListLastModified: jest.fn(() => 0),
   __setPlayerListLastModifiedForTests: jest.fn(),
   invalidatePlayerCache: jest.fn().mockResolvedValue(undefined),
+  invalidateMilestoneCache: jest.fn().mockResolvedValue(undefined),
 }));
 
 describe('POST /api/players/:playerId/anonymize', () => {
@@ -107,6 +109,83 @@ describe('POST /api/players/:playerId/anonymize', () => {
 
     // Verify cache was invalidated
     expect(cache.invalidatePlayerCache).toHaveBeenCalledWith(PLAYER_ID);
+    expect(cache.invalidateMilestoneCache).toHaveBeenCalledWith(PLAYER_ID);
+  });
+
+  it('scrubs inventored stores and returns per-store summary', async () => {
+    const now = Date.now();
+    await db.upsertScoutNote({
+      scout_wallet: 'GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      player_id: PLAYER_ID,
+      note_text: 'secret note',
+      updated_at: now,
+    });
+    await db.insertScoutPlayerNote({
+      scout_wallet: 'GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      player_id: PLAYER_ID,
+      content: 'v2 secret',
+      created_at: now,
+      updated_at: now,
+    });
+    await getDriver().run(
+      `INSERT INTO trial_offer_events (scout_wallet, player_id, details_uri, tx_hash, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      ['GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', PLAYER_ID, 'ipfs://details', 'tx-anon-1', now],
+    );
+    await getDriver().run(
+      `INSERT INTO events (type, ledger, tx_hash, payload, created_at, tx_application_order, event_index, contract_id)
+       VALUES (?, ?, ?, ?, ?, 0, 0, '')`,
+      [
+        'player_registered',
+        50,
+        'tx-ev-1',
+        JSON.stringify({ player_id: PLAYER_ID, wallet: WALLET, metadata_uri: METADATA_URI }),
+        now,
+      ],
+    );
+    await getDriver().run(
+      'INSERT INTO saved_search_notifications (scout_wallet, player_id, notified_at) VALUES (?, ?, ?)',
+      ['GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', PLAYER_ID, now],
+    );
+
+    const token = makeToken(PLAYER_ID);
+    const res = await request(app)
+      .post(`/api/players/${PLAYER_ID}/anonymize`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+
+    expect(res.status).toBe(200);
+    expect(res.body.anonymized.stores.scoutPlayerNotesDeleted).toBeGreaterThanOrEqual(1);
+    expect(res.body.anonymized.stores.scoutPlayerNotesV2Deleted).toBeGreaterThanOrEqual(1);
+    expect(res.body.anonymized.stores.trialOfferEventsDeleted).toBeGreaterThanOrEqual(1);
+    expect(res.body.anonymized.stores.eventsPayloadsRedacted).toBeGreaterThanOrEqual(1);
+    expect(res.body.anonymized.stores.savedSearchNotificationsDeleted).toBeGreaterThanOrEqual(1);
+
+    const note = await db.getScoutNote('GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', PLAYER_ID);
+    expect(note).toBeNull();
+    const eventRow = await getDriver().get<{ payload: string }>(
+      'SELECT payload FROM events WHERE tx_hash = ?',
+      ['tx-ev-1'],
+    );
+    const parsed = JSON.parse(eventRow!.payload);
+    expect(parsed.wallet).toBe('[anonymized]');
+    expect(parsed.metadata_uri).toBe('[anonymized]');
+  });
+
+  it('is idempotent on retry', async () => {
+    const token = makeToken(PLAYER_ID);
+    const first = await request(app)
+      .post(`/api/players/${PLAYER_ID}/anonymize`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    const second = await request(app)
+      .post(`/api/players/${PLAYER_ID}/anonymize`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const player = await db.getPlayerById(PLAYER_ID);
+    expect(player!.wallet).toBe('[anonymized]');
   });
 
   it('anonymized player does not appear in search results with PII', async () => {

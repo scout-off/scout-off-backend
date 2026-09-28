@@ -13,7 +13,8 @@ This document outlines the rotation policy, cadence, and step-by-step procedures
 | `PLATFORM_SECRET_KEY` / `PLATFORM_SECRET` | Semi-Annually (180 days) | No (Requires Restart) | Key Custodian / Soroban Admin |
 | `ADMIN_WALLET` / `ADMIN_WALLETS` | Annually (365 days) | No (Requires Restart) | Platform Owner / Multi-Sig Signers |
 | `REDIS_URL` (with password) | Annually (365 days) | No (Requires Restart) | Database / DevOps Engineer |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY` | Semi-Annually (180 days), or on suspected compromise | No (Requires Re-encryption + Restart) | Security Administrator |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY` | Semi-Annually (180 days), or on suspected compromise | Dual-key decrypt; re-encrypt script | Security Administrator |
+| `NOTES_ENCRYPTION_KEY` | Semi-Annually (180 days), or on suspected compromise | Dual-key decrypt; re-encrypt script | Security Administrator |
 
 ---
 
@@ -225,6 +226,40 @@ WEBHOOK_SECRET_ENCRYPTION_KEY=<key> npm run reencrypt-webhook-secrets
 This is idempotent — rows already in the encrypted format are left untouched, so it's safe to run
 repeatedly (e.g. as a post-deploy health check).
 
+During rotation, set `WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS` to the outgoing key and deploy the
+new primary in `WEBHOOK_SECRET_ENCRYPTION_KEY`. `decryptWebhookSecret()` accepts ciphertext from
+either key until all rows are re-encrypted.
+
+---
+
+## 7. Scout Notes Encryption Key (`NOTES_ENCRYPTION_KEY`)
+
+Scout private notes (`scout_player_notes`, `scout_player_notes_v2`) are encrypted at rest with
+AES-256-GCM via `src/utils/fieldCipher.ts` (purpose `notes`). Required in production; see
+`docs/data-privacy.md`.
+
+### Initial migration (plaintext → encrypted)
+
+After setting `NOTES_ENCRYPTION_KEY` and building:
+
+```bash
+NOTES_ENCRYPTION_KEY=<key> npm run migrate-encrypt-notes
+```
+
+Skips rows already prefixed with `v1:`.
+
+### Rotation (dual-key window)
+
+1. Generate a new key: `openssl rand -hex 32`
+2. Deploy with `NOTES_ENCRYPTION_KEY=<new>` and `NOTES_ENCRYPTION_KEY_PREVIOUS=<old>`
+3. Re-encrypt all rows under the new primary:
+
+```bash
+NOTES_ENCRYPTION_KEY=<new> NOTES_ENCRYPTION_KEY_PREVIOUS=<old> npm run reencrypt-notes
+```
+
+4. After all rows decrypt with the primary key alone, remove `NOTES_ENCRYPTION_KEY_PREVIOUS`.
+
 ---
 
 ## Known Gaps and Limitations
@@ -240,11 +275,6 @@ rest under `WEBHOOK_SECRET_ENCRYPTION_KEY` — see § 6 above.
   re-creating the subscription. See
   [docs/webhooks.md § Secret Rotation](webhooks.md#secret-rotation) for the current workaround and
   the planned `POST /api/admin/webhooks/:id/rotate-secret` improvement.
-- There is no dual-key support for rotating `WEBHOOK_SECRET_ENCRYPTION_KEY` itself (unlike
-  `JWT_SECRET_PREVIOUS`'s zero-downtime pattern) — rotating the encryption key today requires
-  forced re-issuance of subscriber secrets (§ 6, step 3).
-
-* **Follow-up Action**: Once the rotation endpoint ships, update both this document and
-  `docs/webhooks.md` to document zero-downtime dual-secret rotation (analogous to the
-  `JWT_SECRET_PREVIOUS` pattern), and consider adding dual-key (`WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS`)
-  support for the encryption key so it can rotate without forced re-issuance.
+- Dual-key decrypt is supported for `WEBHOOK_SECRET_ENCRYPTION_KEY` / `NOTES_ENCRYPTION_KEY`
+  via `*_PREVIOUS` env vars (`src/utils/fieldCipher.ts`). Re-encryption tooling is still
+  manual (`npm run reencrypt-webhook-secrets`, `npm run reencrypt-notes`).

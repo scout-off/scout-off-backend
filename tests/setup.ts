@@ -34,6 +34,10 @@ process.env.ADMIN_WALLET =
 process.env.WEBHOOK_SECRET_ENCRYPTION_KEY =
   process.env.WEBHOOK_SECRET_ENCRYPTION_KEY ??
   "0".repeat(63) + "1";
+// Deterministic 32-byte key for scout note encryption-at-rest (#1328).
+process.env.NOTES_ENCRYPTION_KEY =
+  process.env.NOTES_ENCRYPTION_KEY ??
+  "2".repeat(63) + "3";
 // Deterministic 32-byte hex pepper for api_keys.lookup_hash (#1033). Set here
 // (before src/config is first imported) so tests exercise the real HMAC
 // derivation instead of the insecure dev-only fallback, and so the suites that

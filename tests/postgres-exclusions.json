@@ -1,0 +1,124 @@
+{
+  "exclusions": [
+    {
+      "path": "tests/controllers/webhookAdminController.test.ts",
+      "reason": "Uses sync getDb() via webhook subscription/DLQ helpers still on better-sqlite3",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/db/backfill.test.ts",
+      "reason": "Seeds and asserts via sync getDb().prepare; production backfill path still SQLite-coupled",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/db/sqlInjectionRegression.test.ts",
+      "reason": "Uses INSERT OR IGNORE + getDb(); sqlite_master injection vectors are SQLite-specific",
+      "issue": "#662"
+    },
+    {
+      "path": "tests/e2e/milestonePromotion.e2e.test.ts",
+      "reason": "E2E seeds events via sync getDb(); indexer path still uses getDb() for inserts",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/e2e/scoutUnlock.e2e.test.ts",
+      "reason": "E2E seeds via sync getDb()",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/routes/adminAuditTrail.test.ts",
+      "reason": "Depends on sync audit/query helpers and module reload patterns unsafe under Postgres initDb",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/routes/adminExport.test.ts",
+      "reason": "Export streaming uses sync better-sqlite3 iterate(); not portable to Postgres yet",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/routes/adminQuerySchema.test.ts",
+      "reason": "Exercises admin event queries that still hit sync getDb() date helpers",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/routes/exportStreaming.test.ts",
+      "reason": "Explicitly unmocks better-sqlite3 and uses INSERT OR IGNORE + iterate()",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/routes/reindex.test.ts",
+      "reason": "Reindex service still uses sync getDb() for event reads/writes",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/routes/playerListFreshness.test.ts",
+      "reason": "Seeds players/events via sync getDb()",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/routes/trialOffers.test.ts",
+      "reason": "Seeds trial_offers via sync getDb().prepare",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/services/indexerDispatch.test.ts",
+      "reason": "indexEvents() still uses sync getDb() for INSERT OR IGNORE and reorg detection",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/services/tierPromotion.test.ts",
+      "reason": "Depends on indexer/player helpers that still touch sync getDb() in related paths",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/services/webhooks.test.ts",
+      "reason": "createWebhookSubscription / DLQ helpers still use sync getDb()",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/routes/replay.test.ts",
+      "reason": "Replay service uses sync getDb() event iteration",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/routes/webhookDeliveries.test.ts",
+      "reason": "webhook_deliveries helpers still sync getDb()",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/services/replayService.test.ts",
+      "reason": "replayService uses sync getDb()",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/services/adminMultiSigExecution.test.ts",
+      "reason": "Pending admin actions path still partially sync getDb()-coupled",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/db/apiKeyLookup.test.ts",
+      "reason": "Introspects sqlite_master indexes; SQLite-specific",
+      "issue": "#662"
+    },
+    {
+      "path": "tests/services/reindexService.test.ts",
+      "reason": "reindexService uses sync getDb() for event batching",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/db/apiKeyRotation.test.ts",
+      "reason": "API key rotation helpers partially coupled to sync DB handle",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/services/reindexCatchupMode.test.ts",
+      "reason": "Catch-up mode shares sync getDb() indexer path",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/services/txCorrelation.test.ts",
+      "reason": "txCorrelation service uses sync getDb()",
+      "issue": "#670"
+    }
+  ]
+}

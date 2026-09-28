@@ -2,7 +2,7 @@
  * Correlation bridge tests (#1113).
  */
 
-import { getDb } from '../../src/db';
+import { resetTables } from '../helpers/db';
 import {
   toCorrelationMemoText,
   recordTxCorrelation,
@@ -13,16 +13,8 @@ import {
 import { getCorrelationId, requestContext } from '../../src/utils/requestContext';
 
 describe('txCorrelation', () => {
-  beforeEach(() => {
-    // Ensure table exists for in-memory / migrated test DB.
-    getDb().exec(`
-      CREATE TABLE IF NOT EXISTS tx_correlations (
-        tx_hash TEXT PRIMARY KEY,
-        correlation_id TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-      );
-    `);
-    getDb().prepare('DELETE FROM tx_correlations').run();
+  beforeEach(async () => {
+    await resetTables(['tx_correlations']);
   });
 
   it('truncates memo text to stellar limit without PII-like characters', () => {

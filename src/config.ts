@@ -143,6 +143,19 @@ if (!apiKeyLookupSecretValue) {
   }
 }
 
+// Validate NOTES_ENCRYPTION_KEY (#1328). Scout private notes are encrypted at
+// rest with this symmetric key; production refuses to start without it.
+const notesEncryptionKeyValue = process.env.NOTES_ENCRYPTION_KEY ?? '';
+if (!notesEncryptionKeyValue) {
+  if (nodeEnv === 'production') {
+    throw new Error(
+      'NOTES_ENCRYPTION_KEY is required in production but is not set. ' +
+      'Generate one with `openssl rand -hex 32` and set this variable. ' +
+      'See docs/secrets-rotation.md for rotation guidance.',
+    );
+  }
+}
+
 // Validate PINATA_GATEWAY when set — it must be a valid HTTPS URL. An invalid
 // gateway would otherwise only surface as a runtime failure when resolving
 // IPFS content, with no clear indication of the misconfiguration.
@@ -376,6 +389,10 @@ const config = {
   // webhook_subscriptions.secret at rest (#686). Required in production —
   // see src/utils/webhookSecretCipher.ts and docs/secrets-rotation.md.
   webhookSecretEncryptionKey: process.env.WEBHOOK_SECRET_ENCRYPTION_KEY ?? '',
+  webhookSecretEncryptionKeyPrevious: process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS ?? '',
+  // Symmetric key (32-byte hex) for scout_player_notes* content at rest (#1328).
+  notesEncryptionKey: process.env.NOTES_ENCRYPTION_KEY ?? '',
+  notesEncryptionKeyPrevious: process.env.NOTES_ENCRYPTION_KEY_PREVIOUS ?? '',
   rateLimit: {
     enabled: process.env.RATE_LIMIT_ENABLED !== 'false',
     windowMs: parseNumericEnv('RATE_LIMIT_WINDOW_MS', process.env.RATE_LIMIT_WINDOW_MS, 60000, { min: 1, integer: true }),
