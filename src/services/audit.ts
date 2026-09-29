@@ -17,6 +17,8 @@ export interface AuditEvent {
   requiredRole?: string;
   /** Optional: API-key scope required by the route, for auth_failed/auth_forbidden events (#1019). */
   requiredScope?: string;
+  /** Optional: wallet the event concerns (e.g. data export requests). */
+  wallet?: string;
 }
 
 /**

@@ -234,6 +234,30 @@ export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
  * Used by the XDR error parser and any code that pattern-matches on '#N'
  * substrings in simulation/result error strings.
  *
- 
-
-/* … truncated 445 chars — edit only what you need near the top … */
+ * | Code | Contract variant  | Backend code         |
+ * |------|-------------------|----------------------|
+ * |  1   | AlreadyInitialized| CONFLICT             |
+ * |  2   | NotInitialized    | INTERNAL_SERVER_ERROR|
+ * |  3   | PlayerNotFound    | PLAYER_NOT_FOUND     |
+ * |  4   | NotFound          | NOT_FOUND            |
+ * |  5   | InvalidInput      | VALIDATION_ERROR     |
+ * |  6   | AlreadyVerified   | CONFLICT             |
+ * |  7   | InsufficientFee   | INSUFFICIENT_FUNDS   |
+ * |  8   | NotSubscribed     | NOT_SUBSCRIBED       |
+ * |  9   | Unauthorized      | UNAUTHORIZED         |
+ * | 10   | ContractPaused    | CONTRACT_PAUSED      |
+ * | 11   | Overflow          | INTERNAL_SERVER_ERROR|
+ */
+export const SOROBAN_ERROR_CODE_MAP: Record<number, ErrorCode> = {
+  1:  ErrorCode.CONFLICT,
+  2:  ErrorCode.INTERNAL_SERVER_ERROR,
+  3:  ErrorCode.PLAYER_NOT_FOUND,
+  4:  ErrorCode.NOT_FOUND,
+  5:  ErrorCode.VALIDATION_ERROR,
+  6:  ErrorCode.CONFLICT,
+  7:  ErrorCode.INSUFFICIENT_FUNDS,
+  8:  ErrorCode.NOT_SUBSCRIBED,
+  9:  ErrorCode.UNAUTHORIZED,
+  10: ErrorCode.CONTRACT_PAUSED,
+  11: ErrorCode.INTERNAL_SERVER_ERROR,
+} as const;

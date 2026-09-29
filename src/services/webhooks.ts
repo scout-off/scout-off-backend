@@ -239,4 +239,11 @@ async function deliverToSubscription(
     });
     incrementWebhookDeadLettersTotal();
     recordWebhookDelivery('dead_letter');
-    recordDeliveryHistory(subscription,
+    recordDeliveryHistory(subscription, eventType, deliveryId, {
+      status: 'failure',
+      errorMessage: failureReason,
+      attemptCount: RETRY_OPTIONS.retries,
+      latencyMs: Date.now() - startedAt,
+    });
+  }
+}

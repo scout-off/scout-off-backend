@@ -6,7 +6,7 @@ import {
   SseFilterCriteria,
   BroadcastEvent,
 } from '../services/eventBroadcaster';
-import { CONTRACT_EVENT_TYPES, ContractEventType } from '../types';
+import { ContractEventType } from '../types';
 import { logger } from '../utils/logger';
 import { ErrorCode } from '../utils/errorCodes';
 import {
@@ -55,7 +55,15 @@ function getMaxSseConnections(): number {
 
 // ─── Valid event type set (for query param validation) ────────────────────────
 
-const VALID_EVENT_TYPES = new Set<ContractEventType>(CONTRACT_EVENT_TYPES);
+const VALID_EVENT_TYPES = new Set<ContractEventType>([
+  'player_registered',
+  'milestone_submitted',
+  'milestone_approved',
+  'scout_subscribed',
+  'contact_unlocked',
+  'trial_offer_logged',
+  'fees_withdrawn',
+]);
 
 // ─── SSE frame helpers ───────────────────────────────────────────────────────
 
@@ -208,6 +216,126 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
   const rawEventType = req.query.eventType as string | undefined;
   const rawPlayerId = req.query.playerId as string | undefined;
 
-  const eventTyp
+  const eventTypes = new Set<ContractEventType>();
+  if (rawEventType && VALID_EVENT_TYPES.has(rawEventType as ContractEventType)) {
+    eventTypes.add(rawEventType as ContractEventType);
+  }
 
-/* … truncated 4318 chars — edit only what you need near the top … */
+  const filter: SseFilterCriteria | undefined =
+    eventTypes.size > 0 || rawPlayerId !== undefined
+      ? {
+          eventTypes,
+          playerId: rawPlayerId,
+        }
+      : undefined;
+
+  // ── SSE response headers ───────────────────────────────────────────────────
+  // Disable the request-level timeout middleware for this long-lived connection.
+  req.socket.setTimeout(0);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // disable nginx proxy buffering
+  res.flushHeaders();
+
+  // Send an initial connected event so the client knows the stream is open.
+  res.write(`event: connected\ndata: ${JSON.stringify({ wallet })}\n\n`);
+
+  // ── Session lifecycle (termination + cleanup) ──────────────────────────────
+  let terminated = false;
+  const cleanupFns: Array<() => void> = [];
+  let keepAliveTimer: NodeJS.Timeout | null = null;
+
+  const subscriber: SseSubscriber = {
+    wallet,
+    filter,
+    send(event: BroadcastEvent): void {
+      // write() returns false when the kernel buffer is full; we ignore the
+      // back-pressure signal here because SSE is fire-and-forget.
+      try {
+        res.write(formatSseFrame(event));
+      } catch {
+        // Stream already closed — nothing else to do.
+      }
+    },
+  };
+
+  const cleanup = (): void => {
+    if (terminated) return;
+    terminated = true;
+    if (keepAliveTimer) clearInterval(keepAliveTimer);
+    broadcaster.unsubscribe(subscriber);
+    activeSessions.delete(session);
+    for (const fn of cleanupFns) {
+      try { fn(); } catch { /* listener cleanup is best-effort */ }
+    }
+    cleanupFns.length = 0;
+    logger.info(`[sse] client disconnected wallet=${wallet} total=${broadcaster.subscriberCount}`);
+  };
+
+  const terminate = (reason: 'token_revoked' | 'wallet_blocklisted'): void => {
+    if (terminated || res.writableEnded) return;
+    logger.warn(`[sse] terminating session wallet=${wallet} reason=${reason}`);
+    try {
+      res.write(`event: session_ended\ndata: ${JSON.stringify({ reason })}\n\n`);
+      res.end();
+    } catch (err) {
+      logger.warn(`[sse] error writing session_ended for ${wallet}:`, err);
+    }
+    cleanup();
+  };
+
+  const session: ActiveSession = {
+    wallet,
+    jti: req.jti,
+    subscriber,
+    terminate,
+  };
+
+  activeSessions.add(session);
+  broadcaster.subscribe(subscriber);
+  logger.info(`[sse] client connected wallet=${wallet} total=${broadcaster.subscriberCount}`);
+
+  // ── Live revocation/blocklist listeners (in-process, immediate) ───────────
+  if (req.jti && tokenBlocklistModule.onTokenRevoked) {
+    // Guarded: tests that mock the tokenBlocklist module may not provide
+    // onTokenRevoked — in that case in-process revocation listeners are
+    // simply unavailable and the bounded sweep still applies.
+    const unsubscribeRevoked = tokenBlocklistModule.onTokenRevoked((jti: string) => {
+      if (jti === session.jti) session.terminate('token_revoked');
+    });
+    cleanupFns.push(unsubscribeRevoked);
+  }
+  const unsubscribeBlocked = onWalletBlocked((blockedWallet: string) => {
+    if (blockedWallet === session.wallet) session.terminate('wallet_blocklisted');
+  });
+  cleanupFns.push(unsubscribeBlocked);
+
+  // ── Keep-alive ─────────────────────────────────────────────────────────────
+  keepAliveTimer = setInterval(() => {
+    // Check if the response is still writable before writing.
+    if (res.writableEnded) {
+      cleanup();
+      return;
+    }
+    res.write(KEEPALIVE_FRAME);
+  }, KEEPALIVE_INTERVAL_MS);
+
+  // ── Cleanup on disconnect ─────────────────────────────────────────────────
+  const onClose = cleanup;
+  req.on('close', onClose);
+  req.on('aborted', onClose);
+  cleanupFns.push(() => {
+    req.removeListener('close', onClose);
+    req.removeListener('aborted', onClose);
+  });
+
+  // Start the shared sweep timer once the first connection opens.
+  if (!authSweepTimer) {
+    authSweepTimer = setInterval(runAuthorizationSweep, AUTH_SWEEP_INTERVAL_MS);
+    authSweepTimer.unref();
+  }
+});
+
+export default router;

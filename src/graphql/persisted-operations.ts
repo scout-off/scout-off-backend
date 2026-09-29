@@ -169,7 +169,8 @@ export function createPersistedOperationsPlugin(): Plugin {
         // Store the validated document for execution
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (args as any).document = documentForHash;
-        return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return { onExecuteDone: ({ result }: any) => logOperationResult(args.document, result) };
       }
       
       // In development mode, allow arbitrary documents
@@ -181,33 +182,36 @@ export function createPersistedOperationsPlugin(): Plugin {
           (args as any).document = documentForHash;
         }
       }
-    },
-    
-    // Track operation execution for metrics
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onOperationExecutionComplete({ args, result }: any) {
-      const document = args?.document;
-      if (typeof document !== 'string') return;
-      
-      // Extract operation name for metrics
-      const operationName = extractOperationName(document);
-      
-      if (result.errors && result.errors.length > 0) {
-        for (const error of result.errors) {
-          const code = (error.extensions as { code?: string } | undefined)?.code;
-          if (code === 'PERSISTED_QUERY_NOT_FOUND') {
-            logger.warn(`[graphql] Persisted query not found: ${error.message}`);
-          } else if (code === 'PERSISTED_QUERY_REQUIRED') {
-            logger.warn('[graphql] Persisted query required in production');
-          } else if (code === 'PERSISTED_QUERY_MISMATCH') {
-            logger.warn('[graphql] Persisted query hash mismatch');
-          }
-        }
-      } else if (operationName) {
-        logger.debug(`[graphql] Operation completed: ${operationName}`);
-      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return { onExecuteDone: ({ result }: any) => logOperationResult(args.document, result) };
     },
   };
+}
+
+/**
+ * Log persisted-query errors and completed operations for metrics.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function logOperationResult(document: unknown, result: any): void {
+  if (typeof document !== 'string') return;
+
+  // Extract operation name for metrics
+  const operationName = extractOperationName(document);
+
+  if (result.errors && result.errors.length > 0) {
+    for (const error of result.errors) {
+      const code = (error.extensions as { code?: string } | undefined)?.code;
+      if (code === 'PERSISTED_QUERY_NOT_FOUND') {
+        logger.warn(`[graphql] Persisted query not found: ${error.message}`);
+      } else if (code === 'PERSISTED_QUERY_REQUIRED') {
+        logger.warn('[graphql] Persisted query required in production');
+      } else if (code === 'PERSISTED_QUERY_MISMATCH') {
+        logger.warn('[graphql] Persisted query hash mismatch');
+      }
+    }
+  } else if (operationName) {
+    logger.debug(`[graphql] Operation completed: ${operationName}`);
+  }
 }
 
 /**

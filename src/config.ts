@@ -704,6 +704,12 @@ const config = {
     return nodeEnv === 'production' ? 'closed' : 'local';
   })(),
 
+  /** Only accept registered persisted GraphQL operations (GRAPHQL_PERSISTED_ONLY=true). */
+  graphqlPersistedOnly: process.env.GRAPHQL_PERSISTED_ONLY === 'true',
+
+  /** Shut down on an unhandled promise rejection (EXIT_ON_UNHANDLED_REJECTION=true). */
+  exitOnUnhandledRejection: process.env.EXIT_ON_UNHANDLED_REJECTION === 'true',
+
 };
 
 export default config;

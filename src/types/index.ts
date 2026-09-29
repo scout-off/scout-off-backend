@@ -178,6 +178,8 @@ declare global {
        * request was not authenticated with an API key (e.g. JWT).
        */
       apiKeyScopes?: string[] | null;
+      /** Database id of the API key used for this request, when authenticated via X-API-Key. */
+      apiKeyId?: number;
     }
   }
 }

@@ -8,7 +8,7 @@
  * Design:
  *   - POST /api/players/:playerId/export → creates a job, returns 202 + job id
  *   - POST /api/scouts/:wallet/export → creates a job, returns 202 + job id
- *   - GET /api/*/export/:jobId → returns status and expiring download URL
+ *   - GET /api/{players,scouts}/.../export/:jobId → returns status and expiring download URL
  *   - Archives expire in 24–72h and are deleted automatically
  *   - Rate-limited per wallet (e.g. 1 export per 24h) to prevent abuse
  *   - Audit-logged for compliance
@@ -53,6 +53,7 @@ export async function requestPlayerDataExport(req: Request, res: Response): Prom
         wallet: req.account,
         reason: 'insufficient_permission',
         path: req.path,
+        timestamp: new Date().toISOString(),
       }).catch(() => {});
       sendForbidden(res, 'Cannot export another player\'s data');
       return;
@@ -95,6 +96,7 @@ export async function requestScoutDataExport(req: Request, res: Response): Promi
         wallet: req.account,
         reason: 'insufficient_permission',
         path: req.path,
+        timestamp: new Date().toISOString(),
       }).catch(() => {});
       sendForbidden(res, 'Cannot export another scout\'s data');
       return;
