@@ -15,6 +15,10 @@ import {
   initCacheInvalidationSubscriber,
   closeCacheInvalidationSubscriber,
 } from "./services/cache";
+import {
+  initSecurityEventSubscriber,
+  closeSecurityEventSubscriber,
+} from "./services/securityEventPubSub";
 import { closeRedisClients } from "./services/redis";
 import { runTierDivergenceCheck } from "./services/tierDivergenceJob";
 import { getTierDivergenceTotal } from "./services/tierDivergenceJob";
@@ -43,6 +47,10 @@ async function start() {
   // Listen for cross-instance player-list cache invalidations on the Redis
   // pub/sub channel `invalidate:players` (no-op when REDIS_URL is unset).
   await initCacheInvalidationSubscriber();
+
+  // Listen for cross-instance security events (wallet blocks, token revocations)
+  // on Redis pub/sub channels (no-op when REDIS_URL is unset).
+  await initSecurityEventSubscriber();
 
   // If INDEXER_BACKFILL_FROM_LEDGER is set and is less than the stored last_ledger,
   // reset last_ledger so the next poll replays from that point.
@@ -179,6 +187,7 @@ async function startServer() {
 
       try {
         await closeCacheInvalidationSubscriber();
+        await closeSecurityEventSubscriber();
         await closeRedisClients();
         logger.info("Redis connections closed");
       } catch (redisErr) {

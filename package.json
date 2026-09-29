@@ -12,6 +12,7 @@
     "predev": "node scripts/validate-env.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
+    "rebuild:better-sqlite3": "npm rebuild better-sqlite3",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit --project tsconfig.scripts.json",
     "prestart": "node scripts/validate-env.js",
@@ -181,6 +182,6 @@
     "brace-expansion": "2.1.4"
   },
   "allowScripts": {
-    "better-sqlite3@11.10.0": true
+    "better-sqlite3": true
   }
 }

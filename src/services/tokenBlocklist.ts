@@ -286,3 +286,22 @@ export async function isTokenRevoked(jti: string | undefined): Promise<boolean> 
  * Exposed for testing; normally called internally by the background job.
  */
 export { pruneExpiredTokens };
+
+/**
+ * Handle a token_revoked event received from another instance via Redis pub/sub.
+ * Invalidates Redis cache entry to trigger immediate session termination.
+ * Called by securityEventPubSub.ts.
+ */
+export async function onTokenRevokedRemote(tokenHash: string): Promise<void> {
+  // Emit locally to terminate this instance's SSE sessions immediately
+  revokedEmitter.emit(REVOKED_EVENT, tokenHash);
+  
+  // Also remove from Redis cache so subsequent checks fall through to DB
+  if (redisClient) {
+    try {
+      await (redisClient as Redis).del(redisKey(tokenHash));
+    } catch (err) {
+      logger.warn('[tokenBlocklist] Redis cache invalidation failed:', err);
+    }
+  }
+}

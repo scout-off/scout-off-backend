@@ -1,5 +1,5 @@
 /**
- * Wallet Blocklist Service (#1019)
+ * Wallet Blocklist Service (#1019, #1326)
  *
  * Manages the wallet blocklist used to terminate established SSE connections
  * when a wallet is blocked (abuse prevention).
@@ -7,15 +7,19 @@
  * Design constraints:
  *   - The SSE keep-alive tick must NOT perform a DB query per connection.
  *   - Blocking must be detected promptly (bounded) by established connections.
+ *   - Cross-instance coordination: blocking a wallet on instance A must
+ *     terminate SSE sessions on all other instances within 1s (#1326).
  *
  * Strategy (mirrors tokenBlocklist.ts):
- *   - Primary signal: in-process events. `blockWallet()` persists to the DB
- *     and synchronously notifies subscribers (`onWalletBlocked`) so SSE
- *     connections in this process react immediately.
- *   - Cross-process safety: `refreshBlockedWallets()` re-syncs the in-memory
- *     cache from the DB in a single query; the SSE route runs it on a slow
- *     sweep interval (default 30 s) shared by ALL connections — never once
- *     per keep-alive tick.
+ *   - Primary signal: in-process events. `blocklistWallet()` persists to the DB,
+ *     publishes a Redis pub/sub event, and synchronously notifies subscribers
+ *     (`onWalletBlocked`) so SSE connections in this process react immediately.
+ *   - Cross-instance safety: other instances receive the same Redis pub/sub event
+ *     and emit locally, terminating their own sessions immediately (< 1s).
+ *   - Cross-process cache sync fallback: `refreshBlockedWallets()` re-syncs the
+ *     in-memory cache from the DB in a single query; the SSE route runs it on a
+ *     slow sweep interval (default 30 s) shared by ALL connections — never once
+ *     per keep-alive tick. This bounds detection at 30s when Redis is unavailable.
  *   - `isWalletBlocklisted` is cache-first: a fresh DB check happens at most
  *     once per wallet per cache TTL (and at connection time), never per tick.
  *
@@ -24,6 +28,7 @@
 
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
+import { getRedisClient } from './redis';
 import {
   blockWalletDb,
   unblockWalletDb,
@@ -35,6 +40,10 @@ import {
 
 /** How long a cached blocklist entry is trusted before a fresh DB read. */
 const CACHE_TTL_MS = parseInt(process.env.WALLET_BLOCKLIST_CACHE_TTL_MS ?? '30000', 10);
+
+/** Redis pub/sub channels for cross-instance security events. */
+const REDIS_CHANNEL_WALLET_BLOCKED = 'security:wallet_blocked';
+const REDIS_CHANNEL_WALLET_UNBLOCKED = 'security:wallet_unblocked';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -68,14 +77,28 @@ async function refreshWallet(wallet: string): Promise<boolean> {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Blocklist a wallet. Persists immediately and notifies local subscribers
- * (SSE connections) synchronously.
+ * Blocklist a wallet. Persists immediately, publishes a Redis pub/sub event,
+ * and notifies local subscribers (SSE connections) synchronously.
  */
 export async function blocklistWallet(wallet: string, reason: string | null = null): Promise<void> {
   try {
     await blockWalletDb(wallet, reason);
     blockedCache.set(wallet, Date.now());
+    
+    // Emit locally to terminate this instance's SSE sessions immediately
     emitter.emit(BLOCKED_EVENT, wallet);
+    
+    // Publish to Redis pub/sub so other instances receive the event within ~1s
+    const redis = getRedisClient();
+    if (redis) {
+      try {
+        await redis.publish(REDIS_CHANNEL_WALLET_BLOCKED, JSON.stringify({ wallet }));
+      } catch (err) {
+        logger.warn(`[walletBlocklist] Redis publish failed for ${wallet}:`, err);
+        // Continue; in-process effect still works, cross-instance effect deferred to sweep
+      }
+    }
+    
     logger.warn(`[walletBlocklist] wallet blocked: ${wallet}`);
   } catch (err) {
     logger.error(`[walletBlocklist] block failed for ${wallet}:`, err);
@@ -88,7 +111,17 @@ export async function unblocklistWallet(wallet: string): Promise<boolean> {
   try {
     const removed = await unblockWalletDb(wallet);
     blockedCache.delete(wallet);
+    
     if (removed) {
+      // Publish unblock event to Redis pub/sub
+      const redis = getRedisClient();
+      if (redis) {
+        try {
+          await redis.publish(REDIS_CHANNEL_WALLET_UNBLOCKED, JSON.stringify({ wallet }));
+        } catch (err) {
+          logger.warn(`[walletBlocklist] Redis publish failed for unblock ${wallet}:`, err);
+        }
+      }
       logger.info(`[walletBlocklist] wallet unblocked: ${wallet}`);
     }
     return removed;
@@ -142,4 +175,23 @@ export function onWalletBlocked(cb: (wallet: string) => void): () => void {
 export function _resetWalletBlocklistForTests(): void {
   blockedCache.clear();
   emitter.removeAllListeners();
+}
+
+/**
+ * Handle a wallet_blocked event received from another instance via Redis pub/sub.
+ * Invalidates cache and emits locally to trigger immediate SSE session termination.
+ * Called by securityEventPubSub.ts.
+ */
+export function onWalletBlockedRemote(wallet: string): void {
+  blockedCache.set(wallet, Date.now());
+  emitter.emit(BLOCKED_EVENT, wallet);
+}
+
+/**
+ * Handle a wallet_unblocked event received from another instance via Redis pub/sub.
+ * Invalidates cache to allow requests from that wallet to proceed.
+ * Called by securityEventPubSub.ts.
+ */
+export function onWalletUnblockedRemote(wallet: string): void {
+  blockedCache.delete(wallet);
 }

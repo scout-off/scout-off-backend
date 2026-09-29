@@ -6,20 +6,25 @@ ARG GIT_COMMIT=unknown
 
 WORKDIR /app
 
+# Install build dependencies for native modules (better-sqlite3 uses node-gyp).
+# These are needed in the builder stage to compile better-sqlite3 for Alpine (musl).
+RUN apk add --no-cache python3 make g++
+
 # Install dependencies first (better layer caching).
-# --ignore-scripts: the `prepare` script installs git hooks via husky, which
-# is meaningless (and, once dev deps are pruned below, unavailable) inside a
-# container that never has a .git directory.
+# Disable husky install via HUSKY=0 environment variable (husky v9 respects this).
+# This allows scripts to run for better-sqlite3's prebuild-install/node-gyp,
+# while skipping the husky prepare hook.
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+RUN HUSKY=0 npm ci
 
 # Copy source and compile TypeScript → dist/
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
-# Prune dev dependencies so only production deps are copied to runtime stage
-RUN npm ci --omit=dev --ignore-scripts
+# Prune dev dependencies so only production deps are copied to runtime stage.
+# Keep HUSKY=0 to skip the prepare hook in the pruned install.
+RUN HUSKY=0 npm ci --omit=dev
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
 FROM node:22-alpine AS runtime
