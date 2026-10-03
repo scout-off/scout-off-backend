@@ -2,7 +2,6 @@ node_modules/
 dist/
 ci_log.txt
 job_log.txt
-.env
 *.js.map
 *.db
 *.db-wal
@@ -27,3 +26,4 @@ k/
 
 pr-1344-1347.md
 apiKeyScopes.txt
+config.bat
