@@ -18,6 +18,10 @@ module.exports = {
     'no-console': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/no-var-requires': 'off',
+    // typescript-eslint v8 replaced no-var-requires with no-require-imports in
+    // `recommended`; keep require() allowed as before (lazy/conditional loads,
+    // jest.isolateModules and resetModules patterns rely on it).
+    '@typescript-eslint/no-require-imports': 'off',
     'no-empty': 'off',
     // Catch imports of packages not declared in dependencies/devDependencies.
     // This prevents a repeat of issue #1417 where @envelop/core was used via
