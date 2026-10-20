@@ -16,6 +16,7 @@ import {
   insertBookmarkFolder,
   getBookmarkFoldersByScout,
   getBookmarkFolderById,
+  renameBookmarkFolder,
   deleteBookmarkFolder,
   moveBookmarksToRoot,
   countBookmarksInFolder,
@@ -42,6 +43,9 @@ export const createBookmarkFolderSchema = z.object({
     .min(1, 'name is required and must be a string')
     .max(100),
 }).strict();
+
+// Rename uses the same name rules as creation.
+export const renameBookmarkFolderSchema = createBookmarkFolderSchema;
 
 // ─── Serialization (mirrors filterPlayers in playerController.ts) ─────────────
 
@@ -238,6 +242,63 @@ export async function listBookmarkFolders(
   );
 
   res.json({ success: true, data: enriched });
+}
+
+/**
+ * PATCH /api/scouts/:wallet/bookmark-folders/:folderId
+ *
+ * Rename a bookmark folder owned by the authenticated scout.
+ * Returns 404 when the folder does not exist or belongs to another scout,
+ * 409 when another folder already uses the name.
+ */
+export async function renameBookmarkFolderHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const { folderId } = req.params as { folderId: string };
+  const folderIdNum = parseInt(folderId, 10);
+
+  if (isNaN(folderIdNum)) {
+    res.status(400).json({ success: false, error: 'Invalid folderId' });
+    return;
+  }
+
+  // Verify folder exists and belongs to scout
+  const folder = await getBookmarkFolderById(folderIdNum, req.params.wallet as string);
+  if (!folder) {
+    res.status(404).json({ success: false, error: 'Folder not found' });
+    return;
+  }
+
+  const { name } = req.body;
+
+  // 409 when another folder of this scout already uses the name
+  try {
+    const folders = await getBookmarkFoldersByScout(req.params.wallet as string);
+    if (folders.some((f) => f.id !== folderIdNum && f.name === name)) {
+      res.status(409).json({ success: false, error: 'A folder with this name already exists' });
+      return;
+    }
+
+    const updated = await renameBookmarkFolder(folderIdNum, req.params.wallet as string, name);
+    if (!updated) {
+      res.status(404).json({ success: false, error: 'Folder not found' });
+      return;
+    }
+
+    logger.info({ scout: req.params.wallet as string, folderId: folderIdNum, name, action: 'folder_renamed' });
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    // Unique-conflict race between the pre-check and the UPDATE
+    const message = err instanceof Error ? err.message : String(err);
+    if (/unique|duplicate key/i.test(message)) {
+      res.status(409).json({ success: false, error: 'A folder with this name already exists' });
+      return;
+    }
+    throw err;
+  }
 }
 
 /**

@@ -3881,6 +3881,85 @@
       }
     },
     "/scouts/{wallet}/bookmark-folders/{folderId}": {
+      "patch": {
+        "tags": [
+          "scouts"
+        ],
+        "summary": "Rename a bookmark folder.",
+        "operationId": "renameBookmarkFolderHandler",
+        "description": "Rename a bookmark folder owned by the authenticated scout.",
+        "parameters": [
+          {
+            "name": "wallet",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Scout's Stellar public key"
+          },
+          {
+            "name": "folderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Bookmark folder row ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "{ name: string }",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ success: true, data: { id, scout_wallet, name, created_at } }"
+          },
+          "400": {
+            "description": "{ success: false, error: string } - Invalid folderId or name"
+          },
+          "404": {
+            "description": "{ success: false, error: string } - Folder not found"
+          },
+          "409": {
+            "description": "{ success: false, error: string } - Name already in use"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": [
+              "write:bookmarks"
+            ]
+          }
+        ],
+        "x-required-role": [
+          "scout"
+        ],
+        "x-api-key-scope": "write:bookmarks",
+        "x-owner-only": true
+      },
       "delete": {
         "tags": [
           "scouts"
