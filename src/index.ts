@@ -25,6 +25,7 @@ import { getTierDivergenceTotal } from "./services/tierDivergenceJob";
 import { setTierDivergenceGetter } from "./middleware/metrics";
 import { drainAllSessions, setAcceptingSseSessions } from "./routes/events";
 import http from "http";
+import { applyHttpTimeouts } from "./httpServer";
 
 // Database initialization is now async - must be awaited
 async function start() {
@@ -74,7 +75,11 @@ async function startServer() {
     logger.info(
       `ScoutOff backend running on port ${config.port} [${config.network}]`,
     );
-
+    applyHttpTimeouts(server, config.http);
+    logger.info(
+      `HTTP timeouts: keepAlive=${config.http.keepAliveTimeoutMs}ms ` +
+      `headers=${config.http.headersTimeoutMs}ms request=${config.http.requestTimeoutMs}ms`,
+    );
     // Log startup health of critical dependencies
     (async () => {
       const statuses: Record<string, string> = {};

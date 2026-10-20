@@ -107,6 +107,9 @@ The sandbox can be started with `scripts/soroban-sandbox` (see [scripts/soroban-
 | `READINESS_STELLAR_TIMEOUT_MS` | — | Per-probe timeout for Stellar RPC connectivity readiness check, in ms (default: `5000`). See [docs/readiness-check.md](docs/readiness-check.md#readiness_stellar_timeout_ms). |
 | `CIRCUIT_BREAKER_FAILURE_THRESHOLD` | — | Number of consecutive failures before generic circuit breaker opens (default: `5`). See [docs/degradation-contracts.md](docs/degradation-contracts.md#circuit-breakers). |
 | `CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | — | Cooldown duration before generic circuit breaker half-opens to test recovery, in ms (default: `30000` = 30 s). See [docs/degradation-contracts.md](docs/degradation-contracts.md#circuit-breakers). |
+| `HTTP_KEEP_ALIVE_TIMEOUT_MS` | — | Node HTTP keep-alive socket timeout in ms (default: `65000`). Set higher than the load balancer idle timeout (AWS ALB: 60 s) so the LB closes idle sockets first and intermittent 502s on reused connections are avoided. |
+| `HTTP_HEADERS_TIMEOUT_MS` | — | Node HTTP headers timeout in ms (default: `66000`). Must be greater than `HTTP_KEEP_ALIVE_TIMEOUT_MS` — startup fails otherwise. |
+| `HTTP_REQUEST_TIMEOUT_MS` | — | Node HTTP request timeout in ms (default: `120000`). Covers receiving the request (headers + body) only; long-lived SSE response streams stay open past it. |
 | `IPFS_BREAKER_FAILURE_THRESHOLD` | — | Number of consecutive failures before Pinata IPFS circuit breaker opens (default: `5`). See [docs/degradation-contracts.md](docs/degradation-contracts.md#ipfs--pinata-circuit-breaker). |
 | `IPFS_BREAKER_RESET_TIMEOUT_MS` | — | Cooldown duration before Pinata IPFS circuit breaker half-opens to test recovery, in ms (default: `30000` = 30 s). See [docs/degradation-contracts.md](docs/degradation-contracts.md#ipfs--pinata-circuit-breaker). |
 

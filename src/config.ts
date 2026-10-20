@@ -574,6 +574,18 @@ const config = {
   subscriptionGracePeriodHours: parseNumericEnv('SUBSCRIPTION_GRACE_PERIOD_HOURS', process.env.SUBSCRIPTION_GRACE_PERIOD_HOURS, 24, { min: 0, integer: true }),
   /** Global request timeout in milliseconds before the server responds with 503. */
   requestTimeoutMs: parseNumericEnv('REQUEST_TIMEOUT_MS', process.env.REQUEST_TIMEOUT_MS, 30000, { min: 1, integer: true }),
+  /**
+   * HTTP server socket timeouts (#1593). keepAliveTimeoutMs must be shorter
+   * than the load balancer's idle timeout to avoid 502s on reused sockets,
+   * and headersTimeoutMs must be greater than keepAliveTimeoutMs (enforced
+   * below). requestTimeoutMs here applies to receiving the request, not to
+   * long-lived SSE response streams.
+   */
+  http: {
+    keepAliveTimeoutMs: parseNumericEnv('HTTP_KEEP_ALIVE_TIMEOUT_MS', process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS, 65000, { min: 1, integer: true }),
+    headersTimeoutMs: parseNumericEnv('HTTP_HEADERS_TIMEOUT_MS', process.env.HTTP_HEADERS_TIMEOUT_MS, 66000, { min: 1, integer: true }),
+    requestTimeoutMs: parseNumericEnv('HTTP_REQUEST_TIMEOUT_MS', process.env.HTTP_REQUEST_TIMEOUT_MS, 120000, { min: 1, integer: true }),
+  },
   /** Lease expiry for pending idempotency claims (ms). A crashed request releases its claim after this window. */
   idempotencyLeaseMs: parseNumericEnv('IDEMPOTENCY_LEASE_MS', process.env.IDEMPOTENCY_LEASE_MS, 35000, { min: 1000, integer: true }),
   /**
@@ -851,6 +863,16 @@ const config = {
 };
 
 export default config;
+
+// Validate the HTTP server timeout relationship (#1593): Node requires
+// headersTimeout > keepAliveTimeout, otherwise keep-alive sockets can be
+// closed while headers are still in flight.
+if (config.http.headersTimeoutMs <= config.http.keepAliveTimeoutMs) {
+  throw new Error(
+    `HTTP_HEADERS_TIMEOUT_MS (${config.http.headersTimeoutMs}) must be greater than ` +
+    `HTTP_KEEP_ALIVE_TIMEOUT_MS (${config.http.keepAliveTimeoutMs})`,
+  );
+}
 
 export function isProduction(): boolean { return config.nodeEnv === 'production'; }
 export function isStaging(): boolean { return config.nodeEnv === 'staging'; }

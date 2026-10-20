@@ -258,6 +258,12 @@ env:
   SSE_MAX_CONNECTIONS: "0"
   # Request timeout in ms
   REQUEST_TIMEOUT_MS: "30000"
+  # HTTP server socket timeouts (ms). keepAlive (65s) exceeds the AWS ALB 60s
+  # idle timeout so the LB closes idle sockets first; headers must stay
+  # greater than keepAlive. requestTimeout covers receiving the request only.
+  HTTP_KEEP_ALIVE_TIMEOUT_MS: "65000"
+  HTTP_HEADERS_TIMEOUT_MS: "66000"
+  HTTP_REQUEST_TIMEOUT_MS: "120000"
   # Rate limiting
   RATE_LIMIT_ENABLED: "true"
   RATE_LIMIT_WINDOW_MS: "60000"
