@@ -77,6 +77,15 @@ describe('Error Response Consistency — application/json invariant', () => {
       expect(res.type).toBe('application/json');
       expectValidErrorResponse(res.body);
     });
+
+    it('echoes the X-Correlation-ID header as correlationId', async () => {
+      const res = await request(app)
+        .get('/nonexistent')
+        .set('X-Correlation-ID', 'corr-404-test');
+      expect(res.status).toBe(404);
+      expectValidErrorResponse(res.body);
+      expect(res.body.correlationId).toBe('corr-404-test');
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────

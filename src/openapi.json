@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "ScoutOff API",
-    "description": "Backend API for ScoutOff — a decentralised football scouting platform built on the Stellar blockchain (Soroban smart contracts).\n",
+    "description": "Backend API for ScoutOff \u2014 a decentralised football scouting platform built on the Stellar blockchain (Soroban smart contracts).\n",
     "version": "1.0.0",
     "contact": {
       "name": "ScoutOff Engineering"
@@ -89,7 +89,7 @@
           "minLength": 56,
           "maxLength": 56
         },
-        "description": "Stellar public key (G…)"
+        "description": "Stellar public key (G\u2026)"
       }
     },
     "schemas": {
@@ -132,6 +132,10 @@
           },
           "code": {
             "type": "string"
+          },
+          "correlationId": {
+            "type": "string",
+            "description": "Echo of the X-Correlation-ID request header, when present"
           }
         }
       },
@@ -629,7 +633,7 @@
         ],
         "summary": "Stub endpoint that simulates pausing the Soroban smart contract.",
         "operationId": "pauseContract",
-        "description": "Stub endpoint that simulates pausing the Soroban smart contract.\nContract-level behavior is simulated — no real on-chain transaction is issued.",
+        "description": "Stub endpoint that simulates pausing the Soroban smart contract.\nContract-level behavior is simulated \u2014 no real on-chain transaction is issued.",
         "requestBody": {
           "required": true,
           "content": {
@@ -670,7 +674,7 @@
         ],
         "summary": "Stub endpoint that simulates unpausing the Soroban smart contract.",
         "operationId": "unpauseContract",
-        "description": "Stub endpoint that simulates unpausing the Soroban smart contract.\nContract-level behavior is simulated — no real on-chain transaction is issued.",
+        "description": "Stub endpoint that simulates unpausing the Soroban smart contract.\nContract-level behavior is simulated \u2014 no real on-chain transaction is issued.",
         "requestBody": {
           "required": true,
           "content": {
@@ -737,7 +741,7 @@
         ],
         "summary": "Streams indexed Soroban contract events as CSV.",
         "operationId": "exportEvents",
-        "description": "Streams indexed Soroban contract events as CSV. Rows are fetched from the\ndatabase in bounded pages and written to the response as they arrive, so\nmemory usage stays constant regardless of table size.\nUseful for data analysis, reporting, and external system integration.\n\nQuery params (same semantics as GET /api/admin/events): startDate, endDate (ISO 8601), eventType\n\nTimeout: 120 s (overrides the 30 s default — large exports can take up to 60 s).",
+        "description": "Streams indexed Soroban contract events as CSV. Rows are fetched from the\ndatabase in bounded pages and written to the response as they arrive, so\nmemory usage stays constant regardless of table size.\nUseful for data analysis, reporting, and external system integration.\n\nQuery params (same semantics as GET /api/admin/events): startDate, endDate (ISO 8601), eventType\n\nTimeout: 120 s (overrides the 30 s default \u2014 large exports can take up to 60 s).",
         "responses": {
           "200": {
             "description": "CSV file with columns: event_type, ledger, timestamp, payload"
@@ -804,7 +808,7 @@
             "description": "{ success: false, error: string } - job already running"
           },
           "422": {
-            "description": "{ success: false, error: string } - range ≥ 200 or invalid range"
+            "description": "{ success: false, error: string } - range \u2265 200 or invalid range"
           }
         },
         "security": [
@@ -1009,7 +1013,7 @@
                 "properties": {
                   "recipient": {
                     "type": "string",
-                    "description": "Additional validation is applied beyond this schema — see the route handler."
+                    "description": "Additional validation is applied beyond this schema \u2014 see the route handler."
                   }
                 },
                 "required": [
@@ -1054,10 +1058,10 @@
         ],
         "summary": "Propose and execute an update_platform_fee multi-sig action.",
         "operationId": "updatePlatformFeeController",
-        "description": "Propose and execute an update_platform_fee multi-sig action.\nUpdates the on-chain platform fee in basis points (0–10000).",
+        "description": "Propose and execute an update_platform_fee multi-sig action.\nUpdates the on-chain platform fee in basis points (0\u201310000).",
         "requestBody": {
           "required": true,
-          "description": "newFeeBps {number} - New fee in basis points (0–10000)",
+          "description": "newFeeBps {number} - New fee in basis points (0\u201310000)",
           "content": {
             "application/json": {
               "schema": {
@@ -1109,7 +1113,7 @@
         "description": "Withdraw accumulated platform fees from the Soroban contract to a treasury\naddress. This is the fully-specified replacement for POST /api/admin/fees.",
         "requestBody": {
           "required": true,
-          "description": "amountStroops   {string|number} — positive integer ≤ contract fee balance\n\nOptional header: Idempotency-Key — prevents double-submission; cached result\nis returned on repeat requests with the same key (24-hour TTL).",
+          "description": "amountStroops   {string|number} \u2014 positive integer \u2264 contract fee balance\n\nOptional header: Idempotency-Key \u2014 prevents double-submission; cached result\nis returned on repeat requests with the same key (24-hour TTL).",
           "content": {
             "application/json": {
               "schema": {
@@ -1117,7 +1121,7 @@
                 "properties": {
                   "treasuryAddress": {
                     "type": "string",
-                    "description": "Additional validation is applied beyond this schema — see the route handler."
+                    "description": "Additional validation is applied beyond this schema \u2014 see the route handler."
                   },
                   "amountStroops": {
                     "oneOf": [
@@ -1128,7 +1132,7 @@
                         "type": "number"
                       }
                     ],
-                    "description": "Additional validation is applied beyond this schema — see the route handler."
+                    "description": "Additional validation is applied beyond this schema \u2014 see the route handler."
                   }
                 },
                 "required": [
@@ -1145,25 +1149,25 @@
             "description": "{ success: true, data: { transactionId, treasuryAddress, amountStroops, recipient, amount, token } }"
           },
           "202": {
-            "description": "{ success: true, message, data: { actionId, collectedSignatures, requiredSignatures, … } }\n              — when ADMIN_THRESHOLD > 1 (multi-sig required)"
+            "description": "{ success: true, message, data: { actionId, collectedSignatures, requiredSignatures, \u2026 } }\n              \u2014 when ADMIN_THRESHOLD > 1 (multi-sig required)"
           },
           "400": {
-            "description": "{ success: false, error } — invalid treasuryAddress or amountStroops"
+            "description": "{ success: false, error } \u2014 invalid treasuryAddress or amountStroops"
           },
           "401": {
-            "description": "{ success: false, error } — missing/expired token"
+            "description": "{ success: false, error } \u2014 missing/expired token"
           },
           "403": {
-            "description": "{ success: false, error } — non-admin role"
+            "description": "{ success: false, error } \u2014 non-admin role"
           },
           "409": {
-            "description": "{ success: false, error } — no fees / contract paused / concurrent withdrawal"
+            "description": "{ success: false, error } \u2014 no fees / contract paused / concurrent withdrawal"
           },
           "422": {
-            "description": "{ success: false, error } — amountStroops exceeds contract fee balance"
+            "description": "{ success: false, error } \u2014 amountStroops exceeds contract fee balance"
           },
           "503": {
-            "description": "{ success: false, error } — transient network error (retryable)"
+            "description": "{ success: false, error } \u2014 transient network error (retryable)"
           }
         },
         "security": [
@@ -1230,7 +1234,7 @@
         ],
         "summary": "Decodes the caller's own bearer token and returns its payload metadata.",
         "operationId": "introspectToken",
-        "description": "Decodes the caller's own bearer token and returns its payload metadata.\nThe token is extracted from the Authorization header only — any request body\n(including a `token` field) is deliberately ignored rather than rejected so a\nstray field can't leak into a 400 (#279).\nUseful for admins to inspect their own token claims (subject, role, expiry).",
+        "description": "Decodes the caller's own bearer token and returns its payload metadata.\nThe token is extracted from the Authorization header only \u2014 any request body\n(including a `token` field) is deliberately ignored rather than rejected so a\nstray field can't leak into a 400 (#279).\nUseful for admins to inspect their own token claims (subject, role, expiry).",
         "requestBody": {
           "required": true,
           "content": {
@@ -1270,7 +1274,7 @@
         ],
         "summary": "Manually set an IP's reputation score.",
         "operationId": "setIpReputationController",
-        "description": "Manually set an IP's reputation score.\n- body { ip, score: 0 }   → whitelist the IP (score pinned at 0, immune to decay)\n- body { ip, score: 100 } → blacklist the IP (immediate 429 for all requests)\n- body { ip, score: N }   → any 0–100 value (admin override)",
+        "description": "Manually set an IP's reputation score.\n- body { ip, score: 0 }   \u2192 whitelist the IP (score pinned at 0, immune to decay)\n- body { ip, score: 100 } \u2192 blacklist the IP (immediate 429 for all requests)\n- body { ip, score: N }   \u2192 any 0\u2013100 value (admin override)",
         "requestBody": {
           "required": true,
           "description": "{ ip: string, score: number }",
@@ -1359,7 +1363,7 @@
         ],
         "summary": "Bulk-onboards players from a CSV or JSON batch (e.g.",
         "operationId": "importPlayers",
-        "description": "Bulk-onboards players from a CSV or JSON batch (e.g. migrating an\nacademy's existing roster), reusing the same validation and IPFS pinning\nlogic as POST /api/players/register.\nAccepts either:\n  - JSON body: { players: [{ wallet, position, region, metadata|metadataUri }, …] }\n  - CSV body (Content-Type: text/csv): rows of wallet,position,region,metadataUri\n\nEach entry is validated against the single-registration schema and\nprocessed independently — one invalid or failing row doesn't abort the\nbatch. Batch size is capped by config.playerImport.maxBatchSize.",
+        "description": "Bulk-onboards players from a CSV or JSON batch (e.g. migrating an\nacademy's existing roster), reusing the same validation and IPFS pinning\nlogic as POST /api/players/register.\nAccepts either:\n  - JSON body: { players: [{ wallet, position, region, metadata|metadataUri }, \u2026] }\n  - CSV body (Content-Type: text/csv): rows of wallet,position,region,metadataUri\n\nEach entry is validated against the single-registration schema and\nprocessed independently \u2014 one invalid or failing row doesn't abort the\nbatch. Batch size is capped by config.playerImport.maxBatchSize.",
         "responses": {
           "200": {
             "description": "{ success: true, data: { results, summary } }"
@@ -1404,7 +1408,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "{ reason: string } — required, max 500 chars",
+          "description": "{ reason: string } \u2014 required, max 500 chars",
           "content": {
             "application/json": {
               "schema": {
@@ -1429,13 +1433,13 @@
             "description": "{ success: true, data: { playerId, cancelledMilestones, notifiedScouts } }"
           },
           "400": {
-            "description": "{ success: false, error } — missing/invalid reason or playerId"
+            "description": "{ success: false, error } \u2014 missing/invalid reason or playerId"
           },
           "404": {
-            "description": "{ success: false, error } — player not found"
+            "description": "{ success: false, error } \u2014 player not found"
           },
           "409": {
-            "description": "{ success: false, error } — player already deactivated"
+            "description": "{ success: false, error } \u2014 player already deactivated"
           }
         },
         "security": [
@@ -1483,10 +1487,10 @@
             "description": "{ success: true, data: { playerId } }"
           },
           "404": {
-            "description": "{ success: false, error } — player not found"
+            "description": "{ success: false, error } \u2014 player not found"
           },
           "409": {
-            "description": "{ success: false, error } — player already active"
+            "description": "{ success: false, error } \u2014 player already active"
           }
         },
         "security": [
@@ -1506,7 +1510,7 @@
         ],
         "summary": "Trigger a background event backfill for a specific ledger range.",
         "operationId": "triggerReindex",
-        "description": "Trigger a background event backfill for a specific ledger range.\nThe job fetches events in batches of 100 ledgers with a 50 ms inter-batch\ndelay. Duplicate events are silently discarded via the UNIQUE constraint on\ntx_hash. The job status is available via GET /api/admin/reindex/status.\n\nTimeout: disabled (0). The endpoint returns 202 immediately — the actual\nbackfill runs as a background job and must never be killed by a network timeout.",
+        "description": "Trigger a background event backfill for a specific ledger range.\nThe job fetches events in batches of 100 ledgers with a 50 ms inter-batch\ndelay. Duplicate events are silently discarded via the UNIQUE constraint on\ntx_hash. The job status is available via GET /api/admin/reindex/status.\n\nTimeout: disabled (0). The endpoint returns 202 immediately \u2014 the actual\nbackfill runs as a background job and must never be killed by a network timeout.",
         "requestBody": {
           "required": true,
           "description": "{ fromLedger: number, toLedger: number }",
@@ -1561,7 +1565,7 @@
         ],
         "summary": "Cooperatively cancel a running background reindex job.",
         "operationId": "cancelReindexHandler",
-        "description": "Cooperatively cancel a running background reindex job. Sets a cancel flag\nthat the batch loop checks after each batch; the job transitions to\n'cancelled' within one batch iteration and persists the last-processed ledger.\n\nReturns 409 when no job is currently running.\n\nNOTE: process-local flag only — multi-instance support requires a shared\nflag (e.g. Redis) and is tracked as a follow-up.",
+        "description": "Cooperatively cancel a running background reindex job. Sets a cancel flag\nthat the batch loop checks after each batch; the job transitions to\n'cancelled' within one batch iteration and persists the last-processed ledger.\n\nReturns 409 when no job is currently running.\n\nNOTE: process-local flag only \u2014 multi-instance support requires a shared\nflag (e.g. Redis) and is tracked as a follow-up.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1780,7 +1784,7 @@
         ],
         "summary": "Bulk-onboards validators from a CSV or JSON batch.",
         "operationId": "importValidators",
-        "description": "Bulk-onboards validators from a CSV or JSON batch.\nAccepts either:\n  - JSON body: { validators: [{ wallet, label?, region? }, …] }\n  - CSV body (Content-Type: text/csv): rows of wallet[,label[,region]]\n\nEach entry is validated and processed through the same single-registration\npath. Invalid addresses and already-registered (non-revoked) validators are\nskipped per-entry rather than failing the whole batch.",
+        "description": "Bulk-onboards validators from a CSV or JSON batch.\nAccepts either:\n  - JSON body: { validators: [{ wallet, label?, region? }, \u2026] }\n  - CSV body (Content-Type: text/csv): rows of wallet[,label[,region]]\n\nEach entry is validated and processed through the same single-registration\npath. Invalid addresses and already-registered (non-revoked) validators are\nskipped per-entry rather than failing the whole batch.",
         "responses": {
           "200": {
             "description": "{ success: true, data: { results, summary } }"
@@ -2129,7 +2133,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Page size 1–100 (default 20)"
+            "description": "Page size 1\u2013100 (default 20)"
           },
           {
             "name": "offset",
@@ -2161,9 +2165,9 @@
         "tags": [
           "admin"
         ],
-        "summary": "Legacy alias — kept for backwards compatibility.",
+        "summary": "Legacy alias \u2014 kept for backwards compatibility.",
         "operationId": "replayDeadLetter",
-        "description": "Legacy alias — kept for backwards compatibility. Delegates to the same\nhandler as POST /api/admin/webhooks/dead-letters/:id/requeue.\n\nUse POST /api/admin/webhooks/dead-letters/:id/requeue instead.",
+        "description": "Legacy alias \u2014 kept for backwards compatibility. Delegates to the same\nhandler as POST /api/admin/webhooks/dead-letters/:id/requeue.\n\nUse POST /api/admin/webhooks/dead-letters/:id/requeue instead.",
         "deprecated": true,
         "parameters": [
           {
@@ -2318,7 +2322,7 @@
             "description": "{ success: true }"
           },
           "401": {
-            "description": "— missing/invalid bearer token"
+            "description": "\u2014 missing/invalid bearer token"
           }
         },
         "security": [
@@ -2362,7 +2366,7 @@
             "description": "{ accessToken, refreshToken, expiresAt }"
           },
           "401": {
-            "description": "{ success: false, error } — invalid, expired, or revoked refresh token"
+            "description": "{ success: false, error } \u2014 invalid, expired, or revoked refresh token"
           }
         },
         "security": []
@@ -2516,25 +2520,25 @@
         ],
         "summary": "Server-Sent Events endpoint.",
         "operationId": "getEventsStream",
-        "description": "Server-Sent Events endpoint. Opens a long-lived HTTP connection and pushes\nrelevant contract events to the authenticated client as they are indexed.\n\nAuthentication: Bearer JWT (same as all other protected routes).\n\nQuery parameters (all optional, combinable):\n  - eventType  One or more event type names to subscribe to, comma-separated\n               (e.g. \"milestone_approved\" or\n               \"milestone_approved,scout_subscribed\"). When omitted the\n               client receives all event types that pass the\n               wallet-relevance filter. Unknown values are rejected with 400.\n  - playerId   Only deliver events whose payload contains this player identifier.\n               When omitted no additional player-level filtering is applied.\n\nFiltering: only events relevant to the authenticated wallet are sent (wallet\nisolation is always enforced regardless of query params). Player events are\nmatched through the authenticated wallet's player record, since their payload\ncarries a player ID rather than a wallet address. Optional query params add\nfurther narrowing on top.\n\nSSE event types sent:\n  - milestone_approved  (player: their own milestone approvals)\n  - scout_subscribed    (scout: their own subscription changes)\n  - contact_unlocked    (scout: their own contact unlocks)\n  - trial_offer_logged  (scout/player: trial offers involving them)\n  - player_registered   (player: their own registration)\n  - milestone_submitted (player/validator)\n  - fees_withdrawn      (admin)\n\nLive authorization enforcement (#1019):\n  - If the authenticated JWT is revoked (via POST /auth/logout or admin\n    token revocation) while the stream is open, the connection emits a\n    terminal `session_ended` event (reason \"token_revoked\") and closes;\n    no further protected events are delivered.\n  - If the wallet is blocklisted while the stream is open, the same\n    termination happens with reason \"wallet_blocklisted\".\n  - When the access JWT expires, the stream closes with reason \"token_expired\".\n  - Detection bound: immediate for revocations/blocklists processed in\n    this process; ≤ SSE_AUTH_SWEEP_INTERVAL_MS (default 30 s) for changes\n    persisted by another instance (one sweep query per process, never a\n    DB query per keep-alive tick).\n  - Blocklisted wallets cannot open a new connection (403).\n  - Concurrent streams are limited per wallet by\n    SSE_MAX_CONNECTIONS_PER_WALLET (default 5; 0 = unlimited).\n\nReconnection: initial `retry:` hint is sent on connect (configured via\nSSE_RETRY_MS, default 5000 ms + up to 20% random jitter) to prevent reconnect storms.\n\nKeep-alive: a `: ping` comment is sent every SSE_KEEPALIVE_INTERVAL_MS ms\n(default 15 s) to prevent idle-connection timeouts.",
+        "description": "Server-Sent Events endpoint. Opens a long-lived HTTP connection and pushes\nrelevant contract events to the authenticated client as they are indexed.\n\nAuthentication: Bearer JWT (same as all other protected routes).\n\nQuery parameters (all optional, combinable):\n  - eventType  One or more event type names to subscribe to, comma-separated\n               (e.g. \"milestone_approved\" or\n               \"milestone_approved,scout_subscribed\"). When omitted the\n               client receives all event types that pass the\n               wallet-relevance filter. Unknown values are rejected with 400.\n  - playerId   Only deliver events whose payload contains this player identifier.\n               When omitted no additional player-level filtering is applied.\n\nFiltering: only events relevant to the authenticated wallet are sent (wallet\nisolation is always enforced regardless of query params). Player events are\nmatched through the authenticated wallet's player record, since their payload\ncarries a player ID rather than a wallet address. Optional query params add\nfurther narrowing on top.\n\nSSE event types sent:\n  - milestone_approved  (player: their own milestone approvals)\n  - scout_subscribed    (scout: their own subscription changes)\n  - contact_unlocked    (scout: their own contact unlocks)\n  - trial_offer_logged  (scout/player: trial offers involving them)\n  - player_registered   (player: their own registration)\n  - milestone_submitted (player/validator)\n  - fees_withdrawn      (admin)\n\nLive authorization enforcement (#1019):\n  - If the authenticated JWT is revoked (via POST /auth/logout or admin\n    token revocation) while the stream is open, the connection emits a\n    terminal `session_ended` event (reason \"token_revoked\") and closes;\n    no further protected events are delivered.\n  - If the wallet is blocklisted while the stream is open, the same\n    termination happens with reason \"wallet_blocklisted\".\n  - When the access JWT expires, the stream closes with reason \"token_expired\".\n  - Detection bound: immediate for revocations/blocklists processed in\n    this process; \u2264 SSE_AUTH_SWEEP_INTERVAL_MS (default 30 s) for changes\n    persisted by another instance (one sweep query per process, never a\n    DB query per keep-alive tick).\n  - Blocklisted wallets cannot open a new connection (403).\n  - Concurrent streams are limited per wallet by\n    SSE_MAX_CONNECTIONS_PER_WALLET (default 5; 0 = unlimited).\n\nReconnection: initial `retry:` hint is sent on connect (configured via\nSSE_RETRY_MS, default 5000 ms + up to 20% random jitter) to prevent reconnect storms.\n\nKeep-alive: a `: ping` comment is sent every SSE_KEEPALIVE_INTERVAL_MS ms\n(default 15 s) to prevent idle-connection timeouts.",
         "responses": {
           "200": {
-            "description": "text/event-stream — long-lived SSE connection"
+            "description": "text/event-stream \u2014 long-lived SSE connection"
           },
           "400": {
-            "description": "{ success: false, error: string, code: string, validEventTypes: string[] } — unknown eventType"
+            "description": "{ success: false, error: string, code: string, validEventTypes: string[] } \u2014 unknown eventType"
           },
           "401": {
-            "description": "{ success: false, error: string } — missing or invalid token"
+            "description": "{ success: false, error: string } \u2014 missing or invalid token"
           },
           "403": {
-            "description": "{ success: false, error: string, code: 'WALLET_BLOCKLISTED' } — wallet is blocklisted"
+            "description": "{ success: false, error: string, code: 'WALLET_BLOCKLISTED' } \u2014 wallet is blocklisted"
           },
           "429": {
-            "description": "{ success: false, error: string } — per-wallet connection limit reached"
+            "description": "{ success: false, error: string } \u2014 per-wallet connection limit reached"
           },
           "503": {
-            "description": "{ success: false, error: string, code: 'SSE_CAPACITY' } — global connection limit reached (sets Retry-After)"
+            "description": "{ success: false, error: string, code: 'SSE_CAPACITY' } \u2014 global connection limit reached (sets Retry-After)"
           }
         },
         "security": [
@@ -2551,7 +2555,7 @@
         ],
         "summary": "optionalAuth so req.account is set when a Bearer token is present (for audit logging) Supports conditional GET (If-None-Match / If-Modifi...",
         "operationId": "filterPlayers",
-        "description": "optionalAuth so req.account is set when a Bearer token is present (for audit logging)\nSupports conditional GET (If-None-Match / If-Modified-Since → 304) and HEAD.",
+        "description": "optionalAuth so req.account is set when a Bearer token is present (for audit logging)\nSupports conditional GET (If-None-Match / If-Modified-Since \u2192 304) and HEAD.",
         "parameters": [
           {
             "name": "region",
@@ -2727,7 +2731,7 @@
                       "metadataUri": {
                         "type": "string",
                         "minLength": 1,
-                        "description": "Additional validation is applied beyond this schema — see the route handler."
+                        "description": "Additional validation is applied beyond this schema \u2014 see the route handler."
                       }
                     },
                     "required": [
@@ -2771,7 +2775,7 @@
         ],
         "summary": "Fetch a single player profile, including a live `offerCount`.",
         "operationId": "getPlayer",
-        "description": "Fetch a single player profile, including a live `offerCount`. Deactivated\nprofiles return 404 to non-owners/non-admins. Supports conditional\nrequests via ETag (304 when `If-None-Match` matches). The same ETag is the\nversion token for optimistic concurrency — echo it as `If-Match` on PUT.",
+        "description": "Fetch a single player profile, including a live `offerCount`. Deactivated\nprofiles return 404 to non-owners/non-admins. Supports conditional\nrequests via ETag (304 when `If-None-Match` matches). The same ETag is the\nversion token for optimistic concurrency \u2014 echo it as `If-Match` on PUT.",
         "parameters": [
           {
             "name": "playerId",
@@ -2857,7 +2861,7 @@
                       "metadataUri": {
                         "type": "string",
                         "minLength": 1,
-                        "description": "Additional validation is applied beyond this schema — see the route handler."
+                        "description": "Additional validation is applied beyond this schema \u2014 see the route handler."
                       }
                     },
                     "required": [
@@ -2949,7 +2953,7 @@
         ],
         "summary": "GDPR right-to-erasure: scrub all off-chain PII for this player.",
         "operationId": "anonymizePlayer",
-        "description": "GDPR right-to-erasure: scrubs PII from every off-chain store this backend\ncontrols (profile fields, history, views, contact unlocks, trial offers),\nunpins the player's IPFS content, and deactivates the profile. Does NOT\nerase on-chain Soroban contract state, which is immutable by design — see\ndocs/data-privacy.md.",
+        "description": "GDPR right-to-erasure: scrubs PII from every off-chain store this backend\ncontrols (profile fields, history, views, contact unlocks, trial offers),\nunpins the player's IPFS content, and deactivates the profile. Does NOT\nerase on-chain Soroban contract state, which is immutable by design \u2014 see\ndocs/data-privacy.md.",
         "parameters": [
           {
             "name": "playerId",
@@ -3086,7 +3090,7 @@
         "x-required-role": [
           "player"
         ],
-        "x-auth-note": "Authorization includes custom inline logic beyond a single role check — see the route source."
+        "x-auth-note": "Authorization includes custom inline logic beyond a single role check \u2014 see the route source."
       }
     },
     "/players/{playerId}/history/{version}": {
@@ -3136,7 +3140,7 @@
         "x-required-role": [
           "player"
         ],
-        "x-auth-note": "Authorization includes custom inline logic beyond a single role check — see the route source."
+        "x-auth-note": "Authorization includes custom inline logic beyond a single role check \u2014 see the route source."
       }
     },
     "/players/{playerId}/history/{version}/diff": {
@@ -3186,7 +3190,7 @@
         "x-required-role": [
           "player"
         ],
-        "x-auth-note": "Authorization includes custom inline logic beyond a single role check — see the route source."
+        "x-auth-note": "Authorization includes custom inline logic beyond a single role check \u2014 see the route source."
       }
     },
     "/players/{playerId}/milestones": {
@@ -3290,7 +3294,7 @@
         ],
         "summary": "Return the list of token holders and their balances for the given player.",
         "operationId": "getPlayerTokenHolders",
-        "description": "Return the list of token holders and their balances for the given player.\nGated by the `player_tokens` feature flag — returns 404 when disabled.",
+        "description": "Return the list of token holders and their balances for the given player.\nGated by the `player_tokens` feature flag \u2014 returns 404 when disabled.",
         "parameters": [
           {
             "name": "playerId",
@@ -3323,9 +3327,9 @@
         "tags": [
           "players"
         ],
-        "summary": "Purchase Player Tokens for the given player (stub — no real XLM transfer).",
+        "summary": "Purchase Player Tokens for the given player (stub \u2014 no real XLM transfer).",
         "operationId": "buyPlayerToken",
-        "description": "Purchase Player Tokens for the given player (stub — no real XLM transfer).\nGated by the `player_tokens` feature flag — returns 404 when disabled.\nThe authenticated account is the buyer; the optional buyerWallet field is\naccepted for compatibility only when it matches that account.",
+        "description": "Purchase Player Tokens for the given player (stub \u2014 no real XLM transfer).\nGated by the `player_tokens` feature flag \u2014 returns 404 when disabled.\nThe authenticated account is the buyer; the optional buyerWallet field is\naccepted for compatibility only when it matches that account.",
         "parameters": [
           {
             "name": "playerId",
@@ -3534,9 +3538,9 @@
         "tags": [
           "scouts"
         ],
-        "summary": "List existing API keys (metadata + hash prefix only — no plaintext).",
+        "summary": "List existing API keys (metadata + hash prefix only \u2014 no plaintext).",
         "operationId": "listApiKeys",
-        "description": "List existing API keys (metadata + hash prefix only — no plaintext).",
+        "description": "List existing API keys (metadata + hash prefix only \u2014 no plaintext).",
         "parameters": [
           {
             "name": "wallet",
@@ -3957,7 +3961,7 @@
             "schema": {
               "type": "integer"
             },
-            "description": "Optional — restrict to one folder"
+            "description": "Optional \u2014 restrict to one folder"
           }
         ],
         "responses": {
@@ -3987,7 +3991,7 @@
         ],
         "summary": "Bookmark a player with optional folder and note.",
         "operationId": "addBookmark",
-        "description": "Bookmark a player with optional folder and note. Idempotent — no error if already bookmarked.",
+        "description": "Bookmark a player with optional folder and note. Idempotent \u2014 no error if already bookmarked.",
         "parameters": [
           {
             "name": "wallet",
@@ -4135,7 +4139,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Optional — restrict to a single player"
+            "description": "Optional \u2014 restrict to a single player"
           }
         ],
         "responses": {
@@ -4306,7 +4310,7 @@
         ],
         "summary": "Consolidated home-screen dashboard for a scout.",
         "operationId": "getScoutDashboard",
-        "description": "Consolidated home-screen dashboard for a scout. Returns four independently\nbounded sections in a single authenticated call:\n  - subscription: current subscription status\n  - contacts:     first 10 unlocked contacts (with `_links.full` for pagination)\n  - bookmarks:    first 10 bookmarked players (with `_links.full` for pagination)\n  - savedSearches: first 10 saved searches (with `_links.full` for pagination)\n\nEach section is fetched via the existing per-resource service functions —\nno duplicated queries.",
+        "description": "Consolidated home-screen dashboard for a scout. Returns four independently\nbounded sections in a single authenticated call:\n  - subscription: current subscription status\n  - contacts:     first 10 unlocked contacts (with `_links.full` for pagination)\n  - bookmarks:    first 10 bookmarked players (with `_links.full` for pagination)\n  - savedSearches: first 10 saved searches (with `_links.full` for pagination)\n\nEach section is fetched via the existing per-resource service functions \u2014\nno duplicated queries.",
         "parameters": [
           {
             "name": "wallet",
@@ -4919,7 +4923,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Optional — last player_id of the previous page"
+            "description": "Optional \u2014 last player_id of the previous page"
           },
           {
             "name": "pageSize",
@@ -4928,7 +4932,7 @@
             "schema": {
               "type": "integer"
             },
-            "description": "Optional — default 20"
+            "description": "Optional \u2014 default 20"
           }
         ],
         "responses": {
@@ -5342,7 +5346,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "{ tier: 'basic' | 'premium', duration: number (1–365 days) }",
+          "description": "{ tier: 'basic' | 'premium', duration: number (1\u2013365 days) }",
           "content": {
             "application/json": {
               "schema": {
@@ -5420,7 +5424,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "{ tier: 'basic' | 'premium', duration: number (1–365 days) }",
+          "description": "{ tier: 'basic' | 'premium', duration: number (1\u2013365 days) }",
           "content": {
             "application/json": {
               "schema": {
@@ -5578,7 +5582,7 @@
         ],
         "summary": "DEPRECATED alias of POST /api/scouts/:wallet/trial-offers (#1034).",
         "operationId": "createTrialOfferAtScoutsByWalletTrialOfferPost",
-        "description": "DEPRECATED alias of POST /api/scouts/:wallet/trial-offers (#1034). It runs the\nsame handler, so it carries the same middleware chain — including walletRateLimit\nand idempotency, which guard the on-chain submission this route now performs.\n\nUse POST /api/scouts/:wallet/trial-offers instead.\nResponses include the RFC 9745 Deprecation header, effective 2026-08-18.",
+        "description": "DEPRECATED alias of POST /api/scouts/:wallet/trial-offers (#1034). It runs the\nsame handler, so it carries the same middleware chain \u2014 including walletRateLimit\nand idempotency, which guard the on-chain submission this route now performs.\n\nUse POST /api/scouts/:wallet/trial-offers instead.\nResponses include the RFC 9745 Deprecation header, effective 2026-08-18.",
         "deprecated": true,
         "parameters": [
           {
@@ -5606,7 +5610,7 @@
                   "detailsUri": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "Additional validation is applied beyond this schema — see the route handler."
+                    "description": "Additional validation is applied beyond this schema \u2014 see the route handler."
                   }
                 },
                 "required": [
@@ -5731,7 +5735,7 @@
                   "detailsUri": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "Additional validation is applied beyond this schema — see the route handler."
+                    "description": "Additional validation is applied beyond this schema \u2014 see the route handler."
                   }
                 },
                 "required": [
@@ -5787,7 +5791,7 @@
         ],
         "summary": "Cancel (withdraw) a pending trial offer submitted by this scout.",
         "operationId": "cancelTrialOfferHandler",
-        "description": "Cancel (withdraw) a pending trial offer submitted by this scout.\nOnly the originating scout may cancel their own offer, and only while it is\nstill in 'pending' status — the player has not yet accepted or rejected it.\n\nAfter cancellation, the player's accept/reject attempts return 410 Gone.",
+        "description": "Cancel (withdraw) a pending trial offer submitted by this scout.\nOnly the originating scout may cancel their own offer, and only while it is\nstill in 'pending' status \u2014 the player has not yet accepted or rejected it.\n\nAfter cancellation, the player's accept/reject attempts return 410 Gone.",
         "parameters": [
           {
             "name": "wallet",
@@ -5844,9 +5848,9 @@
         "tags": [
           "scouts"
         ],
-        "summary": "List all active subscriptions (secrets masked — only the last 4 hex chars visible).",
+        "summary": "List all active subscriptions (secrets masked \u2014 only the last 4 hex chars visible).",
         "operationId": "listWebhooks",
-        "description": "List all active subscriptions (secrets masked — only the last 4 hex chars visible).\n\nRegistration is subject to the default per-wallet rate limit (#1037).",
+        "description": "List all active subscriptions (secrets masked \u2014 only the last 4 hex chars visible).\n\nRegistration is subject to the default per-wallet rate limit (#1037).",
         "parameters": [
           {
             "name": "wallet",
@@ -5911,7 +5915,7 @@
                   "url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Additional validation is applied beyond this schema — see the route handler."
+                    "description": "Additional validation is applied beyond this schema \u2014 see the route handler."
                   },
                   "eventTypes": {
                     "type": "array",
@@ -6024,7 +6028,7 @@
         ],
         "summary": "Send a test ping to the registered URL, signed with the subscription secret.",
         "operationId": "testWebhook",
-        "description": "Send a test ping to the registered URL, signed with the subscription secret.\nReturns 502 when the remote server does not respond with 2xx or is unreachable.\n\nRate limited separately from — and more tightly than — other scout write\nendpoints (#1037), since each call makes the backend issue an outbound\nHTTP request to a caller-supplied URL. Default: 5 requests/minute per\nwallet (WEBHOOK_TEST_RATE_LIMIT_MAX / WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS).\nExceeding it returns 429 before any outbound request is attempted.",
+        "description": "Send a test ping to the registered URL, signed with the subscription secret.\nReturns 502 when the remote server does not respond with 2xx or is unreachable.\n\nRate limited separately from \u2014 and more tightly than \u2014 other scout write\nendpoints (#1037), since each call makes the backend issue an outbound\nHTTP request to a caller-supplied URL. Default: 5 requests/minute per\nwallet (WEBHOOK_TEST_RATE_LIMIT_MAX / WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS).\nExceeding it returns 429 before any outbound request is attempted.",
         "parameters": [
           {
             "name": "wallet",
@@ -6125,7 +6129,7 @@
                   "evidenceUri": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "Additional validation is applied beyond this schema — see the route handler."
+                    "description": "Additional validation is applied beyond this schema \u2014 see the route handler."
                   },
                   "notes": {
                     "type": "string",
@@ -6180,7 +6184,7 @@
         ],
         "summary": "Approve a batch of milestones assigned to the authenticated validator in one call.",
         "operationId": "approveBulkMilestones",
-        "description": "Approve a batch of milestones assigned to the authenticated validator in\none call. Each ID is processed independently — a failure on one does not\nabort the batch; per-ID outcomes are returned in `data`.",
+        "description": "Approve a batch of milestones assigned to the authenticated validator in\none call. Each ID is processed independently \u2014 a failure on one does not\nabort the batch; per-ID outcomes are returned in `data`.",
         "requestBody": {
           "required": true,
           "description": "{ milestoneIds: string[] } - At least one ID required",
@@ -6411,7 +6415,7 @@
         ],
         "summary": "Dashboard summary for a validator: pending count, all-time approved/rejected totals, approvals in the last 30 days, and up to 20 recent a...",
         "operationId": "getValidatorDashboardStats",
-        "description": "Dashboard summary for a validator: pending count, all-time approved/rejected\ntotals, approvals in the last 30 days, and up to 20 recent activity events.\n\nCounts are derived from indexed milestone events — no separate write path.",
+        "description": "Dashboard summary for a validator: pending count, all-time approved/rejected\ntotals, approvals in the last 30 days, and up to 20 recent activity events.\n\nCounts are derived from indexed milestone events \u2014 no separate write path.",
         "parameters": [
           {
             "name": "wallet",
@@ -6449,7 +6453,7 @@
       "servers": [
         {
           "url": "/api/v2",
-          "description": "API v2 only — not available on /api or /api/v1"
+          "description": "API v2 only \u2014 not available on /api or /api/v1"
         }
       ],
       "get": {

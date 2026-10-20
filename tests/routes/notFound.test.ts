@@ -10,6 +10,7 @@ describe('404 fallback handler', () => {
       error: 'Not Found',
       code: 'NOT_FOUND',
       path: '/api/does-not-exist',
+      correlationId: expect.any(String),
     });
   });
 
@@ -23,6 +24,21 @@ describe('404 fallback handler', () => {
     const res = await request(app).get('/api/nonexistent');
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ error: 'Not Found', path: '/api/nonexistent' });
+  });
+
+  it('echoes the X-Correlation-ID header as correlationId', async () => {
+    const res = await request(app)
+      .get('/api/nonexistent')
+      .set('X-Correlation-ID', 'test-corr-id-123');
+    expect(res.status).toBe(404);
+    expect(res.body.correlationId).toBe('test-corr-id-123');
+  });
+
+  it('includes an auto-generated correlationId when no header is sent', async () => {
+    const res = await request(app).get('/api/nonexistent');
+    expect(res.status).toBe(404);
+    expect(typeof res.body.correlationId).toBe('string');
+    expect(res.body.correlationId.length).toBeGreaterThan(0);
   });
 
   it('known routes still work normally', async () => {
