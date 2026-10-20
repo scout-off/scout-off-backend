@@ -85,8 +85,11 @@ export async function closeSecurityEventSubscriber(): Promise<void> {
   }
 }
 
-/** Handle incoming security events and trigger local actions. */
-async function handleSecurityEvent(channel: string, payload: Record<string, unknown>): Promise<void> {
+/** Handle incoming security events and trigger local actions.
+ * @internal Exported for unit tests; prefer driving tests through the
+ * subscriber 'message' event instead of calling this directly.
+ */
+export async function handleSecurityEvent(channel: string, payload: Record<string, unknown>): Promise<void> {
   try {
     switch (channel) {
       case 'security:wallet_blocked': {
