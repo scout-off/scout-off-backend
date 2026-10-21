@@ -37,6 +37,7 @@
     "check:sql-injection": "node scripts/check-sql-injection.js",
     "loadtest": "ts-node --project tsconfig.scripts.json scripts/loadtest.ts",
     "backfill": "node scripts/backfill.js",
+    "backfill:player-on-chain-ids": "ts-node --project tsconfig.scripts.json scripts/backfill-player-on-chain-ids.ts",
     "reencrypt-webhook-secrets": "node scripts/reencrypt-webhook-secrets.js",
     "migrate-encrypt-notes": "node scripts/migrate-encrypt-notes.js",
     "reencrypt-notes": "node scripts/reencrypt-notes.js",

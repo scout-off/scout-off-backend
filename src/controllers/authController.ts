@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { Keypair } from '@stellar/stellar-sdk';
+import { Keypair, Transaction } from '@stellar/stellar-sdk';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { buildChallenge, verifyChallenge, extractAccount } from '../services/sep10';
@@ -78,7 +78,12 @@ export function getChallenge(req: Request, res: Response, next: NextFunction): v
     return;
   }
   const challenge = buildChallenge(parsed.data.account);
-  res.json({ challenge, networkPassphrase: config.networkPassphrase });
+  const challengeTransaction = new Transaction(challenge, config.networkPassphrase);
+  const expiresAt = Number(challengeTransaction.timeBounds?.maxTime);
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
+    throw new Error('Generated SEP-10 challenge has no valid expiration time');
+  }
+  res.json({ challenge, networkPassphrase: config.networkPassphrase, expiresAt });
 }
 
 // ─── POST /auth/token ──────────────────────────────────────────────────────────
@@ -112,7 +117,7 @@ try {
     const { token: accessToken, expiresAt } = issueAccessToken(account, effectiveRole);
     const { token: refreshToken } = issueRefreshToken(account, effectiveRole);
 
-    res.json({ token: accessToken, accessToken, refreshToken, account, expiresAt });
+    res.json({ success: true, token: accessToken, accessToken, refreshToken, account, expiresAt });
   } catch (err) {
     // Normalise to Error — the SDK can throw DOMException (from the base64
     // decoder) or XdrError which, in some JS environments (e.g. Jest's vm

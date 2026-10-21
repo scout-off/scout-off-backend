@@ -191,9 +191,11 @@ declare global {
 export interface Sep10Challenge {
   challenge: string; // XDR
   networkPassphrase: string;
+  expiresAt: number; // Unix timestamp in seconds
 }
 
 export interface Sep10Token {
+  success: true;
   token: string;
   account: string;
   expiresAt: number; // Unix timestamp
