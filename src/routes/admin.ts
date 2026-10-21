@@ -250,7 +250,9 @@ router.route('/validators/register')
  * @response 400 { success: false, error: string } - Validation error
  * @auth Bearer (admin role required)
  */
-router.post('/validators/bulk-import', requireRole('admin'), validateBody(bulkValidatorImportSchema), bulkValidatorImport);
+router.route('/validators/bulk-import')
+  .post(requireRole('admin'), validateBody(bulkValidatorImportSchema), bulkValidatorImport)
+  .all(methodNotAllowed(['POST']));
 
 /**
  * POST /api/admin/validators/revoke
@@ -288,16 +290,17 @@ router.route('/validators/revoke')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.post(
-  '/validators/import',
-  requireRole('admin'),
-  // Parse text/csv and text/plain bodies as raw strings so the controller
-  // can handle CSV formatting. JSON bodies are already parsed by the global
-  // express.json() middleware in app.ts.
-  express.text({ type: ['text/csv', 'text/plain'], limit: '1mb' }),
-  validateJsonBodyOrPassThrough(importValidatorsBodySchema),
-  importValidators,
-);
+router.route('/validators/import')
+  .post(
+    requireRole('admin'),
+    // Parse text/csv and text/plain bodies as raw strings so the controller
+    // can handle CSV formatting. JSON bodies are already parsed by the global
+    // express.json() middleware in app.ts.
+    express.text({ type: ['text/csv', 'text/plain'], limit: '1mb' }),
+    validateJsonBodyOrPassThrough(importValidatorsBodySchema),
+    importValidators,
+  )
+  .all(methodNotAllowed(['POST']));
 
 /**
  * POST /api/admin/players/import
@@ -320,14 +323,15 @@ router.post(
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.post(
-  '/players/import',
-  importRateLimit,
-  requireRole('admin'),
-  express.text({ type: ['text/csv', 'text/plain'], limit: '1mb' }),
-  validateJsonBodyOrPassThrough(importPlayersBodySchema),
-  importPlayers,
-);
+router.route('/players/import')
+  .post(
+    importRateLimit,
+    requireRole('admin'),
+    express.text({ type: ['text/csv', 'text/plain'], limit: '1mb' }),
+    validateJsonBodyOrPassThrough(importPlayersBodySchema),
+    importPlayers,
+  )
+  .all(methodNotAllowed(['POST']));
 
 /**
  * POST /api/admin/players/:playerId/deactivate
@@ -776,7 +780,9 @@ router.route('/ip-reputation/:ip')
  * @response 200 { success: true, data: WebhookDeliveryRow[], total, limit, offset }
  * @auth Bearer (admin role required)
  */
-router.get('/webhooks/:id/deliveries', requireRole('admin'), getWebhookDeliveriesEndpoint);
+router.route('/webhooks/:id/deliveries')
+  .get(requireRole('admin'), getWebhookDeliveriesEndpoint)
+  .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
  * GET /api/admin/webhooks/:id/summary
@@ -788,7 +794,9 @@ router.get('/webhooks/:id/deliveries', requireRole('admin'), getWebhookDeliverie
  * @response 200 { success: true, data: WebhookDeliverySummary }
  * @auth Bearer (admin role required)
  */
-router.get('/webhooks/:id/summary', requireRole('admin'), getWebhookDeliverySummaryEndpoint);
+router.route('/webhooks/:id/summary')
+  .get(requireRole('admin'), getWebhookDeliverySummaryEndpoint)
+  .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
  * POST /api/admin/fees/config
@@ -802,6 +810,8 @@ router.get('/webhooks/:id/summary', requireRole('admin'), getWebhookDeliverySumm
  * @response 400 { success: false, error: string }
  * @auth Bearer (admin role required)
  */
-router.post('/fees/config', requireRole('admin'), validateBody(updatePlatformFeeSchema), updatePlatformFeeController);
+router.route('/fees/config')
+  .post(requireRole('admin'), validateBody(updatePlatformFeeSchema), updatePlatformFeeController)
+  .all(methodNotAllowed(['POST']));
 
 export default router;

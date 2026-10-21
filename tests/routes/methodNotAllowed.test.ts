@@ -138,6 +138,54 @@ describe('405 Method Not Allowed', () => {
     expect(res.body.allowedMethods).toContain('GET');
   });
 
+  it('GET /api/admin/validators/bulk-import returns 405 with Allow: POST', async () => {
+    const res = await request(app).get('/api/admin/validators/bulk-import');
+    expect(res.status).toBe(405);
+    expect(res.body.error).toBe('Method Not Allowed');
+    expect(res.body.allowedMethods).toEqual(expect.arrayContaining(['POST']));
+    expect(res.headers['allow']).toMatch(/POST/);
+  });
+
+  it('PUT /api/admin/validators/import returns 405 with Allow: POST', async () => {
+    const res = await request(app).put('/api/admin/validators/import');
+    expect(res.status).toBe(405);
+    expect(res.body.error).toBe('Method Not Allowed');
+    expect(res.body.allowedMethods).toEqual(expect.arrayContaining(['POST']));
+    expect(res.headers['allow']).toMatch(/POST/);
+  });
+
+  it('GET /api/admin/players/import returns 405 with Allow: POST', async () => {
+    const res = await request(app).get('/api/admin/players/import');
+    expect(res.status).toBe(405);
+    expect(res.body.error).toBe('Method Not Allowed');
+    expect(res.body.allowedMethods).toEqual(expect.arrayContaining(['POST']));
+    expect(res.headers['allow']).toMatch(/POST/);
+  });
+
+  it('POST /api/admin/webhooks/:id/deliveries returns 405 with Allow containing GET', async () => {
+    const res = await request(app).post('/api/admin/webhooks/test-hook/deliveries');
+    expect(res.status).toBe(405);
+    expect(res.body.error).toBe('Method Not Allowed');
+    expect(res.body.allowedMethods).toEqual(expect.arrayContaining(['GET', 'HEAD']));
+    expect(res.headers['allow']).toMatch(/GET/);
+  });
+
+  it('POST /api/admin/webhooks/:id/summary returns 405 with Allow containing GET', async () => {
+    const res = await request(app).post('/api/admin/webhooks/test-hook/summary');
+    expect(res.status).toBe(405);
+    expect(res.body.error).toBe('Method Not Allowed');
+    expect(res.body.allowedMethods).toEqual(expect.arrayContaining(['GET', 'HEAD']));
+    expect(res.headers['allow']).toMatch(/GET/);
+  });
+
+  it('GET /api/admin/fees/config returns 405 with Allow: POST', async () => {
+    const res = await request(app).get('/api/admin/fees/config');
+    expect(res.status).toBe(405);
+    expect(res.body.error).toBe('Method Not Allowed');
+    expect(res.body.allowedMethods).toEqual(expect.arrayContaining(['POST']));
+    expect(res.headers['allow']).toMatch(/POST/);
+  });
+
   // ── Validator routes ──────────────────────────────────────────────────────
 
   it('DELETE /api/validators/milestone returns 405 (only POST is allowed)', async () => {
