@@ -712,6 +712,17 @@ const config = {
     sampleSize: parseNumericEnv('TIER_DIVERGENCE_SAMPLE_SIZE', process.env.TIER_DIVERGENCE_SAMPLE_SIZE, 100, { min: 1, integer: true }),
   },
 
+  // ── Audit-log hash-chain verification (#1539) ──────────────────────────
+  // The scheduled job verifies new audit rows incrementally once an hour and
+  // walks the whole chain weekly, catching edits to already-verified rows.
+  auditVerify: {
+    intervalMs: parseNumericEnv('AUDIT_VERIFY_INTERVAL_MS', process.env.AUDIT_VERIFY_INTERVAL_MS, 3_600_000, { min: 1000, integer: true }),
+    fullIntervalMs: parseNumericEnv('AUDIT_FULL_VERIFY_INTERVAL_MS', process.env.AUDIT_FULL_VERIFY_INTERVAL_MS, 604_800_000, { min: 60_000, integer: true }),
+    batchSize: parseNumericEnv('AUDIT_VERIFY_BATCH_SIZE', process.env.AUDIT_VERIFY_BATCH_SIZE, 5_000, { min: 1, integer: true }),
+    /** Optional SSRF-safe GET webhook fired when a break is detected. */
+    alertWebhookUrl: process.env.AUDIT_ALERT_WEBHOOK_URL?.trim() || null,
+  },
+
   // ── Readiness / health check timeouts ──────────────────────────────────
   // Per-component timeout for readiness probes (#1317)
   readinessDb: {

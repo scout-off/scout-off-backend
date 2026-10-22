@@ -1880,6 +1880,21 @@ const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   return timedQueryAsync(sql, () => getDriver().all<AuditLogRow>(sql, params));
 }
 
+/**
+ * Returns at most `limit` audit_log rows with `id > afterId`, in chain order.
+ *
+ * The scheduled chain verifier (#1539) walks the table in bounded batches so
+ * a large audit log is never loaded into memory in one go. Returning rows in
+ * id order also matches hash-chain order (insertAuditLog serializes writes).
+ */
+export async function getAuditLogRowsAfterId(
+  afterId: number,
+  limit: number,
+): Promise<AuditLogRow[]> {
+  const sql = 'SELECT * FROM audit_log WHERE id > ? ORDER BY id ASC LIMIT ?';
+  return timedQueryAsync(sql, () => getDriver().all<AuditLogRow>(sql, [afterId, limit]));
+}
+
 // ─── Trial offer helpers ──────────────────────────────────────────────────────
 
 export interface TrialOfferRow {

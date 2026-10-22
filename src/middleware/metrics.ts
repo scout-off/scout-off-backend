@@ -20,6 +20,41 @@ function getTierDivergenceForMetrics(): number {
   return _getTierDivergenceTotal();
 }
 
+// ── Audit chain verification (#1539) ─────────────────────────────────────────
+//
+// Kept here (rather than in the verifier service) so the values survive
+// between scheduled runs and are available even before the first run. The
+// gauge starts at 1 because no break has been observed yet; a failed run sets
+// it to 0 until a later run verifies cleanly again.
+
+let _auditChainValid = 1;
+let _auditChainBreaksTotal = 0;
+
+/** Records the outcome of the most recent audit chain verification run. */
+export function setAuditChainValid(valid: boolean): void {
+  _auditChainValid = valid ? 1 : 0;
+}
+
+/** Increments `scout_off_audit_chain_breaks_total` and invalidates the gauge. */
+export function recordAuditChainBreak(): void {
+  _auditChainBreaksTotal += 1;
+  _auditChainValid = 0;
+}
+
+/** Resets both audit chain metrics (used in tests). */
+export function resetAuditChainMetrics(): void {
+  _auditChainValid = 1;
+  _auditChainBreaksTotal = 0;
+}
+
+export function getAuditChainValid(): number {
+  return _auditChainValid;
+}
+
+export function getAuditChainBreaksTotal(): number {
+  return _auditChainBreaksTotal;
+}
+
 export interface RouteMetric {
   count: number;
   totalLatencyMs: number;
@@ -603,6 +638,15 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# HELP scout_off_tier_divergence_total Total number of player tier divergence events detected since process start');
   lines.push('# TYPE scout_off_tier_divergence_total counter');
   lines.push(`scout_off_tier_divergence_total ${getTierDivergenceForMetrics()}`);
+
+  // Audit chain verification (#1539). `scout_off_audit_chain_valid` is 1 when
+  // the most recent scheduled verification passed, 0 after a break is found.
+  lines.push('# HELP scout_off_audit_chain_valid Whether the last audit-log hash-chain verification passed (1) or found a break (0)');
+  lines.push('# TYPE scout_off_audit_chain_valid gauge');
+  lines.push(`scout_off_audit_chain_valid ${getAuditChainValid()}`);
+  lines.push('# HELP scout_off_audit_chain_breaks_total Total number of audit-log hash-chain breaks detected since process start');
+  lines.push('# TYPE scout_off_audit_chain_breaks_total counter');
+  lines.push(`scout_off_audit_chain_breaks_total ${getAuditChainBreaksTotal()}`);
 
   return lines.join('\n') + '\n';
 }

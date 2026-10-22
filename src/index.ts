@@ -22,6 +22,7 @@ import {
 import { closeRedisClients } from "./services/redis";
 import { runTierDivergenceCheck } from "./services/tierDivergenceJob";
 import { getTierDivergenceTotal } from "./services/tierDivergenceJob";
+import { runScheduledAuditChainVerification } from "./services/auditChainVerifier";
 import { setTierDivergenceGetter } from "./middleware/metrics";
 import { drainAllSessions, setAcceptingSseSessions } from "./routes/events";
 import http from "http";
@@ -107,6 +108,7 @@ async function startServer() {
   // Wraps each background job so shutdown can observe whether one is running
   // and wait for it to complete before closing the DB.
   let inFlightJobs = 0;
+  let isShuttingDown = false;
 
   function withJobTracking(fn: () => Promise<void>): () => Promise<void> {
     return async () => {
@@ -168,6 +170,26 @@ async function startServer() {
   runDivergenceCheck();
   const divergenceInterval = setInterval(runDivergenceCheck, config.tierDivergence.intervalMs);
 
+  // Scheduled audit-log hash-chain verification (#1539): verifies new audit
+  // rows incrementally every AUDIT_VERIFY_INTERVAL_MS and walks the whole
+  // chain every AUDIT_FULL_VERIFY_INTERVAL_MS. Progress is checkpointed in
+  // indexer_state, so a restart resumes instead of re-walking the table.
+  const runAuditVerify = withJobTracking(async () => {
+    try {
+      await runScheduledAuditChainVerification({
+        shouldStop: () => isShuttingDown,
+      });
+    } catch (err) {
+      logger.error("Audit chain verification error:", (err as Error).message);
+    }
+  });
+
+  runAuditVerify();
+  const auditVerifyInterval = setInterval(
+    runAuditVerify,
+    config.auditVerify.intervalMs,
+  );
+
   // ── Graceful shutdown ──────────────────────────────────────────────────────
   // Ordered drain sequence (#1315):
   //   1. Flip draining flag  → readiness returns 503 immediately
@@ -187,7 +209,6 @@ async function startServer() {
     process.env.SHUTDOWN_PRESTOP_DELAY_MS ?? '0',
     10,
   );
-  let isShuttingDown = false;
 
   const shutdown = async (signal: string) => {
     if (isShuttingDown) return;
@@ -217,6 +238,7 @@ async function startServer() {
     clearInterval(retryInterval);
     clearInterval(reconcileInterval);
     clearInterval(divergenceInterval);
+    clearInterval(auditVerifyInterval);
 
     // Step 4: await in-flight job executions (bounded to 60 % of total timeout).
     if (inFlightJobs > 0) {
