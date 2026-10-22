@@ -286,35 +286,40 @@ When open, calls fail immediately with `CircuitBreakerOpenError` rather than con
 
 ## Graceful shutdown (#1315)
 
-The server implements an ordered drain sequence on `SIGTERM`/`SIGINT`:
+The server implements a deadline-driven drain sequence on `SIGTERM`/`SIGINT`
+(implementation: `src/shutdown.ts`, tests: `tests/shutdown.test.ts`):
 
-1. Flip draining flag → `/ready` and `/health/readiness` return `503` immediately (liveness stays `200`).
+1. Flip draining flag → `/ready` and `/health/readiness` return `503` immediately (liveness stays `200`). Responses sent from now on carry `Connection: close` so keep-alive clients stop reusing the socket.
 2. Optional pre-stop delay (`SHUTDOWN_PRESTOP_DELAY_MS`, default `0`) so load balancers observe the `503` before traffic stops.
 3. Stop all background schedulers (indexer poll, IPFS retry/reconcile, tier-divergence check).
-4. Await in-flight job executions (up to 60 % of `SHUTDOWN_TIMEOUT_MS`).
+4. Await in-flight job executions (bounded by `SHUTDOWN_JOB_DRAIN_MS`, default 30 % of the budget). Jobs still running at the deadline are abandoned so cleanup can proceed.
 5. Drain SSE sessions — sends `event: session_ended\ndata: {"reason":"server_shutdown"}` to every connected client.
 6. `server.close()` + `closeIdleConnections()` — stops accepting new HTTP connections.
-7. Close Redis, database, tracing SDK.
-8. Exit `0`.
+7. Wait for in-flight HTTP requests (tracked per request, including slow exports and streams) up to `SHUTDOWN_REQUEST_DRAIN_MS` (default 50 % of the budget).
+8. `server.closeAllConnections()` — force-closes whatever is still connected. A slow `GET /admin/events/export` therefore can no longer hold the process open.
+9. Close Redis, database and tracing SDK inside the reserved `SHUTDOWN_CLEANUP_RESERVE_MS` slice (default 2 s). This always runs, even when steps 4–8 hit their deadline.
+10. Exit `0`; exit `1` only if a cleanup step threw or exceeded its budget.
 
 **Configuration:**
 
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
-| `SHUTDOWN_TIMEOUT_MS` | `10000` | Hard limit before forced `exit(1)`. Align with Helm `terminationGracePeriodSeconds`. |
-| `SHUTDOWN_PRESTOP_DELAY_MS` | `0` | Pre-stop sleep to let load balancers drain in-flight connections before traffic stops. |
+| `SHUTDOWN_TIMEOUT_MS` | `10000` | Overall shutdown budget. Every wait below is clamped to it. |
+| `SHUTDOWN_PRESTOP_DELAY_MS` | `0` | Pre-stop sleep to let load balancers observe the `503` before traffic stops. |
+| `SHUTDOWN_REQUEST_DRAIN_MS` | 50 % of timeout (`5000`) | How long in-flight requests may finish before connections are force-closed. |
+| `SHUTDOWN_JOB_DRAIN_MS` | 30 % of timeout (`3000`) | How long in-flight background jobs may finish before they are abandoned. |
+| `SHUTDOWN_CLEANUP_RESERVE_MS` | `2000` | Slice at the end of the budget reserved for Redis, DB and tracing cleanup (clamped to half the budget). |
 
 **Kubernetes alignment:**
 
-Set `terminationGracePeriodSeconds` ≥ `SHUTDOWN_TIMEOUT_MS / 1000 + 5` (buffer for OS signal delivery and container runtime overhead). A `preStop` hook sleep of `SHUTDOWN_PRESTOP_DELAY_MS / 1000` seconds ensures the pod stops receiving traffic before `SIGTERM` is sent:
+Set `terminationGracePeriodSeconds` greater than `SHUTDOWN_TIMEOUT_MS / 1000 + preStopSleepSeconds + 5` (the extra seconds cover OS signal delivery and container runtime overhead). The Helm chart exposes this as `terminationGracePeriodSeconds` (default `30`) and `preStopSleepSeconds` (default `0`):
 
 ```yaml
-lifecycle:
-  preStop:
-    exec:
-      command: ["sleep", "5"]
-terminationGracePeriodSeconds: 20
+terminationGracePeriodSeconds: 30
+preStopSleepSeconds: 5
 ```
+
+With the app defaults, the container finishes draining in at most 10 s and the 30 s grace period leaves ample room for the preStop hook and SIGKILL escalation. Do not set `terminationGracePeriodSeconds` below `SHUTDOWN_TIMEOUT_MS / 1000`: Kubernetes would SIGKILL the pod mid-cleanup.
 
 **Expected log sequence on clean shutdown:**
 
@@ -322,10 +327,14 @@ terminationGracePeriodSeconds: 20
 Received SIGTERM, starting graceful shutdown...
 [shutdown] waiting for 1 in-flight job(s)...
 [sse] draining 3 session(s) for shutdown
-HTTP server closed
-Redis connections closed
-Database connection closed
-Tracing SDK shut down
+[shutdown] 2 request(s) still in flight after 5000ms, force-closing connections
+[shutdown] HTTP server closed
+[shutdown] redis cleanup complete
+[shutdown] database cleanup complete
+[shutdown] tracing cleanup complete
+Graceful shutdown complete in 5031ms
 ```
 
-Exit code `0` confirms clean drain. Exit code `1` with "timed out" means a job or SSE session blocked beyond `SHUTDOWN_TIMEOUT_MS` — increase the timeout or investigate the blocking operation.
+The watchdog line (`Graceful shutdown watchdog fired ... forcing exit`) should never appear: it only fires if a native dependency hangs past `SHUTDOWN_TIMEOUT_MS + 1s`. If it does, the pod exited without closing Redis/DB — investigate the hanging dependency.
+
+Exit code `0` confirms clean drain. Exit code `1` with `cleanup failure(s)` means Redis, the database or tracing failed to close within the reserved slice — check the preceding `[shutdown]` log lines; the request drain itself never causes a non-zero exit.

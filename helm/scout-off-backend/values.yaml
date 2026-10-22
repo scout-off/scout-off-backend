@@ -152,6 +152,21 @@ ingress:
         - api.scoutoff.io
 
 # -----------------------------------------------------------------------------
+# Graceful shutdown
+#
+# Kubernetes sends SIGTERM and then SIGKILLs the container once
+# terminationGracePeriodSeconds elapses. Keep this strictly greater than the
+# app's SHUTDOWN_TIMEOUT_MS (env above) plus preStopSleepSeconds, with a few
+# seconds of buffer for signal delivery and container runtime overhead.
+#
+# preStopSleepSeconds delays SIGTERM so load balancers can observe the failed
+# readiness probe first. It is applied as a `sleep` preStop hook; leave it at 0
+# when no external load balancer needs the extra window.
+# -----------------------------------------------------------------------------
+terminationGracePeriodSeconds: 30
+preStopSleepSeconds: 0
+
+# -----------------------------------------------------------------------------
 # Liveness probe
 #
 # Kubernetes restarts a container when liveness fails failureThreshold times.
@@ -284,6 +299,14 @@ env:
   ADMIN_ACTION_TTL_MS: "3600000"
   # Player cache TTL in ms. Default: 60000 (1 min).
   PLAYER_CACHE_TTL_MS: "60000"
+  # Graceful shutdown (#1538). The overall budget must stay below
+  # terminationGracePeriodSeconds (see below). In-flight requests get
+  # SHUTDOWN_REQUEST_DRAIN_MS before connections are force-closed, and the
+  # last SHUTDOWN_CLEANUP_RESERVE_MS are reserved for Redis/DB/tracing.
+  SHUTDOWN_TIMEOUT_MS: "10000"
+  SHUTDOWN_PRESTOP_DELAY_MS: "0"
+  SHUTDOWN_REQUEST_DRAIN_MS: "5000"
+  SHUTDOWN_CLEANUP_RESERVE_MS: "2000"
 
 # -----------------------------------------------------------------------------
 # Pod annotations

@@ -33,6 +33,10 @@ import { versionRouting } from './middleware/versionRouting';
 import docsRouter from './routes/docs';
 import eventsRoutes from './routes/events';
 import { logger } from './utils/logger';
+import {
+  trackInFlightRequest,
+  drainAwareConnectionMiddleware,
+} from './shutdown';
 import { requireRole } from './middleware/auth';
 import { getHealthDependencies } from './controllers/healthDependenciesController';
 import {
@@ -159,6 +163,13 @@ const processStartTime = Date.now();
 let _draining = false;
 export function setDraining(): void { _draining = true; }
 export function isDraining(): boolean { return _draining; }
+
+// Track in-flight requests so graceful shutdown can wait for them instead of
+// waiting for every socket to close (#1538). Mounted before routing so streams
+// and keep-alive requests are counted too.
+app.use(trackInFlightRequest);
+// Ask keep-alive clients not to reuse their socket once draining has started.
+app.use(drainAwareConnectionMiddleware(isDraining));
 // Disable Express's default X-Powered-By header. helmet() also does this, but
 // being explicit here ensures it is suppressed regardless of middleware order.
 app.disable('x-powered-by');
