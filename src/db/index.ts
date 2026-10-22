@@ -7,9 +7,10 @@ import { EVENTS_ORDER_BY_SQL } from '../services/eventOrdering';
 import { runMigrations } from './migrate';
 import { logger } from '../utils/logger';
 import { computeChainHash, auditChainContent, GENESIS_HASH } from '../utils/hashChain';
+import { latestAuditCheckpoint } from '../utils/auditCheckpoint';
 import { encryptWebhookSecret, decryptWebhookSecret } from '../utils/webhookSecretCipher';
 import { decryptField, encryptField } from '../utils/fieldCipher';
-import { DbDriver } from './driver';
+import { DbDriver, DbTxHandle } from './driver';
 import { SqliteDriver } from './sqlite-driver';
 import { PostgresDriver } from './postgres-driver';
 import { observeDbQueryDuration } from '../middleware/metrics';
@@ -1509,13 +1510,16 @@ export async function saveIdempotencyRecord(
 }
 
 /**
- * Delete all idempotency records whose TTL has passed.
- * Call this periodically (e.g., from the indexer poll loop) to keep the table small.
+ * Delete one bounded batch of expired idempotency responses. The retention
+ * scheduler calls this with its transaction and sweep cutoff.
  */
-export async function purgeExpiredIdempotencyKeys(): Promise<number> {
-  const sql = 'DELETE FROM idempotency_keys WHERE expires_at <= ?';
+export async function purgeExpiredIdempotencyKeys(
+  before = Date.now(), limit = config.retention.batchSize, tx?: DbTxHandle,
+): Promise<number> {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid idempotency purge batch size');
+  const sql = 'DELETE FROM idempotency_keys WHERE key IN (SELECT key FROM idempotency_keys WHERE expires_at < ? ORDER BY expires_at LIMIT ?) AND expires_at < ?';
   return timedQueryAsync(sql, async () => {
-    const info = await getDriver().run(sql, [Date.now()]);
+    const info = await (tx ?? getDriver()).run(sql, [before, limit, before]);
     return info.changes;
   });
 }
@@ -1783,7 +1787,8 @@ export async function insertAuditLog(p: {
       const prevRow = await tx.get<{ hash: string }>(
         'SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1'
       );
-      const prevHash = prevRow?.hash ?? GENESIS_HASH;
+      const checkpoint = await latestAuditCheckpoint(tx);
+      const prevHash = prevRow?.hash ?? checkpoint?.last_hash ?? GENESIS_HASH;
 
       const hash = computeChainHash(
         auditChainContent({ action: p.action, adminWallet, queryParams, createdAt: p.createdAt, eventSource }),
@@ -2954,9 +2959,10 @@ export async function getLastProfileView(scoutWallet: string, playerId: string):
  * Used in analytics aggregation.
  */
 export async function getProfileViewCount(playerId: string): Promise<number> {
-  const sql = `SELECT COUNT(*) as count FROM profile_views WHERE player_id = ?`;
+  const sql = `SELECT (SELECT COUNT(*) FROM profile_views WHERE player_id = ?)
+    + COALESCE((SELECT SUM(view_count) FROM profile_view_daily WHERE player_id = ?), 0) as count`;
   const row = await timedQueryAsync(sql, () =>
-    getDriver().get<{ count: number | string }>(sql, [playerId])
+    getDriver().transaction(tx => tx.get<{ count: number | string }>(sql, [playerId, playerId]))
   );
   return Number(row?.count ?? 0);
 }
@@ -2967,9 +2973,12 @@ export async function getProfileViewCount(playerId: string): Promise<number> {
  * Used in analytics aggregation to determine viewer_count.
  */
 export async function getUniqueViewerCount(playerId: string): Promise<number> {
-  const sql = `SELECT COUNT(DISTINCT scout_wallet) as count FROM profile_views WHERE player_id = ? AND scout_wallet IS NOT NULL`;
+  const sql = `SELECT COUNT(*) as count FROM (
+    SELECT scout_wallet FROM profile_views WHERE player_id = ? AND scout_wallet IS NOT NULL
+    UNION SELECT scout_wallet FROM profile_view_daily WHERE player_id = ?
+  ) AS viewers`;
   const row = await timedQueryAsync(sql, () =>
-    getDriver().get<{ count: number | string }>(sql, [playerId])
+    getDriver().transaction(tx => tx.get<{ count: number | string }>(sql, [playerId, playerId]))
   );
   return Number(row?.count ?? 0);
 }
@@ -3514,4 +3523,9 @@ export function pruneWebhookDeliveries(retentionMs = 30 * 24 * 60 * 60 * 1000): 
     const info = getDb().prepare(sql).run(cutoff);
     return info.changes;
   });
+}
+
+/** Indexed on-chain membership; canonical event replay/reorgs update the view directly. */
+export async function listContractRoleMembers(): Promise<Array<{ contract_id: string; role: string; account: string }>> {
+  return getDriver().all('SELECT contract_id, role, account FROM contract_role_memberships ORDER BY contract_id, role, account');
 }

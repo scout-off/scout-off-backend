@@ -116,11 +116,6 @@
       "issue": "#670"
     },
     {
-      "path": "tests/services/txCorrelation.test.ts",
-      "reason": "txCorrelation service uses sync getDb()",
-      "issue": "#670"
-    },
-    {
       "path": "tests/db/scoutResourceLimits.test.ts",
       "reason": "createWebhookSubscription quota check uses sync getDb() transaction (SQLite-only)",
       "issue": "#640"

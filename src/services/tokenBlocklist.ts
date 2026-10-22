@@ -20,6 +20,7 @@ import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import { getDriver } from '../db';
 import { getRedisClient } from './redis';
+import { encodeTracedMessage } from '../utils/traceContext';
 
 // ─── In-process revocation events ────────────────────────────────────────────
 //
@@ -217,6 +218,14 @@ export async function revokeToken(jti: string, expiresAt: number): Promise<void>
 
   // Notify in-process subscribers (SSE connections) synchronously.
   revokedEmitter.emit(REVOKED_EVENT, jti);
+  const publisher = getRedisClient();
+  if (publisher) {
+    try {
+      await publisher.publish('security:token_revoked', encodeTracedMessage({ token_hash: jti }));
+    } catch (err) {
+      logger.warn('[tokenBlocklist] Redis revocation publish failed:', err);
+    }
+  }
 }
 
 /**
@@ -281,19 +290,11 @@ export { pruneExpiredTokens };
 
 /**
  * Handle a token_revoked event received from another instance via Redis pub/sub.
- * Invalidates Redis cache entry to trigger immediate session termination.
+ * Notifies local sessions. The shared Redis revocation marker must remain
+ * until expiry so subsequent authentication checks still reject the token.
  * Called by securityEventPubSub.ts.
  */
 export async function onTokenRevokedRemote(tokenHash: string): Promise<void> {
   // Emit locally to terminate this instance's SSE sessions immediately
   revokedEmitter.emit(REVOKED_EVENT, tokenHash);
-  
-  // Also remove from Redis cache so subsequent checks fall through to DB
-  if (redisClient) {
-    try {
-      await (redisClient as Redis).del(redisKey(tokenHash));
-    } catch (err) {
-      logger.warn('[tokenBlocklist] Redis cache invalidation failed:', err);
-    }
-  }
 }

@@ -24,16 +24,16 @@ describe('txCorrelation', () => {
     expect(memo).not.toMatch(/[@/]/);
   });
 
-  it('records and looks up correlation by tx hash', () => {
-    requestContext.run({ correlationId: 'corr-origin-1' }, () => {
-      recordTxCorrelation('txhash-aaa');
+  it('records and looks up correlation by tx hash', async () => {
+    await requestContext.run({ correlationId: 'corr-origin-1' }, async () => {
+      await recordTxCorrelation('txhash-aaa');
     });
-    expect(lookupTxCorrelation('txhash-aaa')).toBe('corr-origin-1');
-    expect(lookupTxCorrelation('missing')).toBeUndefined();
+    expect(await lookupTxCorrelation('txhash-aaa')).toBe('corr-origin-1');
+    expect(await lookupTxCorrelation('missing')).toBeUndefined();
   });
 
   it('re-establishes ALS context for downstream work', async () => {
-    recordTxCorrelation('txhash-bbb', 'corr-restored');
+    await recordTxCorrelation('txhash-bbb', 'corr-restored');
     let seen: string | undefined;
     await withRestoredCorrelation('txhash-bbb', 'test.span', async () => {
       seen = getCorrelationId();

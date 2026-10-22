@@ -184,6 +184,19 @@ jobs:
           POSTGRES_TEST_URL: postgres://postgres:postgres@localhost:5432/scout_off_ci
           CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
 
+      - name: Seed SQLite migration fixture
+        run: npm run seed
+        env:
+          DB_DRIVER: sqlite
+          DB_PATH: ${{ runner.temp }}/migration-source.db
+          CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
+
+      - name: Verify SQLite migration, sequences and crash recovery
+        run: node node_modules/jest/bin/jest.js --selectProjects scripts --runInBand --runTestsByPath tests/scripts/sqliteToPostgres.test.ts tests/scripts/sqliteToPostgres.integration.test.ts
+        env:
+          MIGRATION_TEST_URL: postgres://postgres:postgres@localhost:5432/scout_off_ci
+          MIGRATION_SQLITE_FIXTURE: ${{ runner.temp }}/migration-source.db
+
   redis-integration:
     name: Redis integration
     runs-on: ubuntu-latest

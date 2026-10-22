@@ -8,3 +8,7 @@ crate-type = ["rlib"]
 
 [dependencies]
 soroban-sdk = { workspace = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+proptest = { workspace = true }

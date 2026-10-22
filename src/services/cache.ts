@@ -48,6 +48,7 @@ import {
   recordCacheInvalidation,
 } from '../middleware/metrics';
 import { logger } from '../utils/logger';
+import { encodeTracedMessage, consumeTracedMessage } from '../utils/traceContext';
 
 /**
  * Redis Pub/Sub channel used to fan out player-list cache invalidations to
@@ -278,7 +279,7 @@ export async function invalidateMilestoneCache(playerId: string): Promise<void> 
 async function publishInvalidation(): Promise<void> {
   const client = getRedisClient();
   if (!client) return;
-  await client.publish(INVALIDATION_CHANNEL, INVALIDATION_MESSAGE);
+  await client.publish(INVALIDATION_CHANNEL, encodeTracedMessage(JSON.parse(INVALIDATION_MESSAGE)));
 }
 
 /**
@@ -294,11 +295,15 @@ async function publishInvalidation(): Promise<void> {
 export function createInvalidationHandler(
   storeToUse: CacheStore
 ): (channel: string, message: string) => Promise<void> {
-  return async (channel: string, _message: string): Promise<void> => {
+  return async (channel: string, message: string): Promise<void> => {
     if (channel !== INVALIDATION_CHANNEL) return;
     try {
-      playerListLastModifiedMs = Date.now();
-      await storeToUse.deleteByPrefix(namespacedKey('players:list'));
+      // Any legacy message invalidates, including non-JSON informational payloads.
+      const validJson = (() => { try { JSON.parse(message); return message; } catch { return 'null'; } })();
+      await consumeTracedMessage(validJson, 'redis.cache.invalidate', async () => {
+        playerListLastModifiedMs = Date.now();
+        await storeToUse.deleteByPrefix(namespacedKey('players:list'));
+      }, { 'messaging.destination.name': channel });
     } catch (err) {
       logger.warn(
         `[cache] failed to clear local player-list cache after "${INVALIDATION_CHANNEL}" message: ${errMessage(err)}`

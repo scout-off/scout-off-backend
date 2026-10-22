@@ -312,6 +312,7 @@ const ALLOWLIST: Record<string, string> = {
   "GET /admin/audit": "admin-only read; requires admin JWT + audit rows",
   "GET /admin/audit/trail": "admin-only read; requires admin JWT + audit rows",
   "GET /admin/audit/verify": "admin-only read; requires admin JWT + audit rows",
+  "GET /admin/retention/dry-run": "admin-only read; retention candidate fixtures covered in retention.test.ts",
   "POST /admin/contract/pause": "admin-only write; requires admin JWT",
   "POST /admin/contract/unpause": "admin-only write; requires admin JWT",
   "GET /admin/events": "admin-only read; requires admin JWT + indexed events",

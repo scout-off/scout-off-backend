@@ -617,6 +617,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/retention/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview retention candidate counts without deleting rows or writing archives.
+         * @description Preview retention candidate counts without deleting rows or writing archives.
+         */
+        get: operations["getRetentionDryRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/stats": {
         parameters: {
             query?: never;
@@ -3447,6 +3467,24 @@ export interface operations {
              *       }
              *     }
              */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getRetentionDryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description { success: true, dryRun: true, data: RetentionResult[] } */
             200: {
                 headers: {
                     [name: string]: unknown;

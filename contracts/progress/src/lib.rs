@@ -1,5 +1,6 @@
 #![no_std]
 
+use scout_off_shared::access;
 use scout_off_shared::{
     errors::Error,
     storage::{
@@ -55,6 +56,80 @@ pub struct ProgressContract;
 
 #[contractimpl]
 impl ProgressContract {
+    /// Bootstrap RBAC on an upgraded instance. Only the stored legacy admin may authorize.
+    pub fn initialize_roles(env: Env, admin: Address) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        let legacy: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+        if admin != legacy {
+            return Err(Error::Unauthorized);
+        }
+        access::initialize(&env, &admin)
+    }
+
+    pub fn has_role(env: Env, role: soroban_sdk::Symbol, account: Address) -> bool {
+        access::has_role(&env, &role, &account)
+    }
+
+    pub fn get_role_admin(env: Env, role: soroban_sdk::Symbol) -> soroban_sdk::Symbol {
+        access::get_role_admin(&env, &role)
+    }
+
+    pub fn grant_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::grant_role(&env, &caller, &role, &account)
+    }
+
+    pub fn revoke_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::revoke_role(&env, &caller, &role, &account)
+    }
+
+    pub fn renounce_role(
+        env: Env,
+        account: Address,
+        role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::renounce_role(&env, &account, &role)
+    }
+
+    pub fn set_role_admin(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        admin_role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::set_role_admin(&env, &caller, &role, &admin_role)
+    }
+
+    pub fn upgrade(
+        env: Env,
+        caller: Address,
+        wasm_hash: soroban_sdk::BytesN<32>,
+    ) -> Result<(), Error> {
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::DEFAULT_ADMIN),
+            &caller,
+        )?;
+        env.deployer().update_current_contract_wasm(wasm_hash);
+        Ok(())
+    }
+
     /// One-time contract setup. Stores the admin address and the register contract address.
     ///
     /// # Arguments
@@ -74,6 +149,7 @@ impl ProgressContract {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
+        access::initialize(&env, &admin)?;
         env.storage()
             .instance()
             .set(&DataKey::RegisterContract, &register_contract);
@@ -90,15 +166,11 @@ impl ProgressContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         set_paused(&env, true);
         bump_instance(&env);
         Ok(())
@@ -109,15 +181,11 @@ impl ProgressContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         set_paused(&env, false);
         bump_instance(&env);
         Ok(())
@@ -139,15 +207,28 @@ impl ProgressContract {
     /// * [`Error::NotInitialized`] — Contract has not been initialized.
     /// * [`Error::Unauthorized`] — Caller is not the admin.
     pub fn register_validator(env: Env, validator_address: Address) -> Result<(), Error> {
-        if !is_initialized(&env) {
-            return Err(Error::NotInitialized);
-        }
         let admin: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
             .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
+        Self::register_validator_as(env, admin, validator_address)
+    }
+
+    /// Explicit caller variant for delegated role holders.
+    pub fn register_validator_as(
+        env: Env,
+        caller: Address,
+        validator_address: Address,
+    ) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::VALIDATOR_MANAGER),
+            &caller,
+        )?;
         env.storage()
             .instance()
             .set(&DataKey::Validator(validator_address), &true);
@@ -171,15 +252,28 @@ impl ProgressContract {
     /// * [`Error::NotInitialized`] — Contract has not been initialized.
     /// * [`Error::Unauthorized`] — Caller is not the admin.
     pub fn revoke_validator(env: Env, validator_address: Address) -> Result<(), Error> {
-        if !is_initialized(&env) {
-            return Err(Error::NotInitialized);
-        }
         let admin: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
             .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
+        Self::revoke_validator_as(env, admin, validator_address)
+    }
+
+    /// Explicit caller variant for delegated role holders.
+    pub fn revoke_validator_as(
+        env: Env,
+        caller: Address,
+        validator_address: Address,
+    ) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::VALIDATOR_MANAGER),
+            &caller,
+        )?;
         env.storage()
             .instance()
             .remove(&DataKey::Validator(validator_address));

@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { listWebhookSubscriptions, insertWebhookDeadLetter, insertWebhookDelivery, WebhookSubscription } from '../db';
 import { logger } from '../utils/logger';
 import { recordWebhookDelivery, incrementWebhookDeadLettersTotal } from '../middleware/metrics';
-import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { context, propagation, trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
 import { getCorrelationId } from '../utils/requestContext';
 import { getVersionInfo } from '../version';
@@ -118,6 +118,7 @@ export async function postWebhookWithRetry(
       let retryAfterMs: number | null = null;
       try {
         const requestHeaders = { ...headers };
+        propagation.inject(trace.setSpan(context.active(), span), requestHeaders);
         if (options.secret) {
           const timestamp = String(Math.floor(Date.now() / 1000));
           requestHeaders['X-Webhook-Timestamp'] = timestamp;

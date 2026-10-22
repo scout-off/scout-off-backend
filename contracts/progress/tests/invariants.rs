@@ -316,3 +316,45 @@ mod progress_invariants {
         }
     }
 }
+
+#[cfg(test)]
+mod role_invariants {
+    use proptest::prelude::*;
+    use progress::{ProgressContract, ProgressContractClient};
+    use soroban_sdk::{testutils::Address as _, Address, Env, Symbol};
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(
+            std::env::var("PROPTEST_CASES").ok().and_then(|v| v.parse().ok()).unwrap_or(256)
+        ))]
+        #[test]
+        fn invariants_role_grants_are_isolated_and_last_admin_survives(operations in proptest::collection::vec(any::<bool>(), 1..20)) {
+            let env = Env::default();
+            env.mock_all_auths();
+            let id = env.register_contract(None, ProgressContract);
+            let client = ProgressContractClient::new(&env, &id);
+            let admin = Address::generate(&env);
+            let delegate = Address::generate(&env);
+            client.initialize(&admin, &Address::generate(&env));
+            let root = Symbol::new(&env, "DEFAULT_ADMIN");
+            let pauser = Symbol::new(&env, "PAUSER");
+            for name in scout_off_shared::access::ROLES {
+                prop_assert!(client.has_role(&Symbol::new(&env, name), &admin));
+            }
+            // Existing single-admin pause/unpause remains valid.
+            client.pause(&admin);
+            client.unpause(&admin);
+            for grant in operations {
+                if grant { client.grant_role(&admin, &pauser, &delegate); }
+                else { client.revoke_role(&admin, &pauser, &delegate); }
+                prop_assert_eq!(client.has_role(&pauser, &delegate), grant);
+                prop_assert_eq!(client.try_pause(&delegate).is_ok(), grant);
+                client.unpause(&admin);
+                prop_assert!(client.try_grant_role(&delegate, &root, &delegate).is_err());
+                prop_assert!(client.try_revoke_role(&admin, &root, &admin).is_err());
+                prop_assert!(client.try_renounce_role(&admin, &root).is_err());
+                prop_assert!(client.has_role(&root, &admin));
+            }
+        }
+    }
+}

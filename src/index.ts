@@ -25,6 +25,7 @@ import { getTierDivergenceTotal } from "./services/tierDivergenceJob";
 import { setTierDivergenceGetter } from "./middleware/metrics";
 import { drainAllSessions, setAcceptingSseSessions } from "./routes/events";
 import http from "http";
+import { startRetentionJob, stopRetentionJob } from './services/retention';
 
 // Database initialization is now async - must be awaited
 async function start() {
@@ -66,6 +67,7 @@ async function start() {
     }
   }
 
+  startRetentionJob();
   await startServer();
 }
 
@@ -217,6 +219,7 @@ async function startServer() {
     clearInterval(retryInterval);
     clearInterval(reconcileInterval);
     clearInterval(divergenceInterval);
+    await stopRetentionJob();
 
     // Step 4: await in-flight job executions (bounded to 60 % of total timeout).
     if (inFlightJobs > 0) {

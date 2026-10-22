@@ -79,7 +79,7 @@ export async function sendTransactionWithCorrelation(
   }
   const sendResult = await server.sendTransaction(preparedTx);
   if (sendResult.hash) {
-    recordTxCorrelation(sendResult.hash);
+    await recordTxCorrelation(sendResult.hash);
   }
   return sendResult;
 }

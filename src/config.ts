@@ -1,4 +1,6 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import { parseRetentionPolicies } from './retentionPolicy';
 dotenv.config();
 
 function required(name: string): string {
@@ -339,6 +341,8 @@ const config = {
 
   /** Address of the deployed `connection` Soroban contract. */
   connectionContractId: process.env.CONNECTION_CONTRACT_ID ?? process.env.CONTRACT_ID ?? '',
+  /** Optional fifth contract, indexed for token and role events when deployed. */
+  playerTokenContractId: process.env.PLAYER_TOKEN_CONTRACT_ID ?? '',
   jwtSecret: (() => {
     const value = required('JWT_SECRET');
     validateSecretStrength('JWT_SECRET', value);
@@ -847,6 +851,26 @@ const config = {
    * See docs/auth.md for details.
    */
   webAuthDomain: process.env.WEB_AUTH_DOMAIN ?? '',
+
+  retention: (() => {
+    const enabledRaw = process.env.RETENTION_ENABLED ?? 'false';
+    if (!['true', 'false'].includes(enabledRaw)) throw new Error('RETENTION_ENABLED must be true or false');
+    const policies = parseRetentionPolicies(process.env.RETENTION_POLICIES);
+    const checkpointKey = process.env.RETENTION_CHECKPOINT_KEY ?? '';
+    if (checkpointKey && !/^[a-fA-F0-9]{64}$/.test(checkpointKey)) throw new Error('RETENTION_CHECKPOINT_KEY must be 32 bytes in hex');
+    if (enabledRaw === 'true' && policies.some(p => p.table === 'audit_log') && !checkpointKey) {
+      throw new Error('Audit retention requires RETENTION_CHECKPOINT_KEY');
+    }
+    return {
+      enabled: enabledRaw === 'true', policies, checkpointKey,
+      batchSize: parseNumericEnv('RETENTION_BATCH_SIZE', process.env.RETENTION_BATCH_SIZE, 1000, { min: 1, max: 1000, integer: true }),
+      pauseMs: parseNumericEnv('RETENTION_PAUSE_MS', process.env.RETENTION_PAUSE_MS, 100, { min: 1, max: 60000, integer: true }),
+      intervalMs: parseNumericEnv('RETENTION_INTERVAL_MS', process.env.RETENTION_INTERVAL_MS, 86400000, { min: 1000, integer: true }),
+      maxBatches: parseNumericEnv('RETENTION_MAX_BATCHES', process.env.RETENTION_MAX_BATCHES, 100, { min: 1, max: 10000, integer: true }),
+      archiveDir: path.resolve(process.env.RETENTION_ARCHIVE_DIR ?? './data/audit-archives'),
+      exportDir: path.resolve(process.env.DATA_EXPORT_ARCHIVE_DIR ?? './data/exports'),
+    };
+  })(),
 
 };
 

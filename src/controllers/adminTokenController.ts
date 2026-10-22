@@ -3,6 +3,7 @@ import z from 'zod';
 import jwt from 'jsonwebtoken';
 import { revokeToken, isTokenRevoked } from '../services/tokenBlocklist';
 import { ErrorCode } from '../utils/errorCodes';
+import { listContractRoleMembers } from '../db';
 
 export const revokeTokenSchema = z.object({
   jti: z.string().min(1).optional(),
@@ -60,7 +61,7 @@ export async function introspectToken(req: Request, res: Response, next: NextFun
   }
 
   // Revocation check — only meaningful when the token carries a jti claim.
-  const revoked = payload.jti ? isTokenRevoked(payload.jti) : false;
+  const revoked = payload.jti ? await isTokenRevoked(payload.jti) : false;
 
   // A token is valid when it has not expired AND has not been revoked.
   const nowSec = Math.floor(Date.now() / 1000);
@@ -70,6 +71,15 @@ export async function introspectToken(req: Request, res: Response, next: NextFun
   // Human-readable ISO 8601 timestamps (supplementary — tests do not require these).
   const iatIso = payload.iat !== undefined ? new Date(payload.iat * 1000).toISOString() : undefined;
   const expIso = payload.exp !== undefined ? new Date(payload.exp * 1000).toISOString() : undefined;
+
+  // This is the indexed chain snapshot, independent of the caller's JWT role.
+  let contractRoles;
+  try {
+    contractRoles = await listContractRoleMembers();
+  } catch (err) {
+    next(err);
+    return;
+  }
 
   res.json({
     success: true,
@@ -81,6 +91,7 @@ export async function introspectToken(req: Request, res: Response, next: NextFun
       exp: payload.exp,
       // Supplementary fields added by this issue.
       valid,
+      contractRoles,
       ...(revoked && { revoked: true }),
       ...(iatIso !== undefined && { iatIso }),
       ...(expIso !== undefined && { expIso }),

@@ -9,3 +9,8 @@ The randomized contract tests in this workspace target the following invariants:
 5. Trial-offer logging is idempotent: repeated attempts for the same scout/player pair do not duplicate connection state, and successful offers never decrease a player's progress level.
 
 The randomized harness uses deterministic seeds and a compact 24-step loop per test, which keeps the suite CI-friendly while still exercising many operation sequences. The test budget is intentionally modest so cargo test remains practical in repeated CI runs.
+
+6. Role grant/revoke sequences in all five contracts never remove the last root
+   administrator; pauser membership permits pause and does not permit root grants.
+   Shared access tests additionally cover hierarchy changes, renunciation,
+   idempotent events and missing signatures.

@@ -27,6 +27,7 @@
     "lint": "eslint 'src/**/*.ts' 'tests/**/*.ts' 'scripts/*.ts' --ext .ts",
     "seed": "ts-node --project tsconfig.scripts.json scripts/seed.ts",
     "migration:status": "ts-node --project tsconfig.scripts.json scripts/migration-status.ts",
+    "db:migrate-to-postgres": "ts-node --project tsconfig.scripts.json scripts/migrate-sqlite-to-postgres.ts",
     "build:openapi": "node scripts/generate-openapi-json.js",
     "generate:client": "openapi-typescript src/openapi.yaml -o clients/typescript/src/schema.ts && node scripts/sync-client-version.js",
     "build:client": "npm run generate:client && tsc --project clients/typescript/tsconfig.json",
@@ -80,6 +81,9 @@
     "zod": "3.23.8"
   },
   "devDependencies": {
+    "@opentelemetry/core": "2.10.0",
+    "@opentelemetry/sdk-trace-base": "2.10.0",
+    "@opentelemetry/sdk-trace-node": "2.10.0",
     "@types/autocannon": "^7.12.7",
     "@types/better-sqlite3": "7.6.13",
     "@types/compression": "^1.8.1",

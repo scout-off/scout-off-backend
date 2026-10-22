@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { retentionMetrics } from '../services/retentionMetrics';
 import { ipReputationCounters, resetIpReputationCounters } from '../services/ipReputation';
 
 // ── Tier divergence counter injection (#1132) ──────────────────────────────────
@@ -604,6 +605,7 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# TYPE scout_off_tier_divergence_total counter');
   lines.push(`scout_off_tier_divergence_total ${getTierDivergenceForMetrics()}`);
 
+  lines.push(...retentionMetrics());
   return lines.join('\n') + '\n';
 }
 

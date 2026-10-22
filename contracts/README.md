@@ -68,3 +68,18 @@ When upgrading to a new stable Rust toolchain:
    - [`.github/workflows/soroban-e2e.yml`](../.github/workflows/soroban-e2e.yml)
 3. Update references in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 4. Run `cargo test` and `cargo build --release` to verify compilation, test passes, and bytecode stability.
+
+## Role-based administration
+
+All five contracts share per-contract RBAC from `scout_off_shared::access`.
+`DEFAULT_ADMIN` manages roles and WASM upgrades; `PAUSER` controls pausing;
+`FEE_MANAGER` controls fees; `VALIDATOR_MANAGER` controls progress validators;
+`UPDATER_MANAGER` controls register updater allowlists; `MIGRATOR` controls data
+migrations. Initialization grants every role to the initial admin. Removing the
+last `DEFAULT_ADMIN` is prohibited, including through self-renunciation.
+Existing implicit-admin methods remain as compatibility wrappers; delegated
+operators use their explicit `*_as` variants. See [the role and upgrade
+runbook](../docs/admin-multisig.md#contract-roles) for API details, role hierarchy,
+multisig requirements and the one-time `initialize_roles` bootstrap required by
+upgraded instances. Shared and per-contract invariant tests cover membership,
+unauthorized operations, role isolation and last-admin protection.

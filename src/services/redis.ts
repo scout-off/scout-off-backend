@@ -1,6 +1,7 @@
 import Redis from 'ioredis';
 import config from '../config';
 import { logger } from '../utils/logger';
+import { encodeTracedMessage, consumeTracedMessage } from '../utils/traceContext';
 
 let redisClient: Redis | null = null;
 let redisSubscriberClient: Redis | null = null;
@@ -94,8 +95,8 @@ export function getRedisSubscriberClient(): Redis | null {
 /**
  * Publish an event to the SSE event channel.
  *
- * Returns `true` if Redis was available and the PUBLISH succeeded,
- * `false` if Redis is not configured or the publish failed.
+ * Returns `true` if Redis accepted the publish attempt. Async failures are
+ * logged; `false` means Redis is unconfigured or threw synchronously.
  *
  * The payload is a JSON-serialized BroadcastEvent. Each instance receives
  * the message and rebroadcasts locally (if not the origin instance).
@@ -105,14 +106,16 @@ export function publishSseEvent(event: {
   payload: Record<string, unknown>;
   origin: string;
 }): boolean {
-  const client = getRedisSubscriberClient();
+  const client = getRedisClient();
   if (!client) {
     return false;
   }
   const channel = 'sse:events';
-  const message = JSON.stringify(event);
+  const message = encodeTracedMessage(event);
   try {
-    client.publish(channel, message);
+    void client.publish(channel, message).catch((err: unknown) => {
+      logger.warn('[redis] failed to publish SSE event:', err);
+    });
     return true;
   } catch (err) {
     logger.warn(`[redis] failed to publish event to ${channel}: ${err instanceof Error ? err.message : String(err)}`);
@@ -133,15 +136,18 @@ export function subscribeSseEvents(onEvent: (data: unknown) => void): () => void
     return () => {};
   }
   
-  client.on('pmessage', (pattern: string, channel: string, data: string) => {
+  const handler = (channel: string, data: string) => {
     if (channel === 'sse:events') {
       try {
-        onEvent(JSON.parse(data));
+        void consumeTracedMessage(data, 'redis.sse.consume', onEvent, {
+          'messaging.destination.name': channel,
+        }).catch((err: unknown) => logger.warn('[redis] SSE message handler failed:', err));
       } catch (err) {
         logger.warn(`[redis] failed to parse SSE event message: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
-  });
+  };
+  client.on('message', handler);
   
   client.subscribe('sse:events', (err) => {
     if (err) {
@@ -151,6 +157,7 @@ export function subscribeSseEvents(onEvent: (data: unknown) => void): () => void
   
   // Return unsubscribe function
   return () => {
+    client.off('message', handler);
     client.unsubscribe('sse:events');
   };
 }

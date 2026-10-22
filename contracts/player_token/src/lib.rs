@@ -15,6 +15,7 @@
 //!   argument.
 //! * All token amounts are stored as `u64` (stroops-equivalent precision).
 
+use scout_off_shared::access;
 use scout_off_shared::{
     errors::Error,
     storage::{bump_instance, is_initialized, is_paused, set_initialized, set_paused},
@@ -93,6 +94,80 @@ pub struct PlayerTokenContract;
 
 #[contractimpl]
 impl PlayerTokenContract {
+    /// Bootstrap RBAC on an upgraded instance. Only the stored legacy admin may authorize.
+    pub fn initialize_roles(env: Env, admin: Address) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        let legacy: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+        if admin != legacy {
+            return Err(Error::Unauthorized);
+        }
+        access::initialize(&env, &admin)
+    }
+
+    pub fn has_role(env: Env, role: soroban_sdk::Symbol, account: Address) -> bool {
+        access::has_role(&env, &role, &account)
+    }
+
+    pub fn get_role_admin(env: Env, role: soroban_sdk::Symbol) -> soroban_sdk::Symbol {
+        access::get_role_admin(&env, &role)
+    }
+
+    pub fn grant_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::grant_role(&env, &caller, &role, &account)
+    }
+
+    pub fn revoke_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::revoke_role(&env, &caller, &role, &account)
+    }
+
+    pub fn renounce_role(
+        env: Env,
+        account: Address,
+        role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::renounce_role(&env, &account, &role)
+    }
+
+    pub fn set_role_admin(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        admin_role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::set_role_admin(&env, &caller, &role, &admin_role)
+    }
+
+    pub fn upgrade(
+        env: Env,
+        caller: Address,
+        wasm_hash: soroban_sdk::BytesN<32>,
+    ) -> Result<(), Error> {
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::DEFAULT_ADMIN),
+            &caller,
+        )?;
+        env.deployer().update_current_contract_wasm(wasm_hash);
+        Ok(())
+    }
+
     // ── Admin setup ────────────────────────────────────────────────────────
 
     /// One-time initialisation. Stores the admin address.
@@ -105,6 +180,7 @@ impl PlayerTokenContract {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
+        access::initialize(&env, &admin)?;
         set_initialized(&env);
         bump_instance(&env);
         Ok(())
@@ -115,15 +191,11 @@ impl PlayerTokenContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         set_paused(&env, true);
         bump_instance(&env);
         Ok(())
@@ -134,15 +206,11 @@ impl PlayerTokenContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         set_paused(&env, false);
         bump_instance(&env);
         Ok(())
@@ -164,18 +232,32 @@ impl PlayerTokenContract {
     /// * [`Error::AlreadyVerified`]   — tokens already issued for this player.
     /// * [`Error::InvalidInput`]      — `total_supply` is zero.
     pub fn issue_tokens(env: Env, player_id: u64, total_supply: u64) -> Result<(), Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        Self::issue_tokens_as(env, admin, player_id, total_supply)
+    }
+
+    /// Explicit caller variant for delegated role holders.
+    pub fn issue_tokens_as(
+        env: Env,
+        caller: Address,
+        player_id: u64,
+        total_supply: u64,
+    ) -> Result<(), Error> {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
         if is_paused(&env) {
             return Err(Error::ContractPaused);
         }
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::DEFAULT_ADMIN),
+            &caller,
+        )?;
 
         if total_supply == 0 {
             return Err(Error::InvalidInput);
@@ -351,6 +433,23 @@ impl PlayerTokenContract {
         transfer_id: u128,
         page: u32,
     ) -> Result<u32, Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        Self::distribute_fee_as(env, admin, player_id, transfer_fee_xlm, transfer_id, page)
+    }
+
+    /// Explicit caller variant for delegated role holders.
+    pub fn distribute_fee_as(
+        env: Env,
+        caller: Address,
+        player_id: u64,
+        transfer_fee_xlm: u128,
+        transfer_id: u128,
+        page: u32,
+    ) -> Result<u32, Error> {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
@@ -358,12 +457,11 @@ impl PlayerTokenContract {
             return Err(Error::ContractPaused);
         }
 
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::FEE_MANAGER),
+            &caller,
+        )?;
 
         if transfer_fee_xlm == 0 {
             return Err(Error::InvalidInput);
@@ -524,6 +622,22 @@ impl PlayerTokenContract {
         start: u32,
         count: u32,
     ) -> Result<u32, Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        Self::migrate_player_step_as(env, admin, player_id, start, count)
+    }
+
+    /// Explicit caller variant for delegated role holders.
+    pub fn migrate_player_step_as(
+        env: Env,
+        caller: Address,
+        player_id: u64,
+        start: u32,
+        count: u32,
+    ) -> Result<u32, Error> {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
@@ -531,12 +645,11 @@ impl PlayerTokenContract {
             return Err(Error::ContractPaused);
         }
         // Only admin may perform migration.
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::MIGRATOR),
+            &caller,
+        )?;
 
         // Read legacy list from instance storage.
         let legacy: Vec<Address> = env

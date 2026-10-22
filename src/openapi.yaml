@@ -1170,6 +1170,20 @@ paths:
         - bearerAuth: []
       x-required-role:
         - admin
+  /admin/retention/dry-run:
+    get:
+      tags:
+        - admin
+      summary: Preview retention candidate counts without deleting rows or writing archives.
+      operationId: getRetentionDryRun
+      description: Preview retention candidate counts without deleting rows or writing archives.
+      responses:
+        '200':
+          description: '{ success: true, dryRun: true, data: RetentionResult[] }'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
   /admin/stats:
     get:
       tags:

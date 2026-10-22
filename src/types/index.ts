@@ -217,6 +217,9 @@ export interface FeeHistoryItem {
  * must derive its valid-event set from this list so the sets cannot drift.
  */
 export const CONTRACT_EVENT_TYPES = [
+  'role_granted',
+  'role_revoked',
+  'role_admin_changed',
   'player_registered',
   'profile_updated',
   'milestone_submitted',

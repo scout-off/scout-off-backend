@@ -4,10 +4,10 @@
  * Initialises the SDK with auto-instrumentation (covers HTTP calls to Soroban
  * RPC and Pinata/IPFS) and an OTLP/HTTP exporter when
  * OTEL_EXPORTER_OTLP_ENDPOINT is set.  When the env var is absent the SDK
- * runs with a NoopSpanExporter so there is zero overhead.
+ * is not started, so there are no exporters or automatic instrumentations.
  *
  * W3C TraceContext headers (traceparent, tracestate) are propagated on all
- * outgoing HTTP requests via the W3CTraceContextPropagator registered below.
+ * outgoing HTTP requests via the SDK's default W3C trace-context propagator.
  *
  * Must be imported/called BEFORE any other module that makes HTTP requests.
  */
@@ -44,8 +44,8 @@ export async function shutdownTracing(): Promise<void> {
 /**
  * Returns the shared tracer for manual instrumentation.
  * When OTEL_EXPORTER_OTLP_ENDPOINT is not configured, initTracing() is never
- * called and this returns the global no-op tracer — zero overhead, no spans
- * emitted.  Safe to call from any module without guarding.
+ * called and this returns the global no-op tracer — no spans are emitted.
+ * Safe to call from any module without guarding.
  */
 export function getTracer() {
   return trace.getTracer('scout-off-backend');

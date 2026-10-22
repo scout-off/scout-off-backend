@@ -1,5 +1,6 @@
 #![no_std]
 
+use scout_off_shared::access;
 use scout_off_shared::{
     errors::Error,
     storage::{
@@ -116,6 +117,80 @@ pub struct RegisterContract;
 
 #[contractimpl]
 impl RegisterContract {
+    /// Bootstrap RBAC on an upgraded instance. Only the stored legacy admin may authorize.
+    pub fn initialize_roles(env: Env, admin: Address) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        let legacy: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+        if admin != legacy {
+            return Err(Error::Unauthorized);
+        }
+        access::initialize(&env, &admin)
+    }
+
+    pub fn has_role(env: Env, role: soroban_sdk::Symbol, account: Address) -> bool {
+        access::has_role(&env, &role, &account)
+    }
+
+    pub fn get_role_admin(env: Env, role: soroban_sdk::Symbol) -> soroban_sdk::Symbol {
+        access::get_role_admin(&env, &role)
+    }
+
+    pub fn grant_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::grant_role(&env, &caller, &role, &account)
+    }
+
+    pub fn revoke_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::revoke_role(&env, &caller, &role, &account)
+    }
+
+    pub fn renounce_role(
+        env: Env,
+        account: Address,
+        role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::renounce_role(&env, &account, &role)
+    }
+
+    pub fn set_role_admin(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        admin_role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::set_role_admin(&env, &caller, &role, &admin_role)
+    }
+
+    pub fn upgrade(
+        env: Env,
+        caller: Address,
+        wasm_hash: soroban_sdk::BytesN<32>,
+    ) -> Result<(), Error> {
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::DEFAULT_ADMIN),
+            &caller,
+        )?;
+        env.deployer().update_current_contract_wasm(wasm_hash);
+        Ok(())
+    }
+
     /// One-time contract setup. Stores the admin address, payment token, and platform fee config.
     ///
     /// # Arguments
@@ -141,6 +216,7 @@ impl RegisterContract {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
+        access::initialize(&env, &admin)?;
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage()
             .instance()
@@ -177,15 +253,11 @@ impl RegisterContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         set_paused(&env, true);
         bump_instance(&env);
         Ok(())
@@ -203,15 +275,11 @@ impl RegisterContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         set_paused(&env, false);
         bump_instance(&env);
         Ok(())
@@ -362,6 +430,17 @@ impl RegisterContract {
     /// migrate without a single unbounded transaction. New registrations are
     /// already written to persistent storage while migration is in progress.
     pub fn migrate_players(env: Env, limit: u32) -> Result<bool, Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        Self::migrate_players_as(env, admin, limit)
+    }
+
+    /// Explicit caller variant for delegated role holders.
+    pub fn migrate_players_as(env: Env,
+        caller: Address, limit: u32) -> Result<bool, Error> {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
@@ -369,12 +448,11 @@ impl RegisterContract {
             return Err(Error::InvalidInput);
         }
 
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::MIGRATOR),
+            &caller,
+        )?;
 
         if env
             .storage()
@@ -453,15 +531,28 @@ impl RegisterContract {
     /// * [`Error::Unauthorized`] — Caller is not the admin.
     /// * [`Error::InvalidInput`] — Allowlist is already at maximum capacity (16).
     pub fn add_authorized_updater(env: Env, updater: Address) -> Result<(), Error> {
-        if !is_initialized(&env) {
-            return Err(Error::NotInitialized);
-        }
         let admin: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
             .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
+        Self::add_authorized_updater_as(env, admin, updater)
+    }
+
+    /// Explicit caller variant for delegated role holders.
+    pub fn add_authorized_updater_as(
+        env: Env,
+        caller: Address,
+        updater: Address,
+    ) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::UPDATER_MANAGER),
+            &caller,
+        )?;
         if !add_authorized_updater(&env, &updater) {
             return Err(Error::InvalidInput);
         }
@@ -477,15 +568,28 @@ impl RegisterContract {
     /// * [`Error::NotInitialized`] — Contract has not been initialized.
     /// * [`Error::Unauthorized`] — Caller is not the admin.
     pub fn remove_authorized_updater(env: Env, updater: Address) -> Result<(), Error> {
-        if !is_initialized(&env) {
-            return Err(Error::NotInitialized);
-        }
         let admin: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
             .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
+        Self::remove_authorized_updater_as(env, admin, updater)
+    }
+
+    /// Explicit caller variant for delegated role holders.
+    pub fn remove_authorized_updater_as(
+        env: Env,
+        caller: Address,
+        updater: Address,
+    ) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::UPDATER_MANAGER),
+            &caller,
+        )?;
         remove_authorized_updater(&env, &updater);
         bump_instance(&env);
         Ok(())

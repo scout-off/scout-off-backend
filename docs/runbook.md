@@ -329,3 +329,75 @@ Tracing SDK shut down
 ```
 
 Exit code `0` confirms clean drain. Exit code `1` with "timed out" means a job or SSE session blocked beyond `SHUTDOWN_TIMEOUT_MS` — increase the timeout or investigate the blocking operation.
+
+## Configurable retention (#1506)
+
+Retention starts after DB migrations and is disabled by default. Before enabling
+it, inspect `GET /api/admin/retention/dry-run` with an admin bearer token. This
+read-only endpoint returns candidate counts, zero deleted rows and zero batches;
+it creates no archives and changes no retention metrics. Audit candidate counts
+may exceed the next removable prefix when a recent row blocks older backdated
+entries. A sweep never skips a blocking audit entry.
+
+Default policy durations: profile views 180 days (daily rollup), webhook delivery
+history 30 days, security events 90 days, unclaimed dead letters 90 days, indexed
+events 365 days, audit records 365 days (archive + checkpoint). Idempotency and
+completed/failed export jobs expire at their stored deadline. Indexed role events
+are exempt because `/api/admin/introspect` derives membership from their history.
+Unknown tables/columns, invalid strategies, duplicate policies and non-integer
+or negative days are rejected at startup. Profile/audit retention must be at
+least one day. Null timestamps are retained for operator investigation.
+
+Environment settings:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `RETENTION_ENABLED` | `false` | Enable scheduled sweeps |
+| `RETENTION_INTERVAL_MS` | `86400000` | Delay before first and between completed sweeps |
+| `RETENTION_BATCH_SIZE` | `1000` | Maximum rows per mutation transaction, 1–1000 |
+| `RETENTION_PAUSE_MS` | `100` | Yield between batches, 1–60000 ms |
+| `RETENTION_MAX_BATCHES` | `100` | Per-table budget per sweep |
+| `RETENTION_ARCHIVE_DIR` | `./data/audit-archives` | Durable restricted audit archive volume |
+| `RETENTION_CHECKPOINT_KEY` | unset | Independent 32-byte hex HMAC signing key; required when enabling audit retention |
+| `DATA_EXPORT_ARCHIVE_DIR` | `./data/exports` | Only root within which export files can be deleted |
+| `RETENTION_POLICIES` | defaults above | JSON array replacing all policies; `[]` disables all table policies |
+
+For example, retain only webhook history and roll up profile views:
+
+```json
+[
+  { "table": "webhook_deliveries", "column": "created_at", "days": 30, "strategy": "delete" },
+  { "table": "profile_views", "column": "viewed_at", "days": 180, "strategy": "aggregate-then-delete" }
+]
+```
+
+Set `RETENTION_ENABLED=true` after reviewing the dry run and backing up the DB.
+Use a secret manager for `RETENTION_CHECKPOINT_KEY`; it must be identical across
+replicas. Store audit archives on persistent storage available to every replica
+that verifies the chain. On Unix new directories/files use 0700/0600; provision
+equivalent restricted ACLs on Windows. Backup the archives, database checkpoints
+and signing key together. Key rotation requires re-signing checkpoints under a
+controlled migration; removing/replacing the key immediately invalidates old
+checkpoints. Do not reuse a JWT or webhook secret as the checkpoint key.
+
+Sweeps do not overlap in-process; transaction/advisory locks serialize mutation
+batches across replicas. PostgreSQL batches lock candidate rows. Audit archive
+I/O happens before the mutation transaction, which rechecks the exact prefix
+and previous checkpoint to avoid deleting a prefix changed by another replica.
+A crash before commit may leave an unreferenced archive; identify these by
+comparing filenames to `audit_checkpoints` and retain them for investigation
+before manual cleanup. A committed archive must never be removed while its
+checkpoint is needed. The verifier checks the latest archive and live suffix;
+for a historical compliance audit also verify every retained archive digest and
+replay its rows in checkpoint order, including previous-hash links.
+
+`scout_off_retention_rows_deleted_total{table}` counts successful deletions since
+process start, and `scout_off_retention_last_run_timestamp_seconds{table}` records
+the last successful sweep. A bounded sweep can leave a backlog; monitor these
+alongside dry-run candidate counts and tune batch budget, pause or schedule.
+The scheduler logs and surfaces failures without pruning unarchived audit rows.
+Graceful shutdown stops the timer, lets the current batch finish, and drains
+retention before closing the DB. Restore a failed export cleanup's job metadata
+only if its archive still exists; expired files removed before a transaction
+rollback may already be gone. See [data privacy](data-privacy.md) for erasure,
+rollup identity and archive handling.
