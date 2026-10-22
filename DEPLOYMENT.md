@@ -463,6 +463,51 @@ This produces a Deployment, Service, ConfigMap, and (when `ingress.enabled=true`
 an Ingress resource. The HPA and PodDisruptionBudget are only rendered when
 `hpa.enabled=true` / `pdb.enabled=true` respectively.
 
+### 6b. Image provenance, SBOM and signature verification
+
+The staging and mainnet deploy workflows build the release image, push it to
+GHCR (`ghcr.io/<owner>/<repo>`), sign the pushed **digest** keyless with cosign
+(via GitHub OIDC) and attach an SPDX SBOM attestation. Tags are
+`staging-<sha>`/`staging-latest` for staging and `mainnet-<sha>`/`latest` for
+mainnet. The SBOM is also uploaded as the `staging-sbom` / `mainnet-sbom`
+workflow artifact.
+
+Verify an image before running it:
+
+```bash
+IMAGE=ghcr.io/scout-off/scout-off-backend
+DIGEST=sha256:<digest printed by the publish-image job>
+
+# 1. Signature must come from this repository's deploy workflow on main.
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/scout-off/scout-off-backend/\.github/workflows/deploy-mainnet\.yml@refs/heads/main$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "${IMAGE}@${DIGEST}"
+
+# 2. SBOM attestation must exist and match the same identity.
+cosign verify-attestation \
+  --type spdxjson \
+  --certificate-identity-regexp '^https://github.com/scout-off/scout-off-backend/\.github/workflows/deploy-mainnet\.yml@refs/heads/main$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "${IMAGE}@${DIGEST}"
+
+# 3. Inspect the SBOM.
+cosign download attestation "${IMAGE}@${DIGEST}" \
+  | jq -r '.payload' | base64 -d | jq -r '.predicate' > sbom.spdx.json
+```
+
+For staging images use the same commands with `deploy-staging\.yml` in the
+identity regexp.
+
+Pin the Helm release to the signed tag so the running image is the one that was
+verified: `--set image.tag=mainnet-<sha>`. Better still, pin by digest once your
+registry supports it (`image.repository` accepts
+`ghcr.io/scout-off/scout-off-backend@sha256:...` when the chart value is set
+with an empty tag).
+
+To **enforce** verification at admission time, see the Kyverno policy in
+[SECURITY.md → Supply chain](SECURITY.md#supply-chain-image-signing-and-sbom).
+
 ### 7. Uninstall
 
 ```bash
