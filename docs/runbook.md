@@ -26,6 +26,32 @@ behind the chain tip after the last poll. It is exposed as
 (polls run every 5 s, and `INDEXER_FINALITY_MARGIN` — default `10` ledgers —
 intentionally treats the tip as non-final); persistent three-figure lag is not.
 
+## Prometheus alerts
+
+The Helm chart can install a `ServiceMonitor` and a `PrometheusRule`
+(`metrics.serviceMonitor.enabled=true` / `metrics.prometheusRule.enabled=true`,
+see [DEPLOYMENT.md → Monitoring](../DEPLOYMENT.md#6a-monitoring-prometheus-operator)).
+Every alert below references metrics the backend actually exports and can be
+tuned or disabled under `metrics.prometheusRule.rules.<name>`.
+
+| Alert | Signal | First response |
+| ----- | ------ | -------------- |
+| `ScoutOffIndexerLagHigh` | `indexer_ledger_lag > 100` for 10m | Check `GET /health` → `healthStatus.stellar` and the RPC provider. If RPC is healthy, check indexer poll errors and [replay](#targeted-replay-vs-full-reindex) the gap. |
+| `ScoutOffWebhookDLQGrowing` | `sum(scout_off_webhook_dead_letters_total) > 100` for 15m | Inspect `GET /api/admin/webhooks/dead-letters`, then [drain the dead-letter queue](#draining-the-dead-letter-queue). A permanently failing subscriber must be fixed or removed, not replayed forever. |
+| `ScoutOffTierDivergence` | `increase(scout_off_tier_divergence_total[1h]) > 0` | A `milestone_approved` event was missed. Compare the player's milestones with the stored tier and run a [targeted replay](#targeted-replay-vs-full-reindex) over the approval range. |
+| `ScoutOffStuckPins` | `stuck_pending_pins_count > 0` for 30m | Check `PINATA_API_KEY`/`PINATA_SECRET` and Pinata status. Pending pins past their retry budget need a manual retry once IPFS is reachable (see [docs/ipfs-pinata-gateway.md](ipfs-pinata-gateway.md)). |
+| `ScoutOffHigh5xxRate` | 5xx ratio > 5% for 5m | Check `http_errors_total{range="5xx"}` by route, the structured error logs (with `X-Correlation-ID`), `/health` and `/ready`. Most 5xx bursts are a dependency outage (RPC, DB, IPFS) or a bad deploy — roll back if the rate started at rollout. |
+| `ScoutOffNotReady` | pod unready for 10m (kube-state-metrics; disabled by default) | `GET /ready` on the pod: `db`, `ipfs` or `stellar` is failing. Readiness also fails while the pod is draining, so check whether a rollout is in progress before restarting anything. |
+
+To silence or retune an alert during an incident, change its `enabled`,
+`threshold`, `for` or `severity` under `metrics.prometheusRule.rules` and run
+`helm upgrade` — do not edit the generated PrometheusRule directly.
+
+**Metrics authentication:** if `/metrics` is protected by a bearer token,
+create the token Secret in the release namespace and set
+`metrics.serviceMonitor.bearerTokenSecret.name` / `.key`. Without it the
+ServiceMonitor's scrapes return `401` and no alerts can fire.
+
 ## Incident → action
 
 | Incident | Symptoms | Diagnosis | Action |

@@ -461,7 +461,63 @@ helm template scout-off-backend ./helm/scout-off-backend \
 
 This produces a Deployment, Service, ConfigMap, and (when `ingress.enabled=true`)
 an Ingress resource. The HPA and PodDisruptionBudget are only rendered when
-`hpa.enabled=true` / `pdb.enabled=true` respectively.
+`hpa.enabled=true` / `pdb.enabled=true` respectively. The ServiceMonitor and
+PrometheusRule are only rendered when `metrics.*.enabled=true` (see below).
+
+### 6a. Monitoring (Prometheus Operator)
+
+The chart can create Prometheus Operator resources. Both are **disabled by
+default**, so nothing changes unless you opt in, and both require the
+`monitoring.coreos.com/v1` CRDs (for example from kube-prometheus-stack).
+
+```bash
+helm upgrade --install scout-off-backend ./helm/scout-off-backend \
+  --set metrics.serviceMonitor.enabled=true \
+  --set metrics.prometheusRule.enabled=true \
+  --set metrics.serviceMonitor.additionalLabels.release=kube-prometheus-stack
+```
+
+**ServiceMonitor** — scrapes the chart's `http` service port at `/metrics`
+with a configurable `interval` and `scrapeTimeout`. When metrics auth is in
+place, point it at an existing Secret:
+
+```bash
+--set metrics.serviceMonitor.bearerTokenSecret.name=scout-off-metrics-token \
+--set metrics.serviceMonitor.bearerTokenSecret.key=token
+```
+
+**PrometheusRule** — ships alerts for the metrics the backend exports. Every
+threshold and `for` duration is a value, and each alert can be disabled:
+
+| Alert | Default expression | Value path |
+| ----- | ------------------ | ---------- |
+| `ScoutOffIndexerLagHigh` | `indexer_ledger_lag > 100` for `10m` | `metrics.prometheusRule.rules.indexerLag` |
+| `ScoutOffWebhookDLQGrowing` | `sum(scout_off_webhook_dead_letters_total) > 100` for `15m` | `...rules.webhookDlqDepth` |
+| `ScoutOffTierDivergence` | `increase(scout_off_tier_divergence_total[1h]) > 0` | `...rules.tierDivergence` |
+| `ScoutOffStuckPins` | `stuck_pending_pins_count > 0` for `30m` | `...rules.stuckPins` |
+| `ScoutOffHigh5xxRate` | 5xx/total ratio `> 0.05` for `5m` | `...rules.high5xxRate` |
+| `ScoutOffNotReady` | pod not ready (`kube-state-metrics`), disabled by default | `...rules.notReady` |
+
+Add your own rules with `metrics.prometheusRule.extraRules`. Each alert links
+to the [Prometheus alerts runbook](docs/runbook.md#prometheus-alerts).
+
+Validate the rendered CRDs locally:
+
+```bash
+helm template scout-off-backend ./helm/scout-off-backend \
+  --set metrics.serviceMonitor.enabled=true \
+  --set metrics.prometheusRule.enabled=true > /tmp/rendered.yaml
+
+# Optional: CRD schema validation (install kubeconform first)
+kubeconform -strict -summary \
+  -schema-location default \
+  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+  /tmp/rendered.yaml
+```
+
+`scripts/validate-helm-chart.sh` renders the chart with both resources enabled
+and runs `kubeconform` automatically when it is on `PATH`; otherwise the render
+assertions still run.
 
 ### 7. Uninstall
 

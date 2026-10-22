@@ -286,6 +286,77 @@ env:
   PLAYER_CACHE_TTL_MS: "60000"
 
 # -----------------------------------------------------------------------------
+# Prometheus monitoring (optional)
+#
+# Both resources require the Prometheus Operator CRDs (monitoring.coreos.com/v1)
+# and are disabled by default, so a default render is unchanged. Install the
+# chart with --set metrics.serviceMonitor.enabled=true and/or
+# --set metrics.prometheusRule.enabled=true to enable them.
+# -----------------------------------------------------------------------------
+metrics:
+  serviceMonitor:
+    enabled: false
+    # Extra labels for the ServiceMonitor. Set the label your Prometheus
+    # instance's serviceMonitorSelector expects (for kube-prometheus-stack
+    # this is usually `release: <prometheus-release>`).
+    additionalLabels: {}
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    # Name/key of a Secret holding a bearer token, for when /metrics is
+    # protected ("metrics auth"). Leave empty when scraping is unauthenticated.
+    bearerTokenSecret:
+      name: ""
+      key: ""
+    relabelings: []
+    metricRelabelings: []
+
+  prometheusRule:
+    enabled: false
+    additionalLabels: {}
+    # Base link used in each alert's runbook_url annotation.
+    runbookUrl: https://github.com/scout-off/scout-off-backend/blob/main/docs/runbook.md#prometheus-alerts
+    # Every alert can be disabled and tuned here. Expressions reference the
+    # metric names the backend actually exports (see src/middleware/metrics.ts).
+    rules:
+      indexerLag:
+        enabled: true
+        # indexer_ledger_lag above this many ledgers fires the alert.
+        threshold: 100
+        for: 10m
+        severity: warning
+      webhookDlqDepth:
+        enabled: true
+        # Total scout_off_webhook_dead_letters_total across subscriptions.
+        threshold: 100
+        for: 15m
+        severity: warning
+      tierDivergence:
+        enabled: true
+        for: 0m
+        severity: critical
+      stuckPins:
+        enabled: true
+        for: 30m
+        severity: warning
+      high5xxRate:
+        enabled: true
+        # Ratio (0.05 = 5 %) of 5xx responses over all responses.
+        threshold: 0.05
+        for: 5m
+        severity: critical
+      notReady:
+        # Requires kube-state-metrics (kube_pod_status_ready).
+        enabled: false
+        for: 10m
+        severity: warning
+    # Additional PrometheusRule rules appended to the group, e.g.
+    # - alert: ScoutOffCustom
+    #   expr: up{job="scout-off-backend"} == 0
+    #   for: 5m
+    extraRules: []
+
+# -----------------------------------------------------------------------------
 # Pod annotations
 # Useful for Prometheus scraping or Datadog APM injection.
 # -----------------------------------------------------------------------------
