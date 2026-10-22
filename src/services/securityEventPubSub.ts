@@ -43,6 +43,7 @@ export async function initSecurityEventSubscriber(): Promise<void> {
       'security:wallet_blocked',
       'security:wallet_unblocked',
       'security:token_revoked',
+      'security:api_key_revoked',
       (err) => {
         if (err) {
           logger.error('[securityEventPubSub] subscription error:', err);
@@ -116,6 +117,16 @@ async function handleSecurityEvent(channel: string, payload: Record<string, unkn
         if (tokenHash) {
           onTokenRevokedRemote(tokenHash);
           logger.debug(`[securityEventPubSub] processed token_revoked`);
+        }
+        break;
+      }
+
+      case 'security:api_key_revoked': {
+        const { onApiKeyRevokedRemote } = await import('./apiKeyService');
+        const apiKeyId = payload.apiKeyId as number;
+        if (apiKeyId) {
+          onApiKeyRevokedRemote(apiKeyId);
+          logger.debug(`[securityEventPubSub] processed api_key_revoked for key ${apiKeyId}`);
         }
         break;
       }

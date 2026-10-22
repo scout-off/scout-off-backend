@@ -2376,10 +2376,36 @@ export async function revokeApiKeyById(id: number, scoutWallet: string): Promise
     UPDATE api_keys SET revoked_at = ?
     WHERE id = ? AND scout_wallet = ? AND revoked_at IS NULL
   `;
-  return timedQueryAsync(sql, async () => {
+  const changed = await timedQueryAsync(sql, async () => {
     const info = await getDriver().run(sql, [now, id, scoutWallet]);
     return info.changes > 0;
   });
+
+  // Emit revocation event (in-process and cross-instance via Redis)
+  if (changed) {
+    const { publishApiKeyRevoked } = await import('../services/apiKeyService');
+    void publishApiKeyRevoked(id).catch(() => {});
+  }
+
+  return changed;
+}
+
+/**
+ * Get all active API key IDs (not revoked, not past expiry).
+ * Used by the SSE authorization sweep to check if a session's API key is still valid.
+ */
+export async function getActiveApiKeyIds(): Promise<number[]> {
+  const now = Math.floor(Date.now() / 1000);
+  const sql = `
+    SELECT id FROM api_keys
+    WHERE revoked_at IS NULL
+      AND (revoke_after IS NULL OR revoke_after > ?)
+      AND (expires_at IS NULL OR expires_at > ?)
+  `;
+  const rows = await timedQueryAsync(sql, () =>
+    getDriver().all<{ id: number }>(sql, [now, now]),
+  );
+  return rows.map((r) => r.id);
 }
 
 /**

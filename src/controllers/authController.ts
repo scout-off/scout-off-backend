@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Keypair } from '@stellar/stellar-sdk';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { buildChallenge, verifyChallenge, extractAccount } from '../services/sep10';
+import { buildChallenge, verifyChallenge, extractAccount, Sep10Error, Sep10ErrorCode, getErrorMapping } from '../services/sep10';
 import { logger } from '../utils/logger';
 import { extractClientIp } from '../utils/ipExtractor';
 import config from '../config';
@@ -114,57 +114,29 @@ try {
 
     res.json({ token: accessToken, accessToken, refreshToken, account, expiresAt });
   } catch (err) {
-    // Normalise to Error — the SDK can throw DOMException (from the base64
-    // decoder) or XdrError which, in some JS environments (e.g. Jest's vm
-    // sandbox), may not satisfy `instanceof Error` even though they are
-    // error-like objects.  Convert to a plain Error so the rest of the
-    // handler can treat everything uniformly.
-    const error: Error = err instanceof Error
-      ? err
-      : new Error(String((err as { message?: string })?.message ?? err));
-    {
-      const knownAuthErrors = [
-        'Invalid challenge signature',
-        'Missing source account in challenge',
-        'Challenge has expired',
-        'Challenge source account is not the server account',
-        'Challenge sequence number must be 0',
-        'Challenge must have time bounds',
-        'Challenge minTime is in the future',
-        'Invalid challenge: no operations found',
-        'Invalid challenge: expected manageData operation',
-        'Invalid challenge: operation',
-        'Invalid challenge: wrong operation name',
-        'Invalid challenge: missing nonce value',
-        'Invalid challenge: nonce must be exactly 64 bytes',
-        'Operation',
-        'must be sourced by the server account',
-        'Challenge not signed by server',
-      ];
-      if (knownAuthErrors.some((msg) => error.message.includes(msg))) {
-        let attemptedWallet: string | null = null;
-        try { attemptedWallet = extractAccount((req.body as { transaction?: string }).transaction ?? ''); } catch { /* not extractable */ }
-        logger.warn('[auth] failed_token_exchange', {
-          correlationId: req.correlationId,
-          origin: extractClientIp(req),
-          attemptedWallet,
-          reason: error.message,
-        });
-        res.status(401).json({
-          success: false,
-          error: error.message,
-          code: error.message === 'Challenge has expired' ? ErrorCode.TOKEN_EXPIRED : ErrorCode.TOKEN_INVALID,
-        });
-        return;
-      }
-      logger.warn('[auth] failed_token_request malformed_xdr', {
+    // Sep10Error is thrown by verifyChallenge for authentication failures
+    // or malformed XDR. Map to HTTP status and ErrorCode.
+    if (err instanceof Sep10Error) {
+      const mapping = getErrorMapping(err.code);
+      let attemptedWallet: string | null = null;
+      try { attemptedWallet = extractAccount((req.body as { transaction?: string }).transaction ?? ''); } catch { /* not extractable */ }
+      logger.warn('[auth] failed_token_exchange', {
         correlationId: req.correlationId,
         origin: extractClientIp(req),
-        reason: error.message,
+        attemptedWallet,
+        sep10ErrorCode: err.code,
+        reason: err.message,
       });
-      res.status(400).json({ success: false, error: error.message, code: ErrorCode.VALIDATION_ERROR });
+      res.status(mapping.httpStatus).json({
+        success: false,
+        error: mapping.clientMessage,
+        code: mapping.errorCode as ErrorCode,
+      });
       return;
     }
+
+    // Any other error should be passed to the error handler (500 via errorHandler)
+    next(err);
   }
 }
 

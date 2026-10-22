@@ -180,8 +180,27 @@ Other frames you may see:
 | -------------- | ----------------------------------------------- | ----------------------------------------- |
 | `retry:`       | Once, immediately on connect                    | Integer milliseconds (e.g. `5234`); sets client reconnect delay |
 | `connected`    | Once, immediately after the stream opens        | `{ "wallet": "<your wallet>" }`           |
-| `session_ended`| The stream is being closed (see live auth below)| `{ "reason": "token_revoked" \| "wallet_blocklisted" \| "token_expired" }` |
+| `session_ended`| The stream is being closed (see live auth below)| `{ "reason": "<reason>" }` |
 | `: ping`       | Keep-alive comment every `SSE_KEEPALIVE_INTERVAL_MS` (default 15 s) | — (comment only, ignored by EventSource) |
+
+### `session_ended` reasons
+
+When the server terminates a stream, it sends a final `session_ended` event with a machine-readable reason:
+
+| Reason                     | HTTP status | Trigger                                                                 |
+| -------------------------- | ----------- | ----------------------------------------------------------------------- |
+| `token_revoked`            | —           | JWT was revoked (logout or admin revocation) while stream was open     |
+| `wallet_blocklisted`       | —           | Wallet was blocklisted while stream was open                           |
+| `token_expired`            | —           | JWT expiry was reached while stream was open                           |
+| `api_key_revoked`          | —           | API key was revoked or rotated while stream was open                   |
+| `api_key_expired`          | —           | API key's `expires_at` timestamp was reached while stream was open     |
+| `max_session_exceeded`     | —           | Stream exceeded `SSE_MAX_SESSION_MS` (default 24 hours) lifetime cap   |
+| `server_shutdown`          | —           | Server is shutting down and draining all connections                   |
+
+Clients should treat any `session_ended` event as terminal and not attempt to
+reconnect with the same credentials. Reconnection should use fresh authentication
+(verified JWT or a new API key) and, if applicable, fetch any missed events from
+the REST API.
 
 The `data` field is JSON; parse it with `JSON.parse(e.data)`.
 

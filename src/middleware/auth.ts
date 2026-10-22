@@ -25,9 +25,10 @@ function tokenErrorCode(err: unknown): ErrorCode {
 /**
  * Shared X-API-Key authentication used by requireAuth and requireRole.
  *
- * On success attaches req.account / req.role / req.apiKeyScopes and returns
- * 'ok'. On failure sends the appropriate 401/403 response and returns a
- * non-'ok' status so the caller can stop the request.
+ * On success attaches req.account / req.role / req.apiKeyScopes / req.apiKeyId
+ * / req.apiKeyExpiresAt (if the key has an expiry) and returns 'ok'.
+ * On failure sends the appropriate 401/403 response and returns a non-'ok' status
+ * so the caller can stop the request.
  *
  * Keeping this in one place guarantees REST and GraphQL (which uses the same
  * resolveApiKey) can never drift apart on API-key semantics (#1019).
@@ -69,6 +70,18 @@ export async function authenticateApiKey(
     req.account = resolved.scout_wallet;
     req.role = 'scout';
     req.apiKeyScopes = resolved.scopes;
+    req.apiKeyId = resolved.id;
+    // Retrieve the expiry if available (may require a separate DB query)
+    try {
+      const { getApiKeyById } = await import('../db');
+      const row = await getApiKeyById(resolved.id, resolved.scout_wallet);
+      if (row) {
+        req.apiKeyExpiresAt = row.expires_at ?? undefined;
+      }
+    } catch {
+      // Best-effort — if the query fails, the sweep will catch expired keys
+      req.apiKeyExpiresAt = undefined;
+    }
     return 'ok';
   } catch (err) {
     logger.warn({
