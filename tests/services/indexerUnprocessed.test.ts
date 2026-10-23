@@ -3,8 +3,7 @@
  * store them in indexer_unprocessed_events for replay, and expose admin
  * list/retry endpoints.
  */
-import { indexEvents, isKnownEventType } from '../../src/services/indexer';
-import { replayUnprocessedEvent } from '../../src/services/indexer';
+import { indexEvents, isKnownEventType, replayUnprocessedEvent } from '../../src/services/indexer';
 import {
   listUnprocessedEvents,
   getUnprocessedEventById,

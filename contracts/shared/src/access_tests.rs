@@ -51,19 +51,13 @@ fn grant_revoke_renounce_hierarchy_and_last_admin() {
             revoke_role(&env, &admin, &root, &admin),
             Err(Error::Unauthorized)
         );
-        assert_eq!(
-            renounce_role(&env, &admin, &root),
-            Err(Error::Unauthorized)
-        );
+        assert_eq!(renounce_role(&env, &admin, &root), Err(Error::Unauthorized));
         grant_role(&env, &admin, &pause, &member).unwrap();
         let events = env.events().all().len();
         grant_role(&env, &admin, &pause, &member).unwrap();
         assert_eq!(env.events().all().len(), events); // Idempotent grants.
         require_role(&env, &pause, &member).unwrap();
-        assert_eq!(
-            require_role(&env, &fees, &member),
-            Err(Error::Unauthorized)
-        );
+        assert_eq!(require_role(&env, &fees, &member), Err(Error::Unauthorized));
         set_role_admin(&env, &admin, &fees, &pause).unwrap();
         grant_role(&env, &member, &fees, &outsider).unwrap();
         assert!(has_role(&env, &fees, &outsider));
@@ -90,7 +84,9 @@ fn valid_membership_still_requires_signature() {
     env.mock_all_auths();
     client.initialize(&admin);
     env.mock_auths(&[]);
-    assert!(client.try_check(&admin, &Symbol::new(&env, DEFAULT_ADMIN)).is_err());
+    assert!(client
+        .try_check(&admin, &Symbol::new(&env, DEFAULT_ADMIN))
+        .is_err());
 }
 
 proptest::proptest! {

@@ -143,7 +143,7 @@ async function runAdminActionInternal(
         const result: ContractActionResult = await registerValidatorOnChain(validatorWallet);
 
         // Record the validator in the database
-        insertValidator(validatorWallet, result.transactionId);
+        await insertValidator(validatorWallet, result.transactionId);
 
         return { success: true, transactionId: result.transactionId };
       }
@@ -156,7 +156,7 @@ async function runAdminActionInternal(
         const result: ContractActionResult = await revokeValidatorOnChain(validatorWallet);
 
         // Record the revocation in the database
-        revokeValidatorRow(validatorWallet, result.transactionId);
+        await revokeValidatorRow(validatorWallet, result.transactionId);
 
         return { success: true, transactionId: result.transactionId };
       }
@@ -169,7 +169,7 @@ async function runAdminActionInternal(
         const result: ContractActionResult = await registerValidatorOnChain(wallet as string);
 
         // Record the validator in the database
-        insertValidator(wallet as string, result.transactionId);
+        await insertValidator(wallet as string, result.transactionId);
 
         return { success: true, transactionId: result.transactionId };
       }
@@ -464,7 +464,7 @@ export async function approveAction(
   // hit the 'already executed' guard at the top of this function on its next
   // read, rather than double-firing.  If the on-chain call fails we revert the
   // status to 'pending' to allow retry.
-  updatePendingAdminActionStatus(actionId, 'executed');
+  await updatePendingAdminActionStatus(actionId, 'executed');
 
   logger.info(
     `[multisig] action=${action.action_type} id=${actionId} threshold=${action.required_signatures} collected=${collected} — executing`,
@@ -479,9 +479,9 @@ export async function approveAction(
 
   if (!executionResult.success) {
     // Revert to pending so an operator can retry or investigate
-    updatePendingAdminActionStatus(actionId, 'pending');
+    await updatePendingAdminActionStatus(actionId, 'pending');
 
-    logAuditEvent({
+    await logAuditEvent({
       action: `${action.action_type}_execution_failed`,
       adminWallet: signer,
       queryParams: {
@@ -500,7 +500,7 @@ export async function approveAction(
     );
   }
 
-  logAuditEvent({
+  await logAuditEvent({
     action: `${action.action_type}_executed`,
     adminWallet: signer,
     queryParams: {

@@ -28,7 +28,7 @@ export const defaultRetentionPolicies: RetentionPolicy[] = [
 
 /** Identifiers and strategies are allowlisted; configuration never supplies SQL. */
 export function parseRetentionPolicies(raw?: string): RetentionPolicy[] {
-  const input: unknown = raw === undefined ? defaultRetentionPolicies : JSON.parse(raw);
+  const input: unknown = raw === undefined || raw.trim() === '' ? defaultRetentionPolicies : JSON.parse(raw);
   if (!Array.isArray(input)) throw new Error('RETENTION_POLICIES must be a JSON array');
   const seen = new Set<string>();
   return input.map((item: unknown) => {

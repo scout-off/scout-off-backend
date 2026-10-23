@@ -68,7 +68,9 @@ pub fn initialize(env: &Env, admin: &Address) -> Result<(), Error> {
     env.storage()
         .instance()
         .set(&DataKey::RolesInitialized, &true);
-    env.storage().instance().set(&DataKey::RoleAdminCount, &1u32);
+    env.storage()
+        .instance()
+        .set(&DataKey::RoleAdminCount, &1u32);
     for name in ROLES {
         let role = Symbol::new(env, name);
         env.storage()
@@ -115,12 +117,7 @@ pub fn grant_role(
     Ok(())
 }
 
-fn remove_role(
-    env: &Env,
-    caller: &Address,
-    role: &Symbol,
-    account: &Address,
-) -> Result<(), Error> {
+fn remove_role(env: &Env, caller: &Address, role: &Symbol, account: &Address) -> Result<(), Error> {
     if !has_role(env, role, account) {
         return Ok(());
     }

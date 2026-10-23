@@ -25,8 +25,8 @@ import {
   setTierDivergenceGetter,
   initEventLoopMonitoring,
   initGcMonitoring,
+  incUnhandledRejections,
 } from "./middleware/metrics";
-import { incUnhandledRejections } from "./middleware/metrics";
 import { drainAllSessions, setAcceptingSseSessions } from "./routes/events";
 import { startRetentionJob, stopRetentionJob } from './services/retention';
 import { applyHttpTimeouts } from "./httpServer";
@@ -99,7 +99,7 @@ async function startServer() {
       `headers=${config.http.headersTimeoutMs}ms request=${config.http.requestTimeoutMs}ms`,
     );
     // Log startup health of critical dependencies
-    (async () => {
+    void (async () => {
       const statuses: Record<string, string> = {};
 
       try {
@@ -155,7 +155,7 @@ async function startServer() {
     }
   });
 
-  poll();
+  void poll();
   logger.info(`Indexer poll interval: ${config.indexerPollIntervalMs}ms`);
   const pollInterval = setInterval(poll, config.indexerPollIntervalMs);
 
@@ -171,7 +171,7 @@ async function startServer() {
   // Run once at startup for consistency with the reconcile and divergence
   // jobs, then schedule the interval. The interval is configurable via
   // IPFS_PIN_RETRY_INTERVAL_MS (default: 30000, min: 5000).
-  retryPins();
+  void retryPins();
   const retryInterval = setInterval(retryPins, config.ipfsPinRetryIntervalMs);
 
   // Scheduled reconciliation of pending pins against Pinata & IPFS gateways
@@ -183,7 +183,7 @@ async function startServer() {
     }
   });
 
-  reconcilePins();
+  void reconcilePins();
   const reconcileInterval = setInterval(reconcilePins, config.ipfsReconcileIntervalMs);
 
   // Scheduled tier divergence check (#1132): compare derived (off-chain) tier
@@ -197,7 +197,7 @@ async function startServer() {
     }
   });
 
-  runDivergenceCheck();
+  void runDivergenceCheck();
   const divergenceInterval = setInterval(runDivergenceCheck, config.tierDivergence.intervalMs);
 
   // Scheduled audit-log hash-chain verification (#1539): verifies new audit
@@ -214,7 +214,7 @@ async function startServer() {
     }
   });
 
-  runAuditVerify();
+  void runAuditVerify();
   const auditVerifyInterval = setInterval(
     runAuditVerify,
     config.auditVerify.intervalMs,
@@ -329,13 +329,13 @@ async function startServer() {
     );
     // Do not exit by default; set EXIT_ON_UNHANDLED_REJECTION=true to opt in.
     if (config.exitOnUnhandledRejection) {
-      shutdown("unhandledRejection", 1);
+      void shutdown("unhandledRejection", 1);
     }
   });
 
   process.on("uncaughtException", (err: Error) => {
     logger.error("Uncaught exception, shutting down:", err.stack ?? err.message);
-    shutdown("uncaughtException", 1);
+    void shutdown("uncaughtException", 1);
   });
 }
 

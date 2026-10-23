@@ -119,7 +119,7 @@ function isLikelyPlaceholderSecret(secret: string): boolean {
   // with only trivial decoration (separators, digits). Long real secrets that
   // merely contain e.g. "secret" as a substring must NOT match.
   const decoratedPlaceholder =
-    /^(change[-_]?me|replace[-_]?me|example([-_]secret)?|(my|test|development)?[-_]?secret|jwt[-_]?secret)[\-_0-9]*$/;
+    /^(change[-_]?me|replace[-_]?me|example([-_]secret)?|(my|test|development)?[-_]?secret|jwt[-_]?secret)[-_0-9]*$/;
   return decoratedPlaceholder.test(normalized);
 }
 

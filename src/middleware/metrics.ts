@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { retentionMetrics } from '../services/retentionMetrics';
 import { ipReputationCounters, resetIpReputationCounters } from '../services/ipReputation';
-import { performance } from 'perf_hooks';
+import { monitorEventLoopDelay, type IntervalHistogram } from 'perf_hooks';
 
 // ── Tier divergence counter injection (#1132) ──────────────────────────────────
 //
@@ -616,13 +616,13 @@ export function getFeeWithdrawalDbWriteFailuresTotal(): number {
  * Event-loop lag monitor. Uses perf_hooks.monitorEventLoopDelay to measure
  * how long the event loop is blocked. Started at module load if metrics enabled.
  */
-let eventLoopDelayMonitor: performance.EventLoopDelayMonitor | null = null;
+let eventLoopDelayMonitor: IntervalHistogram | null = null;
 
 /** Initialize event-loop lag monitoring. Called at startup. */
 export function initEventLoopMonitoring(): void {
   if (!isMetricsEnabled()) return;
   try {
-    eventLoopDelayMonitor = new performance.EventLoopDelayMonitor({
+    eventLoopDelayMonitor = monitorEventLoopDelay({
       resolution: 10, // 10ms resolution
     });
     eventLoopDelayMonitor.enable();
@@ -635,12 +635,9 @@ export function initEventLoopMonitoring(): void {
 /** Get current event-loop lag in seconds (95th percentile over the sampling window). */
 export function getEventLoopLagSeconds(): number {
   if (!eventLoopDelayMonitor) return 0;
-  const delays = eventLoopDelayMonitor;
-  if (delays.length === 0) return 0;
-  // Calculate 95th percentile
-  const sorted = Array.from(delays).sort((a, b) => a - b);
-  const p95Index = Math.floor(sorted.length * 0.95);
-  return sorted[p95Index]! / 1000; // Convert to seconds
+  if (eventLoopDelayMonitor.count === 0) return 0;
+  // Histogram values are in nanoseconds
+  return eventLoopDelayMonitor.percentile(95) / 1e9;
 }
 
 /** GC duration histogram buckets (in seconds). */

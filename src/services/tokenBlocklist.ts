@@ -39,7 +39,7 @@ const REVOKED_EVENT = 'token_revoked';
 /** Narrow surface we need from ioredis — same pattern as redisCacheStore.ts */
 interface PipelineLike {
   setex(key: string, ttl: number, value: string): PipelineLike;
-  exec(): Promise<Array<[Error | null, unknown]>>;
+  exec(): Promise<Array<[Error | null, unknown]> | null>;
 }
 
 type RedisLike = Pick<Redis, 'setex' | 'exists' | 'keys' | 'set'> & {
@@ -201,7 +201,7 @@ export async function warmRevocationsIntoRedis(
       }
       try {
         const results = await pipe.exec();
-        loaded += results.filter(([err]) => !err).length;
+        loaded += (results ?? []).filter(([err]) => !err).length;
       } catch (err) {
         logger.warn('[tokenBlocklist] pipelined warm-up batch failed:', err);
       }

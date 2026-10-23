@@ -276,8 +276,8 @@ mod player_token_invariants {
 
 #[cfg(test)]
 mod role_invariants {
-    use proptest::prelude::*;
     use player_token::{PlayerTokenContract, PlayerTokenContractClient};
+    use proptest::prelude::*;
     use soroban_sdk::{testutils::Address as _, Address, Env, Symbol};
 
     proptest! {

@@ -149,7 +149,7 @@ export function subscribeSseEvents(onEvent: (data: unknown) => void): () => void
   };
   client.on('message', handler);
   
-  client.subscribe('sse:events', (err) => {
+  void client.subscribe('sse:events', (err) => {
     if (err) {
       logger.error(`[redis] failed to subscribe to sse:events: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -158,8 +158,18 @@ export function subscribeSseEvents(onEvent: (data: unknown) => void): () => void
   // Return unsubscribe function
   return () => {
     client.off('message', handler);
-    client.unsubscribe('sse:events');
+    void client.unsubscribe('sse:events');
   };
+}
+
+/**
+ * Publish a cross-instance security event on the `security:<event>` channel
+ * consumed by securityEventPubSub.ts. No-op when Redis is not configured.
+ */
+export async function publishSecurityEvent(event: string, payload: Record<string, unknown>): Promise<void> {
+  const client = getRedisClient();
+  if (!client) return;
+  await client.publish(`security:${event}`, encodeTracedMessage(payload));
 }
 
 /**

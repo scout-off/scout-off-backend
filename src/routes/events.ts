@@ -19,7 +19,6 @@ import {
 import * as tokenBlocklistModule from '../services/tokenBlocklist';
 import config from '../config';
 import { EventEmitter } from 'events';
-import { publishSecurityEvent, getRedisClient } from '../services/redis';
 
 const router = Router();
 

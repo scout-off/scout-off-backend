@@ -265,7 +265,7 @@ export async function withdrawFeesV2Controller(
   const parsed = withdrawFeesV2Schema.safeParse(req.body);
   if (!parsed.success) {
     const reason = parsed.error.errors[0]?.message ?? 'Invalid request body';
-    logAuditEvent({
+    await logAuditEvent({
       action: 'fee_withdrawal_attempt',
       adminWallet,
       queryParams: { error: 'validation_failed', reason },
@@ -288,7 +288,7 @@ export async function withdrawFeesV2Controller(
       { treasuryAddress, amountStroops },
       adminWallet,
     );
-    logAuditEvent({
+    await logAuditEvent({
       action: 'fee_withdrawal_attempt',
       adminWallet,
       queryParams: {
@@ -317,7 +317,7 @@ export async function withdrawFeesV2Controller(
   try {
     const balance = await getFeeBalance();
     if (BigInt(amountStroops) > balance) {
-      logAuditEvent({
+      await logAuditEvent({
         action: 'fee_withdrawal_attempt',
         adminWallet,
         queryParams: {
@@ -348,7 +348,7 @@ export async function withdrawFeesV2Controller(
 
   // ── 5. Concurrency guard ────────────────────────────────────────────────────
   if (withdrawalInProgress) {
-    logAuditEvent({
+    await logAuditEvent({
       action: 'fee_withdrawal_attempt',
       adminWallet,
       queryParams: {
@@ -394,7 +394,7 @@ export async function withdrawFeesV2Controller(
     // between validation and execution the contract enforces the lower amount
     // and the DB reflects reality while the audit log keeps the request.
     try {
-      insertFeeWithdrawal({
+      await insertFeeWithdrawal({
         idempotencyKey,
         treasuryAddress,
         amountStroops: result.amount,
@@ -418,7 +418,7 @@ export async function withdrawFeesV2Controller(
     // audit trail reflects what was actually withdrawn, and so the requested
     // vs actual discrepancy is preserved for reconciliation against the
     // fee_withdrawals row.
-    logAuditEvent({
+    await logAuditEvent({
       action: 'fee_withdrawal_attempt',
       adminWallet,
       queryParams: {
@@ -449,7 +449,7 @@ export async function withdrawFeesV2Controller(
     const errorCode = err instanceof FeeWithdrawalError ? err.code : 'UNKNOWN';
     const retryable = err instanceof FeeWithdrawalError ? err.retryable : false;
 
-    logAuditEvent({
+    await logAuditEvent({
       action: 'fee_withdrawal_attempt',
       adminWallet,
       queryParams: {

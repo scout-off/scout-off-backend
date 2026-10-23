@@ -61,7 +61,6 @@ pub enum Error {
     // APPEND ONLY. These discriminants are part of the on-chain ABI: existing
     // values must never be renumbered or reused, and each backend mapping in
     // src/utils/contractErrors.ts must stay in sync.
-
     /// The caller is not a registered validator (progress contract).
     ValidatorNotRegistered = 13,
     /// The validator was revoked and may no longer submit or approve milestones.

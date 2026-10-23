@@ -24,8 +24,8 @@ describe('SQLite to Postgres conversion', () => {
     expect(toPostgresValue('{"n":9007199254740993}', 'jsonb')).toBe('{"n":9007199254740993}');
     expect(canonical({ payload: '9007199254740993' }, columns)).not.toBe(canonical({ payload: '9007199254740992' }, columns));
     expect(canonical({ payload: '1.00e3' }, columns)).toBe(canonical({ payload: '1000' }, columns));
-    expect(canonical({ payload: '[1, {"nested": "escaped \\\" quote"}, null]' }, columns)).toBe(
-      canonical({ payload: '[1.0,{"nested":"escaped \\\" quote"},null]' }, columns),
+    expect(canonical({ payload: '[1, {"nested": "escaped \\" quote"}, null]' }, columns)).toBe(
+      canonical({ payload: '[1.0,{"nested":"escaped \\" quote"},null]' }, columns),
     );
   });
 

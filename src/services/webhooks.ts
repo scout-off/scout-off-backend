@@ -39,9 +39,7 @@ type WebhookRetryOptions = {
   eventType?: string;
   /** Stable delivery id sent as the `X-Webhook-Delivery` header. */
   deliveryId?: string;
-};
-
-type WebhookRetryOptionsWithSubscription = WebhookRetryOptions & {
+  /** Subscription whose current and previous secrets sign the delivery. */
   subscription?: WebhookSubscription;
 };
 
@@ -195,7 +193,7 @@ export async function postWebhookWithRetry(
           const timestamp = String(Math.floor(Date.now() / 1000));
           requestHeaders['X-Webhook-Timestamp'] = timestamp;
           // Use subscription's secret and any active previous_secret during rotation
-          const subscription = (options as WebhookRetryOptionsWithSubscription).subscription;
+          const subscription = options.subscription;
           const { versioned, legacy } = buildSignatureHeader(
             rawBody,
             options.secret,

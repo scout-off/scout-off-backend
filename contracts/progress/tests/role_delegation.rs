@@ -34,7 +34,9 @@ fn delegated_validator_manager_is_independent_of_pauser_and_legacy_admin() {
             .has(&DataKey::Validator(validator.clone())));
     });
     client.revoke_role(&admin, &role, &manager);
-    assert!(client.try_register_validator_as(&manager, &validator).is_err());
+    assert!(client
+        .try_register_validator_as(&manager, &validator)
+        .is_err());
 }
 
 #[test]

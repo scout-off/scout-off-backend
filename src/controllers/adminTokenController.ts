@@ -48,7 +48,7 @@ export async function revokeTokenController(req: Request, res: Response, _next: 
  * an arbitrary token there would let an admin introspect another user's
  * claims (#279).
  */
-export async function introspectToken(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function introspectToken(req: Request, res: Response, next: NextFunction): Promise<void> {
   // requireRole('admin') has already verified this header's token.
   // Any `token` field in the request body is intentionally ignored — accepting
   // an arbitrary token there would let an admin introspect another user's

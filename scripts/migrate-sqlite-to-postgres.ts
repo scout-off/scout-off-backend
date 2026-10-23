@@ -193,7 +193,10 @@ export async function migrateSqliteToPostgres(options: MigrationOptions): Promis
   const client = new Client({ connectionString: options.databaseUrl, ssl,
     // The app driver installs a numeric int8 parser globally; retain full 64-bit
     // precision in this tool, independently of application return-value policy.
-    types: { getTypeParser: (oid, format) => [20, 114, 3802].includes(oid) ? (value: string) => value : types.getTypeParser(oid, format) },
+    types: {
+      getTypeParser: ((oid: number, format?: 'text' | 'binary') =>
+        [20, 114, 3802].includes(oid) ? (value: string) => value : types.getTypeParser(oid, (format ?? 'text') as 'text')) as typeof types.getTypeParser,
+    },
   });
   let connected = false;
   let locked = false;
@@ -324,7 +327,7 @@ export async function migrateSqliteToPostgres(options: MigrationOptions): Promis
       const table = tables.get(name)!;
       const checksum = new TableChecksum();
       await client.query(`DECLARE migration_verify NO SCROLL CURSOR FOR SELECT * FROM ${quote(name)}`);
-      while (true) {
+      for (;;) {
         const rows = await client.query(`FETCH FORWARD ${batchSize} FROM migration_verify`);
         if (!rows.rows.length) break;
         for (const row of rows.rows) checksum.add(canonical(row, table.columns));

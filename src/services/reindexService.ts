@@ -20,6 +20,7 @@
  */
 
 import { processEventBatches, type BatchProcessorProgress } from './eventBatchProcessor';
+import config from '../config';
 import { persistLastIndexedLedger } from '../db';
 import { logAuditEvent } from './audit';
 import { logger } from '../utils/logger';

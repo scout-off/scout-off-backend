@@ -319,8 +319,8 @@ mod progress_invariants {
 
 #[cfg(test)]
 mod role_invariants {
-    use proptest::prelude::*;
     use progress::{ProgressContract, ProgressContractClient};
+    use proptest::prelude::*;
     use soroban_sdk::{testutils::Address as _, Address, Env, Symbol};
 
     proptest! {

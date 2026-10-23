@@ -333,6 +333,11 @@ app.get('/health', async (_req, res) => {
   });
 });
 
+export interface ProbeResult {
+  status: 'ok' | 'unavailable' | 'disabled';
+  ms: number;
+}
+
 async function checkReadiness(): Promise<Record<string, ProbeResult>> {
   const [dbResult, ipfsResult, stellarResult, indexerResult] = await Promise.all([
     (async (): Promise<ProbeResult> => {
@@ -381,64 +386,6 @@ async function checkReadiness(): Promise<Record<string, ProbeResult>> {
       
       // After grace period, check if lag is within threshold
       return indexerLedgerLag <= config.readiness.maxLag ? 'ok' : 'unavailable';
-    })(),
-  ]);
-  };
-}
-
-export interface ProbeResult {
-  status: 'ok' | 'unavailable' | 'disabled';
-  ms: number;
-}
-
-async function checkReadiness(): Promise<Record<string, ProbeResult>> {
-  const [dbResult, ipfsResult, stellarResult, indexerResult] = await Promise.all([
-    (async (): Promise<ProbeResult> => {
-      const t0 = Date.now();
-      const outcome = await probeDbWritable(timeouts.db);
-      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
-    })(),
-
-    // IPFS probe — Pinata connectivity
-    (async (): Promise<ProbeResult> => {
-      const t0 = Date.now();
-      const outcome = await withTimeout(
-        async () => {
-          await checkHealth();
-        },
-        timeouts.ipfs,
-      );
-      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
-    })(),
-
-    // Stellar probe — RPC connectivity (can be disabled via config)
-    (async (): Promise<ProbeResult> => {
-      if (!config.stellarHealthCheckEnabled) {
-        return { status: 'disabled', ms: 0 };
-      }
-      if (stellarBreaker.state === 'OPEN') {
-        return { status: 'unavailable', ms: 0 };
-      }
-      const t0 = Date.now();
-      const outcome = await withTimeout(
-        async () => {
-          const ok = await stellarHealth();
-          if (!ok) throw new Error('stellar unhealthy');
-        },
-        timeouts.stellar,
-      );
-      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
-    })(),
-    (async (): Promise<'ok' | 'unavailable' | 'disabled'> => {
-      // If max lag is 0, the check is disabled
-      if (config.readinessMaxLag === 0) return 'disabled';
-      
-      // During grace period, always report ok regardless of lag
-      const uptimeMs = Date.now() - processStartTime;
-      if (uptimeMs < config.readinessGracePeriodMs) return 'ok';
-      
-      // After grace period, check if lag is within threshold
-      return indexerLedgerLag <= config.readinessMaxLag ? 'ok' : 'unavailable';
     })(),
   ]);
 

@@ -44,7 +44,7 @@ export async function registerValidator(req: Request, res: Response, next: NextF
 
   const proposal = await proposeAction('register_validator', { validatorWallet, action: 'register_validator' }, adminWallet);
   if (proposal.status === 'proposed') {
-    logAuditEvent({
+    await logAuditEvent({
       action: 'validator_registration',
       adminWallet,
       queryParams: { validatorWallet, actionId: proposal.actionId, outcome: 'multisig_pending' },
@@ -156,7 +156,7 @@ export async function revokeValidator(req: Request, res: Response, next: NextFun
 
   const proposal = await proposeAction('revoke_validator', { validatorWallet, action: 'revoke_validator' }, adminWallet);
   if (proposal.status === 'proposed') {
-    logAuditEvent({
+    await logAuditEvent({
       action: 'validator_revocation',
       adminWallet,
       queryParams: { validatorWallet, actionId: proposal.actionId, outcome: 'multisig_pending' },

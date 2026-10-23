@@ -19,9 +19,6 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/no-var-requires': 'off',
     'no-empty': 'off',
-    // Type-aware promise rules for src/**
-    '@typescript-eslint/no-floating-promises': 'error',
-    '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { arguments: false, attributes: false } }],
     // Catch imports of packages not declared in dependencies/devDependencies.
     // This prevents a repeat of issue #1417 where @envelop/core was used via
     // a transitive dependency without being declared directly.
@@ -34,7 +31,10 @@ module.exports = {
       // intentionally unused parameters (e.g. Express `next`) with `_`.
       files: ['src/**/*.ts'],
       rules: {
-        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true }]
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true }],
+        // Type-aware promise rules for src/**
+        '@typescript-eslint/no-floating-promises': 'error',
+        '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { arguments: false, attributes: false } }]
       }
     },
     {

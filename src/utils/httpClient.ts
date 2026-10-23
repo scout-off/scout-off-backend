@@ -161,8 +161,8 @@ export async function httpPost(url: string, body: string | Buffer | Uint8Array, 
  * Make a HEAD request.
  */
 export async function httpHead(url: string, options?: Omit<HttpClientOptions, 'method' | 'body'>): Promise<Response> {
+  const method = 'HEAD';
   const {
-    method = 'HEAD',
     headers = {},
     timeoutMs = config.ipfsHttpTimeoutMs,
     maxRedirects = 3,

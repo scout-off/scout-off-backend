@@ -391,8 +391,7 @@ impl ConnectionContract {
     /// Close an existing connection. Only the scout or admin may call this.
     ///
     /// Emits connection_closed on success.
-    pub fn close_connection(env: Env,
-        caller: Address, player_id: u64) -> Result<(), Error> {
+    pub fn close_connection(env: Env, caller: Address, player_id: u64) -> Result<(), Error> {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }

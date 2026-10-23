@@ -545,8 +545,8 @@ mod subscription_lifecycle_invariants {
 #[cfg(test)]
 mod role_invariants {
     use proptest::prelude::*;
-    use subscription::{SubscriptionContract, SubscriptionContractClient};
     use soroban_sdk::{testutils::Address as _, Address, Env, Symbol};
+    use subscription::{SubscriptionContract, SubscriptionContractClient};
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(

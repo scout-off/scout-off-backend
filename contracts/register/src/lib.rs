@@ -448,8 +448,7 @@ impl RegisterContract {
     }
 
     /// Explicit caller variant for delegated role holders.
-    pub fn migrate_players_as(env: Env,
-        caller: Address, limit: u32) -> Result<bool, Error> {
+    pub fn migrate_players_as(env: Env, caller: Address, limit: u32) -> Result<bool, Error> {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }

@@ -10,7 +10,7 @@ import { logger } from '../utils/logger';
 import { deriveApiKeyLookupHash } from '../utils/apiKeyLookup';
 import { parseApiKeyScopes } from '../utils/apiKeyScopes';
 import { EventEmitter } from 'events';
-import { publishSecurityEvent } from './redis';
+import { getRedisClient, publishSecurityEvent } from './redis';
 
 const SALT_BYTES = 16;
 const SEPARATOR = ':';
@@ -107,7 +107,7 @@ export function onApiKeyRevoked(callback: (apiKeyId: number) => void): () => voi
 }
 
 /** Publish API key revocation event to Redis (cross-instance propagation). */
-async function publishApiKeyRevoked(apiKeyId: number): Promise<void> {
+export async function publishApiKeyRevoked(apiKeyId: number): Promise<void> {
   const redis = getRedisClient();
   if (redis) {
     try {

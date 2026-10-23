@@ -37,8 +37,8 @@ export const buyTokenSchema = z.object({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function featureFlagGuard(res: Response): boolean {
-  if (!isFeatureEnabled(FeatureFlags.PLAYER_TOKENS)) {
+async function featureFlagGuard(res: Response): Promise<boolean> {
+  if (!(await isFeatureEnabled(FeatureFlags.PLAYER_TOKENS))) {
     res.status(404).json({
       success: false,
       error: 'Player token endpoints are not enabled on this platform.',
@@ -58,7 +58,7 @@ export async function getPlayerTokenHolders(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  if (!featureFlagGuard(res)) return;
+  if (!(await featureFlagGuard(res))) return;
 
   const {playerId} = req.params as {playerId: string};
   try {
@@ -93,7 +93,7 @@ export async function buyPlayerToken(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  if (!featureFlagGuard(res)) return;
+  if (!(await featureFlagGuard(res))) return;
 
   const {playerId} = req.params as {playerId: string};
   const buyerWallet = req.account;

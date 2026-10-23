@@ -354,8 +354,8 @@ mod connection_invariants {
 
 #[cfg(test)]
 mod role_invariants {
-    use proptest::prelude::*;
     use connection::{ConnectionContract, ConnectionContractClient};
+    use proptest::prelude::*;
     use soroban_sdk::{testutils::Address as _, Address, Env, Symbol};
 
     proptest! {
