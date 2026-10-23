@@ -1,6 +1,6 @@
 import { getFeatureFlag, getAllFeatureFlags, upsertFeatureFlag, getDb } from '../db';
 import { logAuditEvent } from './audit';
-import { logger } from '../utils/logger';
+import config from '../config';
 
 /** Named feature flags. Add new constants here as features are gated. */
 export const FeatureFlags = {
@@ -49,7 +49,7 @@ interface SyncCacheEntry {
 const syncCache = new Map<string, SyncCacheEntry>();
 
 function syncCacheTtlMs(): number {
-  return parseInt(process.env.FEATURE_FLAG_CACHE_TTL_MS ?? '5000', 10);
+  return config.cache.featureFlagTtlMs;
 }
 
 /** No-op bootstrap kept for backwards compatibility — the feature_flags table

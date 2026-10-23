@@ -228,6 +228,7 @@ Comment on the GitHub issue to indicate you're working on it. Maintainers will a
 npm run dev                  # Start dev server with hot-reload
 npm run test                 # Run full test suite
 npm run lint                 # Check code style
+npm run lint:fix             # Auto-fix lint issues across src/, tests/ and scripts/
 npm run typecheck            # Fast type-check (tsc --noEmit), no build output
 npm run check:sql-injection  # Scan src/db for unsafe SQL string interpolation
 npm audit                    # Check for security vulnerabilities
@@ -315,6 +316,16 @@ lifecycle hook). If the hook does not run after cloning, enable it manually:
 ```bash
 npx husky install
 ```
+
+The hook only covers staged files. To auto-fix the whole codebase (`src/`,
+`tests/` and `scripts/`, same globs as `npm run lint`), run:
+
+```bash
+npm run lint:fix
+```
+
+Review the diff afterwards; some fixes (for example merged imports) are worth a
+quick look.
 
 You can also run lint-staged on your current staged files at any time:
 

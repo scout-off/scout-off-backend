@@ -101,6 +101,27 @@ components:
         code:
           type: string
 
+    VersionInfo:
+      type: object
+      required: [version, commit, node, environment, startedAt, uptimeSeconds]
+      properties:
+        version:
+          type: string
+        commit:
+          type: string
+        node:
+          type: string
+        environment:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp recorded when the process started
+        uptimeSeconds:
+          type: integer
+          minimum: 0
+          description: Process uptime in whole seconds
+
     # ── Player ────────────────────────────────────────────────────────────────
     PlayerSummary:
       type: object
@@ -255,6 +276,16 @@ components:
           enum: [pending, approved]
           description: Approval state added by the milestones endpoint ("all" status param)
 
+  headers:
+    IdempotentReplayed:
+      description: >-
+        Present with value `true` when the response was replayed from the
+        idempotency store because the request repeated an earlier
+        `Idempotency-Key`. Absent on first execution.
+      schema:
+        type: string
+        enum:
+          - "true"
   responses:
     Unauthorized:
       description: Missing or invalid JWT

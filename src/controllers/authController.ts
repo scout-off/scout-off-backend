@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { Keypair } from '@stellar/stellar-sdk';
+import { Keypair, Transaction } from '@stellar/stellar-sdk';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { buildChallenge, verifyChallenge, extractAccount } from '../services/sep10';
@@ -10,8 +10,12 @@ import config from '../config';
 import { ErrorCode } from '../utils/errorCodes';
 import { revokeToken, isTokenRevoked } from '../services/tokenBlocklist';
 import { signJwt, verifyJwt } from '../utils/jwt';
+import { incAuthFailure } from '../middleware/metrics';
 
 // ─── Schema ────────────────────────────────────────────────────────────────────
+
+/** Roles a refresh token may legitimately carry. */
+const VALID_ROLES = new Set(['player', 'scout', 'validator', 'admin']);
 
 const challengeSchema = z.object({
   account: z.string().refine(
@@ -65,7 +69,7 @@ function issueRefreshToken(account: string, role: string): { token: string; jti:
 // ─── GET /auth/challenge ───────────────────────────────────────────────────────
 
 /** GET /auth/challenge?account=G... */
-export function getChallenge(req: Request, res: Response, next: NextFunction): void {
+export function getChallenge(req: Request, res: Response, _next: NextFunction): void {
   const parsed = challengeSchema.safeParse(req.query);
   if (!parsed.success) {
     logger.warn('[auth] failed_challenge_request', {
@@ -78,13 +82,18 @@ export function getChallenge(req: Request, res: Response, next: NextFunction): v
     return;
   }
   const challenge = buildChallenge(parsed.data.account);
-  res.json({ challenge, networkPassphrase: config.networkPassphrase });
+  const challengeTransaction = new Transaction(challenge, config.networkPassphrase);
+  const expiresAt = Number(challengeTransaction.timeBounds?.maxTime);
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
+    throw new Error('Generated SEP-10 challenge has no valid expiration time');
+  }
+  res.json({ challenge, networkPassphrase: config.networkPassphrase, expiresAt });
 }
 
 // ─── POST /auth/token ──────────────────────────────────────────────────────────
 
 /** POST /auth/token  { transaction: "<signed XDR>", role?: "validator" } */
-export function postToken(req: Request, res: Response, next: NextFunction): void {
+export function postToken(req: Request, res: Response, _next: NextFunction): void {
 try {
     const parsed = tokenSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -112,7 +121,7 @@ try {
     const { token: accessToken, expiresAt } = issueAccessToken(account, effectiveRole);
     const { token: refreshToken } = issueRefreshToken(account, effectiveRole);
 
-    res.json({ token: accessToken, accessToken, refreshToken, account, expiresAt });
+    res.json({ success: true, token: accessToken, accessToken, refreshToken, account, expiresAt });
   } catch (err) {
     // Normalise to Error — the SDK can throw DOMException (from the base64
     // decoder) or XdrError which, in some JS environments (e.g. Jest's vm
@@ -150,6 +159,7 @@ try {
           attemptedWallet,
           reason: error.message,
         });
+        incAuthFailure('sep10_invalid');
         res.status(401).json({
           success: false,
           error: error.message,
@@ -218,7 +228,14 @@ try {
     const account = payload.sub;
     const role = payload.role as string | undefined;
 
-    if (!jti || !account) {
+    // Every refresh token we issue carries a known role; one without it is
+    // malformed and must not be silently upgraded to a fresh session.
+    if (!jti || !account || typeof role !== 'string' || !VALID_ROLES.has(role)) {
+      logger.warn('[auth] refresh_token_malformed', {
+        jti,
+        hasSub: Boolean(account),
+        role: typeof role === 'string' ? role : undefined,
+      });
       res.status(401).json({
         success: false,
         error: 'Malformed refresh token',
@@ -243,8 +260,8 @@ try {
     await revokeToken(jti, expiresAtSeconds);
 
     // Issue new pair.
-    const { token: newAccessToken, expiresAt } = issueAccessToken(account, role ?? 'player');
-    const { token: newRefreshToken } = issueRefreshToken(account, role ?? 'player');
+    const { token: newAccessToken, expiresAt } = issueAccessToken(account, role);
+    const { token: newRefreshToken } = issueRefreshToken(account, role);
 
     res.json({
       success: true,

@@ -4,11 +4,10 @@ initTracing();
 import app, { setDraining } from "./app";
 import config from "./config";
 import { logger } from "./utils/logger";
-import { initDb, closeDb } from "./db";
+import { initDb, closeDb, fetchLastIndexedLedger, persistLastIndexedLedger } from "./db";
 import { stellarHealth } from "./services/stellar";
 import { checkHealth, retryPendingPins, reconcilePendingPins } from "./services/ipfs";
 import { indexEvents } from "./services/indexer";
-import { fetchLastIndexedLedger, persistLastIndexedLedger } from "./db";
 import { initBlocklist } from "./services/tokenBlocklist";
 import { startDecayTimer } from "./services/ipReputation";
 import {
@@ -20,10 +19,11 @@ import {
   closeSecurityEventSubscriber,
 } from "./services/securityEventPubSub";
 import { closeRedisClients } from "./services/redis";
-import { runTierDivergenceCheck } from "./services/tierDivergenceJob";
-import { getTierDivergenceTotal } from "./services/tierDivergenceJob";
+import { runTierDivergenceCheck, getTierDivergenceTotal } from "./services/tierDivergenceJob";
 import { setTierDivergenceGetter } from "./middleware/metrics";
+import { incUnhandledRejections } from "./middleware/metrics";
 import { drainAllSessions, setAcceptingSseSessions } from "./routes/events";
+import { applyHttpTimeouts } from "./httpServer";
 import { runShutdown } from "./shutdown";
 
 /** Reads a non-negative integer env var, falling back when unset/invalid. */
@@ -82,7 +82,11 @@ async function startServer() {
     logger.info(
       `ScoutOff backend running on port ${config.port} [${config.network}]`,
     );
-
+    applyHttpTimeouts(server, config.http);
+    logger.info(
+      `HTTP timeouts: keepAlive=${config.http.keepAliveTimeoutMs}ms ` +
+      `headers=${config.http.headersTimeoutMs}ms request=${config.http.requestTimeoutMs}ms`,
+    );
     // Log startup health of critical dependencies
     (async () => {
       const statuses: Record<string, string> = {};
@@ -139,7 +143,7 @@ async function startServer() {
   poll();
   const pollInterval = setInterval(poll, 5_000);
 
-  // Poll for IPFS retries every 30 seconds
+  // Poll for IPFS retries
   const retryPins = withJobTracking(async () => {
     try {
       await retryPendingPins();
@@ -148,7 +152,11 @@ async function startServer() {
     }
   });
 
-  const retryInterval = setInterval(retryPins, 30_000);
+  // Run once at startup for consistency with the reconcile and divergence
+  // jobs, then schedule the interval. The interval is configurable via
+  // IPFS_PIN_RETRY_INTERVAL_MS (default: 30000, min: 5000).
+  retryPins();
+  const retryInterval = setInterval(retryPins, config.ipfsPinRetryIntervalMs);
 
   // Scheduled reconciliation of pending pins against Pinata & IPFS gateways
   const reconcilePins = withJobTracking(async () => {
@@ -189,10 +197,10 @@ async function startServer() {
   //   7. Await in-flight requests (bounded by SHUTDOWN_REQUEST_DRAIN_MS)
   //   8. server.closeAllConnections() for anything still connected
   //   9. Close Redis, DB, tracing within SHUTDOWN_CLEANUP_RESERVE_MS
-  //  10. exit 0, or 1 if a cleanup step failed
+  //  10. exit with the provided exit code, or 1 if a cleanup step failed
 
-  const SHUTDOWN_TIMEOUT_MS = intFromEnv('SHUTDOWN_TIMEOUT_MS', 10_000);
-  const SHUTDOWN_PRESTOP_DELAY_MS = intFromEnv('SHUTDOWN_PRESTOP_DELAY_MS', 0);
+  const SHUTDOWN_TIMEOUT_MS = config.shutdown.timeoutMs;
+  const SHUTDOWN_PRESTOP_DELAY_MS = config.shutdown.prestopDelayMs;
   const SHUTDOWN_REQUEST_DRAIN_MS = intFromEnv(
     'SHUTDOWN_REQUEST_DRAIN_MS',
     Math.floor(SHUTDOWN_TIMEOUT_MS * 0.5),
@@ -203,7 +211,7 @@ async function startServer() {
   );
   let isShuttingDown = false;
 
-  const shutdown = async (signal: string) => {
+  const shutdown = async (signal: string, exitCode = 0) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
     logger.info(`Received ${signal}, starting graceful shutdown...`);
@@ -264,7 +272,7 @@ async function startServer() {
         `Graceful shutdown complete in ${result.durationMs}ms`,
       );
     }
-    process.exit(result.exitCode);
+    process.exit(Math.max(exitCode, result.exitCode));
   };
 
   process.on("SIGTERM", () => { shutdown("SIGTERM").catch(() => process.exit(1)); });
@@ -275,6 +283,7 @@ async function startServer() {
 
   process.on("unhandledRejection", (reason: unknown) => {
     unhandledRejectionsTotal += 1;
+    incUnhandledRejections();
     const err = reason instanceof Error ? reason : new Error(String(reason));
     logger.error(
       `Unhandled promise rejection (scout_off_unhandled_rejections_total=${unhandledRejectionsTotal}):`,
@@ -282,14 +291,13 @@ async function startServer() {
     );
     // Do not exit by default; set EXIT_ON_UNHANDLED_REJECTION=true to opt in.
     if (config.exitOnUnhandledRejection) {
-      shutdown("unhandledRejection");
+      shutdown("unhandledRejection", 1);
     }
   });
 
   process.on("uncaughtException", (err: Error) => {
     logger.error("Uncaught exception, shutting down:", err.stack ?? err.message);
-    shutdown("uncaughtException");
-    process.exitCode = 1;
+    shutdown("uncaughtException", 1);
   });
 }
 

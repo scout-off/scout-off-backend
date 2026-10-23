@@ -227,7 +227,7 @@ function playerEtag(detail: Record<string, unknown>, profileVersion: number): st
 export async function getPlayer(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
@@ -348,7 +348,7 @@ function maybeNotModifiedPlayerList(
 export async function filterPlayers(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const tierResult = validateMinTier(req.query.minTier);
   if (!tierResult.valid) {
@@ -481,7 +481,7 @@ export const updatePlayerSchema = z.union([
 export async function updatePlayer(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const playerId = sanitizeInput(req.params.playerId as string);
 
@@ -567,7 +567,7 @@ export const milestonesQuerySchema = z.object({
 export async function getPlayerMilestones(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
@@ -749,7 +749,7 @@ try {
 export async function deactivatePlayerEndpoint(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
@@ -771,7 +771,7 @@ export async function deactivatePlayerEndpoint(
 export async function reactivatePlayerEndpoint(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
@@ -798,7 +798,7 @@ export async function reactivatePlayerEndpoint(
 export async function getPlayerAnalytics(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {

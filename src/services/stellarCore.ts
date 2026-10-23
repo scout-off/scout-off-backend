@@ -1,6 +1,5 @@
 import {
   rpc,
-  Networks,
   Contract,
   TransactionBuilder,
   BASE_FEE,
@@ -8,7 +7,6 @@ import {
   Account,
   Address,
   scValToNative,
-  nativeToScVal,
 } from '@stellar/stellar-sdk';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';

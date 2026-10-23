@@ -22,9 +22,133 @@ DATABASE_URL=postgresql://user:password@host:5432/scoutoff
 This mismatch will be enforced by a startup check in a future release; for now it is a critical configuration trap that every operator must be aware of.
 
 
+## Database Migrations
+
+The backend uses a deterministic migration system (file-based, ordered alphabetically) to evolve the database schema. Migrations are automatically applied on server startup, but operators often need to run them independently — for example, in pre-deployment validation steps or when troubleshooting without starting the full server.
+
+### Available Commands
+
+| Command | Purpose | Exit Code |
+|---------|---------|-----------|
+| `npm run db:migrate` | Apply all pending migrations | 0 on success, 1 on error |
+| `npm run db:migrate:status` | Show which migrations have been applied | 0 if up-to-date, 2 if behind, 1 on error |
+| `npm run db:migrate:version` | Print the current schema version (last applied migration) | 0 on success, 1 on error |
+
+### Running Migrations as a One-Off
+
+In **development or staging**, migrations run automatically when the server starts. To run them in isolation:
+
+```bash
+npm run db:migrate
+```
+
+### Kubernetes / Docker Pre-Deploy Job
+
+To ensure the database is migrated **before** the application pod starts, use an init container or pre-deploy Job:
+
+```yaml
+# init container variant (in the Deployment pod spec)
+initContainers:
+  - name: migrate
+    image: scout-off-backend:latest
+    command:
+      - /bin/sh
+      - -c
+      - |
+        npm install --omit=dev
+        npm run db:migrate
+    env:
+      - name: NODE_ENV
+        value: production
+      # ... database connection vars (DB_DRIVER, DATABASE_URL, etc.)
+```
+
+Or as a separate **pre-deploy Kubernetes Job**:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: scout-off-migrate
+spec:
+  template:
+    spec:
+      serviceAccountName: scout-off-backend
+      containers:
+        - name: migrate
+          image: scout-off-backend:latest
+          command: 
+            - /bin/sh
+            - -c
+            - |
+              npm install --omit=dev
+              npm run db:migrate
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DB_DRIVER
+              value: postgres
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: scout-off-secrets
+                  key: DATABASE_URL
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+      restartPolicy: Never
+```
+
+### ⚠️ Production Images
+
+The **production Docker image** (`Dockerfile.prod` or similar) typically does **not** include:
+- `scripts/` directory
+- `ts-node` or TypeScript compiler
+- dev dependencies (see `npm install --omit=dev` above)
+
+**Option 1: Run migrations from a development image** (shown above; simple but larger download)
+
+**Option 2: Precompile the migration script** into the production build:
+```dockerfile
+# In Dockerfile.prod
+RUN npm run build && \
+    npm run build:scripts  # if defined, or tsc --project tsconfig.scripts.json
+```
+
+Then invoke the compiled version:
+```bash
+node dist/scripts/migrate.js up
+```
+
+### Database Migration Status in CI/CD
+
+Use the exit codes to gate deployments:
+
+```bash
+npm run db:migrate:status
+if [ $? -eq 2 ]; then
+  echo "❌ Database is behind; migrations must be applied first"
+  exit 1
+fi
+# Proceed with deployment if exit code is 0
+```
+
+See also [`db/README.md`](db/README.md) for naming conventions, file pairing (SQLite + PostgreSQL), and how to write new migrations.
+
+
 ## Environment Setup
 
 Copy `.env.example` to `.env` and fill in all required values before starting the server.
+
+### `.env` loading in production and staging
+
+The `.env` file is a **local development** convenience. When `NODE_ENV` is `production` or `staging`, the server does **not** load `.env`, and logs `[config] skipping .env file` at startup. Configuration must come from the orchestrator (Kubernetes ConfigMap/Secrets, Compose `environment:`, and so on). This stops a `.env` that ends up in an image or mounted volume from quietly supplying defaults, such as development secrets, for anything the orchestrator doesn't set.
+
+To opt back in explicitly (for example a single-host deployment that keeps its configuration in a `.env` file), set `DOTENV_ENABLED=true` in the real environment. Startup then logs `[config] loaded .env file`. In development and test, `.env` is loaded as before. `.dockerignore` also excludes `.env` and `.env.*` (except `.env.example`) from the build context.
 
 > [!NOTE]
 > For instructions and policies on managing, securing, and rotating long-lived secrets (such as JWT secrets, Pinata credentials, and platform signing keys), see the [Secrets Rotation Policy](docs/secrets-rotation.md).
@@ -107,6 +231,9 @@ The sandbox can be started with `scripts/soroban-sandbox` (see [scripts/soroban-
 | `READINESS_STELLAR_TIMEOUT_MS` | — | Per-probe timeout for Stellar RPC connectivity readiness check, in ms (default: `5000`). See [docs/readiness-check.md](docs/readiness-check.md#readiness_stellar_timeout_ms). |
 | `CIRCUIT_BREAKER_FAILURE_THRESHOLD` | — | Number of consecutive failures before generic circuit breaker opens (default: `5`). See [docs/degradation-contracts.md](docs/degradation-contracts.md#circuit-breakers). |
 | `CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | — | Cooldown duration before generic circuit breaker half-opens to test recovery, in ms (default: `30000` = 30 s). See [docs/degradation-contracts.md](docs/degradation-contracts.md#circuit-breakers). |
+| `HTTP_KEEP_ALIVE_TIMEOUT_MS` | — | Node HTTP keep-alive socket timeout in ms (default: `65000`). Set higher than the load balancer idle timeout (AWS ALB: 60 s) so the LB closes idle sockets first and intermittent 502s on reused connections are avoided. |
+| `HTTP_HEADERS_TIMEOUT_MS` | — | Node HTTP headers timeout in ms (default: `66000`). Must be greater than `HTTP_KEEP_ALIVE_TIMEOUT_MS` — startup fails otherwise. |
+| `HTTP_REQUEST_TIMEOUT_MS` | — | Node HTTP request timeout in ms (default: `120000`). Covers receiving the request (headers + body) only; long-lived SSE response streams stay open past it. |
 | `IPFS_BREAKER_FAILURE_THRESHOLD` | — | Number of consecutive failures before Pinata IPFS circuit breaker opens (default: `5`). See [docs/degradation-contracts.md](docs/degradation-contracts.md#ipfs--pinata-circuit-breaker). |
 | `IPFS_BREAKER_RESET_TIMEOUT_MS` | — | Cooldown duration before Pinata IPFS circuit breaker half-opens to test recovery, in ms (default: `30000` = 30 s). See [docs/degradation-contracts.md](docs/degradation-contracts.md#ipfs--pinata-circuit-breaker). |
 
@@ -847,6 +974,8 @@ Recommended metrics to track:
 - Event indexer lag (gap between latest on-chain event and last indexed event, exposed as `indexer_ledger_lag` on `GET /metrics`)
 - SQLite file size growth
 
+See [docs/metrics.md](docs/metrics.md) for every metric exported on `GET /metrics`, scrape configuration, and suggested alert rules.
+
 For what to do when these signals go wrong — indexer lag, stale tiers, missing webhooks, RPC/IPFS outages, DB slowness, plus reindex/replay, dead-letter drain, cache flush, circuit-breaker, and pause/unpause procedures — see the [Operator Runbook](docs/runbook.md).
 
 ### Docker Compose Healthcheck
@@ -863,6 +992,10 @@ healthcheck:
 ```
 
 Docker marks the container `(healthy)` once the first probe succeeds. The `start_period` of 15 seconds gives the Express server time to initialize before probes are counted as failures. The `--spider` flag tells `wget` to perform a HEAD-only request without downloading the response body, keeping healthcheck logs quiet. Run `docker compose ps` to confirm the container status shows `(healthy)` after startup.
+
+### Init Process (tini)
+
+The runtime image runs Node under [tini](https://github.com/krallin/tini) (`ENTRYPOINT ["/sbin/tini", "--"]`). Node as PID 1 neither reaps zombie child processes nor gets default signal behaviour, so tini handles signal forwarding and zombie reaping. Graceful shutdown is preserved: `docker stop` sends SIGTERM to tini, which forwards it to Node and triggers the graceful shutdown sequence (`"Received SIGTERM, starting graceful shutdown..."`). If you run the image without its built-in entrypoint, use `docker run --init` or equivalent instead.
 
 ## Multi-Sig Admin Operations
 

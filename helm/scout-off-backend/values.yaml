@@ -198,6 +198,22 @@ readinessProbe:
   timeoutSeconds: 5
 
 # -----------------------------------------------------------------------------
+# Startup probe
+#
+# Kubernetes holds off liveness/readiness checks until startup succeeds, so a
+# slow start (migrations, Redis connect, token-blocklist warm-up, backfill)
+# no longer risks a liveness-kill restart loop. Generous budget: 30 x 5s = 150s.
+# Set to null to disable. Once this is in place, the liveness probe's
+# initialDelaySeconds can be lowered since slow startups are covered here.
+# -----------------------------------------------------------------------------
+startupProbe:
+  httpGet:
+    path: /health/liveness
+    port: http
+  periodSeconds: 5
+  failureThreshold: 30
+
+# -----------------------------------------------------------------------------
 # Kubernetes Secret reference
 #
 # ALL sensitive values are sourced from a pre-existing Kubernetes Secret named
@@ -267,12 +283,24 @@ env:
   DB_PATH: /data/scout-off.db
   # Platform fee in basis points (100 bps = 1%). Default: 500 (5%).
   PLATFORM_FEE_BPS: "500"
-  # SSE keep-alive interval in ms
+  # SSE keep-alive interval in ms (1000-120000)
   SSE_KEEPALIVE_INTERVAL_MS: "15000"
+  # SSE authorization sweep interval in ms (1000-600000); bounds cross-instance revocation detection
+  SSE_AUTH_SWEEP_INTERVAL_MS: "30000"
   # Maximum concurrent SSE connections (0 = unlimited)
   SSE_MAX_CONNECTIONS: "0"
+  # Maximum concurrent SSE connections per wallet (0 = unlimited)
+  SSE_MAX_CONNECTIONS_PER_WALLET: "5"
+  # Base SSE reconnect delay in ms sent to clients (jitter is added per connection)
+  SSE_RETRY_MS: "5000"
   # Request timeout in ms
   REQUEST_TIMEOUT_MS: "30000"
+  # HTTP server socket timeouts (ms). keepAlive (65s) exceeds the AWS ALB 60s
+  # idle timeout so the LB closes idle sockets first; headers must stay
+  # greater than keepAlive. requestTimeout covers receiving the request only.
+  HTTP_KEEP_ALIVE_TIMEOUT_MS: "65000"
+  HTTP_HEADERS_TIMEOUT_MS: "66000"
+  HTTP_REQUEST_TIMEOUT_MS: "120000"
   # Rate limiting
   RATE_LIMIT_ENABLED: "true"
   RATE_LIMIT_WINDOW_MS: "60000"
@@ -307,6 +335,21 @@ env:
   SHUTDOWN_PRESTOP_DELAY_MS: "0"
   SHUTDOWN_REQUEST_DRAIN_MS: "5000"
   SHUTDOWN_CLEANUP_RESERVE_MS: "2000"
+  # In-memory cache size caps (entries, >= 1)
+  CACHE_MAX_ENTRIES: "1000"
+  CACHE_MAX_SIZE: "1000"
+  PLAYER_CACHE_MAX_SIZE: "1000"
+  # Feature-flag and wallet-blocklist cache TTLs in ms (>= 0; 0 disables caching)
+  FEATURE_FLAG_CACHE_TTL_MS: "5000"
+  WALLET_BLOCKLIST_CACHE_TTL_MS: "30000"
+  # IPFS pending-pin retry interval in ms. Default: 30000 (30s). Min: 5000.
+  IPFS_PIN_RETRY_INTERVAL_MS: "30000"
+  # Reindex tuning. Batch sizes are in ledgers (1-10000); delays in ms.
+  REINDEX_BATCH_SIZE: "100"
+  REINDEX_BATCH_DELAY_MS: "50"
+  REINDEX_CATCHUP_BATCH_SIZE: "500"
+  REINDEX_CATCHUP_THRESHOLD: "500"
+  REINDEX_RATE_LIMIT_BACKOFF_MS: "2000"
 
 # -----------------------------------------------------------------------------
 # Pod annotations

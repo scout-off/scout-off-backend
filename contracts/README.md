@@ -13,6 +13,27 @@ This directory contains the Soroban smart contracts powering the ScoutOff decent
 
 ---
 
+## Error Codes
+
+All contracts return the shared `Error` enum defined in [`shared/src/errors.rs`](shared/src/errors.rs). A failed invocation surfaces the numeric code below. These values are part of the ABI and never change.
+
+| Code | Variant | Returned by | Meaning |
+|------|---------|-------------|---------|
+| 1 | `AlreadyInitialized` | `initialize` (all contracts) | The contract has already been initialized. |
+| 2 | `NotInitialized` | Any entrypoint that reads config (all contracts) | Called before `initialize`. |
+| 3 | `PlayerNotFound` | `register::{get_player, update_profile, update_progress_level}`, `connection::{get_connection, close_connection}` | No player is registered under the given id. |
+| 4 | `NotFound` | `progress::{submit_milestone, approve_milestone}` | The referenced milestone does not exist. |
+| 5 | `InvalidInput` | Most mutating and paginated entrypoints (all contracts) | An argument failed validation (empty/oversized string, zero amount, bad fee bps, invalid page size). |
+| 6 | `AlreadyVerified` | `player_token::issue_tokens`, `progress::approve_milestone` | Tokens were already issued, or the milestone was already approved. |
+| 7 | `InsufficientFee` | `subscription::{subscribe, withdraw_fees}` | Payment below the required fee, or withdrawal exceeds collected fees. |
+| 8 | `NotSubscribed` | `subscription::cancel_subscription` and subscription access guards | The scout has no active subscription. |
+| 9 | `Unauthorized` | Admin-only and role-gated entrypoints (all contracts) | The caller is not the admin or an authorized updater. |
+| 10 | `ContractPaused` | State-changing entrypoints (all contracts) | The contract is paused by its admin. |
+| 11 | `Overflow` | `player_token::{buy_token, distribute_fee}`, `subscription::{initialize, subscribe, pay_to_contact}` | A checked arithmetic operation overflowed. |
+| 12 | `InsufficientSupply` | `player_token::buy_token` | Fewer unsold tokens remain than were requested. |
+
+---
+
 ## Rust Toolchain & Reproducibility
 
 The Rust compiler toolchain for this workspace is pinned via [`rust-toolchain.toml`](rust-toolchain.toml):

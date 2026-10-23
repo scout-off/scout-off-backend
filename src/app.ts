@@ -1,8 +1,8 @@
-import express from 'express';
+import express, { RequestHandler } from 'express';
 import cors, { CorsOptions } from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import config from './config';
+import config, { API_PREFIX, API_V1_PREFIX, API_V2_PREFIX } from './config';
 import authRoutes from './routes/auth';
 import playerRoutes from './routes/player';
 import scoutRoutes from './routes/scout';
@@ -16,10 +16,7 @@ import { traceId } from './middleware/traceId';
 import { responseTime } from './middleware/responseTime';
 import { stellarHealth, stellarBreaker } from './services/stellar';
 import { checkHealth } from './services/ipfs';
-import { API_PREFIX, API_V1_PREFIX, API_V2_PREFIX } from './config';
 import { mountGraphQL } from './graphql';
-import { createPersistedOperationsPlugin } from './graphql/persisted-operations';
-import { loadPersistedOperationsFromFile } from './graphql/persisted-operations';
 import { ErrorCode } from './utils/errorCodes';
 import { metricsMiddleware, createMetricsHandler } from './middleware/metrics';
 import { ipReputationMiddleware } from './middleware/ipReputation';
@@ -134,12 +131,14 @@ const corsOptions: CorsOptions = {
   exposedHeaders: [
     'ETag',
     'X-Correlation-ID',
+    'X-Trace-Id',
     'X-Response-Time',
     'X-API-Version',
     'API-Version',
     'Location',
     'Retry-After',
     'X-RateLimit-Reputation-Limit',
+    'Idempotent-Replayed',
   ],
   // credentials cannot be used with a wildcard origin (CORS spec); only enable
   // it when we are using an explicit allowlist
@@ -262,6 +261,25 @@ app.use(metricsMiddleware);
 // metricsMiddleware is registered first, keeping score increments in order.
 app.use(ipReputationMiddleware);
 
+// Operational endpoints must never be cached by a CDN or proxy, otherwise load
+// balancers and monitoring could see a stale health status during an outage.
+const noStore: RequestHandler = (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+};
+app.use(
+  [
+    '/health',
+    '/ready',
+    '/metrics',
+    '/version',
+    `${API_PREFIX}/health/dependencies`,
+    `${API_V1_PREFIX}/health/dependencies`,
+    `${API_V2_PREFIX}/health/dependencies`,
+  ],
+  noStore,
+);
+
 app.get('/version', (_req, res) => {
   res.json(getVersionInfo());
 });
@@ -287,28 +305,56 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-/**
- * Per-probe timeout configuration (ms).
- * Each probe has its own independent timeout so a slow dependency only blocks
- * its own result — not all three.
- *
- * Configurable via:
- *   READINESS_DB_TIMEOUT_MS      (default: 2 000)
- *   READINESS_IPFS_TIMEOUT_MS    (default: 5 000)
- *   READINESS_STELLAR_TIMEOUT_MS (default: 5 000)
- */
-function getReadinessTimeouts(): { db: number; ipfs: number; stellar: number } {
-  const parseTimeout = (name: string, fallback: number): number => {
-    const raw = process.env[name];
-    if (raw === undefined) return fallback;
-    const parsed = parseInt(raw, 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-  };
+async function checkReadiness(): Promise<Record<string, ProbeResult>> {
+  const [dbResult, ipfsResult, stellarResult, indexerResult] = await Promise.all([
+    (async (): Promise<ProbeResult> => {
+      const t0 = Date.now();
+      const outcome = await probeDbWritable(config.readiness.timeouts.dbMs);
+      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
+    })(),
 
-  return {
-    db: parseTimeout('READINESS_DB_TIMEOUT_MS', 2_000),
-    ipfs: parseTimeout('READINESS_IPFS_TIMEOUT_MS', 5_000),
-    stellar: parseTimeout('READINESS_STELLAR_TIMEOUT_MS', 5_000),
+    // IPFS probe — Pinata connectivity
+    (async (): Promise<ProbeResult> => {
+      const t0 = Date.now();
+      const outcome = await withTimeout(
+        async () => {
+          await checkHealth();
+        },
+        config.readiness.timeouts.ipfsMs,
+      );
+      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
+    })(),
+
+    // Stellar probe — RPC connectivity (can be disabled via config)
+    (async (): Promise<ProbeResult> => {
+      if (!config.stellarHealthCheckEnabled) {
+        return { status: 'disabled', ms: 0 };
+      }
+      if (stellarBreaker.state === 'OPEN') {
+        return { status: 'unavailable', ms: 0 };
+      }
+      const t0 = Date.now();
+      const outcome = await withTimeout(
+        async () => {
+          const ok = await stellarHealth();
+          if (!ok) throw new Error('stellar unhealthy');
+        },
+        config.readiness.timeouts.stellarMs,
+      );
+      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
+    })(),
+    (async (): Promise<'ok' | 'unavailable' | 'disabled'> => {
+      // If max lag is 0, the check is disabled
+      if (config.readiness.maxLag === 0) return 'disabled';
+      
+      // During grace period, always report ok regardless of lag
+      const uptimeMs = Date.now() - processStartTime;
+      if (uptimeMs < config.readiness.gracePeriodMs) return 'ok';
+      
+      // After grace period, check if lag is within threshold
+      return indexerLedgerLag <= config.readiness.maxLag ? 'ok' : 'unavailable';
+    })(),
+  ]);
   };
 }
 
@@ -318,8 +364,6 @@ export interface ProbeResult {
 }
 
 async function checkReadiness(): Promise<Record<string, ProbeResult>> {
-  const timeouts = getReadinessTimeouts();
-
   const [dbResult, ipfsResult, stellarResult, indexerResult] = await Promise.all([
     (async (): Promise<ProbeResult> => {
       const t0 = Date.now();
@@ -386,8 +430,17 @@ app.get('/ready', async (_req, res) => {
     return;
   }
   const services = await checkReadiness();
-  const allOk = Object.values(services).every(v => v.status === 'ok' || v.status === 'disabled');
-  if (allOk) {
+  
+  // Determine if pod should be ready based on critical dependencies only
+  const criticalDeps = config.readinessCriticalDependencies;
+  const allCriticalOk = Array.from(criticalDeps).every(
+    (dep) => {
+      const probe = services[dep];
+      return !probe || probe.status === 'ok' || probe.status === 'disabled';
+    },
+  );
+  
+  if (allCriticalOk) {
     res.json({ status: 'ok', services });
   } else {
     res.status(503).json({ status: 'degraded', services });
@@ -405,8 +458,17 @@ app.get('/health/readiness', createTimeout(5_000), async (_req, res) => {
     return;
   }
   const services = await checkReadiness();
-  const allOk = Object.values(services).every(v => v.status === 'ok' || v.status === 'disabled');
-  if (allOk) {
+  
+  // Determine if pod should be ready based on critical dependencies only
+  const criticalDeps = config.readinessCriticalDependencies;
+  const allCriticalOk = Array.from(criticalDeps).every(
+    (dep) => {
+      const probe = services[dep];
+      return !probe || probe.status === 'ok' || probe.status === 'disabled';
+    },
+  );
+  
+  if (allCriticalOk) {
     res.json({ status: 'ok', services });
   } else {
     res.status(503).json({ status: 'degraded', services });

@@ -64,14 +64,12 @@ export const INVALIDATION_MESSAGE = JSON.stringify({
 
 /**
  * Maximum number of entries kept in the process-local in-memory cache.
- * Configurable via PLAYER_CACHE_MAX_SIZE; defaults to 1000 entries as a
- * stopgap against unbounded growth while Redis migration is pending.
+ * Configurable via config.cache.playerMaxSize (PLAYER_CACHE_MAX_SIZE); defaults
+ * to 1000 entries as a stopgap against unbounded growth while Redis migration
+ * is pending.
  */
-const DEFAULT_MAX_CACHE_SIZE = 1000;
-
 function getMaxCacheSize(): number {
-  const configured = Number(process.env.PLAYER_CACHE_MAX_SIZE);
-  return Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_MAX_CACHE_SIZE;
+  return config.cache.playerMaxSize;
 }
 
 /**

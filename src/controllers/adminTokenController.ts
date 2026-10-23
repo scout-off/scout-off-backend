@@ -10,7 +10,7 @@ export const revokeTokenSchema = z.object({
 }).strict().refine((d) => !!d.jti || !!d.token, { message: 'jti or token is required' });
 
 /** POST /api/admin/tokens/revoke */
-export async function revokeTokenController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function revokeTokenController(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const parsed = revokeTokenSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'jti or token is required', code: ErrorCode.VALIDATION_ERROR });
@@ -47,7 +47,7 @@ export async function revokeTokenController(req: Request, res: Response, next: N
  * an arbitrary token there would let an admin introspect another user's
  * claims (#279).
  */
-export async function introspectToken(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function introspectToken(req: Request, res: Response, _next: NextFunction): Promise<void> {
   // requireRole('admin') has already verified this header's token.
   // Any `token` field in the request body is intentionally ignored — accepting
   // an arbitrary token there would let an admin introspect another user's

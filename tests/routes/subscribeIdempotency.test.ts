@@ -197,6 +197,7 @@ describe('POST /api/scouts/:wallet/subscribe — idempotency', () => {
       .send(VALID_BODY);
 
     expect(first.status).toBe(201);
+    expect(first.headers['idempotent-replayed']).toBeUndefined();
     expect(mockPurchase).toHaveBeenCalledTimes(1);
 
     // Second request with the same key — must return cached response.
@@ -207,6 +208,7 @@ describe('POST /api/scouts/:wallet/subscribe — idempotency', () => {
       .send(VALID_BODY);
 
     expect(second.status).toBe(201);
+    expect(second.headers['idempotent-replayed']).toBe('true');
     expect(second.body).toEqual(first.body);
     // No additional on-chain call must have been made.
     expect(mockPurchase).toHaveBeenCalledTimes(1);

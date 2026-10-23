@@ -22,7 +22,6 @@ import {
   countSavedSearchesByScout,
   queryPlayers,
   countPlayers,
-  type SavedSearchRow,
 } from '../db';
 import { logger } from '../utils/logger';
 import { MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE } from '../utils/pagination';
@@ -84,7 +83,7 @@ export type UpdateSavedSearchRequest = z.infer<typeof updateSavedSearchSchema>;
 export async function createSavedSearch(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const parsed = createSavedSearchSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -146,7 +145,7 @@ export async function createSavedSearch(
 export async function listSavedSearches(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const rows = await getSavedSearchesByScout(req.params.wallet as string);
 
@@ -178,7 +177,7 @@ export async function listSavedSearches(
 export async function deleteSavedSearchHandler(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
@@ -214,7 +213,7 @@ export async function deleteSavedSearchHandler(
 export async function updateSavedSearchHandler(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
@@ -287,7 +286,7 @@ export async function updateSavedSearchHandler(
 export async function runSavedSearch(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {

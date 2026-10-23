@@ -36,7 +36,14 @@ const REVOKED_EVENT = 'token_revoked';
 // ─── Redis client (optional) ──────────────────────────────────────────────────
 
 /** Narrow surface we need from ioredis — same pattern as redisCacheStore.ts */
-type RedisLike = Pick<Redis, 'setex' | 'exists' | 'keys' | 'set'>;
+interface PipelineLike {
+  setex(key: string, ttl: number, value: string): PipelineLike;
+  exec(): Promise<Array<[Error | null, unknown]>>;
+}
+
+type RedisLike = Pick<Redis, 'setex' | 'exists' | 'keys' | 'set'> & {
+  pipeline?: () => PipelineLike;
+};
 
 const redisClient: RedisLike | null = getRedisClient();
 
@@ -161,12 +168,55 @@ async function syncDbToRedis(): Promise<void> {
   }
 
   let loaded = 0;
-  for (const row of rows) {
-    const ok = await writeToRedis(row.jti, row.expires_at);
-    if (ok) loaded++;
+  if (redisClient) {
+    loaded = await warmRevocationsIntoRedis(redisClient, rows, now);
   }
 
   logger.info(`[tokenBlocklist] Startup sync: loaded ${loaded}/${rows.length} revocations into Redis`);
+}
+
+/** Pipeline batch size for the startup warm-up (#1592). */
+export const WARMUP_PIPELINE_CHUNK = 500;
+
+/**
+ * Write revocation rows into Redis in pipelined batches of
+ * WARMUP_PIPELINE_CHUNK, computing each TTL from its own expires_at.
+ * Already-expired rows are skipped. Falls back to sequential SETEX when the
+ * client has no pipeline() method. Returns the number of keys written.
+ * @internal Exported for unit tests.
+ */
+export async function warmRevocationsIntoRedis(
+  client: RedisLike,
+  rows: Array<{ jti: string; expires_at: number }>,
+  nowSec: number,
+): Promise<number> {
+  const fresh = rows.filter((r) => r.expires_at - nowSec > 0);
+  if (typeof client.pipeline === 'function') {
+    let loaded = 0;
+    for (let i = 0; i < fresh.length; i += WARMUP_PIPELINE_CHUNK) {
+      const pipe = client.pipeline();
+      for (const row of fresh.slice(i, i + WARMUP_PIPELINE_CHUNK)) {
+        pipe.setex(redisKey(row.jti), row.expires_at - nowSec, '1');
+      }
+      try {
+        const results = await pipe.exec();
+        loaded += results.filter(([err]) => !err).length;
+      } catch (err) {
+        logger.warn('[tokenBlocklist] pipelined warm-up batch failed:', err);
+      }
+    }
+    return loaded;
+  }
+  let loaded = 0;
+  for (const row of fresh) {
+    try {
+      await client.setex(redisKey(row.jti), row.expires_at - nowSec, '1');
+      loaded++;
+    } catch (err) {
+      logger.warn('[tokenBlocklist] Redis write failed:', err);
+    }
+  }
+  return loaded;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────

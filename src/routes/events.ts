@@ -25,11 +25,13 @@ const SSE_CAPACITY_RETRY_AFTER_SECONDS = 30;
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
+// All SSE settings come from config.sse (validated at startup). They are read
+// through these getters at use time so tests can override config.sse per case.
+
 /** Interval between keep-alive comment pings, in milliseconds. */
-const KEEPALIVE_INTERVAL_MS = parseInt(
-  process.env.SSE_KEEPALIVE_INTERVAL_MS ?? '15000',
-  10,
-);
+function getKeepaliveIntervalMs(): number {
+  return config.sse.keepaliveIntervalMs;
+}
 
 /**
  * Interval for the shared authorization sweep, in milliseconds.
@@ -44,36 +46,29 @@ const KEEPALIVE_INTERVAL_MS = parseInt(
  *   - same-process revocation/blocklist: immediate (synchronous event)
  *   - cross-process: ≤ SSE_AUTH_SWEEP_INTERVAL_MS (default 30 000 ms)
  */
-const AUTH_SWEEP_INTERVAL_MS = parseInt(
-  process.env.SSE_AUTH_SWEEP_INTERVAL_MS ?? '30000',
-  10,
-);
+function getAuthSweepIntervalMs(): number {
+  return config.sse.authSweepIntervalMs;
+}
 
-/** Maximum number of concurrent SSE connections (0 = unlimited). Read live
- *  (not cached at module load) so tests can flip it per-case. */
+/** Maximum number of concurrent SSE connections (0 = unlimited). */
 function getMaxSseConnections(): number {
-  return parseInt(process.env.SSE_MAX_CONNECTIONS ?? '0', 10);
+  return config.sse.maxConnections;
 }
 
 /**
  * Compute the SSE reconnect retry interval in milliseconds.
- * Read live so tests can override process.env.SSE_RETRY_MS per-test.
  * Applies a small random jitter (up to 20% of base) per connection to prevent
  * synchronized reconnect storms across clients.
  */
-export function getSseRetryMs(baseMs: number = config.sseRetryMs): number {
-  const envVal = process.env.SSE_RETRY_MS;
-  const parsed = envVal !== undefined ? parseInt(envVal, 10) : baseMs;
-  const effectiveBase = Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
-  const maxJitter = Math.max(1, Math.floor(effectiveBase * 0.2));
+export function getSseRetryMs(baseMs: number = config.sse.retryMs): number {
+  const maxJitter = Math.max(1, Math.floor(baseMs * 0.2));
   const jitter = Math.floor(Math.random() * maxJitter);
-  return effectiveBase + jitter;
+  return baseMs + jitter;
 }
 
 /** Maximum concurrent streams per authenticated wallet (0 = unlimited). */
 function getMaxSseConnectionsPerWallet(): number {
-  const configured = Number.parseInt(process.env.SSE_MAX_CONNECTIONS_PER_WALLET ?? '5', 10);
-  return Number.isInteger(configured) && configured >= 0 ? configured : 5;
+  return config.sse.maxConnectionsPerWallet;
 }
 
 /** Reject a stream when either the process-wide or per-wallet cap is reached. */
@@ -456,7 +451,7 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
       return;
     }
     res.write(KEEPALIVE_FRAME);
-  }, KEEPALIVE_INTERVAL_MS);
+  }, getKeepaliveIntervalMs());
 
   // ── Cleanup on disconnect ─────────────────────────────────────────────────
   const onClose = cleanup;
@@ -491,7 +486,7 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
           err instanceof Error ? err.message : String(err),
         );
       });
-    }, AUTH_SWEEP_INTERVAL_MS);
+    }, getAuthSweepIntervalMs());
     authSweepTimer.unref();
   }
 });

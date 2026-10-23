@@ -223,6 +223,14 @@ spec:
           # /health/readiness checks DB writability and IPFS connectivity.
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
+          # ── Startup probe ────────────────────────────────────────────────────
+          # Holds off liveness/readiness until the app has started (migrations,
+          # Redis connect, blocklist warm-up). Set .Values.startupProbe to null
+          # to disable.
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           # ── Resources ──────────────────────────────────────────────────────────
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

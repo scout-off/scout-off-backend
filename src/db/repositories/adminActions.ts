@@ -3,8 +3,7 @@
  * Moved from src/db/index.ts (#1322).
  * All functions use getDriver() (async) — compatible with both SQLite and PostgreSQL.
  */
-import { timedQueryAsync } from '../index';
-import { getDriver } from '../index';
+import { timedQueryAsync, getDriver } from '../index';
 
 export interface PendingAdminActionRow {
   id: string;
