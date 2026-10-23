@@ -1,4 +1,34 @@
 /**
+ * Race a thunk's result against a timeout, resolving 'error' (never
+ * rejecting, never throwing) on a synchronous throw, an async rejection, or
+ * a timeout. Takes a thunk rather than an already-created promise so a
+ * synchronous throw from evaluating the call itself (e.g. getDriver()
+ * throwing "Database not initialised") is also caught — an already-created
+ * promise argument can't protect against a throw that happens before the
+ * promise even exists.
+ */
+export function withTimeout(fn: () => Promise<unknown>, timeoutMs: number): Promise<'ok' | 'error'> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve('error'), timeoutMs);
+    try {
+      Promise.resolve(fn()).then(
+        () => {
+          clearTimeout(timer);
+          resolve('ok');
+        },
+        () => {
+          clearTimeout(timer);
+          resolve('error');
+        },
+      );
+    } catch {
+      clearTimeout(timer);
+      resolve('error');
+    }
+  });
+}
+
+/**
  * Execute a promise with an external abort signal combined with a timeout.
  * Useful for operations that support cancellation and need both:
  * - A request-scoped signal (from req.signal via AbortController)
@@ -40,7 +70,8 @@ export async function withTimeoutAndSignal<T>(
 
   // Use AbortSignal.any() to race multiple signals (available in Node 20.3+)
   // For older Node versions, fall back to manual race
-  const combinedSignal = AbortSignal.any ? AbortSignal.any(signals) : signals[0];
+  const anySignal = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  const combinedSignal = anySignal ? anySignal(signals) : signals[0];
 
   const timeoutId = timeoutMs > 0 ? setTimeout(() => timeoutController?.abort(), timeoutMs) : undefined;
 
@@ -64,16 +95,4 @@ export async function withTimeoutAndSignal<T>(
       clearTimeout(timeoutId);
     }
   }
-}
-
-/**
- * Execute a promise with a local timeout (no external signal).
- * Backward-compatible wrapper around withTimeoutAndSignal.
- *
- * @param promise A promise to wrap
- * @param timeoutMs Timeout in milliseconds (0 = no timeout)
- * @returns The promise wrapped with timeout
- */
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return withTimeoutAndSignal(promise, timeoutMs);
 }

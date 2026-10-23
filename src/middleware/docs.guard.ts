@@ -22,7 +22,7 @@ export function guardApiDocs(req: Request, res: Response, next: NextFunction): v
 
   if (mode === 'admin') {
     // Require admin role — delegate to requireRole middleware
-    requireRole('admin')(req, res, next);
+    Promise.resolve(requireRole('admin')(req, res, next)).catch(next);
     return;
   }
 

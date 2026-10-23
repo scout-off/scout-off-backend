@@ -1,4 +1,6 @@
 module.exports = {
+  // Unwired reference examples (#1720); excluded from tsconfig too.
+  ignorePatterns: ['src/**/*.example.ts'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     project: './tsconfig.eslint.json',
