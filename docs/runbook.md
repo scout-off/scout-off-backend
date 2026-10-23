@@ -26,6 +26,32 @@ behind the chain tip after the last poll. It is exposed as
 (polls run every 5 s, and `INDEXER_FINALITY_MARGIN` — default `10` ledgers —
 intentionally treats the tip as non-final); persistent three-figure lag is not.
 
+## Prometheus alerts
+
+The Helm chart can install a `ServiceMonitor` and a `PrometheusRule`
+(`metrics.serviceMonitor.enabled=true` / `metrics.prometheusRule.enabled=true`,
+see [DEPLOYMENT.md → Monitoring](../DEPLOYMENT.md#6a-monitoring-prometheus-operator)).
+Every alert below references metrics the backend actually exports and can be
+tuned or disabled under `metrics.prometheusRule.rules.<name>`.
+
+| Alert | Signal | First response |
+| ----- | ------ | -------------- |
+| `ScoutOffIndexerLagHigh` | `indexer_ledger_lag > 100` for 10m | Check `GET /health` → `healthStatus.stellar` and the RPC provider. If RPC is healthy, check indexer poll errors and [replay](#targeted-replay-vs-full-reindex) the gap. |
+| `ScoutOffWebhookDLQGrowing` | `sum(scout_off_webhook_dead_letters_total) > 100` for 15m | Inspect `GET /api/admin/webhooks/dead-letters`, then [drain the dead-letter queue](#draining-the-dead-letter-queue). A permanently failing subscriber must be fixed or removed, not replayed forever. |
+| `ScoutOffTierDivergence` | `increase(scout_off_tier_divergence_total[1h]) > 0` | A `milestone_approved` event was missed. Compare the player's milestones with the stored tier and run a [targeted replay](#targeted-replay-vs-full-reindex) over the approval range. |
+| `ScoutOffStuckPins` | `stuck_pending_pins_count > 0` for 30m | Check `PINATA_API_KEY`/`PINATA_SECRET` and Pinata status. Pending pins past their retry budget need a manual retry once IPFS is reachable (see [docs/ipfs-pinata-gateway.md](ipfs-pinata-gateway.md)). |
+| `ScoutOffHigh5xxRate` | 5xx ratio > 5% for 5m | Check `http_errors_total{range="5xx"}` by route, the structured error logs (with `X-Correlation-ID`), `/health` and `/ready`. Most 5xx bursts are a dependency outage (RPC, DB, IPFS) or a bad deploy — roll back if the rate started at rollout. |
+| `ScoutOffNotReady` | pod unready for 10m (kube-state-metrics; disabled by default) | `GET /ready` on the pod: `db`, `ipfs` or `stellar` is failing. Readiness also fails while the pod is draining, so check whether a rollout is in progress before restarting anything. |
+
+To silence or retune an alert during an incident, change its `enabled`,
+`threshold`, `for` or `severity` under `metrics.prometheusRule.rules` and run
+`helm upgrade` — do not edit the generated PrometheusRule directly.
+
+**Metrics authentication:** if `/metrics` is protected by a bearer token,
+create the token Secret in the release namespace and set
+`metrics.serviceMonitor.bearerTokenSecret.name` / `.key`. Without it the
+ServiceMonitor's scrapes return `401` and no alerts can fire.
+
 ## Incident → action
 
 | Incident | Symptoms | Diagnosis | Action |
@@ -286,35 +312,40 @@ When open, calls fail immediately with `CircuitBreakerOpenError` rather than con
 
 ## Graceful shutdown (#1315)
 
-The server implements an ordered drain sequence on `SIGTERM`/`SIGINT`:
+The server implements a deadline-driven drain sequence on `SIGTERM`/`SIGINT`
+(implementation: `src/shutdown.ts`, tests: `tests/shutdown.test.ts`):
 
-1. Flip draining flag → `/ready` and `/health/readiness` return `503` immediately (liveness stays `200`).
+1. Flip draining flag → `/ready` and `/health/readiness` return `503` immediately (liveness stays `200`). Responses sent from now on carry `Connection: close` so keep-alive clients stop reusing the socket.
 2. Optional pre-stop delay (`SHUTDOWN_PRESTOP_DELAY_MS`, default `0`) so load balancers observe the `503` before traffic stops.
 3. Stop all background schedulers (indexer poll, IPFS retry/reconcile, tier-divergence check).
-4. Await in-flight job executions (up to 60 % of `SHUTDOWN_TIMEOUT_MS`).
+4. Await in-flight job executions (bounded by `SHUTDOWN_JOB_DRAIN_MS`, default 30 % of the budget). Jobs still running at the deadline are abandoned so cleanup can proceed.
 5. Drain SSE sessions — sends `event: session_ended\ndata: {"reason":"server_shutdown"}` to every connected client.
 6. `server.close()` + `closeIdleConnections()` — stops accepting new HTTP connections.
-7. Close Redis, database, tracing SDK.
-8. Exit `0`.
+7. Wait for in-flight HTTP requests (tracked per request, including slow exports and streams) up to `SHUTDOWN_REQUEST_DRAIN_MS` (default 50 % of the budget).
+8. `server.closeAllConnections()` — force-closes whatever is still connected. A slow `GET /admin/events/export` therefore can no longer hold the process open.
+9. Close Redis, database and tracing SDK inside the reserved `SHUTDOWN_CLEANUP_RESERVE_MS` slice (default 2 s). This always runs, even when steps 4–8 hit their deadline.
+10. Exit `0`; exit `1` only if a cleanup step threw or exceeded its budget.
 
 **Configuration:**
 
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
-| `SHUTDOWN_TIMEOUT_MS` | `10000` | Hard limit before forced `exit(1)`. Align with Helm `terminationGracePeriodSeconds`. |
-| `SHUTDOWN_PRESTOP_DELAY_MS` | `0` | Pre-stop sleep to let load balancers drain in-flight connections before traffic stops. |
+| `SHUTDOWN_TIMEOUT_MS` | `10000` | Overall shutdown budget. Every wait below is clamped to it. |
+| `SHUTDOWN_PRESTOP_DELAY_MS` | `0` | Pre-stop sleep to let load balancers observe the `503` before traffic stops. |
+| `SHUTDOWN_REQUEST_DRAIN_MS` | 50 % of timeout (`5000`) | How long in-flight requests may finish before connections are force-closed. |
+| `SHUTDOWN_JOB_DRAIN_MS` | 30 % of timeout (`3000`) | How long in-flight background jobs may finish before they are abandoned. |
+| `SHUTDOWN_CLEANUP_RESERVE_MS` | `2000` | Slice at the end of the budget reserved for Redis, DB and tracing cleanup (clamped to half the budget). |
 
 **Kubernetes alignment:**
 
-Set `terminationGracePeriodSeconds` ≥ `SHUTDOWN_TIMEOUT_MS / 1000 + 5` (buffer for OS signal delivery and container runtime overhead). A `preStop` hook sleep of `SHUTDOWN_PRESTOP_DELAY_MS / 1000` seconds ensures the pod stops receiving traffic before `SIGTERM` is sent:
+Set `terminationGracePeriodSeconds` greater than `SHUTDOWN_TIMEOUT_MS / 1000 + preStopSleepSeconds + 5` (the extra seconds cover OS signal delivery and container runtime overhead). The Helm chart exposes this as `terminationGracePeriodSeconds` (default `30`) and `preStopSleepSeconds` (default `0`):
 
 ```yaml
-lifecycle:
-  preStop:
-    exec:
-      command: ["sleep", "5"]
-terminationGracePeriodSeconds: 20
+terminationGracePeriodSeconds: 30
+preStopSleepSeconds: 5
 ```
+
+With the app defaults, the container finishes draining in at most 10 s and the 30 s grace period leaves ample room for the preStop hook and SIGKILL escalation. Do not set `terminationGracePeriodSeconds` below `SHUTDOWN_TIMEOUT_MS / 1000`: Kubernetes would SIGKILL the pod mid-cleanup.
 
 **Expected log sequence on clean shutdown:**
 
@@ -322,10 +353,14 @@ terminationGracePeriodSeconds: 20
 Received SIGTERM, starting graceful shutdown...
 [shutdown] waiting for 1 in-flight job(s)...
 [sse] draining 3 session(s) for shutdown
-HTTP server closed
-Redis connections closed
-Database connection closed
-Tracing SDK shut down
+[shutdown] 2 request(s) still in flight after 5000ms, force-closing connections
+[shutdown] HTTP server closed
+[shutdown] redis cleanup complete
+[shutdown] database cleanup complete
+[shutdown] tracing cleanup complete
+Graceful shutdown complete in 5031ms
 ```
 
-Exit code `0` confirms clean drain. Exit code `1` with "timed out" means a job or SSE session blocked beyond `SHUTDOWN_TIMEOUT_MS` — increase the timeout or investigate the blocking operation.
+The watchdog line (`Graceful shutdown watchdog fired ... forcing exit`) should never appear: it only fires if a native dependency hangs past `SHUTDOWN_TIMEOUT_MS + 1s`. If it does, the pod exited without closing Redis/DB — investigate the hanging dependency.
+
+Exit code `0` confirms clean drain. Exit code `1` with `cleanup failure(s)` means Redis, the database or tracing failed to close within the reserved slice — check the preceding `[shutdown]` log lines; the request drain itself never causes a non-zero exit.

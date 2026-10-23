@@ -1,5 +1,8 @@
 import request from 'supertest';
 import app from '../../src/app';
+import { buildChallenge, getServerKeypair } from '../../src/services/sep10';
+import { Keypair, Transaction, Networks, TransactionBuilder, BASE_FEE, Operation, Account, Asset } from '@stellar/stellar-sdk';
+import crypto from 'crypto';
 
 jest.mock('../../src/db', () => ({
   queryEvents: jest.fn().mockReturnValue([]),
@@ -89,6 +92,225 @@ describe('POST /auth/token — malformed XDR handling', () => {
   });
 });
 
+describe('POST /auth/token — Sep10Error code mapping', () => {
+  describe('401 TOKEN_EXPIRED', () => {
+    it('returns 401 with TOKEN_EXPIRED for an expired challenge', async () => {
+      const clientKeypair = Keypair.random();
+      const xdr = buildChallenge(clientKeypair.publicKey());
+      const tx = new Transaction(xdr, Networks.TESTNET);
+      tx.sign(clientKeypair);
+      const signedXdr = tx.toXdr();
+
+      // Advance Date.now() past the challenge TTL (300 s)
+      const realNow = Date.now;
+      Date.now = () => realNow() + 400_000; // +400 seconds → past maxTime
+      try {
+        const res = await request(app)
+          .post('/auth/token')
+          .send({ transaction: signedXdr });
+        expect(res.status).toBe(401);
+        expect(res.body.success).toBe(false);
+        expect(res.body.code).toBe('TOKEN_EXPIRED');
+        expect(res.body.error).toBe('Challenge has expired');
+      } finally {
+        Date.now = realNow;
+      }
+    });
+  });
+
+  describe('401 TOKEN_INVALID', () => {
+    it('returns 401 with TOKEN_INVALID for unsigned challenge', async () => {
+      const clientKeypair = Keypair.random();
+      const xdr = buildChallenge(clientKeypair.publicKey());
+      const res = await request(app)
+        .post('/auth/token')
+        .send({ transaction: xdr });
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('TOKEN_INVALID');
+      expect(res.body.error).toBe('Invalid challenge');
+    });
+
+    it('returns 401 with TOKEN_INVALID for wrong source account', async () => {
+      const rogueKeypair = Keypair.random();
+      const rogueAccount = new Account(rogueKeypair.publicKey(), '-1');
+      const clientKeypair = Keypair.random();
+      const tx = new TransactionBuilder(rogueAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          Operation.manageData({
+            name: 'scoutoff auth',
+            value: crypto.randomBytes(48).toString('base64'),
+            source: clientKeypair.publicKey(),
+          })
+        )
+        .setTimeout(300)
+        .build();
+
+      tx.sign(rogueKeypair);
+      tx.sign(clientKeypair);
+      const res = await request(app)
+        .post('/auth/token')
+        .send({ transaction: tx.toXdr() });
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('TOKEN_INVALID');
+      expect(res.body.error).toBe('Invalid challenge');
+    });
+
+    it('returns 401 with TOKEN_INVALID for wrong operation name', async () => {
+      const serverKeypair = getServerKeypair();
+      const serverAccount = new Account(serverKeypair.publicKey(), '-1');
+      const clientKeypair = Keypair.random();
+      const tx = new TransactionBuilder(serverAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          Operation.manageData({
+            name: 'wrong name',
+            value: Buffer.from(Keypair.random().rawPublicKey()).toString('base64'),
+            source: clientKeypair.publicKey(),
+          })
+        )
+        .setTimeout(300)
+        .build();
+
+      tx.sign(serverKeypair);
+      tx.sign(clientKeypair);
+      const res = await request(app)
+        .post('/auth/token')
+        .send({ transaction: tx.toXdr() });
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('TOKEN_INVALID');
+      expect(res.body.error).toBe('Invalid challenge');
+    });
+
+    it('returns 401 with TOKEN_INVALID for replayed challenge', async () => {
+      const clientKeypair = Keypair.random();
+      const xdr = buildChallenge(clientKeypair.publicKey());
+      const tx = new Transaction(xdr, Networks.TESTNET);
+      tx.sign(clientKeypair);
+      const signedXdr = tx.toXdr();
+
+      // First redemption succeeds
+      const res1 = await request(app)
+        .post('/auth/token')
+        .send({ transaction: signedXdr });
+      expect(res1.status).toBe(200);
+
+      // Second redemption fails
+      const res2 = await request(app)
+        .post('/auth/token')
+        .send({ transaction: signedXdr });
+      expect(res2.status).toBe(401);
+      expect(res2.body.success).toBe(false);
+      expect(res2.body.code).toBe('TOKEN_INVALID');
+      expect(res2.body.error).toBe('Invalid challenge');
+    });
+  });
+
+  describe('400 VALIDATION_ERROR', () => {
+    it('returns 400 with VALIDATION_ERROR for malformed XDR', async () => {
+      const res = await request(app)
+        .post('/auth/token')
+        .send({ transaction: 'this-is-not-valid-xdr' });
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error).toBe('Invalid transaction format');
+    });
+
+    it('returns 400 with VALIDATION_ERROR for random base64-like string', async () => {
+      const res = await request(app)
+        .post('/auth/token')
+        .send({ transaction: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' });
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error).toBe('Invalid transaction format');
+    });
+
+    it('returns 400 with VALIDATION_ERROR for JSON object as transaction', async () => {
+      const res = await request(app)
+        .post('/auth/token')
+        .send({ transaction: JSON.stringify({ fake: true }) });
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error).toBe('Invalid transaction format');
+    });
+
+    it('returns 400 with VALIDATION_ERROR for empty transaction string', async () => {
+      const res = await request(app)
+        .post('/auth/token')
+        .send({ transaction: '' });
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('401 TOKEN_INVALID for missing operations', () => {
+    it('returns 401 with TOKEN_INVALID for challenge with no operations', async () => {
+      const serverKeypair = getServerKeypair();
+      const serverAccount = new Account(serverKeypair.publicKey(), '-1');
+      const clientKeypair = Keypair.random();
+      const tx = new TransactionBuilder(serverAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .setTimeout(300)
+        .build();
+
+      tx.sign(serverKeypair);
+      tx.sign(clientKeypair);
+      const res = await request(app)
+        .post('/auth/token')
+        .send({ transaction: tx.toXdr() });
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('TOKEN_INVALID');
+      expect(res.body.error).toBe('Invalid challenge');
+    });
+  });
+
+  describe('401 TOKEN_INVALID for wrong operation type', () => {
+    it('returns 401 with TOKEN_INVALID when first operation is not manageData', async () => {
+      const serverKeypair = getServerKeypair();
+      const serverAccount = new Account(serverKeypair.publicKey(), '-1');
+      const clientKeypair = Keypair.random();
+      const tx = new TransactionBuilder(serverAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          Operation.payment({
+            destination: serverKeypair.publicKey(),
+            amount: '1',
+            asset: new Asset('TESTCOIN', serverKeypair.publicKey()),
+            source: clientKeypair.publicKey(),
+          })
+        )
+        .setTimeout(300)
+        .build();
+
+      tx.sign(serverKeypair);
+      tx.sign(clientKeypair);
+      const res = await request(app)
+        .post('/auth/token')
+        .send({ transaction: tx.toXdr() });
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('TOKEN_INVALID');
+      expect(res.body.error).toBe('Invalid challenge');
+    });
+  });
+});
+
 describe('POST /auth/token — admin role pre-verification regression (#694)', () => {
   it('does not issue an admin-role token for a transaction whose source is an admin wallet but is not validly signed', async () => {
     // Construct a transaction XDR whose first operation's source is an admin wallet,
@@ -140,4 +362,3 @@ describe('Cache-Control and Pragma headers on /auth/*', () => {
     expect(res.headers['pragma']).toBe('no-cache');
   });
 });
-

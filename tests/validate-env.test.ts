@@ -1,12 +1,31 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { validateRuntimeEnv, findStaleExampleKeys } from '../scripts/validate-env';
+import envConstants from '../src/config/env-constants.json';
+import { VALID_ENVS, VALID_NETWORKS as CONFIG_NETWORKS } from '../src/config';
+import {
+  validateRuntimeEnv,
+  findStaleExampleKeys,
+  REQUIRED_RUNTIME_VARS,
+  VALID_NODE_ENVS,
+  VALID_NETWORKS,
+  VALID_DB_DRIVERS,
+} from '../scripts/validate-env';
 
 describe('validate-env runtime validation', () => {
   it('should pass on a complete valid config (NODE_ENV=development)', () => {
     const env = {
       NODE_ENV: 'development',
+      CONTRACT_ID: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+      JWT_SECRET: 'test-secret',
+    };
+    const errors = validateRuntimeEnv(env);
+    expect(errors).toEqual([]);
+  });
+
+  it('should pass on a complete valid config (NODE_ENV=staging)', () => {
+    const env = {
+      NODE_ENV: 'staging',
       CONTRACT_ID: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
       JWT_SECRET: 'test-secret',
     };
@@ -69,8 +88,19 @@ describe('validate-env runtime validation', () => {
     };
     const errors = validateRuntimeEnv(env);
     expect(errors).toContain(
-      'NODE_ENV="invalid_env" is invalid. Must be one of: development, test, production'
+      'NODE_ENV="invalid_env" is invalid. Must be one of: development, test, staging, production'
     );
+  });
+
+  it('uses the same enumerations as src/config.ts (single source of truth)', () => {
+    expect(VALID_NODE_ENVS).toEqual(envConstants.nodeEnvs);
+    expect(Array.from(VALID_ENVS)).toEqual(envConstants.nodeEnvs);
+
+    expect(VALID_NETWORKS).toEqual(envConstants.networks);
+    expect(Array.from(CONFIG_NETWORKS)).toEqual(envConstants.networks);
+
+    expect(VALID_DB_DRIVERS).toEqual(envConstants.dbDrivers);
+    expect(REQUIRED_RUNTIME_VARS).toEqual(envConstants.requiredRuntimeVars);
   });
 
   it('should pass on valid CORS_ALLOWED_ORIGINS', () => {

@@ -1,5 +1,6 @@
 import express from 'express';
 import request from 'supertest';
+import app from '../../src/app';
 import {
   metricsMiddleware,
   createMetricsHandler,
@@ -88,6 +89,11 @@ describe('GET /metrics — Prometheus exposition', () => {
     expect(inf![1]).toBe(count![1]); // +Inf bucket == observation count
     expect(Number(count![1])).toBe(3); // exactly the three /ok requests observed
     expect(body.endsWith('\n')).toBe(true);
+  });
+
+  it('is served with Cache-Control: no-store by the full app', async () => {
+    const res = await request(app).get('/metrics');
+    expect(res.headers['cache-control']).toBe('no-store');
   });
 
   it('still serves the endpoint (empty series) when no traffic has been recorded', async () => {

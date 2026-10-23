@@ -196,12 +196,15 @@ const adminToken = makeToken(ADMIN_WALLET, 'admin');
 // ─── Auth routes (/auth/*) ────────────────────────────────────────────────────
 
 describe('GET /auth/challenge — envelope shape', () => {
-  it('success: returns challenge and networkPassphrase (not the API envelope)', async () => {
+  it('success: returns challenge, networkPassphrase, and challenge expiry (not the API envelope)', async () => {
     const kp = Keypair.random();
     const res = await request(app).get(`/auth/challenge?account=${kp.publicKey()}`);
     expect(res.status).toBe(200);
     expect(typeof res.body.challenge).toBe('string');
     expect(typeof res.body.networkPassphrase).toBe('string');
+    expect(typeof res.body.expiresAt).toBe('number');
+    const challenge = new Transaction(res.body.challenge, Networks.TESTNET);
+    expect(res.body.expiresAt).toBe(Number(challenge.timeBounds?.maxTime));
   });
 
   it('error: returns { success: false, error: string } for invalid account', async () => {
@@ -212,13 +215,14 @@ describe('GET /auth/challenge — envelope shape', () => {
 });
 
 describe('POST /auth/token — envelope shape', () => {
-  it('success: returns token, account, expiresAt (not the API envelope)', async () => {
+  it('success: returns success, token, account, and expiresAt (not the API envelope)', async () => {
     const kp = Keypair.random();
     const challengeRes = await request(app).get(`/auth/challenge?account=${kp.publicKey()}`);
     const tx = new Transaction(challengeRes.body.challenge, Networks.TESTNET);
     tx.sign(kp);
     const res = await request(app).post('/auth/token').send({ transaction: tx.toXdr() });
     expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
     expect(typeof res.body.token).toBe('string');
     expect(typeof res.body.account).toBe('string');
     expect(typeof res.body.expiresAt).toBe('number');

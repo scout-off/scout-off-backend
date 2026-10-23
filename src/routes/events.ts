@@ -14,9 +14,12 @@ import {
   isWalletBlocklisted,
   refreshBlockedWallets,
   onWalletBlocked,
+  onWalletBlockedRemote,
 } from '../services/walletBlocklist';
 import * as tokenBlocklistModule from '../services/tokenBlocklist';
 import config from '../config';
+import { EventEmitter } from 'events';
+import { publishSecurityEvent, getRedisClient } from '../services/redis';
 
 const router = Router();
 
@@ -25,11 +28,13 @@ const SSE_CAPACITY_RETRY_AFTER_SECONDS = 30;
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
+// All SSE settings come from config.sse (validated at startup). They are read
+// through these getters at use time so tests can override config.sse per case.
+
 /** Interval between keep-alive comment pings, in milliseconds. */
-const KEEPALIVE_INTERVAL_MS = parseInt(
-  process.env.SSE_KEEPALIVE_INTERVAL_MS ?? '15000',
-  10,
-);
+function getKeepaliveIntervalMs(): number {
+  return config.sse.keepaliveIntervalMs;
+}
 
 /**
  * Interval for the shared authorization sweep, in milliseconds.
@@ -44,36 +49,51 @@ const KEEPALIVE_INTERVAL_MS = parseInt(
  *   - same-process revocation/blocklist: immediate (synchronous event)
  *   - cross-process: ≤ SSE_AUTH_SWEEP_INTERVAL_MS (default 30 000 ms)
  */
-const AUTH_SWEEP_INTERVAL_MS = parseInt(
-  process.env.SSE_AUTH_SWEEP_INTERVAL_MS ?? '30000',
-  10,
-);
+function getAuthSweepIntervalMs(): number {
+  return config.sse.authSweepIntervalMs;
+}
 
-/** Maximum number of concurrent SSE connections (0 = unlimited). Read live
- *  (not cached at module load) so tests can flip it per-case. */
+/** Maximum number of concurrent SSE connections (0 = unlimited). */
 function getMaxSseConnections(): number {
-  return parseInt(process.env.SSE_MAX_CONNECTIONS ?? '0', 10);
+  return config.sse.maxConnections;
 }
 
 /**
  * Compute the SSE reconnect retry interval in milliseconds.
- * Read live so tests can override process.env.SSE_RETRY_MS per-test.
  * Applies a small random jitter (up to 20% of base) per connection to prevent
  * synchronized reconnect storms across clients.
  */
-export function getSseRetryMs(baseMs: number = config.sseRetryMs): number {
-  const envVal = process.env.SSE_RETRY_MS;
-  const parsed = envVal !== undefined ? parseInt(envVal, 10) : baseMs;
-  const effectiveBase = Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
-  const maxJitter = Math.max(1, Math.floor(effectiveBase * 0.2));
+export function getSseRetryMs(baseMs: number = config.sse.retryMs): number {
+  const maxJitter = Math.max(1, Math.floor(baseMs * 0.2));
   const jitter = Math.floor(Math.random() * maxJitter);
-  return effectiveBase + jitter;
+  return baseMs + jitter;
 }
 
 /** Maximum concurrent streams per authenticated wallet (0 = unlimited). */
 function getMaxSseConnectionsPerWallet(): number {
-  const configured = Number.parseInt(process.env.SSE_MAX_CONNECTIONS_PER_WALLET ?? '5', 10);
-  return Number.isInteger(configured) && configured >= 0 ? configured : 5;
+  return config.sse.maxConnectionsPerWallet;
+}
+
+/** Maximum SSE session lifetime in milliseconds (default 24 hours). */
+const MAX_SESSION_MS = parseNumericEnv('SSE_MAX_SESSION_MS', process.env.SSE_MAX_SESSION_MS, 24 * 60 * 60 * 1000, { min: 1, integer: true });
+
+/** Parse a numeric environment variable with defaults and validation. */
+function parseNumericEnv(
+  name: string,
+  raw: string | undefined,
+  defaultValue: number,
+  options: { min?: number; integer?: boolean } = {},
+): number {
+  if (raw === undefined) return defaultValue;
+
+  const value = options.integer !== false ? parseInt(raw, 10) : parseFloat(raw);
+  if (Number.isNaN(value)) {
+    throw new Error(`${name} must be a valid number`);
+  }
+  if (options.min !== undefined && value < options.min) {
+    throw new Error(`${name} must be at least ${options.min}`);
+  }
+  return value;
 }
 
 /** Reject a stream when either the process-wide or per-wallet cap is reached. */
@@ -165,19 +185,26 @@ const KEEPALIVE_FRAME = ': ping\n\n';
 
 /**
  * Active, connected sessions. Each entry carries the auth state needed to
- * terminate the stream (jti, wallet) plus the subscriber itself.
+ * terminate the stream (jti, wallet, apiKeyId) plus the subscriber itself.
  * The entry is added by the route handler and removed in cleanup().
  */
 interface ActiveSession {
   wallet: string;
   jti: string | undefined;
+  apiKeyId: number | undefined;
+  apiKeyExpiresAt: number | undefined;
   subscriber: SseSubscriber;
+  /** Unix timestamp when the session started (for max session lifetime). */
+  startTime?: number;
   /** Terminate the connection; safe to call more than once. */
-  terminate: (reason: 'token_revoked' | 'wallet_blocklisted' | 'token_expired' | 'server_shutdown') => void;
+  terminate: (reason: 'token_revoked' | 'wallet_blocklisted' | 'token_expired' | 'server_shutdown' | 'api_key_revoked' | 'api_key_expired' | 'max_session_exceeded') => void;
 }
 
 /** Sessions currently open in this process. */
 const activeSessions = new Set<ActiveSession>();
+
+/** In-process emitter for API key revocation events. */
+const apiKeyRevocationEmitter = new EventEmitter();
 
 /** Sweep body shared by the interval and tests. */
 export async function runAuthorizationSweep(): Promise<void> {
@@ -198,12 +225,63 @@ export async function runAuthorizationSweep(): Promise<void> {
     blockedWallets = new Set();
   }
 
+  // Check active API keys
+  const now = Math.floor(Date.now() / 1000);
+  const activeApiKeyIds = await getActiveApiKeyIdsForSweep();
+
   for (const session of activeSessions) {
+    // Token-based auth checks
     if (session.jti && revokedJtis.has(session.jti)) {
       session.terminate('token_revoked');
-    } else if (blockedWallets.has(session.wallet)) {
-      session.terminate('wallet_blocklisted');
+      continue;
     }
+    if (blockedWallets.has(session.wallet)) {
+      session.terminate('wallet_blocklisted');
+      continue;
+    }
+
+    // API key-based auth checks
+    if (session.apiKeyId) {
+      // Check if key has been revoked
+      if (!activeApiKeyIds.has(session.apiKeyId)) {
+        session.terminate('api_key_revoked');
+        continue;
+      }
+
+      // Check if key has expired
+      if (session.apiKeyExpiresAt && session.apiKeyExpiresAt <= now) {
+        session.terminate('api_key_expired');
+        continue;
+      }
+    }
+
+    // Check max session lifetime
+    if (session.startTime && session.startTime + MAX_SESSION_MS <= now) {
+      session.terminate('max_session_exceeded');
+      continue;
+    }
+  }
+}
+
+// Cache for active API key IDs (refreshed each sweep)
+let activeApiKeyIdsCache: Set<number> | null = null;
+let activeApiKeyIdsCacheTime = 0;
+const ACTIVE_API_KEY_ID_CACHE_TTL_MS = 5000; // 5 seconds
+
+async function getActiveApiKeyIdsForSweep(): Promise<Set<number>> {
+  const now = Date.now();
+  if (activeApiKeyIdsCache && now - activeApiKeyIdsCacheTime < ACTIVE_API_KEY_ID_CACHE_TTL_MS) {
+    return activeApiKeyIdsCache;
+  }
+
+  try {
+    const { getActiveApiKeyIds } = await import('../db');
+    activeApiKeyIdsCache = new Set(await getActiveApiKeyIds());
+    activeApiKeyIdsCacheTime = now;
+    return activeApiKeyIdsCache;
+  } catch {
+    activeApiKeyIdsCache = null;
+    return new Set();
   }
 }
 
@@ -380,6 +458,7 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
   const cleanupFns: Array<() => void> = [];
   let keepAliveTimer: NodeJS.Timeout | null = null;
   let tokenExpiryTimer: NodeJS.Timeout | null = null;
+  let maxSessionTimer: NodeJS.Timeout | null = null;
 
   const subscriber: SseSubscriber = {
     wallet,
@@ -401,6 +480,7 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
     terminated = true;
     if (keepAliveTimer) clearInterval(keepAliveTimer);
     if (tokenExpiryTimer) clearTimeout(tokenExpiryTimer);
+    if (maxSessionTimer) clearTimeout(maxSessionTimer);
     broadcaster.unsubscribe(subscriber);
     activeSessions.delete(session);
     for (const fn of cleanupFns) {
@@ -410,7 +490,7 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
     logger.info(`[sse] client disconnected wallet=${wallet} total=${broadcaster.subscriberCount}`);
   };
 
-  const terminate = (reason: 'token_revoked' | 'wallet_blocklisted' | 'token_expired' | 'server_shutdown'): void => {
+  const terminate = (reason: 'token_revoked' | 'wallet_blocklisted' | 'token_expired' | 'server_shutdown' | 'api_key_revoked' | 'api_key_expired' | 'max_session_exceeded'): void => {
     if (terminated || res.writableEnded) return;
     logger.warn(`[sse] terminating session wallet=${wallet} reason=${reason}`);
     try {
@@ -422,11 +502,15 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
     cleanup();
   };
 
+  const now = Math.floor(Date.now() / 1000);
   const session: ActiveSession = {
     wallet,
     jti: req.jti,
+    apiKeyId: req.apiKeyId,
+    apiKeyExpiresAt: req.apiKeyExpiresAt,
     subscriber,
     terminate,
+    startTime: now,
   };
 
   activeSessions.add(session);
@@ -448,6 +532,19 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
   });
   cleanupFns.push(unsubscribeBlocked);
 
+  // ── API key revocation listener (in-process, immediate) ────────────────────
+  if (session.apiKeyId) {
+    const unsubscribeApiKeyRevoked = (apiKeyId: number) => {
+      if (apiKeyId === session.apiKeyId) {
+        session.terminate('api_key_revoked');
+      }
+    };
+    apiKeyRevocationEmitter.on('revoked', unsubscribeApiKeyRevoked);
+    cleanupFns.push(() => {
+      apiKeyRevocationEmitter.removeListener('revoked', unsubscribeApiKeyRevoked);
+    });
+  }
+
   // ── Keep-alive ─────────────────────────────────────────────────────────────
   keepAliveTimer = setInterval(() => {
     // Check if the response is still writable before writing.
@@ -456,7 +553,7 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
       return;
     }
     res.write(KEEPALIVE_FRAME);
-  }, KEEPALIVE_INTERVAL_MS);
+  }, getKeepaliveIntervalMs());
 
   // ── Cleanup on disconnect ─────────────────────────────────────────────────
   const onClose = cleanup;
@@ -482,6 +579,32 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
     enforceExpiry();
   }
 
+  // API key expiry timer (if the key has an explicit expiry)
+  if (session.apiKeyExpiresAt) {
+    const apiKeyExpiresAtMs = session.apiKeyExpiresAt * 1000;
+    const enforceApiKeyExpiry = (): void => {
+      const remainingMs = apiKeyExpiresAtMs - Date.now();
+      if (remainingMs <= 0) {
+        session.terminate('api_key_expired');
+        return;
+      }
+      tokenExpiryTimer = setTimeout(enforceApiKeyExpiry, Math.min(remainingMs, 2_147_483_647));
+    };
+    enforceApiKeyExpiry();
+  }
+
+  // Max session lifetime cap — hard cap applied to every session regardless of auth type
+  const enforceMaxSession = (): void => {
+    const sessionAgeMs = (Math.floor(Date.now() / 1000) - session.startTime!) * 1000;
+    if (sessionAgeMs >= MAX_SESSION_MS) {
+      session.terminate('max_session_exceeded');
+      return;
+    }
+    const remainingMs = MAX_SESSION_MS - sessionAgeMs;
+    maxSessionTimer = setTimeout(enforceMaxSession, Math.min(remainingMs, 2_147_483_647));
+  };
+  enforceMaxSession();
+
   // Start the shared sweep timer once the first connection opens.
   if (!authSweepTimer) {
     authSweepTimer = setInterval(() => {
@@ -491,7 +614,7 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
           err instanceof Error ? err.message : String(err),
         );
       });
-    }, AUTH_SWEEP_INTERVAL_MS);
+    }, getAuthSweepIntervalMs());
     authSweepTimer.unref();
   }
 });

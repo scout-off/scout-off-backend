@@ -191,7 +191,7 @@ try {
 }
 
 /** GET /api/validators/milestones/pending or /api/validators/:wallet/milestones/pending */
-export async function getPendingMilestones(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getPendingMilestones(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const { region, position, playerId, submittedAfter, submittedBefore, page, pageSize } =
     pendingQuerySchema.parse(req.query);
   const validatorWallet = req.params.wallet as string || req.account;

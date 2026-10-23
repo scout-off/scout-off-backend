@@ -182,6 +182,8 @@ declare global {
       apiKeyScopes?: string[] | null;
       /** Database id of the API key used for this request, when authenticated via X-API-Key. */
       apiKeyId?: number;
+      /** Expiry timestamp (Unix seconds) of the API key used for this request, if any. */
+      apiKeyExpiresAt?: number;
     }
   }
 }
@@ -191,9 +193,11 @@ declare global {
 export interface Sep10Challenge {
   challenge: string; // XDR
   networkPassphrase: string;
+  expiresAt: number; // Unix timestamp in seconds
 }
 
 export interface Sep10Token {
+  success: true;
   token: string;
   account: string;
   expiresAt: number; // Unix timestamp

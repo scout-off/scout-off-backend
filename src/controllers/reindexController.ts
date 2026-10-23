@@ -142,7 +142,7 @@ try {
 export function reindexStatusHandler(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): void {
   const s = getReindexStatus();
   res.json({

@@ -151,7 +151,7 @@ export async function triggerReplay(
 export function replayStatusHandler(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): void {
   const s = getReplayStatus();
   res.json({

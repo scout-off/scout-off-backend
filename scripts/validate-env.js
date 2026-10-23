@@ -16,17 +16,24 @@
 const fs = require('fs');
 const path = require('path');
 
-// ─── Required vars that must be present at runtime ───────────────────────────
-const REQUIRED_RUNTIME_VARS = ['CONTRACT_ID', 'JWT_SECRET'];
+// ─── Shared enumerations (#1541) ─────────────────────────────────────────────
+//
+// These live in src/config/env-constants.json so this script and src/config.ts
+// validate against exactly the same lists. Keep the JSON as the single source
+// of truth — do not add values here.
+const envConstants = require('../src/config/env-constants.json');
+
+// Required vars that must be present at runtime.
+const REQUIRED_RUNTIME_VARS = envConstants.requiredRuntimeVars;
 
 // Valid NODE_ENV values; defaults to 'development' when unset.
-const VALID_NODE_ENVS = ['development', 'test', 'production'];
+const VALID_NODE_ENVS = envConstants.nodeEnvs;
 
 // Valid NETWORK values; defaults to 'testnet' when unset.
-const VALID_NETWORKS = ['testnet', 'mainnet', 'futurenet', 'standalone'];
+const VALID_NETWORKS = envConstants.networks;
 
 // Valid DB_DRIVER values; defaults to 'sqlite' when unset.
-const VALID_DB_DRIVERS = ['sqlite', 'postgres'];
+const VALID_DB_DRIVERS = envConstants.dbDrivers;
 
 function validateRuntimeEnv(env = process.env) {
   const errors = [];
@@ -197,6 +204,7 @@ if (require.main === module) {
 module.exports = {
   REQUIRED_RUNTIME_VARS,
   VALID_NODE_ENVS,
+  VALID_NETWORKS,
   VALID_DB_DRIVERS,
   validateRuntimeEnv,
   findStaleExampleKeys,

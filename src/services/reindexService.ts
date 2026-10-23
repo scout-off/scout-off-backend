@@ -38,8 +38,8 @@ export const MAX_REINDEX_RANGE = 10_000;
 // When ledger lag (remaining ledgers) exceeds CATCHUP_THRESHOLD the batch loop
 // switches into catch-up mode: larger batch and zero inter-batch delay.
 //
-// All values are configurable via environment variables so operators can tune
-// without a code change.
+// All values come from config.reindex (REINDEX_* environment variables,
+// validated at startup) so operators can tune without a code change.
 
 /** Hard ceiling on catch-up batch size to keep individual RPC responses sane. */
 const MAX_ALLOWED_CATCHUP_BATCH_SIZE = 1_000;
@@ -49,7 +49,7 @@ const MAX_ALLOWED_CATCHUP_BATCH_SIZE = 1_000;
  * Configurable via REINDEX_CATCHUP_THRESHOLD (default: 500).
  */
 function getCatchupThreshold(): number {
-  return parseInt(process.env.REINDEX_CATCHUP_THRESHOLD ?? '500', 10);
+  return config.reindex.catchupThreshold;
 }
 
 /**
@@ -58,8 +58,7 @@ function getCatchupThreshold(): number {
  * Hard-capped at MAX_ALLOWED_CATCHUP_BATCH_SIZE.
  */
 function getCatchupBatchSize(): number {
-  const raw = parseInt(process.env.REINDEX_CATCHUP_BATCH_SIZE ?? '500', 10);
-  return Math.min(raw, MAX_ALLOWED_CATCHUP_BATCH_SIZE);
+  return Math.min(config.reindex.catchupBatchSize, MAX_ALLOWED_CATCHUP_BATCH_SIZE);
 }
 
 /**
@@ -67,7 +66,7 @@ function getCatchupBatchSize(): number {
  * Configurable via REINDEX_BATCH_SIZE (default: 100).
  */
 function getSteadyBatchSize(): number {
-  return parseInt(process.env.REINDEX_BATCH_SIZE ?? '100', 10);
+  return config.reindex.batchSize;
 }
 
 /**
@@ -75,7 +74,7 @@ function getSteadyBatchSize(): number {
  * Configurable via REINDEX_BATCH_DELAY_MS (default: 50).
  */
 function getSteadyBatchDelay(): number {
-  return parseInt(process.env.REINDEX_BATCH_DELAY_MS ?? '50', 10);
+  return config.reindex.batchDelayMs;
 }
 
 /**
@@ -83,7 +82,7 @@ function getSteadyBatchDelay(): number {
  * Configurable via REINDEX_RATE_LIMIT_BACKOFF_MS (default: 2 000).
  */
 function getRateLimitBackoffMs(): number {
-  return parseInt(process.env.REINDEX_RATE_LIMIT_BACKOFF_MS ?? '2000', 10);
+  return config.reindex.rateLimitBackoffMs;
 }
 
 /** Determine whether an error is an RPC rate-limit response. */

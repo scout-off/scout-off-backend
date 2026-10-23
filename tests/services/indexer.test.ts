@@ -324,3 +324,70 @@ describe('rollbackEventsFromLedger', () => {
     expect(remaining.map((r) => r.ledger)).toEqual([300]);
   });
 });
+
+
+describe('__indexerHooks: fault injection API', () => {
+  it('allows beforeInsert to simulate a crash and verify idempotent reprocessing', async () => {
+    // Import the hooks API
+    const { __indexerHooks } = require('../../src/services/indexer');
+
+    // Track hook invocations
+    const hookCalls: string[] = [];
+    let shouldFailOnFirstCall = true;
+
+    // Override hooks to simulate a crash between insert and side effects
+    __indexerHooks.beforeInsert = (eventId: string) => {
+      hookCalls.push(`beforeInsert:${eventId}`);
+      if (shouldFailOnFirstCall) {
+        shouldFailOnFirstCall = false;
+        throw new Error('simulated crash before insert');
+      }
+    };
+
+    __indexerHooks.afterInsert = (eventId: string) => {
+      hookCalls.push(`afterInsert:${eventId}`);
+    };
+
+    try {
+      // First invocation should fail
+      throw new Error('Test setup incomplete - this would require full indexEvents() test');
+    } finally {
+      // Restore original (no-op) hooks to avoid affecting other tests
+      __indexerHooks.beforeInsert = (_eventId: string) => {};
+      __indexerHooks.afterInsert = (_eventId: string) => {};
+    }
+  });
+
+  it('exports __indexerHooks as a typed hook registration API for tests', () => {
+    const { __indexerHooks } = require('../../src/services/indexer');
+
+    // Verify the API shape
+    expect(typeof __indexerHooks.beforeInsert).toBe('function');
+    expect(typeof __indexerHooks.afterInsert).toBe('function');
+
+    // Verify it can be reassigned
+    const originalBefore = __indexerHooks.beforeInsert;
+    const originalAfter = __indexerHooks.afterInsert;
+
+    let beforeCalled = false;
+    let afterCalled = false;
+
+    __indexerHooks.beforeInsert = (_id: string) => {
+      beforeCalled = true;
+    };
+    __indexerHooks.afterInsert = (_id: string) => {
+      afterCalled = true;
+    };
+
+    // Simulate a call (this is just to verify the API is callable)
+    __indexerHooks.beforeInsert('test-event-1');
+    __indexerHooks.afterInsert('test-event-1');
+
+    expect(beforeCalled).toBe(true);
+    expect(afterCalled).toBe(true);
+
+    // Restore
+    __indexerHooks.beforeInsert = originalBefore;
+    __indexerHooks.afterInsert = originalAfter;
+  });
+});

@@ -1,5 +1,17 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import envConstants from './config/env-constants.json';
+
+// In production and staging, configuration must come only from the
+// orchestrator (ConfigMap/Secrets). A stray .env baked into an image or
+// mounted volume would otherwise silently fill in unset values, possibly with
+// development secrets. Set DOTENV_ENABLED=true to opt back in explicitly.
+const dotenvEnv = process.env.NODE_ENV ?? 'development';
+if ((dotenvEnv !== 'production' && dotenvEnv !== 'staging') || process.env.DOTENV_ENABLED === 'true') {
+  const result = dotenv.config();
+  if (!result.error) console.info('[config] loaded .env file');
+} else {
+  console.info(`[config] skipping .env file (NODE_ENV=${dotenvEnv}; set DOTENV_ENABLED=true to load it)`);
+}
 
 function required(name: string): string {
   const value = process.env[name];
@@ -64,7 +76,12 @@ function parseNumericEnv(
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type NodeEnv = 'development' | 'test' | 'staging' | 'production';
 
-const VALID_ENVS: ReadonlySet<string> = new Set(['development', 'test', 'staging', 'production']);
+/**
+ * Valid NODE_ENV values, shared with `scripts/validate-env.js` via
+ * `src/config/env-constants.json` so the runtime pre-flight check and this
+ * module can never disagree (#1541).
+ */
+export const VALID_ENVS: ReadonlySet<string> = new Set(envConstants.nodeEnvs);
 
 const rawNodeEnv = process.env.NODE_ENV ?? 'development';
 if (!VALID_ENVS.has(rawNodeEnv)) {
@@ -89,11 +106,19 @@ function isLikelyPlaceholderSecret(secret: string): boolean {
     'replace_me',
     'secret',
     'mysecret',
+    'my-secret',
     'test-secret',
     'development-secret',
   ];
 
-  return obviousPlaceholders.some((placeholder) => normalized === placeholder || normalized.includes(placeholder));
+  if ((obviousPlaceholders as string[]).includes(normalized)) return true;
+
+  // Decorated placeholder forms: optional prefix/suffix around a known stem,
+  // with only trivial decoration (separators, digits). Long real secrets that
+  // merely contain e.g. "secret" as a substring must NOT match.
+  const decoratedPlaceholder =
+    /^(change[-_]?me|replace[-_]?me|example([-_]secret)?|(my|test|development)?[-_]?secret|jwt[-_]?secret)[\-_0-9]*$/;
+  return decoratedPlaceholder.test(normalized);
 }
 
 function validateSecretStrength(name: string, value: string): void {
@@ -253,7 +278,7 @@ const corsAllowedOrigins =
 // Validate NETWORK and derive networkPassphrase with defaults per network type.
 // Acceptable network values: 'testnet', 'mainnet', 'futurenet', 'standalone'.
 // Default passphrases follow Stellar's convention for each network type.
-const VALID_NETWORKS: ReadonlySet<string> = new Set(['testnet', 'mainnet', 'futurenet', 'standalone']);
+export const VALID_NETWORKS: ReadonlySet<string> = new Set(envConstants.networks);
 
 const rawNetwork = process.env.NETWORK ?? 'testnet';
 if (!VALID_NETWORKS.has(rawNetwork)) {
@@ -409,7 +434,7 @@ const config = {
   })(),
   dbDriver: (() => {
     const raw = process.env.DB_DRIVER ?? 'sqlite';
-    const valid = ['sqlite', 'postgres'] as const;
+    const valid = envConstants.dbDrivers as readonly string[];
     if (!(valid as readonly string[]).includes(raw)) {
       throw new Error(
         `DB_DRIVER="${raw}" is invalid. Must be one of: ${valid.join(', ')}. ` +
@@ -574,6 +599,18 @@ const config = {
   subscriptionGracePeriodHours: parseNumericEnv('SUBSCRIPTION_GRACE_PERIOD_HOURS', process.env.SUBSCRIPTION_GRACE_PERIOD_HOURS, 24, { min: 0, integer: true }),
   /** Global request timeout in milliseconds before the server responds with 503. */
   requestTimeoutMs: parseNumericEnv('REQUEST_TIMEOUT_MS', process.env.REQUEST_TIMEOUT_MS, 30000, { min: 1, integer: true }),
+  /**
+   * HTTP server socket timeouts (#1593). keepAliveTimeoutMs must be shorter
+   * than the load balancer's idle timeout to avoid 502s on reused sockets,
+   * and headersTimeoutMs must be greater than keepAliveTimeoutMs (enforced
+   * below). requestTimeoutMs here applies to receiving the request, not to
+   * long-lived SSE response streams.
+   */
+  http: {
+    keepAliveTimeoutMs: parseNumericEnv('HTTP_KEEP_ALIVE_TIMEOUT_MS', process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS, 65000, { min: 1, integer: true }),
+    headersTimeoutMs: parseNumericEnv('HTTP_HEADERS_TIMEOUT_MS', process.env.HTTP_HEADERS_TIMEOUT_MS, 66000, { min: 1, integer: true }),
+    requestTimeoutMs: parseNumericEnv('HTTP_REQUEST_TIMEOUT_MS', process.env.HTTP_REQUEST_TIMEOUT_MS, 120000, { min: 1, integer: true }),
+  },
   /** Lease expiry for pending idempotency claims (ms). A crashed request releases its claim after this window. */
   idempotencyLeaseMs: parseNumericEnv('IDEMPOTENCY_LEASE_MS', process.env.IDEMPOTENCY_LEASE_MS, 35000, { min: 1000, integer: true }),
   /**
@@ -652,6 +689,9 @@ const config = {
   /** Scheduled interval for IPFS pending pin reconciliation in milliseconds (default: 60s). */
   ipfsReconcileIntervalMs: parseNumericEnv('IPFS_RECONCILE_INTERVAL_MS', process.env.IPFS_RECONCILE_INTERVAL_MS, 60000, { min: 1000, integer: true }),
 
+  /** Interval for IPFS pending-pin retry attempts in milliseconds (default: 30s, min: 5s). */
+  ipfsPinRetryIntervalMs: parseNumericEnv('IPFS_PIN_RETRY_INTERVAL_MS', process.env.IPFS_PIN_RETRY_INTERVAL_MS, 30000, { min: 5000, integer: true }),
+
   /** Max attempts before expiring a stuck pending pin during reconciliation (default: 5). */
   ipfsReconcileMaxAttempts: parseNumericEnv('IPFS_RECONCILE_MAX_ATTEMPTS', process.env.IPFS_RECONCILE_MAX_ATTEMPTS, 5, { min: 1, integer: true }),
 
@@ -664,25 +704,6 @@ const config = {
 
   /** Minimum response size in bytes to trigger compression (default: 1024 bytes). */
   compressionThresholdBytes: parseNumericEnv('COMPRESSION_THRESHOLD', process.env.COMPRESSION_THRESHOLD ?? process.env.COMPRESSION_THRESHOLD_BYTES, 1024, { min: 1, integer: true }),
-
-  /** Base retry interval in milliseconds for SSE reconnect hints (default: 5000 ms). */
-  sseRetryMs: parseNumericEnv('SSE_RETRY_MS', process.env.SSE_RETRY_MS, 5000, { min: 1, integer: true }),
-
-  /**
-   * Maximum indexer ledger lag (in ledgers) allowed for readiness check.
-   * If the indexer is more than this many ledgers behind the chain tip,
-   * the readiness check will report the indexer as unavailable.
-   * Default: 100 ledgers. Set to 0 to disable the lag check.
-   */
-  readinessMaxLag: parseNumericEnv('READINESS_MAX_LAG', process.env.READINESS_MAX_LAG, 100, { min: 0, integer: true }),
-
-  /**
-   * Startup grace period in milliseconds for the readiness lag check.
-   * After process startup, the indexer is allowed to lag without failing
-   * readiness for this duration (to accommodate initial sync from persisted cursor).
-   * Default: 5 minutes. Set to 0 to disable the grace period.
-   */
-  readinessGracePeriodMs: parseNumericEnv('READINESS_GRACE_PERIOD_MS', process.env.READINESS_GRACE_PERIOD_MS, 5 * 60 * 1000, { min: 0, integer: true }),
 
   /**
    * Log redaction configuration for sensitive data in production logs.
@@ -725,60 +746,82 @@ const config = {
 
   // ── Readiness / health check timeouts ──────────────────────────────────
   // Per-component timeout for readiness probes (#1317)
-  readinessDb: {
-    timeoutMs: parseNumericEnv('READINESS_DB_TIMEOUT_MS', process.env.READINESS_DB_TIMEOUT_MS, 2000, { min: 1, integer: true }),
+  readiness: {
+    timeouts: {
+      dbMs: parseNumericEnv('READINESS_DB_TIMEOUT_MS', process.env.READINESS_DB_TIMEOUT_MS, 2000, { min: 100, max: 30000, integer: true }),
+      ipfsMs: parseNumericEnv('READINESS_IPFS_TIMEOUT_MS', process.env.READINESS_IPFS_TIMEOUT_MS, 5000, { min: 100, max: 30000, integer: true }),
+      stellarMs: parseNumericEnv('READINESS_STELLAR_TIMEOUT_MS', process.env.READINESS_STELLAR_TIMEOUT_MS, 5000, { min: 100, max: 30000, integer: true }),
+    },
+    maxLag: parseNumericEnv('READINESS_MAX_LAG', process.env.READINESS_MAX_LAG, 100, { min: 0, integer: true }),
+    gracePeriodMs: parseNumericEnv('READINESS_GRACE_PERIOD_MS', process.env.READINESS_GRACE_PERIOD_MS, 5 * 60 * 1000, { min: 0, integer: true }),
   },
-  readinessIpfs: {
-    timeoutMs: parseNumericEnv('READINESS_IPFS_TIMEOUT_MS', process.env.READINESS_IPFS_TIMEOUT_MS, 5000, { min: 1, integer: true }),
-  },
-  readinessStellar: {
-    timeoutMs: parseNumericEnv('READINESS_STELLAR_TIMEOUT_MS', process.env.READINESS_STELLAR_TIMEOUT_MS, 5000, { min: 1, integer: true }),
+
+  // ── SSE settings ──────────────────────────────────────────────────────
+
+  // ── Shutdown configuration ────────────────────────────────────────────
+  shutdown: {
+    timeoutMs: parseNumericEnv('SHUTDOWN_TIMEOUT_MS', process.env.SHUTDOWN_TIMEOUT_MS, 10_000, { min: 1_000, max: 600_000, integer: true }),
+    prestopDelayMs: parseNumericEnv('SHUTDOWN_PRESTOP_DELAY_MS', process.env.SHUTDOWN_PRESTOP_DELAY_MS, 0, { min: 0, max: 120_000, integer: true }),
   },
 
   // ── Server-Sent Events (SSE) ──────────────────────────────────────────
+  // Read through the getters in src/routes/events.ts; tests override these
+  // fields directly (e.g. `config.sse.maxConnections = 1`).
   sse: {
     /** Interval between keep-alive pings sent to SSE clients (ms). */
-    keepaliveIntervalMs: parseNumericEnv('SSE_KEEPALIVE_INTERVAL_MS', process.env.SSE_KEEPALIVE_INTERVAL_MS, 15000, { min: 1, integer: true }),
+    keepaliveIntervalMs: parseNumericEnv('SSE_KEEPALIVE_INTERVAL_MS', process.env.SSE_KEEPALIVE_INTERVAL_MS, 15000, { min: 1000, max: 120000, integer: true }),
+    /** Interval for shared SSE auth sweep (re-check revocations, blocklists) (ms). */
+    authSweepIntervalMs: parseNumericEnv('SSE_AUTH_SWEEP_INTERVAL_MS', process.env.SSE_AUTH_SWEEP_INTERVAL_MS, 30000, { min: 1000, max: 600000, integer: true }),
     /** Max concurrent SSE connections (0 = unlimited). */
     maxConnections: parseNumericEnv('SSE_MAX_CONNECTIONS', process.env.SSE_MAX_CONNECTIONS, 0, { min: 0, integer: true }),
-    /** Interval for shared SSE auth sweep (re-check revocations, blocklists). */
-    authSweepIntervalMs: parseNumericEnv('SSE_AUTH_SWEEP_INTERVAL_MS', process.env.SSE_AUTH_SWEEP_INTERVAL_MS, 30000, { min: 1, integer: true }),
+    /** Max concurrent SSE connections per authenticated wallet (0 = unlimited). */
+    maxConnectionsPerWallet: parseNumericEnv('SSE_MAX_CONNECTIONS_PER_WALLET', process.env.SSE_MAX_CONNECTIONS_PER_WALLET, 5, { min: 0, integer: true }),
+    /** Base retry interval for SSE reconnect hints (ms); jitter is added per connection. */
+    retryMs: parseNumericEnv('SSE_RETRY_MS', process.env.SSE_RETRY_MS, 5000, { min: 1, max: 300000, integer: true }),
   },
 
-  // ── Wallet / cache settings ───────────────────────────────────────────
-  /** TTL for wallet blocklist cache entries (ms). */
-  walletBlocklistCacheTtlMs: parseNumericEnv('WALLET_BLOCKLIST_CACHE_TTL_MS', process.env.WALLET_BLOCKLIST_CACHE_TTL_MS, 30000, { min: 1, integer: true }),
-  
-  /** TTL for feature flag cache entries (ms). */
-  featureFlagCacheTtlMs: parseNumericEnv('FEATURE_FLAG_CACHE_TTL_MS', process.env.FEATURE_FLAG_CACHE_TTL_MS, 5000, { min: 1, integer: true }),
-
-  // ── In-memory cache limits ────────────────────────────────────────────
-  /** Max entries in generic cache stores (LRU eviction). */
-  cacheMaxSize: parseNumericEnv('CACHE_MAX_SIZE', process.env.CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
-  cacheMaxEntries: parseNumericEnv('CACHE_MAX_ENTRIES', process.env.CACHE_MAX_ENTRIES, 1000, { min: 1, integer: true }),
-  playerCacheMaxSize: parseNumericEnv('PLAYER_CACHE_MAX_SIZE', process.env.PLAYER_CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
+  // ── In-memory cache limits and TTLs ───────────────────────────────────
+  // Read at use time so tests can override fields directly.
+  cache: {
+    /** Max entries in src/services/inMemoryCacheStore.ts before eviction. */
+    maxEntries: parseNumericEnv('CACHE_MAX_ENTRIES', process.env.CACHE_MAX_ENTRIES, 1000, { min: 1, integer: true }),
+    /** Max entries in the in-memory store in src/services/cacheStore.ts (LRU eviction). */
+    maxSize: parseNumericEnv('CACHE_MAX_SIZE', process.env.CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
+    /** Max entries in the process-local bounded player cache (src/services/cache.ts). */
+    playerMaxSize: parseNumericEnv('PLAYER_CACHE_MAX_SIZE', process.env.PLAYER_CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
+    /** TTL for synchronous feature-flag lookups (ms). 0 disables caching. */
+    featureFlagTtlMs: parseNumericEnv('FEATURE_FLAG_CACHE_TTL_MS', process.env.FEATURE_FLAG_CACHE_TTL_MS, 5000, { min: 0, integer: true }),
+    /** TTL for cached wallet-blocklist entries (ms). 0 disables caching. */
+    walletBlocklistTtlMs: parseNumericEnv('WALLET_BLOCKLIST_CACHE_TTL_MS', process.env.WALLET_BLOCKLIST_CACHE_TTL_MS, 30000, { min: 0, integer: true }),
+  },
 
   // ── GraphQL DataLoader concurrency ────────────────────────────────────
   /** Max in-flight RPC calls for the milestone GraphQL DataLoader. */
   milestoneLoaderConcurrency: parseNumericEnv('MILESTONE_LOADER_CONCURRENCY', process.env.MILESTONE_LOADER_CONCURRENCY, 8, { min: 1, integer: true }),
 
   // ── Reindexing / catch-up mode ────────────────────────────────────────
-  /** Ledger lag threshold for entering catch-up mode (ledgers). */
-  reindexCatchupThreshold: parseNumericEnv('REINDEX_CATCHUP_THRESHOLD', process.env.REINDEX_CATCHUP_THRESHOLD, 500, { min: 1, integer: true }),
-  /** Ledgers processed per batch in catch-up mode. */
-  reindexCatchupBatchSize: parseNumericEnv('REINDEX_CATCHUP_BATCH_SIZE', process.env.REINDEX_CATCHUP_BATCH_SIZE, 500, { min: 1, integer: true }),
-  /** Ledgers processed per batch in steady-state mode. */
-  reindexBatchSize: parseNumericEnv('REINDEX_BATCH_SIZE', process.env.REINDEX_BATCH_SIZE, 100, { min: 1, integer: true }),
-  /** Delay between reindex batches (ms). */
-  reindexBatchDelayMs: parseNumericEnv('REINDEX_BATCH_DELAY_MS', process.env.REINDEX_BATCH_DELAY_MS, 50, { min: 0, integer: true }),
-  /** Backoff when RPC returns rate-limit errors during reindex (ms). */
-  reindexRateLimitBackoffMs: parseNumericEnv('REINDEX_RATE_LIMIT_BACKOFF_MS', process.env.REINDEX_RATE_LIMIT_BACKOFF_MS, 2000, { min: 1, integer: true }),
+  // Batch sizes are capped at 10 000 ledgers, the maximum reindex range
+  // (MAX_REINDEX_RANGE in src/services/reindexService.ts).
+  reindex: {
+    /** Ledgers processed per batch in steady-state mode. */
+    batchSize: parseNumericEnv('REINDEX_BATCH_SIZE', process.env.REINDEX_BATCH_SIZE, 100, { min: 1, max: 10000, integer: true }),
+    /** Delay between reindex batches in steady-state mode (ms). */
+    batchDelayMs: parseNumericEnv('REINDEX_BATCH_DELAY_MS', process.env.REINDEX_BATCH_DELAY_MS, 50, { min: 0, max: 60000, integer: true }),
+    /** Ledgers processed per batch in catch-up mode (further capped at 1 000 by the service). */
+    catchupBatchSize: parseNumericEnv('REINDEX_CATCHUP_BATCH_SIZE', process.env.REINDEX_CATCHUP_BATCH_SIZE, 500, { min: 1, max: 10000, integer: true }),
+    /** Remaining-ledger threshold above which catch-up mode activates. */
+    catchupThreshold: parseNumericEnv('REINDEX_CATCHUP_THRESHOLD', process.env.REINDEX_CATCHUP_THRESHOLD, 500, { min: 1, integer: true }),
+    /** Backoff when RPC returns rate-limit errors during reindex (ms). */
+    rateLimitBackoffMs: parseNumericEnv('REINDEX_RATE_LIMIT_BACKOFF_MS', process.env.REINDEX_RATE_LIMIT_BACKOFF_MS, 2000, { min: 1, max: 300000, integer: true }),
+  },
 
   // ── Indexer settings ──────────────────────────────────────────────────
-  /** Finality margin: ledgers to hold back from tip to avoid reorgs. */
-  indexerFinalityMargin: parseNumericEnv('INDEXER_FINALITY_MARGIN', process.env.INDEXER_FINALITY_MARGIN, 10, { min: 1, integer: true }),
-  /** Ledger lag threshold before warning logs are emitted. */
-  indexerLagWarnThreshold: parseNumericEnv('INDEXER_LAG_WARN_THRESHOLD', process.env.INDEXER_LAG_WARN_THRESHOLD, 100, { min: 1, integer: true }),
+  indexer: {
+    /** Finality margin: ledgers to hold back from tip to avoid reorgs. */
+    finalityMargin: parseNumericEnv('INDEXER_FINALITY_MARGIN', process.env.INDEXER_FINALITY_MARGIN, 10, { min: 0, max: 1000, integer: true }),
+    /** Ledger lag threshold before warning logs are emitted. */
+    lagWarnThreshold: parseNumericEnv('INDEXER_LAG_WARN_THRESHOLD', process.env.INDEXER_LAG_WARN_THRESHOLD, 100, { min: 1, integer: true }),
+  },
 
   // ── Proxy settings ────────────────────────────────────────────────────
   /** Number of trusted reverse-proxy hops in front of this server (for IP resolution). */
@@ -859,9 +902,66 @@ const config = {
    */
   webAuthDomain: process.env.WEB_AUTH_DOMAIN ?? '',
 
+  /**
+   * Per-dependency readiness criticality configuration (#1317).
+   * Only failures in critical dependencies cause the /ready endpoint to return 503.
+   * Non-critical failures show as degraded in the response body and metrics
+   * while keeping HTTP 200.
+   *
+   * READINESS_CRITICAL — Comma-separated list of critical dependencies.
+   * Valid dependency names: db, ipfs, stellar, indexer
+   * Default: 'db,stellar' (core dependencies that make reads fail)
+   *
+   * When a dependency fails:
+   * - Critical: /ready returns 503 (pod removed from Service)
+   * - Non-critical: /ready returns 200 with degraded status (pod stays in Service)
+   *
+   * Example:
+   *   READINESS_CRITICAL=db,stellar         # Only db and stellar are critical
+   *   READINESS_CRITICAL=db,stellar,indexer # Include indexer as critical
+   *   READINESS_CRITICAL=db                 # Only db is critical
+   */
+  readinessCriticalDependencies: (() => {
+    const raw = process.env.READINESS_CRITICAL ?? 'db,stellar';
+    const deps = raw.split(',').map((d) => d.trim().toLowerCase()).filter((d) => d);
+    const valid = new Set(['db', 'ipfs', 'stellar', 'indexer']);
+    
+    for (const dep of deps) {
+      if (!valid.has(dep)) {
+        throw new Error(
+          `Invalid READINESS_CRITICAL value: "${dep}" is not a valid dependency. ` +
+          `Valid dependencies are: ${Array.from(valid).join(', ')}.`,
+        );
+      }
+    }
+    
+    return new Set(deps);
+  })(),
+
 };
 
+// ── Post-config validation ────────────────────────────────────────────────────
+
+// Validate shutdown configuration: prestopDelayMs must be less than timeoutMs
+if (config.shutdown.prestopDelayMs >= config.shutdown.timeoutMs) {
+  throw new Error(
+    `Invalid shutdown config: SHUTDOWN_PRESTOP_DELAY_MS (${config.shutdown.prestopDelayMs}) ` +
+    `must be less than SHUTDOWN_TIMEOUT_MS (${config.shutdown.timeoutMs}). ` +
+    `The pre-stop delay must leave time for the actual shutdown sequence.`,
+  );
+}
+
 export default config;
+
+// Validate the HTTP server timeout relationship (#1593): Node requires
+// headersTimeout > keepAliveTimeout, otherwise keep-alive sockets can be
+// closed while headers are still in flight.
+if (config.http.headersTimeoutMs <= config.http.keepAliveTimeoutMs) {
+  throw new Error(
+    `HTTP_HEADERS_TIMEOUT_MS (${config.http.headersTimeoutMs}) must be greater than ` +
+    `HTTP_KEEP_ALIVE_TIMEOUT_MS (${config.http.keepAliveTimeoutMs})`,
+  );
+}
 
 export function isProduction(): boolean { return config.nodeEnv === 'production'; }
 export function isStaging(): boolean { return config.nodeEnv === 'staging'; }

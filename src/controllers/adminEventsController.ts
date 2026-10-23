@@ -89,7 +89,7 @@ const eventsQuerySchema = z
   );
 
 /** GET /api/admin/events */
-export async function getAllEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getAllEvents(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const parsed = eventsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);

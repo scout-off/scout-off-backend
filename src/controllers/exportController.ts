@@ -113,7 +113,7 @@ export function formatEventCsvRow(row: EventExportRow): string {
  */
 const DISCONNECT_CHECK_INTERVAL = 500;
 
-export async function exportEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function exportEvents(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const parsed = adminDateRangeSchema.safeParse(req.query ?? {});
   if (!parsed.success) {
     res.status(400).json({

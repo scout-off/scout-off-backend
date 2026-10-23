@@ -337,19 +337,21 @@ router.route("/:playerId/tokens")
 /**
  * POST /api/players/:playerId/tokens/buy
  *
- * Purchase Player Tokens for the given player (stub — no real XLM transfer).
+ * Purchase Player Tokens for a given player. Purchases are persisted in the
+ * database, but this stub does not perform an XLM transfer.
  * Gated by the `player_tokens` feature flag — returns 404 when disabled.
- * The authenticated account is the buyer; the optional buyerWallet field is
- * accepted for compatibility only when it matches that account.
+ * The authenticated scout account is the buyer; the optional buyerWallet field
+ * is accepted only when it matches that account.
  *
  * @param playerId {string} - The player's on-chain identifier
  * @body { amount: number, buyerWallet?: string }
  * @response 200 { success: true, data: { playerId, buyerWallet, amount, newBalance } }
- * @response 400 { success: false, error: string } - Invalid amount
+ * @response 400 { success: false, error: string } - Invalid request body or amount
  * @response 401 { success: false, error: string } - Authentication required
  * @response 403 { success: false, error: string } - buyerWallet does not match authenticated account
- * @response 404 { success: false, error: string } - Feature flag disabled or player not found
- * @auth Bearer (scout or player role required)
+ * @response 404 { success: false, error: string } - Feature flag disabled or no tokens issued for player
+ * @response 409 { success: false, error: string, code: TOKEN_SUPPLY_EXHAUSTED } - Token supply exhausted
+ * @auth Bearer token with scout role required
  */
 router.route("/:playerId/tokens/buy")
   .post(requireRole("scout"), requireApiKeyScope("write:player_tokens"), validateBody(buyTokenSchema), buyPlayerToken)

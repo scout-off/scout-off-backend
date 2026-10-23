@@ -25,13 +25,25 @@ function resolveCommit(): string {
 }
 
 const commit = resolveCommit();
+const STARTED_AT = new Date();
 
-export function getVersionInfo(): { version: string; commit: string; node: string; environment: string } {
+export interface VersionInfo {
+  version: string;
+  commit: string;
+  node: string;
+  environment: string;
+  startedAt: string;
+  uptimeSeconds: number;
+}
+
+export function getVersionInfo(): VersionInfo {
   return {
     version: pkg.version,
     commit,
     node: process.version,
     environment: config.nodeEnv,
+    startedAt: STARTED_AT.toISOString(),
+    uptimeSeconds: Math.floor(process.uptime()),
   };
 }
 

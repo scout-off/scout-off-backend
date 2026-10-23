@@ -17,9 +17,7 @@ const DB_DIR = path.resolve(__dirname, '../../db');
 // because they contain only syntax convertSqlToPostgres() already translates
 // (see src/db/migrate.ts). Linked to #1190.
 const ALLOWLIST = new Set([
-  '027_api_key_rate_limits.sql', // ALTER TABLE ADD COLUMN + CREATE TABLE/INDEX, portable
   '028_security_event_metrics.sql', // INTEGER PRIMARY KEY AUTOINCREMENT -> SERIAL PRIMARY KEY
-  '029_gdpr_data_export.sql', // INTEGER PRIMARY KEY AUTOINCREMENT -> SERIAL PRIMARY KEY
 ]);
 
 describe('db/ migration Postgres parity', () => {

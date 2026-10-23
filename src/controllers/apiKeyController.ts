@@ -88,7 +88,7 @@ export const rotateKeySchema = z.object({
 export async function issueApiKey(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const parsed = issueKeySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -162,7 +162,7 @@ export async function issueApiKey(
 export async function listApiKeys(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const rows: ApiKeyRow[] = await listApiKeysByWallet(req.params.wallet as string);
 
@@ -196,7 +196,7 @@ export async function listApiKeys(
 export async function revokeApiKey(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
@@ -231,7 +231,7 @@ export async function revokeApiKey(
 export async function rotateApiKey(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {

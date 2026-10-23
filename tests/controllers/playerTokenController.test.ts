@@ -12,8 +12,7 @@ import {
   _stubSeedTokens,
   _stubReset,
 } from '../../src/controllers/playerTokenController';
-import { clearFeatureFlagCache, setFeatureFlag } from '../../src/services/featureFlags';
-import { FeatureFlags } from '../../src/services/featureFlags';
+import { clearFeatureFlagCache, setFeatureFlag, FeatureFlags } from '../../src/services/featureFlags';
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 

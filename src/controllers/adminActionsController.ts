@@ -100,7 +100,7 @@ export async function bulkValidatorImport(req: Request, res: Response, next: Nex
  * GET /api/admin/actions/pending
  * List all pending multi-admin actions (expired ones are purged on read).
  */
-export async function getPendingActions(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getPendingActions(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const actions = (await listPendingActions()).map((a) => ({
     id: a.id,
     actionType: a.action_type,
@@ -118,7 +118,7 @@ export async function getPendingActions(req: Request, res: Response, next: NextF
  * GET /api/admin/actions/:id
  * Get details of a specific pending action including collected signers.
  */
-export async function getPendingActionById(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getPendingActionById(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const details = await getActionDetails(req.params.id as string);
   if (!details) {
     res.status(404).json({ success: false, error: 'Action not found', code: ErrorCode.NOT_FOUND });

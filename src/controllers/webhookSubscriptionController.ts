@@ -98,7 +98,7 @@ function serializeSubscription(
 export async function registerWebhook(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const parsed = registerWebhookSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -160,7 +160,7 @@ export async function registerWebhook(
 export async function listWebhooks(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const rows = getWebhookSubscriptionsByScout(req.params.wallet as string);
 
@@ -184,7 +184,7 @@ export async function listWebhooks(
 export async function deleteWebhook(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
