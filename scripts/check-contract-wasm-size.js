@@ -22,7 +22,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const glob = require('glob');
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -124,9 +123,13 @@ function main() {
   // Find WASM files
   let wasmFiles;
   try {
-    wasmFiles = glob.sync(path.join(WASM_DIR, '*.wasm')).sort();
+    // No npm install in the contract CI job, so avoid the `glob` dependency.
+    wasmFiles = fs.readdirSync(WASM_DIR)
+      .filter((f) => f.endsWith('.wasm'))
+      .map((f) => path.join(WASM_DIR, f))
+      .sort();
   } catch (err) {
-    console.error(`[error] Failed to glob WASM files:`, err.message);
+    console.error(`[error] Failed to list WASM files:`, err.message);
     process.exit(1);
   }
 
