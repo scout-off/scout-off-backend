@@ -369,7 +369,7 @@ function convertSqlToPostgres(sql: string): string {
   if (!converted.includes('ON CONFLICT')) {
     converted = converted.replace(
       /INSERT INTO ([a-z_]+) \(([^)]+)\) VALUES/gi,
-      (match, table, columns) => {
+      (match) => {
         if (sql.includes('INSERT OR IGNORE')) {
           return match + ' ON CONFLICT DO NOTHING ';
         }

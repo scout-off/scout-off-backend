@@ -36,15 +36,6 @@ function assertAuthenticated(ctx: GraphQLContext): void {
   }
 }
 
-function assertRole(ctx: GraphQLContext, role: string): void {
-  assertAuthenticated(ctx);
-  if (ctx.role !== role) {
-    throw new GraphQLError(`Requires ${role} role`, {
-      extensions: { code: 'UNAUTHORIZED' },
-    });
-  }
-}
-
 /**
  * Enforce the shared API-key scope contract (#1019).
  *

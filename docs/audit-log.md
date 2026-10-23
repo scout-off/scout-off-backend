@@ -79,6 +79,34 @@ The following actions are automatically logged:
 | `player_anonymized` | `POST /api/admin/players/{playerId}/anonymize` | Player PII removed; includes anonymization timestamp |
 | `reindex_triggered` | `POST /api/admin/reindex` | On-chain event reindexing started |
 
+### Sensitive read events (#1531)
+
+Successful (2xx) reads of sensitive data are recorded as `read:<action>` by the
+`auditRead()` middleware (`src/middleware/auditRead.ts`). Entries contain the
+actor, role, target, correlation id, method, path and client IP — never the
+response body, query string or decrypted content. 4xx/5xx responses are not
+recorded, and the write is best-effort so auditing can never fail a request.
+
+| Action | Endpoint | Target |
+|--------|----------|--------|
+| `read:admin_audit_log` | `GET /api/admin/audit` | — |
+| `read:admin_audit_trail` | `GET /api/admin/audit/trail` | — |
+| `read:admin_events_export` | `GET /api/admin/events/export` | — |
+| `read:webhook_dead_letters` | `GET /api/admin/webhooks/dead-letters` | — |
+| `read:webhook_deliveries` | `GET /api/admin/webhooks/:id/deliveries` | webhook id |
+| `read:ip_reputation` | `GET /api/admin/ip-reputation/:ip` | IP address |
+| `read:token_introspection` | `POST /api/admin/introspect` | — |
+| `read:scout_note` | `GET /api/scouts/:wallet/notes/:playerId` | wallet/player id |
+| `read:scout_notes` | `GET /api/scouts/:wallet/notes` | wallet |
+| `read:scout_player_notes` | `GET /api/scouts/:wallet/players/:playerId/notes` | wallet/player id |
+| `read:scout_api_keys` | `GET /api/scouts/:wallet/api-keys` | wallet |
+
+Read auditing is controlled by `AUDIT_READS_ENABLED` (default: `true` in
+production, `false` elsewhere). Because the entries join the same hash chain as
+mutations and auth events, `GET /api/admin/audit/verify` covers them too. Use
+the existing `?action=` filter on `GET /api/admin/audit` to include or exclude
+`read:*` entries.
+
 ## Hash Chain Construction
 
 ### Deterministic hashing
@@ -232,6 +260,73 @@ This violation means:
 - The row's content no longer matches the stored hash
 - All rows inserted after row 847 now have invalid `prev_hash` values
 - This is a **critical security incident** requiring immediate investigation
+
+## Scheduled verification and alerting (#1539)
+
+Verification does not depend on an admin calling the endpoint. A background job
+(`src/services/auditChainVerifier.ts`, started by `src/index.ts`) verifies the
+chain on a schedule and alerts when it breaks.
+
+### How it works
+
+1. Progress is checkpointed in `indexer_state`:
+   `audit_verify_last_id`, `audit_verify_last_hash`, `audit_verify_last_run`
+   and `audit_verify_last_full_run`.
+2. Every `AUDIT_VERIFY_INTERVAL_MS` the job verifies rows with `id` greater
+   than the checkpoint, in batches of `AUDIT_VERIFY_BATCH_SIZE`, continuing
+   from the stored hash. Only incremental work is capped at 100 batches per
+   run; the next run resumes from the checkpoint.
+3. Once every `AUDIT_FULL_VERIFY_INTERVAL_MS` (or when no checkpoint exists)
+   it walks the whole chain from `GENESIS_HASH`, which catches edits to rows
+   that were already verified.
+4. The walk stops at the first break so the checkpoint never advances past
+   the damaged row: the next run re-detects it immediately.
+
+### Configuration
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `AUDIT_VERIFY_INTERVAL_MS` | `3600000` (1 h) | How often an incremental run happens. |
+| `AUDIT_FULL_VERIFY_INTERVAL_MS` | `604800000` (7 d) | How often the whole chain is re-verified from genesis. |
+| `AUDIT_VERIFY_BATCH_SIZE` | `5000` | Rows read per batch. Bounds memory use. |
+| `AUDIT_ALERT_WEBHOOK_URL` | unset | Optional https URL. On a break the job sends a `GET` with `event=audit_chain_break`, `broken_at_id`, `expected_hash`, `actual_hash`, `row_created_at`, `reason` and `mode` query parameters through `safeFetch`, which blocks private/loopback/link-local targets and redirects. |
+
+### When a break is detected
+
+- `scout_off_audit_chain_valid` is set to `0` and
+  `scout_off_audit_chain_breaks_total` is incremented (both exported at
+  `/metrics`).
+- An error is logged with `broken_at_id`, `expected_hash`, `actual_hash`,
+  `row_created_at` and the verification mode.
+- An `audit_chain_break` audit event is written with the same details.
+- The optional webhook is called once, best-effort.
+
+Example log line:
+
+```
+[audit-verify] audit-log hash chain is BROKEN {
+  broken_at_id: 847, expected_hash: "abc123...", actual_hash: "wronghash...",
+  row_created_at: "2025-01-15T08:32:00Z", reason: "hash_mismatch", mode: "full"
+}
+```
+
+### Response procedure
+
+1. Confirm the alert with `GET /api/admin/audit/verify` (full report, all
+   violations) and check the log line above for the first bad id.
+2. Snapshot the `audit_log` table before changing anything — it is evidence.
+3. Treat this as a **critical security incident**: identify who could write to
+   the table, and correlate the row's `created_at` with application and DB
+   audit logs.
+4. Do **not** delete or rewrite the damaged row. If the chain must be repaired,
+   do it from a verified backup and document the procedure.
+5. When the cause is fixed and the chain verifies cleanly again,
+   `scout_off_audit_chain_valid` returns to `1` on the next successful run.
+
+If retention/archival is introduced later, seed the checkpoint from the
+archive boundary (`audit_verify_last_id` + `audit_verify_last_hash`) so
+verification resumes at the first live row instead of genesis. Until then a
+full run expects the entire chain to be present.
 
 ## Integration with horizontal scaling
 

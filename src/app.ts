@@ -1,8 +1,8 @@
-import express from 'express';
+import express, { RequestHandler } from 'express';
 import cors, { CorsOptions } from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import config from './config';
+import config, { API_PREFIX, API_V1_PREFIX, API_V2_PREFIX } from './config';
 import authRoutes from './routes/auth';
 import playerRoutes from './routes/player';
 import scoutRoutes from './routes/scout';
@@ -16,12 +16,10 @@ import { traceId } from './middleware/traceId';
 import { responseTime } from './middleware/responseTime';
 import { stellarHealth, stellarBreaker } from './services/stellar';
 import { checkHealth } from './services/ipfs';
-import { API_PREFIX, API_V1_PREFIX, API_V2_PREFIX } from './config';
 import { mountGraphQL } from './graphql';
-import { createPersistedOperationsPlugin } from './graphql/persisted-operations';
-import { loadPersistedOperationsFromFile } from './graphql/persisted-operations';
 import { ErrorCode } from './utils/errorCodes';
 import { metricsMiddleware, createMetricsHandler } from './middleware/metrics';
+import { metricsGuard } from './middleware/metricsGuard';
 import { ipReputationMiddleware } from './middleware/ipReputation';
 import { createTimeout, requestTimeout } from './middleware/timeout';
 import { indexerLedgerLag } from './services/indexer';
@@ -33,6 +31,10 @@ import { versionRouting } from './middleware/versionRouting';
 import docsRouter from './routes/docs';
 import eventsRoutes from './routes/events';
 import { logger } from './utils/logger';
+import {
+  trackInFlightRequest,
+  drainAwareConnectionMiddleware,
+} from './shutdown';
 import { requireRole } from './middleware/auth';
 import { getHealthDependencies } from './controllers/healthDependenciesController';
 import {
@@ -82,6 +84,7 @@ async function probeDbWritable(timeoutMs = 2_000): Promise<'ok' | 'error'> {
 
 const isDevOrTest = config.nodeEnv === 'development' || config.nodeEnv === 'test';
 const allowedOrigins = config.corsAllowedOrigins;
+const wildcardPatterns = config.corsWildcardPatterns;
 
 if (!isDevOrTest && (!allowedOrigins || allowedOrigins.length === 0)) {
   logger.warn(
@@ -107,10 +110,22 @@ const corsOptions: CorsOptions = {
       return;
     }
 
-    // Explicit allowlist check (case-sensitive, exact match)
+    // Exact allowlist check (case-sensitive)
     if (allowedOrigins.includes(origin)) {
+      // Set Vary: Origin to ensure caches don't mix responses for different origins
       callback(null, origin);
       return;
+    }
+
+    // Wildcard subdomain pattern check: lowercase origin host for comparison.
+    // Scheme and port must match exactly (patterns are anchored regexes).
+    for (const pattern of wildcardPatterns) {
+      if (pattern.test(origin)) {
+        // Set Vary: Origin so CDN/proxy caches don't serve one origin's
+        // response to a request from a different origin.
+        callback(null, origin);
+        return;
+      }
     }
 
     // Not in the allowlist — suppress the CORS header (no error thrown so the
@@ -130,15 +145,17 @@ const corsOptions: CorsOptions = {
   exposedHeaders: [
     'ETag',
     'X-Correlation-ID',
+    'X-Trace-Id',
     'X-Response-Time',
     'X-API-Version',
     'API-Version',
     'Location',
     'Retry-After',
     'X-RateLimit-Reputation-Limit',
+    'Idempotent-Replayed',
   ],
   // credentials cannot be used with a wildcard origin (CORS spec); only enable
-  // it when we are using an explicit allowlist
+  // it when we are using an explicit allowlist or wildcard pattern match
   credentials: !isWildcard,
   maxAge: 86400, // 24 hours — browsers cache pre-flight for this duration
   preflightContinue: false,
@@ -159,6 +176,13 @@ const processStartTime = Date.now();
 let _draining = false;
 export function setDraining(): void { _draining = true; }
 export function isDraining(): boolean { return _draining; }
+
+// Track in-flight requests so graceful shutdown can wait for them instead of
+// waiting for every socket to close (#1538). Mounted before routing so streams
+// and keep-alive requests are counted too.
+app.use(trackInFlightRequest);
+// Ask keep-alive clients not to reuse their socket once draining has started.
+app.use(drainAwareConnectionMiddleware(isDraining));
 // Disable Express's default X-Powered-By header. helmet() also does this, but
 // being explicit here ensures it is suppressed regardless of middleware order.
 app.disable('x-powered-by');
@@ -173,6 +197,20 @@ app.set('etag', false);
 // v8) rejects a bare '*' route — '/*splat' is the v8 catch-all form.
 app.options('/*splat', cors(corsOptions));
 app.use(cors(corsOptions));
+// Set Vary: Origin on any response that reflects a specific origin back to the
+// client, so shared caches (CDN, proxy) don't serve one origin's response
+// to requests from a different origin.
+app.use((_req, res, next) => {
+  if (!isWildcard) {
+    const vary = res.getHeader('Vary');
+    if (!vary) {
+      res.setHeader('Vary', 'Origin');
+    } else if (!String(vary).includes('Origin')) {
+      res.setHeader('Vary', `${vary}, Origin`);
+    }
+  }
+  next();
+});
 app.use(compression({
   threshold: config.compressionThresholdBytes,
   filter: (req, res) => {
@@ -251,6 +289,25 @@ app.use(metricsMiddleware);
 // metricsMiddleware is registered first, keeping score increments in order.
 app.use(ipReputationMiddleware);
 
+// Operational endpoints must never be cached by a CDN or proxy, otherwise load
+// balancers and monitoring could see a stale health status during an outage.
+const noStore: RequestHandler = (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+};
+app.use(
+  [
+    '/health',
+    '/ready',
+    '/metrics',
+    '/version',
+    `${API_PREFIX}/health/dependencies`,
+    `${API_V1_PREFIX}/health/dependencies`,
+    `${API_V2_PREFIX}/health/dependencies`,
+  ],
+  noStore,
+);
+
 app.get('/version', (_req, res) => {
   res.json(getVersionInfo());
 });
@@ -276,28 +333,56 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-/**
- * Per-probe timeout configuration (ms).
- * Each probe has its own independent timeout so a slow dependency only blocks
- * its own result — not all three.
- *
- * Configurable via:
- *   READINESS_DB_TIMEOUT_MS      (default: 2 000)
- *   READINESS_IPFS_TIMEOUT_MS    (default: 5 000)
- *   READINESS_STELLAR_TIMEOUT_MS (default: 5 000)
- */
-function getReadinessTimeouts(): { db: number; ipfs: number; stellar: number } {
-  const parseTimeout = (name: string, fallback: number): number => {
-    const raw = process.env[name];
-    if (raw === undefined) return fallback;
-    const parsed = parseInt(raw, 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-  };
+async function checkReadiness(): Promise<Record<string, ProbeResult>> {
+  const [dbResult, ipfsResult, stellarResult, indexerResult] = await Promise.all([
+    (async (): Promise<ProbeResult> => {
+      const t0 = Date.now();
+      const outcome = await probeDbWritable(config.readiness.timeouts.dbMs);
+      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
+    })(),
 
-  return {
-    db: parseTimeout('READINESS_DB_TIMEOUT_MS', 2_000),
-    ipfs: parseTimeout('READINESS_IPFS_TIMEOUT_MS', 5_000),
-    stellar: parseTimeout('READINESS_STELLAR_TIMEOUT_MS', 5_000),
+    // IPFS probe — Pinata connectivity
+    (async (): Promise<ProbeResult> => {
+      const t0 = Date.now();
+      const outcome = await withTimeout(
+        async () => {
+          await checkHealth();
+        },
+        config.readiness.timeouts.ipfsMs,
+      );
+      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
+    })(),
+
+    // Stellar probe — RPC connectivity (can be disabled via config)
+    (async (): Promise<ProbeResult> => {
+      if (!config.stellarHealthCheckEnabled) {
+        return { status: 'disabled', ms: 0 };
+      }
+      if (stellarBreaker.state === 'OPEN') {
+        return { status: 'unavailable', ms: 0 };
+      }
+      const t0 = Date.now();
+      const outcome = await withTimeout(
+        async () => {
+          const ok = await stellarHealth();
+          if (!ok) throw new Error('stellar unhealthy');
+        },
+        config.readiness.timeouts.stellarMs,
+      );
+      return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
+    })(),
+    (async (): Promise<'ok' | 'unavailable' | 'disabled'> => {
+      // If max lag is 0, the check is disabled
+      if (config.readiness.maxLag === 0) return 'disabled';
+      
+      // During grace period, always report ok regardless of lag
+      const uptimeMs = Date.now() - processStartTime;
+      if (uptimeMs < config.readiness.gracePeriodMs) return 'ok';
+      
+      // After grace period, check if lag is within threshold
+      return indexerLedgerLag <= config.readiness.maxLag ? 'ok' : 'unavailable';
+    })(),
+  ]);
   };
 }
 
@@ -307,8 +392,6 @@ export interface ProbeResult {
 }
 
 async function checkReadiness(): Promise<Record<string, ProbeResult>> {
-  const timeouts = getReadinessTimeouts();
-
   const [dbResult, ipfsResult, stellarResult, indexerResult] = await Promise.all([
     (async (): Promise<ProbeResult> => {
       const t0 = Date.now();
@@ -375,8 +458,17 @@ app.get('/ready', async (_req, res) => {
     return;
   }
   const services = await checkReadiness();
-  const allOk = Object.values(services).every(v => v.status === 'ok' || v.status === 'disabled');
-  if (allOk) {
+  
+  // Determine if pod should be ready based on critical dependencies only
+  const criticalDeps = config.readinessCriticalDependencies;
+  const allCriticalOk = Array.from(criticalDeps).every(
+    (dep) => {
+      const probe = services[dep];
+      return !probe || probe.status === 'ok' || probe.status === 'disabled';
+    },
+  );
+  
+  if (allCriticalOk) {
     res.json({ status: 'ok', services });
   } else {
     res.status(503).json({ status: 'degraded', services });
@@ -394,8 +486,17 @@ app.get('/health/readiness', createTimeout(5_000), async (_req, res) => {
     return;
   }
   const services = await checkReadiness();
-  const allOk = Object.values(services).every(v => v.status === 'ok' || v.status === 'disabled');
-  if (allOk) {
+  
+  // Determine if pod should be ready based on critical dependencies only
+  const criticalDeps = config.readinessCriticalDependencies;
+  const allCriticalOk = Array.from(criticalDeps).every(
+    (dep) => {
+      const probe = services[dep];
+      return !probe || probe.status === 'ok' || probe.status === 'disabled';
+    },
+  );
+  
+  if (allCriticalOk) {
     res.json({ status: 'ok', services });
   } else {
     res.status(503).json({ status: 'degraded', services });
@@ -410,10 +511,9 @@ app.get(
   getHealthDependencies,
 );
 
-// Prometheus scrape endpoint. Intentionally unauthenticated and not rate-limited
-// (standard scrape pattern): it is registered before the auth routes and is not
-// wrapped by any auth or rate-limit middleware.
-app.get('/metrics', createMetricsHandler(() => indexerLedgerLag));
+// Prometheus scrape endpoint. Protected by optional bearer token and/or CIDR allowlist.
+// Intentionally not rate-limited (standard scrape pattern).
+app.get('/metrics', metricsGuard, createMetricsHandler(() => indexerLedgerLag));
 
 app.use('/auth', authRoutes);
 

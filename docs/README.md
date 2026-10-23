@@ -19,6 +19,7 @@ not a directory listing.
 | [webhooks.md](webhooks.md) | Operator & subscriber | Outbound event webhooks: subscribing, HMAC signature verification, delivery/retry, the dead-letter queue, and admin replay |
 | [trace-correlation.md](trace-correlation.md) | Contributor | End-to-end correlation lifecycle across HTTP → Soroban tx → indexer → webhook/SSE (#1113) |
 | [event-ordering.md](event-ordering.md) | Contributor | Deterministic indexer event total order and co-transaction atomicity (#1111) |
+| [indexer-unprocessed-events.md](indexer-unprocessed-events.md) | Operator & contributor | How the indexer counts, stores, and replays contract events it cannot decode or recognise, plus the admin list/retry endpoints and cursor semantics (#1540) |
 
 ## Auth & Security
 
@@ -34,6 +35,7 @@ not a directory listing.
 | Doc | Audience | Description |
 | --- | -------- | ----------- |
 | [data-model.md](data-model.md) | Contributor | All application tables, their purposes, and how they are populated (indexer, API writes, migrations) — consult this before writing queries |
+| [contract-errors.md](contract-errors.md) | Contributor & client | Soroban error discriminants, their backend `code`/HTTP status mapping, and how to add a variant without breaking the on-chain ABI |
 | [data-privacy.md](data-privacy.md) | Operator | GDPR right-to-erasure: what the backend can erase, and the immutable on-chain boundary |
 | [postgres-migration.md](postgres-migration.md) | Operator | Migrating a deployment from SQLite to PostgreSQL |
 | [tier-promotion.md](tier-promotion.md) | Contributor | How a player's progress tier (0–3) is derived from approved milestones |
@@ -42,7 +44,10 @@ not a directory listing.
 
 | Doc | Audience | Description |
 | --- | -------- | ----------- |
+| [feature-flags.md](feature-flags.md) | Operator | Every runtime feature flag: what it gates, its default, where it's checked, the admin toggle API, caching/propagation across replicas, and the audit trail |
+| [metrics.md](metrics.md) | Operator | Every Prometheus metric on `GET /metrics` (type, labels, meaning), how to scrape it, and suggested alerts |
 | [runbook.md](runbook.md) | Operator | Incident → action runbook: indexer lag, wrong tiers, webhook failures, RPC/IPFS outages, DB slowness, reindex/replay, dead-letter drain, cache flush, circuit breaker, pause/unpause |
+| [background-jobs.md](background-jobs.md) | Operator | Every periodic in-process job (indexer, pin retry/reconcile, tier divergence, blocklist prune, IP decay, SSE sweeps, webhook DLQ): interval, config, start location, failure behaviour, and multi-replica safety |
 | [performance.md](performance.md) | Contributor | Latency budgets for key endpoints and how to run the load-test suites |
 | [soroban-sandbox-e2e.md](soroban-sandbox-e2e.md) | Contributor | Local + CI Soroban sandbox that deploys all five contracts and runs live backend E2E (#1117) |
 

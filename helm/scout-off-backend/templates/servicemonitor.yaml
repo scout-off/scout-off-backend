@@ -1,0 +1,41 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+{{- $sm := .Values.metrics.serviceMonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "scout-off-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "scout-off-backend.labels" . | nindent 4 }}
+    {{- with $sm.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  # Selects the chart's Service (same selector labels as the Deployment).
+  selector:
+    matchLabels:
+      {{- include "scout-off-backend.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: http
+      path: {{ $sm.path | quote }}
+      interval: {{ $sm.interval }}
+      scrapeTimeout: {{ $sm.scrapeTimeout }}
+      {{- if $sm.bearerTokenSecret.name }}
+      # Only set when /metrics is protected by a bearer token; the Secret must
+      # exist in the release namespace (see docs/runbook.md).
+      bearerTokenSecret:
+        name: {{ $sm.bearerTokenSecret.name }}
+        key: {{ $sm.bearerTokenSecret.key }}
+      {{- end }}
+      {{- with $sm.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $sm.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

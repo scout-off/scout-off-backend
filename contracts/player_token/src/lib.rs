@@ -168,6 +168,13 @@ impl PlayerTokenContract {
         Ok(())
     }
 
+    /// Return the contract's semantic version as `(major, minor, patch)`.
+    ///
+    /// Read-only, auth-free. Used by the backend at startup for compatibility checks.
+    pub fn version(_env: Env) -> (u32, u32, u32) {
+        (0, 1, 0)
+    }
+
     // ── Admin setup ────────────────────────────────────────────────────────
 
     /// One-time initialisation. Stores the admin address.
@@ -1277,5 +1284,13 @@ mod tests {
         // Page 3: beyond holders, should return 0
         let page3_queued = client.distribute_fee(&player_id, &1_000_000u128, &transfer_id, &3u32);
         assert_eq!(page3_queued, 0);
+    }
+
+    #[test]
+    fn version_returns_semver_tuple() {
+        let env = Env::default();
+        let (client, _admin) = setup(&env);
+        let (major, _minor, _patch) = client.version();
+        assert_eq!(major, 0);
     }
 }

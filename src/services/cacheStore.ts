@@ -1,3 +1,5 @@
+import config from '../config';
+
 /**
  * Pluggable cache backend interface.
  *
@@ -36,8 +38,8 @@ export interface CacheStore {
  *
  * This class implements the CacheStore interface using a plain Map with a
  * bounded size and LRU eviction according to access order. The maximum
- * number of entries is configurable via the CACHE_MAX_SIZE environment variable
- * (default 1000). This is a stopgap measure a head of the Redis migration and
+ * number of entries is configurable via config.cache.maxSize (CACHE_MAX_SIZE,
+ * default 1000). This is a stopgap measure a head of the Redis migration and
  * is not meant as a general-purpose cache library.
  *
  * NOTE: The default cap of 1000 is documented in .env.example as CACHE_MAX_SIZE.
@@ -47,8 +49,7 @@ export class InMemoryCacheStore implements CacheStore {
   private readonly maxSize: number;
 
   constructor() {
-    const parsed = Number(process.env.CACHE_MAX_SIZE);
-    this.maxSize = Number.isFinite(parsed) && parsed > 0 ? parsed : 1000;
+    this.maxSize = config.cache.maxSize;
   }
 
   async get<T>(key: string): Promise<T | undefined> {

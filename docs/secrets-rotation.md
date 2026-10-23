@@ -15,6 +15,7 @@ This document outlines the rotation policy, cadence, and step-by-step procedures
 | `REDIS_URL` (with password) | Annually (365 days) | No (Requires Restart) | Database / DevOps Engineer |
 | `WEBHOOK_SECRET_ENCRYPTION_KEY` | Semi-Annually (180 days), or on suspected compromise | Dual-key decrypt; re-encrypt script | Security Administrator |
 | `NOTES_ENCRYPTION_KEY` | Semi-Annually (180 days), or on suspected compromise | Dual-key decrypt; re-encrypt script | Security Administrator |
+| `webhook_subscriptions.secret` (per-subscriber) | Semi-Annually (180 days), or on suspected compromise | Yes (via Dual-Key) | Platform Owner / Security Administrator |
 
 ---
 
@@ -265,16 +266,64 @@ NOTES_ENCRYPTION_KEY=<new> NOTES_ENCRYPTION_KEY_PREVIOUS=<old> npm run reencrypt
 ## Known Gaps and Limitations
 
 ### Webhook Signing Secrets
-The backend's webhook dispatcher **does** sign outgoing payloads with an HMAC-SHA256 signature
-sent in the `X-Webhook-Signature` header.  Each subscription row in `webhook_subscriptions` holds
-its own per-subscriber secret generated at creation, and (since #686) that secret is encrypted at
-rest under `WEBHOOK_SECRET_ENCRYPTION_KEY` — see § 6 above.
+The backend's webhook dispatcher signs outgoing payloads with an HMAC-SHA256 signature
+sent in the `X-Webhook-Signature` (legacy) and `X-Webhook-Signature-V1` (versioned) headers.  
+Each subscription row in `webhook_subscriptions` holds its own per-subscriber secret generated 
+at creation, and (since #686) that secret is encrypted at rest under `WEBHOOK_SECRET_ENCRYPTION_KEY` 
+— see § 6 above.
+
+### Zero-Downtime Rotation with Dual-Key Support
+
+Webhook subscriptions now support a dual-key rotation pattern that allows seamless secret rotation
+without downtime. The backend signs deliveries with both the current and previous secrets during 
+the rotation window, enabling receivers to verify using either secret.
+
+#### Database Schema
+The `webhook_subscriptions` table includes two additional columns:
+- `previous_secret` — The old HMAC secret, encrypted at rest
+- `previous_secret_expires_at` — Expiry timestamp (ISO 8601 or Unix seconds) for the previous secret
+
+#### Rotation Workflow
+
+1. **Initiate Rotation**:
+   - Generate a new secret: `openssl rand -hex 32`
+   - Set `previous_secret` and `previous_secret_expires_at` on the subscription row
+   - The backend now signs **all deliveries** with both current and previous secrets
+
+2. **Receiver Update Window** (recommended: 24-48 hours):
+   - Update receiver configurations to try **both** secrets
+   - The receiver parses `X-Webhook-Signature-V1` and validates against both signatures
+   - The legacy `X-Webhook-Signature` header remains for backward compatibility
+
+3. **End Rotation**:
+   - Once all receivers have been updated, clear `previous_secret` and `previous_secret_expires_at`
+   - After this, only the current secret signs and validates
+
+#### Admin API Endpoint (Planned)
+
+A `PATCH /api/admin/webhooks/:id/rotate-secret` endpoint is planned to automate this workflow.
+Until then, use direct database updates:
+
+```sql
+-- Start rotation (set previous secret to expire in 48 hours)
+UPDATE webhook_subscriptions
+SET 
+  previous_secret = '<encrypted-old-secret>',
+  previous_secret_expires_at = datetime('now', '+48 hours')
+WHERE id = ?;
+
+-- End rotation (clear previous secret)
+UPDATE webhook_subscriptions
+SET previous_secret = NULL, previous_secret_expires_at = NULL
+WHERE id = ?;
+```
 
 **Current limitations**:
-- There is no dedicated API endpoint to rotate a subscription's secret without deleting and
-  re-creating the subscription. See
-  [docs/webhooks.md § Secret Rotation](webhooks.md#secret-rotation) for the current workaround and
-  the planned `POST /api/admin/webhooks/:id/rotate-secret` improvement.
-- Dual-key decrypt is supported for `WEBHOOK_SECRET_ENCRYPTION_KEY` / `NOTES_ENCRYPTION_KEY`
-  via `*_PREVIOUS` env vars (`src/utils/fieldCipher.ts`). Re-encryption tooling is still
-  manual (`npm run reencrypt-webhook-secrets`, `npm run reencrypt-notes`).
+- No dedicated API endpoint yet — use direct database updates or the planned rotation endpoint
+- Receivers must be updated to support the versioned signature format (`X-Webhook-Signature-V1`)
+- See [docs/webhooks.md](webhooks.md) for receiver verification code (Node.js and Python)
+
+### Dual-Key Decrypt (WEBHOOK_SECRET_ENCRYPTION_KEY / NOTES_ENCRYPTION_KEY)
+Dual-key decrypt is supported for `WEBHOOK_SECRET_ENCRYPTION_KEY` / `NOTES_ENCRYPTION_KEY`
+via `*_PREVIOUS` env vars (`src/utils/fieldCipher.ts`). Re-encryption tooling is still
+manual (`npm run reencrypt-webhook-secrets`, `npm run reencrypt-notes`).

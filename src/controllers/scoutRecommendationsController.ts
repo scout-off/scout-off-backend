@@ -30,7 +30,6 @@ import {
   getSavedSearchesByScout,
   getBookmarksByScout,
   getContactUnlocksByScout,
-  getAuditLogs,
   getPlayerById,
   queryPlayers,
   type PlayerRow,

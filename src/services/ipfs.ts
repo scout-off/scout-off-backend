@@ -42,13 +42,11 @@
 // content — defeating the purpose of the lock in multi-instance deployments.
 
 import { createHash } from 'crypto';
-import axios from 'axios';
-import FormData from 'form-data';
-import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
 import { logger } from '../utils/logger';
 import { CircuitBreaker, CircuitBreakerOpenError } from '../utils/circuitBreaker';
 import { getRequestSignal } from '../utils/requestContext';
+import { httpClient, httpPost, httpDelete, HttpClientError } from '../utils/httpClient';
 import {
   insertPendingPin,
   getPendingPins,

@@ -1,11 +1,14 @@
 import express from 'express';
 import request from 'supertest';
+import app from '../../src/app';
 import {
   metricsMiddleware,
   createMetricsHandler,
   resetMetrics,
   PROMETHEUS_CONTENT_TYPE,
   LATENCY_BUCKETS_MS,
+  HTTP_SECONDS_BUCKETS,
+  GC_DURATION_BUCKETS,
 } from '../../src/middleware/metrics';
 
 // Build a minimal app that mounts only the metrics middleware and the /metrics
@@ -30,6 +33,7 @@ function buildApp() {
 describe('GET /metrics — Prometheus exposition', () => {
   beforeEach(() => {
     delete process.env.METRICS_ENABLED;
+    delete process.env.METRICS_LEGACY_MS;
     resetMetrics();
   });
 
@@ -55,7 +59,16 @@ describe('GET /metrics — Prometheus exposition', () => {
     expect(body).toContain('# TYPE http_requests_total counter');
     expect(body).toMatch(/http_requests_total\{route="GET \/ok"\} 2/);
 
-    // Request duration (histogram): a bucket per boundary, +Inf, _sum, _count
+    // NEW: Request duration in seconds (standard Prometheus metric)
+    expect(body).toContain('# TYPE http_request_duration_seconds histogram');
+    for (const bound of HTTP_SECONDS_BUCKETS) {
+      expect(body).toContain(`http_request_duration_seconds_bucket{le="${bound}"}`);
+    }
+    expect(body).toMatch(/http_request_duration_seconds_bucket\{le="\+Inf"\} \d+/);
+    expect(body).toMatch(/http_request_duration_seconds_sum \d+/);
+    expect(body).toMatch(/http_request_duration_seconds_count \d+/);
+
+    // LEGACY: Request duration in ms (still exported by default)
     expect(body).toContain('# TYPE http_request_duration_ms histogram');
     for (const bound of LATENCY_BUCKETS_MS) {
       expect(body).toContain(`http_request_duration_ms_bucket{le="${bound}"}`);
@@ -90,12 +103,62 @@ describe('GET /metrics — Prometheus exposition', () => {
     expect(body.endsWith('\n')).toBe(true);
   });
 
+  it('is served with Cache-Control: no-store by the full app', async () => {
+    const res = await request(app).get('/metrics');
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
   it('still serves the endpoint (empty series) when no traffic has been recorded', async () => {
     const body = (await request(buildApp()).get('/metrics')).text;
     // Families are always declared even with zero observations.
     expect(body).toContain('# TYPE http_requests_total counter');
+    expect(body).toContain('# TYPE http_request_duration_seconds histogram');
     expect(body).toContain('# TYPE http_request_duration_ms histogram');
     expect(body).toMatch(/http_errors_total\{range="4xx"\} 0/);
+    expect(body).toMatch(/http_request_duration_seconds_count 0/);
     expect(body).toMatch(/http_request_duration_ms_count 0/);
+  });
+
+  it('exposes runtime metrics (process CPU, RSS, heap, event-loop lag, GC, handles)', async () => {
+    const body = (await request(buildApp()).get('/metrics')).text;
+
+    // Process metrics
+    expect(body).toContain('# TYPE process_cpu_seconds_total counter');
+    expect(body).toMatch(/process_cpu_seconds_total \d+(\.\d+)?/);
+    expect(body).toContain('# TYPE process_resident_memory_bytes gauge');
+    expect(body).toMatch(/process_resident_memory_bytes \d+/);
+
+    // Node.js heap metrics
+    expect(body).toContain('# TYPE nodejs_heap_size_used_bytes gauge');
+    expect(body).toMatch(/nodejs_heap_size_used_bytes \d+/);
+    expect(body).toContain('# TYPE nodejs_heap_size_total_bytes gauge');
+    expect(body).toMatch(/nodejs_heap_size_total_bytes \d+/);
+
+    // Event-loop lag
+    expect(body).toContain('# TYPE nodejs_eventloop_lag_seconds gauge');
+    expect(body).toMatch(/nodejs_eventloop_lag_seconds \d+(\.\d+)?/);
+
+    // GC duration histogram
+    expect(body).toContain('# TYPE nodejs_gc_duration_seconds histogram');
+    for (const bound of GC_DURATION_BUCKETS) {
+      expect(body).toContain(`nodejs_gc_duration_seconds_bucket{le="${bound}"}`);
+    }
+    expect(body).toMatch(/nodejs_gc_duration_seconds_bucket\{le="\+Inf"\} \d+/);
+    expect(body).toMatch(/nodejs_gc_duration_seconds_sum \d+(\.\d+)?/);
+    expect(body).toMatch(/nodejs_gc_duration_seconds_count \d+/);
+
+    // Active handles
+    expect(body).toContain('# TYPE nodejs_active_handles_total gauge');
+    expect(body).toMatch(/nodejs_active_handles_total \d+/);
+  });
+
+  it('omits legacy http_request_duration_ms when METRICS_LEGACY_MS=false', async () => {
+    process.env.METRICS_LEGACY_MS = 'false';
+    const body = (await request(buildApp()).get('/metrics')).text;
+
+    expect(body).toContain('# TYPE http_request_duration_seconds histogram');
+    expect(body).not.toContain('# TYPE http_request_duration_ms histogram');
+    expect(body).not.toContain('http_request_duration_ms_bucket');
+    delete process.env.METRICS_LEGACY_MS;
   });
 });

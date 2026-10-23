@@ -18,6 +18,7 @@
  */
 
 import { processEventBatches, type BatchProcessorProgress } from './eventBatchProcessor';
+import { getIndexedContractIds } from './indexer';
 import { logAuditEvent } from './audit';
 import { logger } from '../utils/logger';
 
@@ -131,6 +132,7 @@ export async function runReplay(
     batchDelayMs: DEFAULT_BATCH_DELAY_MS,
     adminWallet,
     onProgress,
+    contractIds: getIndexedContractIds(),
   });
 
   const completedAt = new Date().toISOString();

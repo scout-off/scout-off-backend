@@ -1,17 +1,24 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { Keypair } from '@stellar/stellar-sdk';
+import { Keypair, Transaction } from '@stellar/stellar-sdk';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { buildChallenge, verifyChallenge, extractAccount } from '../services/sep10';
+import { buildChallenge, verifyChallenge, extractAccount, Sep10Error, Sep10ErrorCode, getErrorMapping } from '../services/sep10';
 import { logger } from '../utils/logger';
 import { extractClientIp } from '../utils/ipExtractor';
 import config from '../config';
 import { ErrorCode } from '../utils/errorCodes';
 import { revokeToken, isTokenRevoked } from '../services/tokenBlocklist';
 import { signJwt, verifyJwt } from '../utils/jwt';
+import { getValidatorByWallet } from '../services/indexer';
+import { insertAuditLog } from '../db';
+import { recordAuthFailure, resetAuthFailures } from '../middleware/authFailureLockout';
+import { incAuthFailure } from '../middleware/metrics';
 
 // ─── Schema ────────────────────────────────────────────────────────────────────
+
+/** Roles a refresh token may legitimately carry. */
+const VALID_ROLES = new Set(['player', 'scout', 'validator', 'admin']);
 
 const challengeSchema = z.object({
   account: z.string().refine(
@@ -28,6 +35,55 @@ export const tokenSchema = z.object({
 export const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 }).strict();
+
+// ─── Role resolution ──────────────────────────────────────────────────────────
+
+/**
+ * Re-derive the effective role for `account` from authoritative state.
+ *
+ * Priority:
+ *   1. `admin`     — wallet is in config.adminWallet / config.adminWallets
+ *   2. `validator` — wallet is a registered, non-revoked validator (DB)
+ *   3. `requestedRole` — the role claimed in the token (scout or player),
+ *      defaulting to 'player' if absent or unrecognised.
+ *
+ * This function is used by both `postToken` (initial grant) and `postRefresh`
+ * (rotation) so that a demoted admin or revoked validator cannot extend their
+ * elevated access beyond the current state.
+ */
+export async function resolveEffectiveRole(
+  account: string,
+  requestedRole: string | undefined,
+): Promise<string> {
+  // Admin check (synchronous, config-based — no DB required)
+  const isAdmin =
+    (config.adminWallet && account === config.adminWallet) ||
+    config.adminWallets.includes(account);
+  if (isAdmin) return 'admin';
+
+  // Validator check (async, DB-backed)
+  try {
+    const validatorRow = await getValidatorByWallet(account);
+    if (validatorRow && validatorRow.revoked_at === null) {
+      // Only grant validator if that's what the token is asking for; a scout
+      // who is also a registered validator keeps their chosen role.
+      if (requestedRole === 'validator') return 'validator';
+    }
+  } catch (err) {
+    // Non-fatal: if the DB is unreachable, the refresh still succeeds but the
+    // validator role cannot be confirmed, so it is not granted. An unavailable
+    // DB should not lock out all token refreshes, nor extend unverified access.
+    logger.warn('[auth] resolveEffectiveRole: validator check failed, validator role not granted', {
+      account,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Fallback: honour the requested scout/player role, defaulting to 'player'.
+  // 'validator' is only ever granted by the verified check above.
+  const allowed = new Set(['scout', 'player']);
+  return allowed.has(requestedRole ?? '') ? (requestedRole as string) : 'player';
+}
 
 // ─── Token issuance helpers ────────────────────────────────────────────────────
 
@@ -65,7 +121,7 @@ function issueRefreshToken(account: string, role: string): { token: string; jti:
 // ─── GET /auth/challenge ───────────────────────────────────────────────────────
 
 /** GET /auth/challenge?account=G... */
-export function getChallenge(req: Request, res: Response, next: NextFunction): void {
+export function getChallenge(req: Request, res: Response, _next: NextFunction): void {
   const parsed = challengeSchema.safeParse(req.query);
   if (!parsed.success) {
     logger.warn('[auth] failed_challenge_request', {
@@ -78,13 +134,18 @@ export function getChallenge(req: Request, res: Response, next: NextFunction): v
     return;
   }
   const challenge = buildChallenge(parsed.data.account);
-  res.json({ challenge, networkPassphrase: config.networkPassphrase });
+  const challengeTransaction = new Transaction(challenge, config.networkPassphrase);
+  const expiresAt = Number(challengeTransaction.timeBounds?.maxTime);
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
+    throw new Error('Generated SEP-10 challenge has no valid expiration time');
+  }
+  res.json({ challenge, networkPassphrase: config.networkPassphrase, expiresAt });
 }
 
 // ─── POST /auth/token ──────────────────────────────────────────────────────────
 
 /** POST /auth/token  { transaction: "<signed XDR>", role?: "validator" } */
-export function postToken(req: Request, res: Response, next: NextFunction): void {
+export async function postToken(req: Request, res: Response, next: NextFunction): Promise<void> {
 try {
     const parsed = tokenSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -112,59 +173,43 @@ try {
     const { token: accessToken, expiresAt } = issueAccessToken(account, effectiveRole);
     const { token: refreshToken } = issueRefreshToken(account, effectiveRole);
 
-    res.json({ token: accessToken, accessToken, refreshToken, account, expiresAt });
+    // Step 4: reset any per-account failure counter on successful exchange.
+    void resetAuthFailures(account);
+
+    res.json({ success: true, token: accessToken, accessToken, refreshToken, account, expiresAt });
   } catch (err) {
-    // Normalise to Error — the SDK can throw DOMException (from the base64
-    // decoder) or XdrError which, in some JS environments (e.g. Jest's vm
-    // sandbox), may not satisfy `instanceof Error` even though they are
-    // error-like objects.  Convert to a plain Error so the rest of the
-    // handler can treat everything uniformly.
-    const error: Error = err instanceof Error
-      ? err
-      : new Error(String((err as { message?: string })?.message ?? err));
-    {
-      const knownAuthErrors = [
-        'Invalid challenge signature',
-        'Missing source account in challenge',
-        'Challenge has expired',
-        'Challenge source account is not the server account',
-        'Challenge sequence number must be 0',
-        'Challenge must have time bounds',
-        'Challenge minTime is in the future',
-        'Invalid challenge: no operations found',
-        'Invalid challenge: expected manageData operation',
-        'Invalid challenge: operation',
-        'Invalid challenge: wrong operation name',
-        'Invalid challenge: missing nonce value',
-        'Invalid challenge: nonce must be exactly 64 bytes',
-        'Operation',
-        'must be sourced by the server account',
-        'Challenge not signed by server',
-      ];
-      if (knownAuthErrors.some((msg) => error.message.includes(msg))) {
-        let attemptedWallet: string | null = null;
-        try { attemptedWallet = extractAccount((req.body as { transaction?: string }).transaction ?? ''); } catch { /* not extractable */ }
-        logger.warn('[auth] failed_token_exchange', {
-          correlationId: req.correlationId,
-          origin: extractClientIp(req),
-          attemptedWallet,
-          reason: error.message,
-        });
-        res.status(401).json({
-          success: false,
-          error: error.message,
-          code: error.message === 'Challenge has expired' ? ErrorCode.TOKEN_EXPIRED : ErrorCode.TOKEN_INVALID,
-        });
-        return;
-      }
-      logger.warn('[auth] failed_token_request malformed_xdr', {
+    // Sep10Error is thrown by verifyChallenge for authentication failures
+    // or malformed XDR. Map to HTTP status and ErrorCode.
+    if (err instanceof Sep10Error) {
+      const mapping = getErrorMapping(err.code);
+      let attemptedWallet: string | null = null;
+      try { attemptedWallet = extractAccount((req.body as { transaction?: string }).transaction ?? ''); } catch { /* not extractable */ }
+      logger.warn('[auth] failed_token_exchange', {
         correlationId: req.correlationId,
         origin: extractClientIp(req),
-        reason: error.message,
+        attemptedWallet,
+        sep10ErrorCode: err.code,
+        reason: err.message,
       });
-      res.status(400).json({ success: false, error: error.message, code: ErrorCode.VALIDATION_ERROR });
+      if (mapping.httpStatus === 401) incAuthFailure('sep10_invalid');
+      // Record the failure for per-account backoff tracking
+      if (mapping.httpStatus === 401 && attemptedWallet) {
+        void recordAuthFailure(
+          attemptedWallet,
+          extractClientIp(req) ?? 'unknown',
+          req.correlationId,
+        );
+      }
+      res.status(mapping.httpStatus).json({
+        success: false,
+        error: mapping.clientMessage,
+        code: mapping.errorCode as ErrorCode,
+      });
       return;
     }
+
+    // Any other error should be passed to the error handler (500 via errorHandler)
+    next(err);
   }
 }
 
@@ -218,7 +263,14 @@ try {
     const account = payload.sub;
     const role = payload.role as string | undefined;
 
-    if (!jti || !account) {
+    // Every refresh token we issue carries a known role; one without it is
+    // malformed and must not be silently upgraded to a fresh session.
+    if (!jti || !account || typeof role !== 'string' || !VALID_ROLES.has(role)) {
+      logger.warn('[auth] refresh_token_malformed', {
+        jti,
+        hasSub: Boolean(account),
+        role: typeof role === 'string' ? role : undefined,
+      });
       res.status(401).json({
         success: false,
         error: 'Malformed refresh token',
@@ -242,9 +294,36 @@ try {
     const expiresAtSeconds = payload.exp ?? Math.floor(Date.now() / 1000) + config.jwtRefreshTtlSeconds;
     await revokeToken(jti, expiresAtSeconds);
 
-    // Issue new pair.
-    const { token: newAccessToken, expiresAt } = issueAccessToken(account, role ?? 'player');
-    const { token: newRefreshToken } = issueRefreshToken(account, role ?? 'player');
+    // Re-derive role from authoritative state (config for admin, DB for validator).
+    // This ensures a demoted admin or revoked validator cannot perpetuate
+    // their elevated access beyond the current token rotation window.
+    const claimedRole = role;
+    const effectiveRole = await resolveEffectiveRole(account, claimedRole);
+
+    if (effectiveRole !== claimedRole) {
+      logger.info('[auth] auth_role_downgraded', {
+        account,
+        previousRole: claimedRole ?? 'unknown',
+        newRole: effectiveRole,
+        jti,
+      });
+      // Emit a structured audit event for the downgrade
+      try {
+        await insertAuditLog({
+          action: 'auth_role_downgraded',
+          adminWallet: account,
+          queryParams: { previousRole: claimedRole ?? null, newRole: effectiveRole },
+          eventSource: 'postRefresh',
+          createdAt: new Date().toISOString(),
+        });
+      } catch {
+        // Non-fatal: audit log failure must not block token issuance
+      }
+    }
+
+    // Issue new pair with the re-derived (potentially downgraded) role.
+    const { token: newAccessToken, expiresAt } = issueAccessToken(account, effectiveRole);
+    const { token: newRefreshToken } = issueRefreshToken(account, effectiveRole);
 
     res.json({
       success: true,

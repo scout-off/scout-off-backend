@@ -6,6 +6,7 @@ import { RedisRateLimitStore } from './redisRateLimitStore';
 import { getRedisClient } from '../services/redis';
 import { logger } from '../utils/logger';
 import { ErrorCode } from '../utils/errorCodes';
+import { incRateLimitRejected, incRateLimitStoreError } from './metrics';
 
 function createStore(): RateLimitStore {
   const redis = getRedisClient();
@@ -81,6 +82,7 @@ export function rateLimit(options: RateLimitOptions = {}) {
         const now = Date.now();
         const retryAfterSec = Math.ceil(Math.max(0, resetAt - now) / 1000);
         res.set('Retry-After', String(retryAfterSec || 1));
+        incRateLimitRejected(namespace);
         res.status(429).json({
           success: false,
           error: 'Too many requests, please try again later',
@@ -92,6 +94,7 @@ export function rateLimit(options: RateLimitOptions = {}) {
     } catch (err) {
       // Redis (or other store) error: fail open — allow the request rather
       // than returning a 500.  Log at warn so operators can investigate.
+      incRateLimitStoreError();
       logger.warn('[rate-limit] store error, failing open', { ip, err });
       next();
     }
@@ -138,6 +141,7 @@ export function playerRateLimit(options: RateLimitOptions = {}) {
         const now = Date.now();
         const retryAfterSec = Math.ceil(Math.max(0, resetAt - now) / 1000);
         res.set('Retry-After', String(retryAfterSec || 1));
+        incRateLimitRejected(namespace);
         res.status(429).json({
           success: false,
           error: 'Too many milestone submissions for this player, please try again later',
@@ -147,6 +151,7 @@ export function playerRateLimit(options: RateLimitOptions = {}) {
       }
       next();
     } catch (err) {
+      incRateLimitStoreError();
       logger.warn('[rate-limit] store error (player limiter), failing open', { playerId, err });
       next();
     }
@@ -191,6 +196,7 @@ export function walletRateLimit(options: RateLimitOptions = {}) {
         const now = Date.now();
         const retryAfterSec = Math.ceil(Math.max(0, resetAt - now) / 1000);
         res.set('Retry-After', String(retryAfterSec || 1));
+        incRateLimitRejected(namespace);
         res.status(429).json({
           success: false,
           error: 'Too many requests, please try again later',
@@ -201,6 +207,7 @@ export function walletRateLimit(options: RateLimitOptions = {}) {
       next();
     } catch (err) {
       // Redis (or other store) error: fail open.
+      incRateLimitStoreError();
       logger.warn('[rate-limit] store error, failing open', { wallet, err });
       next();
     }

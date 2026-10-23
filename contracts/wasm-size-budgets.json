@@ -1,0 +1,9 @@
+{
+  "_comment": "Per-contract WASM size budgets in bytes. Soroban's deploy limit is 65536 bytes per contract. These budgets should be exceeded only with explicit reviewer approval. Initial values based on estimated contract sizes plus 15% headroom.",
+  "scout_off_register.wasm": 60000,
+  "scout_off_progress.wasm": 58000,
+  "scout_off_subscription.wasm": 62000,
+  "scout_off_connection.wasm": 61000,
+  "scout_off_player_token.wasm": 64000,
+  "_default": 65000
+}

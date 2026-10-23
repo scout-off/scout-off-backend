@@ -50,6 +50,7 @@ jest.mock('../../src/services/indexer', () => ({
       payload: scValToNative(raw.value),
     };
   }),
+  getIndexedContractIds: jest.fn(() => ['CONTRACT_A']),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -327,15 +328,16 @@ describe('batching behaviour', () => {
     );
   });
 
-  it('filters events by config.registerContractId', async () => {
+  it('filters events by contract IDs from getIndexedContractIds', async () => {
     mockGetEvents.mockResolvedValue({ events: [] });
 
     await runReplay(1, 1, 'GADMIN');
 
-    const config = jest.requireActual('../../src/config').default;
+    const indexerModule = require('../../src/services/indexer');
+    expect(indexerModule.getIndexedContractIds).toHaveBeenCalled();
     expect(mockGetEvents).toHaveBeenCalledWith(
       expect.objectContaining({
-        filters: [{ type: 'contract', contractIds: [config.registerContractId] }],
+        filters: [{ type: 'contract', contractIds: ['CONTRACT_A'] }],
       }),
     );
   });

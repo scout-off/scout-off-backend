@@ -105,6 +105,75 @@ We thank all responsible security researchers who help keep ScoutOff safe.
 Reporters who follow this policy will be credited in the relevant release notes
 (unless they request anonymity).
 
+## Supply chain: image signing and SBOM
+
+Container images for staging and mainnet are built by the deploy workflows
+(`.github/workflows/deploy-staging.yml`, `.github/workflows/deploy-mainnet.yml`)
+with Docker Buildx, which produces SLSA provenance (`provenance: mode=max`) and
+an SBOM attestation. The pushed digest is then signed **keyless** with cosign
+using GitHub's OIDC token — there is no long-lived signing key to leak. An SPDX
+SBOM is generated with Syft and attached with `cosign attest`; the same file is
+uploaded as a workflow artifact.
+
+The mainnet workflow verifies the signature (`cosign verify`) before the deploy
+job is allowed to run, so an image that was not produced by this repository's
+`main` branch cannot reach production through the pipeline.
+
+### Verifying an image manually
+
+```bash
+IMAGE=ghcr.io/scout-off/scout-off-backend
+DIGEST=sha256:<digest>
+
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/scout-off/scout-off-backend/\.github/workflows/deploy-mainnet\.yml@refs/heads/main$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "${IMAGE}@${DIGEST}"
+
+cosign verify-attestation --type spdxjson \
+  --certificate-identity-regexp '^https://github.com/scout-off/scout-off-backend/\.github/workflows/deploy-mainnet\.yml@refs/heads/main$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "${IMAGE}@${DIGEST}"
+```
+
+### Enforcing verification with Kyverno
+
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-scout-off-images
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: verify-keyless-signature-and-sbom
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [scout-off]
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/scout-off/scout-off-backend*"
+          attestors:
+            - entries:
+                - keyless:
+                    subject: "https://github.com/scout-off/scout-off-backend/.github/workflows/deploy-mainnet.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+          attestations:
+            - predicateType: https://spdx.dev/Document
+              attestors:
+                - entries:
+                    - keyless:
+                        subject: "https://github.com/scout-off/scout-off-backend/.github/workflows/deploy-mainnet.yml@refs/heads/main"
+                        issuer: "https://token.actions.githubusercontent.com"
+```
+
+Sigstore's policy-controller (`ClusterImagePolicy`) can express the same rules;
+the important parts are the keyless issuer, the exact workflow identity, and
+requiring the SPDX attestation rather than only the signature.
+
 ## Incident Response & Audit Trails
 
 When a security incident or audit occurs, the platform provides a tamper-evident audit trail for investigation and compliance:

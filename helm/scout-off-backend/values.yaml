@@ -136,11 +136,15 @@ networkPolicy:
 # -----------------------------------------------------------------------------
 ingress:
   enabled: false
-  # Ingress class name (e.g. "nginx", "traefik", "alb").
+  # Ingress class name (e.g., "nginx", "traefik", "alb").
   className: "nginx"
   annotations: {}
   #  kubernetes.io/ingress.class: nginx
   #  cert-manager.io/cluster-issuer: letsencrypt-prod
+  # Exclude /metrics from ingress (recommended when metrics are unprotected)
+  # When true, Prometheus scrapes should go through a ServiceMonitor or
+  # direct pod access (node port, port-forward) rather than public ingress.
+  excludeMetrics: false
   hosts:
     - host: api.scoutoff.io
       paths:
@@ -150,6 +154,21 @@ ingress:
     - secretName: scout-off-tls
       hosts:
         - api.scoutoff.io
+
+# -----------------------------------------------------------------------------
+# Graceful shutdown
+#
+# Kubernetes sends SIGTERM and then SIGKILLs the container once
+# terminationGracePeriodSeconds elapses. Keep this strictly greater than the
+# app's SHUTDOWN_TIMEOUT_MS (env above) plus preStopSleepSeconds, with a few
+# seconds of buffer for signal delivery and container runtime overhead.
+#
+# preStopSleepSeconds delays SIGTERM so load balancers can observe the failed
+# readiness probe first. It is applied as a `sleep` preStop hook; leave it at 0
+# when no external load balancer needs the extra window.
+# -----------------------------------------------------------------------------
+terminationGracePeriodSeconds: 30
+preStopSleepSeconds: 0
 
 # -----------------------------------------------------------------------------
 # Liveness probe
@@ -181,6 +200,22 @@ readinessProbe:
   periodSeconds: 5
   failureThreshold: 2
   timeoutSeconds: 5
+
+# -----------------------------------------------------------------------------
+# Startup probe
+#
+# Kubernetes holds off liveness/readiness checks until startup succeeds, so a
+# slow start (migrations, Redis connect, token-blocklist warm-up, backfill)
+# no longer risks a liveness-kill restart loop. Generous budget: 30 x 5s = 150s.
+# Set to null to disable. Once this is in place, the liveness probe's
+# initialDelaySeconds can be lowered since slow startups are covered here.
+# -----------------------------------------------------------------------------
+startupProbe:
+  httpGet:
+    path: /health/liveness
+    port: http
+  periodSeconds: 5
+  failureThreshold: 30
 
 # -----------------------------------------------------------------------------
 # Kubernetes Secret reference
@@ -252,12 +287,24 @@ env:
   DB_PATH: /data/scout-off.db
   # Platform fee in basis points (100 bps = 1%). Default: 500 (5%).
   PLATFORM_FEE_BPS: "500"
-  # SSE keep-alive interval in ms
+  # SSE keep-alive interval in ms (1000-120000)
   SSE_KEEPALIVE_INTERVAL_MS: "15000"
+  # SSE authorization sweep interval in ms (1000-600000); bounds cross-instance revocation detection
+  SSE_AUTH_SWEEP_INTERVAL_MS: "30000"
   # Maximum concurrent SSE connections (0 = unlimited)
   SSE_MAX_CONNECTIONS: "0"
+  # Maximum concurrent SSE connections per wallet (0 = unlimited)
+  SSE_MAX_CONNECTIONS_PER_WALLET: "5"
+  # Base SSE reconnect delay in ms sent to clients (jitter is added per connection)
+  SSE_RETRY_MS: "5000"
   # Request timeout in ms
   REQUEST_TIMEOUT_MS: "30000"
+  # HTTP server socket timeouts (ms). keepAlive (65s) exceeds the AWS ALB 60s
+  # idle timeout so the LB closes idle sockets first; headers must stay
+  # greater than keepAlive. requestTimeout covers receiving the request only.
+  HTTP_KEEP_ALIVE_TIMEOUT_MS: "65000"
+  HTTP_HEADERS_TIMEOUT_MS: "66000"
+  HTTP_REQUEST_TIMEOUT_MS: "120000"
   # Rate limiting
   RATE_LIMIT_ENABLED: "true"
   RATE_LIMIT_WINDOW_MS: "60000"
@@ -284,6 +331,106 @@ env:
   ADMIN_ACTION_TTL_MS: "3600000"
   # Player cache TTL in ms. Default: 60000 (1 min).
   PLAYER_CACHE_TTL_MS: "60000"
+  # Metrics endpoint protection (recommended in production)
+  # METRICS_AUTH_TOKEN: bearer token for /metrics endpoint
+  # METRICS_ALLOWED_CIDRS: comma-separated CIDR list (e.g., "10.0.0.0/8,192.168.1.0/24")
+  # Set either or both to restrict access. If neither is set, /metrics is open (warning logged in production).
+  METRICS_AUTH_TOKEN: ""
+  METRICS_ALLOWED_CIDRS: ""
+  # Graceful shutdown (#1538). The overall budget must stay below
+  # terminationGracePeriodSeconds (see below). In-flight requests get
+  # SHUTDOWN_REQUEST_DRAIN_MS before connections are force-closed, and the
+  # last SHUTDOWN_CLEANUP_RESERVE_MS are reserved for Redis/DB/tracing.
+  SHUTDOWN_TIMEOUT_MS: "10000"
+  SHUTDOWN_PRESTOP_DELAY_MS: "0"
+  SHUTDOWN_REQUEST_DRAIN_MS: "5000"
+  SHUTDOWN_CLEANUP_RESERVE_MS: "2000"
+  # In-memory cache size caps (entries, >= 1)
+  CACHE_MAX_ENTRIES: "1000"
+  CACHE_MAX_SIZE: "1000"
+  PLAYER_CACHE_MAX_SIZE: "1000"
+  # Feature-flag and wallet-blocklist cache TTLs in ms (>= 0; 0 disables caching)
+  FEATURE_FLAG_CACHE_TTL_MS: "5000"
+  WALLET_BLOCKLIST_CACHE_TTL_MS: "30000"
+  # IPFS pending-pin retry interval in ms. Default: 30000 (30s). Min: 5000.
+  IPFS_PIN_RETRY_INTERVAL_MS: "30000"
+  # Reindex tuning. Batch sizes are in ledgers (1-10000); delays in ms.
+  REINDEX_BATCH_SIZE: "100"
+  REINDEX_BATCH_DELAY_MS: "50"
+  REINDEX_CATCHUP_BATCH_SIZE: "500"
+  REINDEX_CATCHUP_THRESHOLD: "500"
+  REINDEX_RATE_LIMIT_BACKOFF_MS: "2000"
+
+# -----------------------------------------------------------------------------
+# Prometheus monitoring (optional)
+#
+# Both resources require the Prometheus Operator CRDs (monitoring.coreos.com/v1)
+# and are disabled by default, so a default render is unchanged. Install the
+# chart with --set metrics.serviceMonitor.enabled=true and/or
+# --set metrics.prometheusRule.enabled=true to enable them.
+# -----------------------------------------------------------------------------
+metrics:
+  serviceMonitor:
+    enabled: false
+    # Extra labels for the ServiceMonitor. Set the label your Prometheus
+    # instance's serviceMonitorSelector expects (for kube-prometheus-stack
+    # this is usually `release: <prometheus-release>`).
+    additionalLabels: {}
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    # Name/key of a Secret holding a bearer token, for when /metrics is
+    # protected ("metrics auth"). Leave empty when scraping is unauthenticated.
+    bearerTokenSecret:
+      name: ""
+      key: ""
+    relabelings: []
+    metricRelabelings: []
+
+  prometheusRule:
+    enabled: false
+    additionalLabels: {}
+    # Base link used in each alert's runbook_url annotation.
+    runbookUrl: https://github.com/scout-off/scout-off-backend/blob/main/docs/runbook.md#prometheus-alerts
+    # Every alert can be disabled and tuned here. Expressions reference the
+    # metric names the backend actually exports (see src/middleware/metrics.ts).
+    rules:
+      indexerLag:
+        enabled: true
+        # indexer_ledger_lag above this many ledgers fires the alert.
+        threshold: 100
+        for: 10m
+        severity: warning
+      webhookDlqDepth:
+        enabled: true
+        # Total scout_off_webhook_dead_letters_total across subscriptions.
+        threshold: 100
+        for: 15m
+        severity: warning
+      tierDivergence:
+        enabled: true
+        for: 0m
+        severity: critical
+      stuckPins:
+        enabled: true
+        for: 30m
+        severity: warning
+      high5xxRate:
+        enabled: true
+        # Ratio (0.05 = 5 %) of 5xx responses over all responses.
+        threshold: 0.05
+        for: 5m
+        severity: critical
+      notReady:
+        # Requires kube-state-metrics (kube_pod_status_ready).
+        enabled: false
+        for: 10m
+        severity: warning
+    # Additional PrometheusRule rules appended to the group, e.g.
+    # - alert: ScoutOffCustom
+    #   expr: up{job="scout-off-backend"} == 0
+    #   for: 5m
+    extraRules: []
 
 # -----------------------------------------------------------------------------
 # Pod annotations

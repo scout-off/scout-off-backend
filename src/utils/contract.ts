@@ -10,6 +10,8 @@ import {
 } from '@stellar/stellar-sdk';
 import { server, networkPassphrase } from '../services/stellar';
 import { correlationMemoFromContext, recordTxCorrelation } from '../services/txCorrelation';
+import { ContractExecutionError } from './contractErrors';
+export { ContractExecutionError } from './contractErrors';
 import config from '../config';
 
 // ─── Typed errors ─────────────────────────────────────────────────────────────
@@ -25,13 +27,6 @@ export class ContractTimeoutError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ContractTimeoutError';
-  }
-}
-
-export class ContractExecutionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ContractExecutionError';
   }
 }
 

@@ -1,6 +1,5 @@
 import type Database from 'better-sqlite3';
 import crypto from 'crypto';
-import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
 import { EventRecord, ContractEventType } from '../types';
 import { EVENTS_ORDER_BY_SQL } from '../services/eventOrdering';
@@ -13,35 +12,11 @@ import { decryptField, encryptField } from '../utils/fieldCipher';
 import { DbDriver, DbTxHandle } from './driver';
 import { SqliteDriver } from './sqlite-driver';
 import { PostgresDriver } from './postgres-driver';
-import { observeDbQueryDuration } from '../middleware/metrics';
 import {
   createBetterSqlite3LoadError,
   isBetterSqlite3LoadFailure,
 } from './betterSqlite3Error';
 import { ApiKeyLimitError, MAX_API_KEYS_PER_SCOUT, MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT, WebhookSubscriptionLimitError } from '../utils/scoutResourceLimits';
-
-const dbTracer = trace.getTracer('scout-off-backend');
-
-/**
- * Thin wrapper that creates a DB span, runs fn(), sets ipfs.cid on success,
- * records exception and ERROR status on throw. Zero-cost when OTEL is not
- * configured (noop tracer).
- */
-function withDbSpan<T>(name: string, sql: string, fn: () => T): T {
-  const span = dbTracer.startSpan(`db.${name}`, {
-    attributes: { 'db.system': 'sqlite', 'db.statement': sql.slice(0, 200) },
-  });
-  try {
-    const result = fn();
-    span.end();
-    return result;
-  } catch (err) {
-    span.recordException(err as Error);
-    span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
-    span.end();
-    throw err;
-  }
-}
 
 function slowQueryThresholdMs(): number {
   return parseInt(process.env.SLOW_QUERY_THRESHOLD_MS ?? '50', 10);
@@ -217,6 +192,21 @@ export async function initDb(): Promise<void> {
         PRIMARY KEY (scout_wallet, player_id)
       );
       CREATE INDEX IF NOT EXISTS idx_contact_unlocks_scout ON contact_unlocks (scout_wallet);
+      CREATE TABLE IF NOT EXISTS indexer_unprocessed_events (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        type        TEXT,
+        ledger      INTEGER,
+        tx_hash     TEXT NOT NULL,
+        event_index INTEGER NOT NULL DEFAULT 0,
+        contract_id TEXT,
+        topic_json  TEXT,
+        value_xdr   TEXT,
+        reason      TEXT NOT NULL,
+        payload     TEXT,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_indexer_unprocessed_tx_event
+        ON indexer_unprocessed_events (tx_hash, event_index);
     `);
 
     logger.info(`[db] Connected to SQLite at ${config.dbPath}`);
@@ -671,6 +661,124 @@ export function* getEventsIterable(filter: EventsPageFilter): Generator<EventExp
       payload: JSON.parse(row.payload),
     };
   }
+}
+
+// ─── Unprocessed indexer events (#1540) ──────────────────────────────────────
+
+/**
+ * A contract event the indexer could not apply — either an unrecognised topic
+ * (`unknown_type`) or one whose value failed to decode (`decode_error`). Rows
+ * retain enough of the raw event (topic + value XDR) to be replayed later via
+ * `POST /api/admin/indexer/unprocessed/:id/retry` once the decoder is fixed.
+ *
+ * Deduplicated on `(tx_hash, event_index)` so a re-poll that re-encounters the
+ * same event does not create a second row.
+ */
+export interface UnprocessedEventRow {
+  id: number;
+  type: string | null;
+  ledger: number;
+  tx_hash: string;
+  event_index: number;
+  contract_id: string | null;
+  /** JSON array of the event's raw topics (base64 XDR), for replay. */
+  topic_json: string | null;
+  /** Base64 XDR of the event's raw value, for replay. */
+  value_xdr: string | null;
+  /** Machine-readable reason: `unknown_type` or `decode_error`. */
+  reason: string;
+  /** JSON-encoded partially-decoded payload, when available. */
+  payload: string | null;
+  created_at: number;
+}
+
+/**
+ * Record an event the indexer could not apply. Idempotent on
+ * `(tx_hash, event_index)` — replaying the same event (e.g. a reorg that
+ * rewinds the cursor) updates the existing row rather than duplicating it.
+ */
+export async function insertUnprocessedEvent(p: {
+  type: string | null;
+  ledger: number;
+  tx_hash: string;
+  event_index: number;
+  contract_id: string | null;
+  topic_json: string | null;
+  value_xdr: string | null;
+  reason: string;
+  payload: string | null;
+}): Promise<void> {
+  const sql = `INSERT INTO indexer_unprocessed_events
+      (type, ledger, tx_hash, event_index, contract_id, topic_json, value_xdr, reason, payload, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (tx_hash, event_index) DO UPDATE SET
+       type = excluded.type,
+       ledger = excluded.ledger,
+       contract_id = excluded.contract_id,
+       topic_json = excluded.topic_json,
+       value_xdr = excluded.value_xdr,
+       reason = excluded.reason,
+       payload = excluded.payload,
+       created_at = excluded.created_at`;
+  await timedQueryAsync(sql, () =>
+    getDriver().run(sql, [
+      p.type,
+      p.ledger,
+      p.tx_hash,
+      p.event_index,
+      p.contract_id,
+      p.topic_json,
+      p.value_xdr,
+      p.reason,
+      p.payload,
+      Date.now(),
+    ]),
+  );
+}
+
+/**
+ * Fetch one page of unprocessed events, newest first, optionally filtered by
+ * `reason`. Also returns the total count for pagination metadata.
+ */
+export async function listUnprocessedEvents(opts: {
+  limit?: number;
+  offset?: number;
+  reason?: string;
+}): Promise<{ data: UnprocessedEventRow[]; total: number }> {
+  const driver = getDriver();
+  const limit = opts.limit ?? 50;
+  const offset = opts.offset ?? 0;
+  const where = opts.reason ? 'WHERE reason = ?' : '';
+  const params = opts.reason ? [opts.reason] : [];
+
+  const countSql = `SELECT COUNT(*) AS count FROM indexer_unprocessed_events ${where}`;
+  const countRow = await timedQueryAsync(countSql, () =>
+    driver.get<{ count: number | string }>(countSql, params),
+  );
+  const total = Number(countRow?.count ?? 0);
+
+  const dataSql = `SELECT * FROM indexer_unprocessed_events ${where}
+                   ORDER BY created_at DESC, id DESC
+                   LIMIT ? OFFSET ?`;
+  const data = await timedQueryAsync(dataSql, () =>
+    driver.all<UnprocessedEventRow>(dataSql, [...params, limit, offset]),
+  );
+
+  return { data, total };
+}
+
+/** Fetch a single unprocessed event by id, or null when absent. */
+export async function getUnprocessedEventById(id: number): Promise<UnprocessedEventRow | null> {
+  const sql = 'SELECT * FROM indexer_unprocessed_events WHERE id = ?';
+  return timedQueryAsync(sql, async () =>
+    (await getDriver().get<UnprocessedEventRow>(sql, [id])) ?? null,
+  );
+}
+
+/** Delete an unprocessed event once it has been replayed (or discarded). */
+export async function deleteUnprocessedEvent(id: number): Promise<void> {
+  const sql = 'DELETE FROM indexer_unprocessed_events WHERE id = ?';
+  await timedQueryAsync(sql, () => getDriver().run(sql, [id]));
 }
 
 // ─── Player table helpers ─────────────────────────────────────────────────────
@@ -1279,7 +1387,7 @@ function processCursorResults(
   rows: (PlayerRow | ScoredPlayerRow)[],
   limit: number,
   sortBy: string,
-  sortOrder: string,
+  _sortOrder: string,
 ): SearchPlayersResult {
   const hasMore = rows.length > limit;
   const data = hasMore ? rows.slice(0, limit) : rows;
@@ -1885,6 +1993,21 @@ const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   return timedQueryAsync(sql, () => getDriver().all<AuditLogRow>(sql, params));
 }
 
+/**
+ * Returns at most `limit` audit_log rows with `id > afterId`, in chain order.
+ *
+ * The scheduled chain verifier (#1539) walks the table in bounded batches so
+ * a large audit log is never loaded into memory in one go. Returning rows in
+ * id order also matches hash-chain order (insertAuditLog serializes writes).
+ */
+export async function getAuditLogRowsAfterId(
+  afterId: number,
+  limit: number,
+): Promise<AuditLogRow[]> {
+  const sql = 'SELECT * FROM audit_log WHERE id > ? ORDER BY id ASC LIMIT ?';
+  return timedQueryAsync(sql, () => getDriver().all<AuditLogRow>(sql, [afterId, limit]));
+}
+
 // ─── Trial offer helpers ──────────────────────────────────────────────────────
 
 export interface TrialOfferRow {
@@ -2381,10 +2504,36 @@ export async function revokeApiKeyById(id: number, scoutWallet: string): Promise
     UPDATE api_keys SET revoked_at = ?
     WHERE id = ? AND scout_wallet = ? AND revoked_at IS NULL
   `;
-  return timedQueryAsync(sql, async () => {
+  const changed = await timedQueryAsync(sql, async () => {
     const info = await getDriver().run(sql, [now, id, scoutWallet]);
     return info.changes > 0;
   });
+
+  // Emit revocation event (in-process and cross-instance via Redis)
+  if (changed) {
+    const { publishApiKeyRevoked } = await import('../services/apiKeyService');
+    void publishApiKeyRevoked(id).catch(() => {});
+  }
+
+  return changed;
+}
+
+/**
+ * Get all active API key IDs (not revoked, not past expiry).
+ * Used by the SSE authorization sweep to check if a session's API key is still valid.
+ */
+export async function getActiveApiKeyIds(): Promise<number[]> {
+  const now = Math.floor(Date.now() / 1000);
+  const sql = `
+    SELECT id FROM api_keys
+    WHERE revoked_at IS NULL
+      AND (revoke_after IS NULL OR revoke_after > ?)
+      AND (expires_at IS NULL OR expires_at > ?)
+  `;
+  const rows = await timedQueryAsync(sql, () =>
+    getDriver().all<{ id: number }>(sql, [now, now]),
+  );
+  return rows.map((r) => r.id);
 }
 
 /**
@@ -2749,7 +2898,10 @@ export interface BookmarkedPlayerRow extends PlayerRow {
 export async function getBookmarkedPlayersWithDetails(
   scoutWallet: string,
   folderId?: number | null,
+  opts?: { limit?: number; offset?: number },
 ): Promise<BookmarkedPlayerRow[]> {
+  const limit = opts?.limit;
+  const offset = opts?.offset;
   let sql: string;
   let params: (string | number | null)[];
 
@@ -2781,7 +2933,45 @@ export async function getBookmarkedPlayersWithDetails(
     params = [scoutWallet];
   }
 
+  if (limit !== undefined) {
+    sql += ` LIMIT ? OFFSET ?`;
+    params.push(limit, offset ?? 0);
+  }
+
   return timedQueryAsync(sql, () => getDriver().all<BookmarkedPlayerRow>(sql, params));
+}
+
+/**
+ * Count bookmarked players for a scout (JOIN variant so orphans excluded,
+ * matching getBookmarkedPlayersWithDetails). Used for pagination metadata.
+ */
+export async function countBookmarkedPlayers(
+  scoutWallet: string,
+  folderId?: number | null,
+): Promise<number> {
+  let sql: string;
+  let params: (string | number | null)[];
+
+  if (folderId !== undefined) {
+    sql = `
+      SELECT COUNT(*) AS cnt
+      FROM scout_bookmarks b
+      INNER JOIN players p ON p.player_id = b.player_id
+      WHERE b.scout_wallet = ? AND b.folder_id = ?
+    `;
+    params = [scoutWallet, folderId];
+  } else {
+    sql = `
+      SELECT COUNT(*) AS cnt
+      FROM scout_bookmarks b
+      INNER JOIN players p ON p.player_id = b.player_id
+      WHERE b.scout_wallet = ?
+    `;
+    params = [scoutWallet];
+  }
+
+  const rows = await timedQueryAsync(sql, () => getDriver().all<{ cnt: number }>(sql, params));
+  return Number(rows[0]?.cnt ?? 0);
 }
 
 // ─── Scout saved-search helpers (#486) ───────────────────────────────────────
@@ -3082,6 +3272,8 @@ export interface WebhookSubscription {
   scout_wallet: string | null;
   event_types: string | null; // JSON array of ContractEventType strings, or null = all
   created_at: string;
+  previous_secret?: string | null;
+  previous_secret_expires_at?: string | null;
 }
 
 export function createWebhookSubscription(
@@ -3089,6 +3281,8 @@ export function createWebhookSubscription(
   secret?: string,
   scoutWallet?: string,
   eventTypes?: string[],
+  previousSecret?: string,
+  previousSecretExpiresAt?: string,
 ): WebhookSubscription {
   const finalSecret = secret ?? crypto.randomBytes(32).toString('hex');
   // Encrypted at rest (#686) — only the ciphertext is ever persisted. The
@@ -3096,7 +3290,12 @@ export function createWebhookSubscription(
   // issuance time) but is never written back to storage.
   const encryptedSecret = encryptWebhookSecret(finalSecret);
   const eventTypesJson = eventTypes && eventTypes.length > 0 ? JSON.stringify(eventTypes) : null;
-  const sql = 'INSERT INTO webhook_subscriptions (url, secret, scout_wallet, event_types) VALUES (?, ?, ?, ?)';
+  const encryptedPreviousSecret = previousSecret
+    ? encryptWebhookSecret(previousSecret)
+    : null;
+  const sql = `INSERT INTO webhook_subscriptions 
+    (url, secret, scout_wallet, event_types, previous_secret, previous_secret_expires_at) 
+    VALUES (?, ?, ?, ?, ?, ?)`;
   return timedQuery(sql, () => {
     const insert = getDb().transaction(() => {
       if (scoutWallet) {
@@ -3108,13 +3307,22 @@ export function createWebhookSubscription(
         }
       }
 
-      const info = getDb().prepare(sql).run(url, encryptedSecret, scoutWallet ?? null, eventTypesJson);
+      const info = getDb().prepare(sql).run(
+        url,
+        encryptedSecret,
+        scoutWallet ?? null,
+        eventTypesJson,
+        encryptedPreviousSecret ?? null,
+        previousSecretExpiresAt ?? null,
+      );
       return {
         id: Number(info.lastInsertRowid),
         url,
         secret: finalSecret,
         scout_wallet: scoutWallet ?? null,
         event_types: eventTypesJson,
+        previous_secret: previousSecret ?? null,
+        previous_secret_expires_at: previousSecretExpiresAt ?? null,
         created_at: new Date().toISOString(),
       };
     });
@@ -3128,7 +3336,12 @@ export function listWebhookSubscriptions(): WebhookSubscription[] {
     const rows = getDb().prepare(sql).all() as WebhookSubscription[];
     // Decrypted only here, in memory, immediately before the caller signs a
     // delivery with it (src/services/webhooks.ts) — never persisted.
-    return rows.map((row) => ({ ...row, secret: decryptWebhookSecret(row.secret) }));
+    return rows.map((row) => ({
+      ...row,
+      secret: decryptWebhookSecret(row.secret),
+      // previous_secret is stored encrypted, decrypt if present
+      previous_secret: row.previous_secret ? decryptWebhookSecret(row.previous_secret) : null,
+    }));
   });
 }
 
@@ -3166,6 +3379,36 @@ export function deleteWebhookSubscription(id: number, scoutWallet: string): bool
     const info = getDb().prepare(sql).run(id, scoutWallet);
     return info.changes > 0;
   });
+}
+
+/**
+ * Update a webhook subscription's previous secret and expiry for rotation.
+ * This enables zero-downtime secret rotation where deliveries are signed
+ * with both the current and previous secrets until the rotation window expires.
+ *
+ * @param id - Subscription ID
+ * @param previousSecret - The old secret to use during rotation window
+ * @param previousSecretExpiresAt - Expiry timestamp in ISO format
+ */
+export function updateWebhookSubscriptionPreviousSecret(
+  id: number,
+  previousSecret: string,
+  previousSecretExpiresAt: string,
+): void {
+  const sql = `UPDATE webhook_subscriptions
+    SET previous_secret = ?, previous_secret_expires_at = ?
+    WHERE id = ?`;
+  timedQuery(sql, () => getDb().prepare(sql).run(previousSecret, previousSecretExpiresAt, id));
+}
+
+/**
+ * Clear a webhook subscription's previous secret (end rotation window).
+ */
+export function clearWebhookSubscriptionPreviousSecret(id: number): void {
+  const sql = `UPDATE webhook_subscriptions
+    SET previous_secret = NULL, previous_secret_expires_at = NULL
+    WHERE id = ?`;
+  timedQuery(sql, () => getDb().prepare(sql).run(id));
 }
 
 /**

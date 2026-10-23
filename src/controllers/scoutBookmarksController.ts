@@ -11,19 +11,19 @@ import {
   getPlayerById,
   insertBookmark,
   deleteBookmark,
-  getBookmarksByScout,
   getBookmarkedPlayersWithDetails,
+  countBookmarkedPlayers,
   insertBookmarkFolder,
   getBookmarkFoldersByScout,
   getBookmarkFolderById,
   deleteBookmarkFolder,
   moveBookmarksToRoot,
   countBookmarksInFolder,
-  ScoutBookmarkRow,
   ScoutBookmarkFolderRow,
   PlayerRow,
 } from '../db';
 import { getTierMeta } from '../utils/tier';
+import { DEFAULT_PAGE_SIZE, clampPageSize } from '../utils/pagination';
 import { logger } from '../utils/logger';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ function serializePlayer(row: PlayerRow): Record<string, unknown> {
 export async function addBookmark(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const { playerId, folderId, note } = req.body;
 
@@ -131,7 +131,7 @@ export async function addBookmark(
 export async function removeBookmark(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {playerId} = req.params as {playerId: string};
   const removed = await deleteBookmark(req.params.wallet as string, playerId);
@@ -160,12 +160,20 @@ export async function removeBookmark(
 export async function listBookmarks(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const folderId = req.query.folderId ? parseInt(req.query.folderId as string, 10) : undefined;
 
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const pageSize = clampPageSize(req.query.pageSize ?? DEFAULT_PAGE_SIZE);
+  const offset = (page - 1) * pageSize;
+
   // Single JOIN query — replaces the previous per-bookmark getPlayerById() loop.
-  const rows = await getBookmarkedPlayersWithDetails(req.params.wallet as string, folderId);
+  const rows = await getBookmarkedPlayersWithDetails(req.params.wallet as string, folderId, {
+    limit: pageSize,
+    offset,
+  });
+  const total = await countBookmarkedPlayers(req.params.wallet as string, folderId);
 
   const enriched = rows.map((row) => ({
     ...serializePlayer(row),
@@ -174,7 +182,7 @@ export async function listBookmarks(
     note: row.bookmark_note,
   }));
 
-  res.json({ success: true, data: enriched });
+  res.json({ success: true, data: enriched, meta: { page, pageSize, total } });
 }
 
 // ─── Bookmark folder handlers ─────────────────────────────────────────────────────
@@ -188,7 +196,7 @@ export async function listBookmarks(
 export async function createBookmarkFolder(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const { name } = req.body;
 
@@ -225,7 +233,7 @@ export async function createBookmarkFolder(
 export async function listBookmarkFolders(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const folders: ScoutBookmarkFolderRow[] = await getBookmarkFoldersByScout(req.params.wallet as string);
 
@@ -249,7 +257,7 @@ export async function listBookmarkFolders(
 export async function deleteBookmarkFolderHandler(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {folderId} = req.params as {folderId: string};
   const folderIdNum = parseInt(folderId, 10);

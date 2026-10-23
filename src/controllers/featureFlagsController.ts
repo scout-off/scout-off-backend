@@ -57,7 +57,7 @@ function serializeFlag(row: { name: string; enabled: number; updated_at: number;
 export async function getFeatureFlags(
   _req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   // Force re-read from DB by clearing cache first
   clearFeatureFlagCache();
@@ -80,7 +80,7 @@ export async function getFeatureFlags(
 export async function updateFeatureFlag(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const parsed = updateFeatureFlagBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -120,7 +120,7 @@ export async function updateFeatureFlag(
 export async function toggleFeatureFlag(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {name} = req.params as {name: string};
 

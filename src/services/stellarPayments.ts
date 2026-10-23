@@ -12,6 +12,7 @@ import {
   waitForTransactionConfirmation,
   requireOnChainPlayerId,
 } from './stellarCore';
+import { extractContractErrorCode } from '../utils/contractErrors';
 
 const tracer = trace.getTracer('scout-off-backend');
 
@@ -574,8 +575,9 @@ export class SubscriptionError extends Error {
  *
  * On success returns the confirmed transaction hash.
  * Maps Soroban contract error codes to SubscriptionError:
- *   #8 NotSubscribed  → code: 'NOT_SUBSCRIBED'
- *   #9 Unauthorized   → code: 'UNAUTHORIZED'
+ *   #8  NotSubscribed       → code: 'NOT_SUBSCRIBED'
+ *   #9  Unauthorized        → code: 'UNAUTHORIZED'
+ *   #18 SubscriptionExpired → code: 'ALREADY_CANCELLED'
  */
 export async function cancelSubscriptionOnChain(
   scoutWallet: string,
@@ -604,12 +606,17 @@ export async function cancelSubscriptionOnChain(
 
       if (rpc.Api.isSimulationError(simResult)) {
         const errMsg = simResult.error ?? '';
+        const code = extractContractErrorCode(errMsg);
         // Contract error #8 = NotSubscribed
-        if (errMsg.includes('#8') || /not.?subscribed/i.test(errMsg)) {
+        if (code === 8 || /not.?subscribed/i.test(errMsg)) {
           throw new SubscriptionError('Scout has no active on-chain subscription', 'NOT_SUBSCRIBED');
         }
+        // Contract error #18 = SubscriptionExpired (expired or already cancelled)
+        if (code === 18) {
+          throw new SubscriptionError('Subscription has expired or was already cancelled', 'ALREADY_CANCELLED');
+        }
         // Contract error #9 = Unauthorized
-        if (errMsg.includes('#9') || /unauthorized/i.test(errMsg)) {
+        if (code === 9 || /unauthorized/i.test(errMsg)) {
           throw new SubscriptionError('Unauthorized: wallet is not allowed to cancel this subscription', 'UNAUTHORIZED');
         }
         throw new PaymentError(`Simulation failed: ${errMsg}`, 'NETWORK_ERROR');
@@ -637,10 +644,14 @@ export async function cancelSubscriptionOnChain(
         // Cast through unknown because GetFailedTransactionResponse and
         // GetSuccessfulTransactionResponse share no overlapping status type.
         const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
-        if (resultMeta.includes('#8') || /not.?subscribed/i.test(resultMeta)) {
+        const code = extractContractErrorCode(resultMeta);
+        if (code === 8 || /not.?subscribed/i.test(resultMeta)) {
           throw new SubscriptionError('Scout has no active on-chain subscription', 'NOT_SUBSCRIBED');
         }
-        if (resultMeta.includes('#9') || /unauthorized/i.test(resultMeta)) {
+        if (code === 18) {
+          throw new SubscriptionError('Subscription has expired or was already cancelled', 'ALREADY_CANCELLED');
+        }
+        if (code === 9 || /unauthorized/i.test(resultMeta)) {
           throw new SubscriptionError('Unauthorized: wallet is not allowed to cancel this subscription', 'UNAUTHORIZED');
         }
         throw new PaymentError('cancel_subscription transaction failed on-chain', 'NETWORK_ERROR');

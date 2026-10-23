@@ -129,6 +129,13 @@ impl SubscriptionContract {
         Ok(())
     }
 
+    /// Return the contract's semantic version as `(major, minor, patch)`.
+    ///
+    /// Read-only, auth-free. Used by the backend at startup for compatibility checks.
+    pub fn version(_env: Env) -> (u32, u32, u32) {
+        (0, 1, 0)
+    }
+
     /// One-time contract setup. Stores the admin, payment token, and platform fee config.
     pub fn initialize(
         env: Env,
@@ -417,7 +424,7 @@ impl SubscriptionContract {
     ///
     /// # Errors
     /// * [`Error::NotInitialized`] — Contract has not been initialized.
-    /// * [`Error::InvalidInput`] — `platform_fee_bps` exceeds 10000.
+    /// * [`Error::FeeBpsOutOfRange`] — `platform_fee_bps` exceeds 10000.
     /// * [`Error::Unauthorized`] — Caller is not the stored admin.
     pub fn set_platform_fee_bps(
         env: Env,
@@ -431,7 +438,7 @@ impl SubscriptionContract {
             return Err(Error::ContractPaused);
         }
         if platform_fee_bps > 10000 {
-            return Err(Error::InvalidInput);
+            return Err(Error::FeeBpsOutOfRange);
         }
         access::require_role(
             &env,
@@ -523,8 +530,9 @@ impl SubscriptionContract {
     /// # Errors
     /// * [`Error::NotInitialized`] — Contract has not been initialized.
     /// * [`Error::ContractPaused`] — Contract is paused.
-    /// * [`Error::NotSubscribed`] — Scout has no active subscription or it has
-    ///   already expired/been cancelled.
+    /// * [`Error::NotSubscribed`] — Scout has never subscribed.
+    /// * [`Error::SubscriptionExpired`] — Scout's subscription has expired or
+    ///   was already cancelled.
     pub fn cancel_subscription(env: Env, scout: Address) -> Result<(), Error> {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
@@ -544,7 +552,7 @@ impl SubscriptionContract {
         // Reject if the subscription is already expired or previously cancelled
         // (expires_at == 0 is the sentinel we write below).
         if env.ledger().sequence() >= record.expires_at || record.expires_at == 0 {
-            return Err(Error::NotSubscribed);
+            return Err(Error::SubscriptionExpired);
         }
 
         // Mark as cancelled by setting expires_at to the current ledger (= expired now).
@@ -1045,5 +1053,13 @@ mod tests {
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
         }
+    }
+
+    #[test]
+    fn version_returns_semver_tuple() {
+        let env = Env::default();
+        let (client, _admin, _token_addr) = setup(&env);
+        let (major, _minor, _patch) = client.version();
+        assert_eq!(major, 0);
     }
 }

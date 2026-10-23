@@ -26,7 +26,7 @@ export const listDeadLettersQuerySchema = z.object({
  * Paginated list of dead letters. Each row exposes url, payload_preview
  * (first 200 chars of JSON), retry_count, last_error, and created_at.
  */
-export async function listDeadLetters(req: Request, res: Response, next: NextFunction) {
+export async function listDeadLetters(req: Request, res: Response, _next: NextFunction) {
   const parsed = listDeadLettersQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({
@@ -106,6 +106,7 @@ try {
         baseDelayMs: 500,
         maxDelayMs: 5000,
         secret: subscription?.secret,
+        subscription,
       });
 
       markWebhookDeadLetterReplayed(id);
@@ -142,7 +143,7 @@ try {
  *
  * Purge a specific dead-letter row.
  */
-export async function purgeDeadLetter(req: Request, res: Response, next: NextFunction) {
+export async function purgeDeadLetter(req: Request, res: Response, _next: NextFunction) {
   const parsedParams = deadLetterIdSchema.safeParse(req.params);
   if (!parsedParams.success) {
     res.status(400).json({
@@ -173,7 +174,7 @@ const purgeOldQuerySchema = z.object({
  *
  * Purge all dead letters older than `olderThanDays` days (default: 7).
  */
-export async function purgeOldDeadLetters(req: Request, res: Response, next: NextFunction) {
+export async function purgeOldDeadLetters(req: Request, res: Response, _next: NextFunction) {
   const parsed = purgeOldQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({

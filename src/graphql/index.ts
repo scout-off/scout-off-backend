@@ -26,7 +26,6 @@ import { createContext } from './context';
 import { createDepthLimitRule, createQueryCostRule, MAX_DEPTH, MAX_QUERY_COST } from './validation';
 import { logger } from '../utils/logger';
 import { createPersistedOperationsPlugin } from './persisted-operations';
-import config from '../config';
 
 // ─── Production introspection-blocking plugin ────────────────────────────────
 

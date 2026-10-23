@@ -41,8 +41,81 @@ type WebhookRetryOptions = {
   deliveryId?: string;
 };
 
+type WebhookRetryOptionsWithSubscription = WebhookRetryOptions & {
+  subscription?: WebhookSubscription;
+};
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Builds a versioned, multi-value signature header for webhook deliveries.
+ *
+ * Format: `t=<timestamp>,v1=<signature-current>,v1=<signature-previous>`
+ *
+ * This allows subscribers to verify against multiple secrets during rotation
+ * (current + previous), supporting zero-downtime secret rotation.
+ *
+ * The legacy single `X-Webhook-Signature: sha256=<digest>` header is still
+ * sent when `WEBHOOK_LEGACY_SIGNATURE=true` (default: true during deprecation
+ * period) so existing receivers continue to work.
+ *
+ * @param rawBody - The exact JSON string that will be sent as the request body
+ * @param currentSecret - The current HMAC secret
+ * @param timestamp - Unix timestamp in seconds
+ * @param previousSecret - Optional previous secret during rotation window
+ * @param previousSecretExpiresAt - Optional expiry timestamp (epoch ms) for previous secret
+ * @returns Object with `versioned` (new header value) and `legacy` (old header value) properties
+ */
+export function buildSignatureHeader(
+  rawBody: string,
+  currentSecret: string,
+  timestamp: string,
+  previousSecret?: string | null,
+  previousSecretExpiresAt?: number | null,
+): { versioned: string; legacy: string | null } {
+  // Compute current signature (always)
+  const currentSig = computeHmac(rawBody, currentSecret, timestamp);
+
+  // Compute previous signature if rotation is active
+  const previousSig = previousSecret
+    ? computeHmac(rawBody, previousSecret, timestamp)
+    : null;
+
+  // Build versioned header
+  let versioned = `t=${timestamp},v1=${currentSig}`;
+  if (previousSig) {
+    // Check if previous secret is still valid
+    const isExpired = previousSecretExpiresAt
+      ? Date.now() > previousSecretExpiresAt
+      : false;
+    if (!isExpired) {
+      versioned += `,v1=${previousSig}`;
+    }
+  }
+
+  // Build legacy header for backward compatibility
+  const legacy = config.webhook?.enableLegacySignature !== false
+    ? `sha256=${currentSig}`
+    : null;
+
+  return { versioned, legacy };
+}
+
+/**
+ * Computes HMAC-SHA256 signature for webhook payload.
+ *
+ * @param rawBody - The exact JSON string that will be sent as the request body
+ * @param secret - The HMAC secret
+ * @param timestamp - Unix timestamp in seconds
+ * @returns Hex-encoded HMAC digest
+ */
+function computeHmac(rawBody: string, secret: string, timestamp: string): string {
+  return crypto
+    .createHmac('sha256', secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest('hex');
 }
 
 /**
@@ -52,13 +125,12 @@ function sleep(ms: number): Promise<void> {
  * `<timestamp>.<raw body>` using the subscriber's secret as the HMAC key.
  * The timestamp is Unix time in seconds and is sent separately in the
  * `X-Webhook-Timestamp` header.
+ *
+ * @deprecated Use buildSignatureHeader() instead. This function will be
+ * removed once the versioned signature migration is complete.
  */
 export function signWebhookPayload(rawBody: string, secret: string, timestamp: string): string {
-  const digest = crypto
-    .createHmac('sha256', secret)
-    .update(`${timestamp}.${rawBody}`)
-    .digest('hex');
-  return `sha256=${digest}`;
+  return `sha256=${computeHmac(rawBody, secret, timestamp)}`;
 }
 
 function parseRetryAfter(response: Awaited<ReturnType<typeof fetch>>): number | null {
@@ -122,11 +194,17 @@ export async function postWebhookWithRetry(
         if (options.secret) {
           const timestamp = String(Math.floor(Date.now() / 1000));
           requestHeaders['X-Webhook-Timestamp'] = timestamp;
-          requestHeaders['X-Webhook-Signature'] = signWebhookPayload(
+          // Use subscription's secret and any active previous_secret during rotation
+          const subscription = (options as WebhookRetryOptionsWithSubscription).subscription;
+          const { versioned, legacy } = buildSignatureHeader(
             rawBody,
             options.secret,
             timestamp,
+            subscription?.previous_secret ?? null,
+            subscription?.previous_secret_expires_at ? Number(subscription.previous_secret_expires_at) : null,
           );
+          requestHeaders['X-Webhook-Signature'] = legacy ?? '';
+          requestHeaders['X-Webhook-Signature-V1'] = versioned;
         }
         const response = await fetch(url, {
           method: 'POST',
@@ -249,6 +327,7 @@ async function deliverToSubscription(
     await postWebhookWithRetry(subscription.url, body, {
       ...RETRY_OPTIONS,
       secret: subscription.secret,
+      subscription,
       eventType,
       deliveryId,
     });

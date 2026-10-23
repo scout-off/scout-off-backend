@@ -3,11 +3,14 @@ import {
   getActiveApiKeyByLookupHash,
   getActiveApiKeysAwaitingLookupHash,
   setApiKeyLookupHash,
+  revokeApiKeyById,
 } from '../db';
 import type { ApiKeyRow } from '../db';
 import { logger } from '../utils/logger';
 import { deriveApiKeyLookupHash } from '../utils/apiKeyLookup';
 import { parseApiKeyScopes } from '../utils/apiKeyScopes';
+import { EventEmitter } from 'events';
+import { publishSecurityEvent } from './redis';
 
 const SALT_BYTES = 16;
 const SEPARATOR = ':';
@@ -89,4 +92,37 @@ async function resolvePreMigrationApiKey(
     return toResolvedApiKey(row);
   }
   return null;
+}
+// ─── API key revocation emitter (for SSE session termination) ─────────────────
+
+/** In-process emitter for API key revocation events. */
+const apiKeyRevocationEmitter = new EventEmitter();
+
+/** Subscribe to API key revocation events. */
+export function onApiKeyRevoked(callback: (apiKeyId: number) => void): () => void {
+  apiKeyRevocationEmitter.on('revoked', callback);
+  return () => {
+    apiKeyRevocationEmitter.removeListener('revoked', callback);
+  };
+}
+
+/** Publish API key revocation event to Redis (cross-instance propagation). */
+async function publishApiKeyRevoked(apiKeyId: number): Promise<void> {
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      await publishSecurityEvent('api_key_revoked', { apiKeyId });
+      logger.debug(`[apiKeyService] published api_key_revoked for key ${apiKeyId}`);
+    } catch (err) {
+      logger.error(`[apiKeyService] failed to publish api_key_revoked for key ${apiKeyId}:`, err);
+    }
+  }
+}
+
+// ─── Remote handlers (called via Redis pub/sub from other instances) ─────────
+
+/** Handle API key revocation event from another instance. */
+export function onApiKeyRevokedRemote(apiKeyId: number): void {
+  logger.debug(`[apiKeyService] processing remote api_key_revoked for key ${apiKeyId}`);
+  apiKeyRevocationEmitter.emit('revoked', apiKeyId);
 }

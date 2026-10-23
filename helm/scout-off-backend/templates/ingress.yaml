@@ -24,6 +24,7 @@ spec:
       http:
         paths:
           {{- range .paths }}
+          {{- if not (or (eq .path "/metrics") .Values.ingress.excludeMetrics) }}
           - path: {{ .path }}
             pathType: {{ .pathType }}
             backend:
@@ -31,6 +32,7 @@ spec:
                 name: {{ include "scout-off-backend.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}
+          {{- end }}
           {{- end }}
     {{- end }}
 {{- end }}

@@ -1,6 +1,5 @@
 import {
   rpc,
-  Networks,
   Contract,
   TransactionBuilder,
   BASE_FEE,
@@ -8,10 +7,10 @@ import {
   Account,
   Address,
   scValToNative,
-  nativeToScVal,
 } from '@stellar/stellar-sdk';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
+import { extractContractErrorCode } from '../utils/contractErrors';
 import { correlationMemoFromContext, recordTxCorrelation } from './txCorrelation';
 import { getRequestSignal } from '../utils/requestContext';
 
@@ -140,17 +139,17 @@ export async function requireOnChainPlayerId(playerId: string): Promise<bigint> 
 
 /** Matches the contract's ContractPaused (#10) error in a simulation/result error string. */
 export function isContractPausedError(message: string): boolean {
-  return /#10\b/.test(message) || /contract.?paused/i.test(message);
+  return extractContractErrorCode(message) === 10 || /contract.?paused/i.test(message);
 }
 
 /** Matches the contract's PlayerNotFound (#3) error in a simulation/result error string. */
 export function isPlayerNotFoundError(message: string): boolean {
-  return /#3\b/.test(message) || /player.?not.?found/i.test(message);
+  return extractContractErrorCode(message) === 3 || /player.?not.?found/i.test(message);
 }
 
 /** Matches Soroban contract error #7 (InsufficientFee) in a simulation/result error string. */
 export function isInsufficientFeeError(message: string): boolean {
-  return /#7\b/.test(message) || /insufficient.?fee/i.test(message);
+  return extractContractErrorCode(message) === 7 || /insufficient.?fee/i.test(message);
 }
 
 /**

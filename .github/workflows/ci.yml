@@ -71,7 +71,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends sqlite3
 
       - name: Validate env example
-        run: node scripts/validate-env.js
+        run: npm run env:check
 
       - name: Check every route has canonical-source documentation
         run: npm run docs:check

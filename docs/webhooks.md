@@ -4,6 +4,46 @@ This document describes how ScoutOff signs outbound event webhooks and how to
 verify them, along with the dead-letter queue and admin replay flow for
 deliveries that exhaust their retries.
 
+## Versioned Signature Format
+
+Webhook deliveries are signed using a versioned, multi-value signature header
+that supports zero-downtime secret rotation.
+
+### Header Format
+
+Two signature headers are sent with each webhook delivery:
+
+1. **X-Webhook-Signature** (legacy, may be disabled):  
+   `sha256=<hex-encoded HMAC-SHA256 digest>`
+
+2. **X-Webhook-Signature-V1** (versioned, always present):  
+   `t=<timestamp>,v1=<signature-current>,v1=<signature-previous>`
+
+The versioned format (`X-Webhook-Signature-V1`) contains:
+- `t=<timestamp>` — Unix timestamp in seconds (same value as `X-Webhook-Timestamp`)
+- `v1=<signature>` — One or more HMAC-SHA256 signatures using the current and/or previous secrets
+
+During a rotation window, the header includes signatures for **both** the current
+and previous secrets. After the rotation window expires, only the current secret
+is used.
+
+### Rotation Process
+
+Webhook subscriptions support a dual-key rotation pattern analogous to JWT
+rotation:
+
+1. **Start Rotation**: Set `previous_secret` and `previous_secret_expires_at` on
+   the subscription row. From this point, deliveries are signed with both secrets.
+
+2. **Rotation Window**: Receivers verify against **both** signatures. If either
+   validates, the delivery is accepted.
+
+3. **End Rotation**: Once `previous_secret_expires_at` is passed, clear the
+   previous secret. Only the current secret signs and validates.
+
+See [docs/secrets-rotation.md](secrets-rotation.md) for the rotation endpoint
+API and step-by-step procedures.
+
 ## Subscribing
 
 Each webhook subscriber is a row in the `webhook_subscriptions` table
@@ -270,66 +310,124 @@ Fires when an admin withdraws accumulated platform fees from the contract.
 ## Verifying the signature
 
 `X-Webhook-Timestamp` is the request creation time as Unix seconds.
-`X-Webhook-Signature` is computed as:
+`X-Webhook-Signature` (legacy) and `X-Webhook-Signature-V1` (versioned) are sent.
+The versioned header contains one or more signatures for rotation support.
 
+### Header Format
+
+The **X-Webhook-Signature-V1** header format is:
 ```
-sha256=HMAC_SHA256(secret, timestamp + "." + raw_request_body_bytes)
+t=<timestamp>,v1=<signature-current>,v1=<signature-previous>
 ```
 
-The HMAC is computed over the timestamp header followed by a period and the
-**raw bytes of the request body exactly as sent** — do not re-serialize the
-parsed JSON before verifying, since key ordering/whitespace differences would
-produce a different digest than what was signed. The timestamp is covered by
-the HMAC, so it cannot be changed independently. The `deliveryId` field is
-also part of the signed body.
+Where:
+- `t=<timestamp>` matches `X-Webhook-Timestamp`
+- `v1=<sig>` — One or more HMAC-SHA256 signatures (comma-separated)
 
-Receivers **must** reject requests whose timestamp is outside a short
-freshness window (five minutes is recommended), in addition to checking the
-HMAC with a constant-time comparison. This prevents an old captured delivery
-from being accepted indefinitely. The delivery ID is stable across retries and
-dead-letter replays, so receivers **must also** durably deduplicate by
-`deliveryId` before applying side effects; an in-memory cache alone is not
-sufficient for production or multi-instance receivers. Keep deduplication
-records for as long as the sender may replay a delivery.
+The **X-Webhook-Signature** (legacy) header uses:
+```
+sha256=<hex-encoded HMAC-SHA256 digest>
+```
 
-This mirrors the pattern used by Stripe and GitHub webhooks: recompute the
-HMAC yourself with your subscription's secret, and compare it to the value in
-the header using a **constant-time comparison** to avoid leaking timing
-information about how many bytes matched.
+During rotation, receivers must check **all** `v1=` signatures until one validates.
 
-### Example (Node.js)
+### Validation Steps
+
+Receivers must:
+
+1. **Parse the timestamp** from `X-Webhook-Timestamp` or extract from `t=` in `X-Webhook-Signature-V1`
+2. **Reject stale requests** if timestamp is more than 5 minutes from current time
+3. **Extract all signatures** from `X-Webhook-Signature-V1` (or `X-Webhook-Signature` for legacy)
+4. **Try each secret** (current + any previous secrets) until one validates
+5. **Use constant-time comparison** to avoid timing leaks
+6. **Persistently deduplicate** by `deliveryId` before applying side effects
+
+### Example (Node.js) — Versioned Header Support
 
 ```js
 const crypto = require('crypto');
 
-function isValidSignature(rawBody, timestamp, signatureHeader, secret) {
+function parseVersionedSignature(header) {
+  if (!header || !header.startsWith('t=')) return null;
+  
+  const parts = header.split(',');
+  const result = { timestamp: null, signatures: [] };
+  
+  for (const part of parts) {
+    if (part.startsWith('t=')) {
+      result.timestamp = part.slice(2);
+    } else if (part.startsWith('v1=')) {
+      result.signatures.push(part.slice(3));
+    }
+  }
+  
+  return result;
+}
+
+function isValidSignature(rawBody, timestamp, signatureHeaders, secrets) {
+  // Validate timestamp freshness
   if (!timestamp || !/^\d+$/.test(timestamp)) return false;
   const timestampSeconds = Number(timestamp);
   const nowSeconds = Math.floor(Date.now() / 1000);
-  if (!Number.isSafeInteger(timestampSeconds) || Math.abs(nowSeconds - timestampSeconds) > 300) {
+  if (Math.abs(nowSeconds - timestampSeconds) > 300) { // 5 minute tolerance
     return false;
   }
-  if (!signatureHeader || !signatureHeader.startsWith('sha256=')) return false;
 
-  const expected = crypto.createHmac('sha256', secret)
-    .update(`${timestamp}.${rawBody}`)
-    .digest('hex');
-  const provided = signatureHeader.slice('sha256='.length);
-
-  const expectedBuf = Buffer.from(expected, 'hex');
-  const providedBuf = Buffer.from(provided, 'hex');
-
-  // Lengths must match before calling timingSafeEqual, which throws on
-  // mismatched buffer lengths rather than returning false.
-  if (expectedBuf.length !== providedBuf.length) return false;
-
-  return crypto.timingSafeEqual(expectedBuf, providedBuf);
+  // Check all provided signatures against all known secrets
+  for (const header of signatureHeaders) {
+    const parsed = parseVersionedSignature(header);
+    if (parsed) {
+      for (const sig of parsed.signatures) {
+        for (const secret of secrets) {
+          const expected = crypto.createHmac('sha256', secret)
+            .update(`${timestamp}.${rawBody}`)
+            .digest('hex');
+          
+          const expectedBuf = Buffer.from(expected, 'hex');
+          const providedBuf = Buffer.from(sig, 'hex');
+          
+          if (expectedBuf.length === providedBuf.length &&
+              crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+            return true; // Valid signature found
+          }
+        }
+      }
+    } else if (header.startsWith('sha256=')) {
+      // Legacy single-value format
+      const provided = header.slice('sha256='.length);
+      for (const secret of secrets) {
+        const expected = crypto.createHmac('sha256', secret)
+          .update(`${timestamp}.${rawBody}`)
+          .digest('hex');
+        
+        const expectedBuf = Buffer.from(expected, 'hex');
+        const providedBuf = Buffer.from(provided, 'hex');
+        
+        if (expectedBuf.length === providedBuf.length &&
+            crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+          return true;
+        }
+      }
+    }
+  }
+  
+  return false; // No valid signature found
 }
 
 app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
-  const signature = req.headers['x-webhook-signature'];
   const timestamp = req.headers['x-webhook-timestamp'];
-  if (!isValidSignature(req.body, timestamp, signature, process.env.SCOUTOFF_WEBHOOK_SECRET)) {
+  const signatureV1 = req.headers['x-webhook-signature-v1'];
+  const signatureLegacy = req.headers['x-webhook-signature'];
+  
+  const signatureHeaders = [signatureV1, signatureLegacy].filter(Boolean);
+  
+  // Try both current and previous secrets (for rotation window)
+  const secrets = [
+    process.env.SCOUTOFF_WEBHOOK_SECRET,      // current
+    process.env.SCOUTOFF_WEBHOOK_SECRET_PREVIOUS, // previous (may be undefined)
+  ].filter(Boolean);
+  
+  if (!isValidSignature(req.body, timestamp, signatureHeaders, secrets)) {
     return res.status(401).send('invalid signature');
   }
 
@@ -340,9 +438,99 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
 });
 ```
 
-Note the receiver must read the **raw body** (e.g. `express.raw()`) for the
-signature check — parsing JSON first and re-stringifying it is not
-guaranteed to reproduce the exact bytes that were signed.
+### Example (Python) — Versioned Header Support
+
+```python
+import hmac
+import hashlib
+import time
+from typing import List, Optional
+
+def parse_versioned_signature(header: str) -> Optional[dict]:
+    """Parse X-Webhook-Signature-V1 header."""
+    if not header or not header.startswith('t='):
+        return None
+    
+    parts = header.split(',')
+    result = {'timestamp': None, 'signatures': []}
+    
+    for part in parts:
+        if part.startswith('t='):
+            result['timestamp'] = part[2:]
+        elif part.startswith('v1='):
+            result['signatures'].append(part[3:])
+    
+    return result
+
+def compute_hmac(secret: str, timestamp: str, body: bytes) -> str:
+    """Compute HMAC-SHA256 signature."""
+    message = f"{timestamp}.{body.decode('utf-8')}"
+    return hmac.new(
+        secret.encode('utf-8'),
+        message.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+
+def is_valid_signature(
+    raw_body: bytes,
+    timestamp: str,
+    signature_headers: List[str],
+    secrets: List[str]
+) -> bool:
+    """Verify signature against multiple secrets (for rotation)."""
+    if not timestamp or not timestamp.isdigit():
+        return False
+    
+    timestamp_seconds = int(timestamp)
+    now_seconds = int(time.time())
+    
+    # 5 minute tolerance
+    if abs(now_seconds - timestamp_seconds) > 300:
+        return False
+    
+    for header in signature_headers:
+        parsed = parse_versioned_signature(header)
+        if parsed:
+            for sig in parsed['signatures']:
+                for secret in secrets:
+                    expected = compute_hmac(secret, timestamp, raw_body)
+                    if hmac.compare_digest(sig, expected):
+                        return True
+        elif header.startswith('sha256='):
+            # Legacy format
+            provided = header[7:]
+            for secret in secrets:
+                expected = compute_hmac(secret, timestamp, raw_body)
+                if hmac.compare_digest(provided, expected):
+                    return True
+    
+    return False
+
+@app.post('/webhook')
+async def webhook(request: Request):
+    body = await request.body()
+    timestamp = request.headers.get('x-webhook-timestamp', '')
+    
+    signature_v1 = request.headers.get('x-webhook-signature-v1', '')
+    signature_legacy = request.headers.get('x-webhook-signature', '')
+    
+    signature_headers = [h for h in [signature_v1, signature_legacy] if h]
+    
+    # Try both current and previous secrets
+    secrets = [
+        os.getenv('SCOUTOFF_WEBHOOK_SECRET'),
+        os.getenv('SCOUTOFF_WEBHOOK_SECRET_PREVIOUS')
+    ]
+    secrets = [s for s in secrets if s]
+    
+    if not is_valid_signature(body, timestamp, signature_headers, secrets):
+        return JSONResponse(status_code=401, content={'error': 'invalid signature'})
+    
+    event = json.loads(body.decode())
+    # Persistently deduplicate event['deliveryId'] before applying side effects
+    # ... handle event ...
+    return JSONResponse(status_code=200, content={'status': 'ok'})
+```
 
 ### Receiver-side deduplication
 

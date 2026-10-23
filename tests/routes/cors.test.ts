@@ -136,6 +136,7 @@ describe('CORS origin allowlist', () => {
       'location',
       'retry-after',
       'x-ratelimit-reputation-limit',
+      'x-trace-id',
     ]));
   });
 

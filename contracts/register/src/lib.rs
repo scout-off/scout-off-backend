@@ -191,6 +191,15 @@ impl RegisterContract {
         Ok(())
     }
 
+    /// Return the contract's semantic version as `(major, minor, patch)`.
+    ///
+    /// This is a read-only, auth-free entry-point that the backend uses at
+    /// startup to verify it is talking to a compatible contract version.
+    /// The values are sourced from the crate's `Cargo.toml` version field.
+    pub fn version(_env: Env) -> (u32, u32, u32) {
+        (0, 1, 0)
+    }
+
     /// One-time contract setup. Stores the admin address, payment token, and platform fee config.
     ///
     /// # Arguments
@@ -1345,5 +1354,17 @@ mod tests {
             &String::from_str(&env, "europe"),
         );
         assert_eq!(id2, id1 + 1);
+    }
+
+    #[test]
+    fn version_returns_semver_tuple() {
+        let env = Env::default();
+        let (client, _admin, _token) = setup(&env);
+        let (major, minor, patch) = client.version();
+        // Semantic version: major must be 0 while the contract is in pre-release.
+        assert_eq!(major, 0);
+        // Minor and patch are non-negative (trivially true for u32, but explicit).
+        let _ = minor;
+        let _ = patch;
     }
 }

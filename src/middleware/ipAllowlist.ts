@@ -21,7 +21,7 @@ function ipToNumber(ip: string): number {
  * transparently match clients that connect over a dual-stack socket and whose
  * address appears as "::ffff:192.168.1.42".
  */
-function normalizeIpv4MappedIpv6(ip: string): string {
+export function normalizeIpv4MappedIpv6(ip: string): string {
   const prefix = '::ffff:';
   if (ip.toLowerCase().startsWith(prefix)) {
     const candidate = ip.slice(prefix.length);
@@ -56,7 +56,7 @@ function validateEntry(entry: string): string | null {
  * @param ip   - Client IP in dotted-decimal notation (e.g. "192.168.1.42")
  * @param cidr - Entry from the allowlist, either "x.x.x.x" or "x.x.x.x/n"
  */
-function ipInCidr(ip: string, cidr: string): boolean {
+export function ipInCidr(ip: string, cidr: string): boolean {
   if (net.isIP(ip) !== 4) return false;
   if (!cidr.includes('/')) return ip === cidr;
   const [network, prefixStr] = cidr.split('/');

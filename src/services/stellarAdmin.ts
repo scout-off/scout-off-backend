@@ -8,6 +8,7 @@ import {
   sendTransactionWithCorrelation,
   server,
 } from './stellarCore';
+import { extractContractErrorCode } from '../utils/contractErrors';
 
 const tracer = trace.getTracer('scout-off-backend');
 
@@ -318,7 +319,11 @@ export async function registerValidatorOnChain(
       if (rpc.Api.isSimulationError(simResult)) {
         const errMsg = simResult.error ?? '';
         // Best-effort contract error mapping — see NOTE above.
-        if (errMsg.includes('#13') || /already.?registered/i.test(errMsg)) {
+        const code = extractContractErrorCode(errMsg);
+        if (code === 13) {
+          throw new ValidatorActionError('Validator is not registered on-chain', 'NOT_REGISTERED');
+        }
+        if (/already.?registered/i.test(errMsg)) {
           throw new ValidatorActionError('Validator is already registered on-chain', 'ALREADY_REGISTERED');
         }
         if (/#9\b/.test(errMsg) || /unauthorized/i.test(errMsg)) {
@@ -349,7 +354,11 @@ export async function registerValidatorOnChain(
         // Cast through unknown because GetFailedTransactionResponse and
         // GetSuccessfulTransactionResponse share no overlapping status type.
         const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
-        if (resultMeta.includes('#13') || /already.?registered/i.test(resultMeta)) {
+        const code = extractContractErrorCode(resultMeta);
+        if (code === 13) {
+          throw new ValidatorActionError('Validator is not registered on-chain', 'NOT_REGISTERED');
+        }
+        if (/already.?registered/i.test(resultMeta)) {
           throw new ValidatorActionError('Validator is already registered on-chain', 'ALREADY_REGISTERED');
         }
         throw new ValidatorActionError('register_validator transaction failed on-chain', 'NETWORK_ERROR');
@@ -468,10 +477,10 @@ export async function revokeValidatorOnChain(
 
       if (rpc.Api.isSimulationError(simResult)) {
         const errMsg = simResult.error ?? '';
-        if (errMsg.includes('#14') || /already.?revoked/i.test(errMsg)) {
+        if (extractContractErrorCode(errMsg) === 14 || /already.?revoked/i.test(errMsg)) {
           throw new ValidatorActionError('Validator is already revoked on-chain', 'ALREADY_REVOKED');
         }
-        if (errMsg.includes('#15') || /not.?registered/i.test(errMsg)) {
+        if (extractContractErrorCode(errMsg) === 13 || /not.?registered/i.test(errMsg)) {
           throw new ValidatorActionError('Wallet is not a registered validator on-chain', 'NOT_REGISTERED');
         }
         if (/#9\b/.test(errMsg) || /unauthorized/i.test(errMsg)) {
@@ -499,10 +508,10 @@ export async function revokeValidatorOnChain(
 
       if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
         const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
-        if (resultMeta.includes('#14') || /already.?revoked/i.test(resultMeta)) {
+        if (extractContractErrorCode(resultMeta) === 14 || /already.?revoked/i.test(resultMeta)) {
           throw new ValidatorActionError('Validator is already revoked on-chain', 'ALREADY_REVOKED');
         }
-        if (resultMeta.includes('#15') || /not.?registered/i.test(resultMeta)) {
+        if (extractContractErrorCode(resultMeta) === 13 || /not.?registered/i.test(resultMeta)) {
           throw new ValidatorActionError('Wallet is not a registered validator on-chain', 'NOT_REGISTERED');
         }
         throw new ValidatorActionError('revoke_validator transaction failed on-chain', 'NETWORK_ERROR');
