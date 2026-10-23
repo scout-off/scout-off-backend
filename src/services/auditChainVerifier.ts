@@ -94,6 +94,7 @@ async function readState(keys: string[]): Promise<Map<string, string>> {
   const placeholders = keys.map(() => '?').join(', ');
   // sql-injection-check-ignore: placeholders are generated `?` markers; keys are bound values.
   const rows = await getDriver().all<{ key: string; value: string }>(
+    // sql-injection-ok: placeholders are generated `?` markers; keys are bound values.
     `SELECT key, value FROM indexer_state WHERE key IN (${placeholders})`,
     keys,
   );

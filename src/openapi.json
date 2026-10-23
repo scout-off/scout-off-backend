@@ -1269,6 +1269,107 @@
         ]
       }
     },
+    "/admin/indexer/unprocessed": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List contract events the indexer could not apply.",
+        "operationId": "listUnprocessed",
+        "description": "Paginated list of contract events the indexer could not apply (unknown topic\nor decode failure), newest first. Each row carries the raw topic/value XDR\nneeded to replay the event once the decoder is fixed.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "1-based page number (default 1)"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Page size, 1-100 (default 20)"
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "unknown_type",
+                "decode_error"
+              ]
+            },
+            "description": "Optional filter by failure reason"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ success: true, data: UnprocessedEvent[], total, page, pageSize }"
+          },
+          "400": {
+            "description": "{ success: false, error: string } - Invalid query parameters"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-role": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/indexer/unprocessed/{id}/retry": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Replay a stored unprocessed event after a decoder fix.",
+        "operationId": "retryUnprocessed",
+        "description": "Reruns the indexer's apply path for a stored unprocessed event after a\ndecoder fix. On success the unprocessed row is removed; on failure it is\nkept and the failure detail is returned.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Id of the stored unprocessed event"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ success: true, data: { id, status, detail } }"
+          },
+          "404": {
+            "description": "{ success: false, error: string } - Unknown id"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-role": [
+          "admin"
+        ]
+      }
+    },
     "/admin/introspect": {
       "post": {
         "tags": [

@@ -500,12 +500,14 @@ export async function listUnprocessedEvents(opts: {
   const where = opts.reason ? 'WHERE reason = ?' : '';
   const params = opts.reason ? [opts.reason] : [];
 
+  // sql-injection-ok: `where` is either empty or the fixed 'WHERE reason = ?'.
   const countSql = `SELECT COUNT(*) AS count FROM indexer_unprocessed_events ${where}`;
   const countRow = await timedQueryAsync(countSql, () =>
     driver.get<{ count: number | string }>(countSql, params),
   );
   const total = Number(countRow?.count ?? 0);
 
+  // sql-injection-ok: `where` is either empty or the fixed 'WHERE reason = ?'.
   const dataSql = `SELECT * FROM indexer_unprocessed_events ${where}
                    ORDER BY created_at DESC, id DESC
                    LIMIT ? OFFSET ?`;

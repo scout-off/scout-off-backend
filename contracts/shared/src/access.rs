@@ -60,11 +60,12 @@ pub fn get_role_admin(env: &Env, role: &Symbol) -> Symbol {
 }
 
 /// Called only by initialize, or by an authenticated legacy-admin migration.
+/// The caller must already have called `admin.require_auth()`: requiring it
+/// again in the same frame fails with `Error(Auth, ExistingValue)`.
 pub fn initialize(env: &Env, admin: &Address) -> Result<(), Error> {
     if initialized(env) {
         return Err(Error::AlreadyInitialized);
     }
-    admin.require_auth();
     env.storage()
         .instance()
         .set(&DataKey::RolesInitialized, &true);

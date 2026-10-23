@@ -44,6 +44,7 @@ async function selectBatch(tx: DbTxHandle, policy: RetentionPolicy, before: stri
     return prefix as unknown as Row[];
   }
   const lock = config.dbDriver === 'postgres' ? ' FOR UPDATE' : '';
+  // sql-injection-ok: table/key/predicate come from the retentionTargets allowlist; values are bound.
   return tx.all<Row>(`SELECT * FROM ${policy.table} WHERE ${predicate(policy)} ORDER BY ${key} LIMIT ?${lock}`, [before, config.retention.batchSize]);
 }
 
@@ -137,8 +138,10 @@ async function pruneBatch(policy: RetentionPolicy, before: string | number): Pro
     if (policy.table === 'audit_log') {
       // SQLite deployments may not have foreign_keys enabled; never rely on
       // cascading deletion to enforce the PII retention boundary.
+      // sql-injection-ok: generated `?` placeholders; ids are bound values.
       await tx.run(`DELETE FROM audit_log_pii WHERE audit_log_id IN (${ids.map(() => '?').join(',')})`, ids);
     }
+    // sql-injection-ok: table/key from the retentionTargets allowlist; ids are bound values.
     const result = await tx.run(`DELETE FROM ${policy.table} WHERE ${key} IN (${ids.map(() => '?').join(',')})`, ids);
     return result.changes;
   });
@@ -154,6 +157,7 @@ export async function runRetention(dryRun = false, now = Date.now()): Promise<Re
     const results: RetentionResult[] = [];
     for (const policy of config.retention.policies) {
       const before = cutoff(policy, now);
+      // sql-injection-ok: table/predicate come from the retentionTargets allowlist; values are bound.
       const count = await getDriver().get<{ count: string | number }>(`SELECT COUNT(*) AS count FROM ${policy.table} WHERE ${predicate(policy)}`, [before]);
       const result = { table: policy.table, eligible: Number(count?.count ?? 0), deleted: 0, batches: 0 };
       results.push(result);

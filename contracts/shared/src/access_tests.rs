@@ -11,6 +11,7 @@ struct AccessHarness;
 #[contractimpl]
 impl AccessHarness {
     pub fn initialize(env: Env, admin: Address) -> Result<(), Error> {
+        admin.require_auth();
         initialize(&env, &admin)
     }
 
