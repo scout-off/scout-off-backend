@@ -7,6 +7,9 @@ declare namespace JSX {
   interface IntrinsicElements {
     [elemName: string]: any;
   }
+  // Kept as an (empty) interface rather than a type alias so consumers can
+  // declaration-merge into JSX.Element.
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   interface Element extends Record<string, any> {}
 }
 
