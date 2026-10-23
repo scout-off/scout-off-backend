@@ -151,6 +151,8 @@ The backend maintains a 24-hour cache of idempotent request responses keyed by t
 
 **Transient 5xx responses are NOT cached.** If a request completes with a 5xx status, the pending claim is released immediately so the same key can be reused for a retry without waiting for the previous 24-hour TTL.
 
+**Detecting a replay.** A response served from the idempotency cache carries `Idempotent-Replayed: true`. The first execution of a request does not include the header, so clients and support staff can tell whether the action ran just now or whether an earlier result was returned. The header is listed in CORS `exposedHeaders`, so browser clients can read it.
+
 ### How to use it
 
 **Send a stable, unique key:**
@@ -598,6 +600,10 @@ curl -X POST "http://localhost:4000/api/admin/actions/cm123456789/approve" \
 #### Single-Admin Mode
 
 When `ADMIN_THRESHOLD = 1`, operations execute immediately without creating pending actions. The response format and audit logging remain consistent.
+
+### Feature Flags
+
+`GET /api/admin/feature-flags`, `PUT /api/admin/feature-flags` and `PUT /api/admin/feature-flags/:name` list and toggle runtime feature flags (admin role required). See [docs/feature-flags.md](docs/feature-flags.md) for every flag, its default, what it gates, and how caching affects propagation across replicas.
 
 ---
 

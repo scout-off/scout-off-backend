@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import {
   Keypair,
-  Networks,
   TransactionBuilder,
   BASE_FEE,
   Operation,

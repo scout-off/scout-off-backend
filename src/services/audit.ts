@@ -1,4 +1,3 @@
-import { logger } from '../utils/logger';
 import { logWithoutRedaction } from '../utils/logRedaction';
 import { insertAuditLog } from '../db';
 

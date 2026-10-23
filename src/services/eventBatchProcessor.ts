@@ -18,7 +18,6 @@ import config from '../config';
 import { getDb } from '../db';
 import { normalizeEventId, normalizeSorobanEvent } from './indexer';
 import { normalizeAndSortEvents, type RawIndexerEvent } from './eventOrdering';
-import { logAuditEvent } from './audit';
 import { logger } from '../utils/logger';
 
 export interface BatchProcessorOptions {
@@ -71,7 +70,6 @@ export async function processEventBatches(
     toLedger,
     batchSize,
     batchDelayMs,
-    adminWallet,
     onProgress,
   } = options;
 

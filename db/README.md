@@ -7,6 +7,41 @@ status and apply pending migrations, and
 [docs/postgres-migration.md](../docs/postgres-migration.md) for running
 migrations against PostgreSQL.
 
+## Running Migrations
+
+### Check Status
+
+To see which migrations have been applied and which are pending:
+
+```bash
+npm run db:migrate:status
+```
+
+This command exits with code 0 if the database is up-to-date, or code 2 if
+migrations are pending. Use this in CI/CD to gate deployments or in readiness checks.
+
+### Apply Migrations
+
+To apply all pending migrations:
+
+```bash
+npm run db:migrate
+```
+
+This is safe to run multiple times (migrations are idempotent). It can also be
+run as a one-off container command or Kubernetes Job (see **Deployment** below).
+
+### Get Current Version
+
+To see which migration was last applied:
+
+```bash
+npm run db:migrate:version
+```
+
+This prints the filename ID of the last applied migration, plus metadata about
+the expected vs. current schema version.
+
 ## Naming convention
 
 Each migration is a pair of files:

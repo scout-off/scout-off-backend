@@ -47,7 +47,7 @@ export const deactivateBodySchema = z.object({
 export async function adminDeactivatePlayer(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   // ── Validate playerId path param ─────────────────────────────────────────
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
@@ -170,7 +170,7 @@ export async function adminDeactivatePlayer(
 export async function adminReactivatePlayer(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   // ── Validate playerId ────────────────────────────────────────────────────
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);

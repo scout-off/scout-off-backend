@@ -277,7 +277,7 @@ export async function processPlayerImportBatch(
  *
  * @auth Bearer (admin role required)
  */
-export async function importPlayers(req: Request, res: Response, next: NextFunction) {
+export async function importPlayers(req: Request, res: Response, _next: NextFunction) {
   const adminWallet = req.account ?? 'unknown';
   const contentType = (req.headers['content-type'] ?? '').toLowerCase();
   const allowPartial = req.query['allowPartial'] !== 'false';

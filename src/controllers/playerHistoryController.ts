@@ -97,7 +97,7 @@ async function findPlayerByIdOrWallet(playerId: string) {
 export async function getPlayerHistory(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
@@ -150,7 +150,7 @@ export async function getPlayerHistory(
 export async function getPlayerHistoryVersion(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
@@ -223,7 +223,7 @@ export async function getPlayerHistoryVersion(
 export async function getPlayerHistoryDiff(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {

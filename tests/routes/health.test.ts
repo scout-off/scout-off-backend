@@ -388,3 +388,23 @@ describe('GET /ready and GET /health/readiness return identical responses', () =
     expect(normalizeTiming(a.body)).toEqual(normalizeTiming(b.body));
   });
 });
+
+// ─── Cache-Control on operational endpoints ──────────────────────────────────
+
+describe('operational endpoints set Cache-Control: no-store', () => {
+  beforeEach(() => {
+    mockCheckHealth.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    mockCheckHealth.mockReset();
+  });
+
+  it.each(['/health', '/ready', '/health/liveness', '/health/readiness', '/health/dependencies', '/metrics', '/version'])(
+    '%s responds with Cache-Control: no-store',
+    async (path) => {
+      const res = await request(app).get(path);
+      expect(res.headers['cache-control']).toBe('no-store');
+    },
+  );
+});

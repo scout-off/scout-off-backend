@@ -91,6 +91,32 @@ components:
           type: string
         code:
           type: string
+    VersionInfo:
+      type: object
+      required:
+        - version
+        - commit
+        - node
+        - environment
+        - startedAt
+        - uptimeSeconds
+      properties:
+        version:
+          type: string
+        commit:
+          type: string
+        node:
+          type: string
+        environment:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp recorded when the process started
+        uptimeSeconds:
+          type: integer
+          minimum: 0
+          description: Process uptime in whole seconds
     PlayerSummary:
       type: object
       required:
@@ -264,6 +290,15 @@ components:
             - pending
             - approved
           description: Approval state added by the milestones endpoint ("all" status param)
+  headers:
+    IdempotentReplayed:
+      description: >-
+        Present with value `true` when the response was replayed from the idempotency store because
+        the request repeated an earlier `Idempotency-Key`. Absent on first execution.
+      schema:
+        type: string
+        enum:
+          - 'true'
   responses:
     Unauthorized:
       description: Missing or invalid JWT
@@ -1638,7 +1673,7 @@ paths:
           description: Stellar public key (G...) to build the challenge for
       responses:
         '200':
-          description: '{ challenge: string, networkPassphrase: string }'
+          description: '{ challenge: string, networkPassphrase: string, expiresAt: number }'
         '400':
           description: '{ success: false, error: string } - Missing/invalid account'
       security: []
@@ -1737,7 +1772,7 @@ paths:
               additionalProperties: false
       responses:
         '200':
-          description: '{ token, accessToken, refreshToken, account, expiresAt }'
+          description: '{ success: true, token, accessToken, refreshToken, account, expiresAt }'
         '400':
           description: '{ success: false, error: string } - Invalid body or malformed XDR'
         '401':
@@ -2435,13 +2470,14 @@ paths:
     post:
       tags:
         - players
-      summary: Purchase Player Tokens for the given player (stub — no real XLM transfer).
+      summary: Purchase Player Tokens for a given player.
       operationId: buyPlayerToken
       description: |-
-        Purchase Player Tokens for the given player (stub — no real XLM transfer).
+        Purchase Player Tokens for a given player. Purchases are persisted in the
+        database, but this stub does not perform an XLM transfer.
         Gated by the `player_tokens` feature flag — returns 404 when disabled.
-        The authenticated account is the buyer; the optional buyerWallet field is
-        accepted for compatibility only when it matches that account.
+        The authenticated scout account is the buyer; the optional buyerWallet field
+        is accepted only when it matches that account.
       parameters:
         - name: playerId
           in: path
@@ -2470,13 +2506,15 @@ paths:
         '200':
           description: '{ success: true, data: { playerId, buyerWallet, amount, newBalance } }'
         '400':
-          description: '{ success: false, error: string } - Invalid amount'
+          description: '{ success: false, error: string } - Invalid request body or amount'
         '401':
           description: '{ success: false, error: string } - Authentication required'
         '403':
           description: '{ success: false, error: string } - buyerWallet does not match authenticated account'
         '404':
-          description: '{ success: false, error: string } - Feature flag disabled or player not found'
+          description: '{ success: false, error: string } - Feature flag disabled or no tokens issued for player'
+        '409':
+          description: '{ success: false, error: string, code: TOKEN_SUPPLY_EXHAUSTED } - Token supply exhausted'
       security:
         - bearerAuth: []
         - apiKeyAuth:

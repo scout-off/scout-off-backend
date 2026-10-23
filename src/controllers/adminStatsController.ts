@@ -17,7 +17,7 @@ const statsQuerySchema = z.object({
 });
 
 /** GET /api/admin/stats */
-export async function getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getStats(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const parsed = statsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({

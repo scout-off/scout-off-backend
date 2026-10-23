@@ -16,9 +16,8 @@
 
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import config from '../config';
 import { logger } from '../utils/logger';
-import { sendUnauthorized, sendForbidden } from '../utils/authError';
+import { sendForbidden } from '../utils/authError';
 import { logAuditEvent } from '../services/audit';
 
 // ─── Request validation ───────────────────────────────────────────────────────
@@ -127,7 +126,7 @@ export async function requestScoutDataExport(req: Request, res: Response): Promi
  */
 export async function getPlayerExportStatus(req: Request, res: Response): Promise<void> {
   try {
-    const { playerId, jobId } = req.params;
+    const { playerId, jobId: _jobId } = req.params;
 
     // Ownership check
     if (req.account !== playerId && req.role !== 'admin') {
@@ -160,7 +159,7 @@ export async function getPlayerExportStatus(req: Request, res: Response): Promis
  */
 export async function getScoutExportStatus(req: Request, res: Response): Promise<void> {
   try {
-    const { wallet, jobId } = req.params;
+    const { wallet, jobId: _jobId } = req.params;
 
     // Ownership check
     if (req.account !== wallet && req.role !== 'admin') {
@@ -193,7 +192,7 @@ export async function getScoutExportStatus(req: Request, res: Response): Promise
  */
 export async function downloadExportArchive(req: Request, res: Response): Promise<void> {
   try {
-    const { token } = req.params;
+    const { token: _token } = req.params;
 
     // TODO: Verify token exists, hasn't been used, and hasn't expired
     // TODO: Mark token as used

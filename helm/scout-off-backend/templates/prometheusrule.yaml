@@ -1,0 +1,108 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+{{- $pr := .Values.metrics.prometheusRule }}
+{{- $r := $pr.rules }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "scout-off-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "scout-off-backend.labels" . | nindent 4 }}
+    {{- with $pr.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: scout-off-backend
+      rules:
+        {{- if $r.indexerLag.enabled }}
+        # Indexer is falling behind the chain tip; see docs/runbook.md#prometheus-alerts.
+        - alert: ScoutOffIndexerLagHigh
+          expr: indexer_ledger_lag > {{ $r.indexerLag.threshold }}
+          for: {{ $r.indexerLag.for }}
+          labels:
+            severity: {{ $r.indexerLag.severity }}
+          annotations:
+            summary: "ScoutOff indexer is {{ "{{" }} $value {{ "}}" }} ledgers behind the chain tip"
+            description: >-
+              indexer_ledger_lag has been above {{ $r.indexerLag.threshold }} for
+              {{ $r.indexerLag.for }}. New player and milestone events are not
+              reaching the API.
+            runbook_url: {{ $pr.runbookUrl }}
+        {{- end }}
+        {{- if $r.webhookDlqDepth.enabled }}
+        # Dead-letter queue is not draining (a subscriber is failing).
+        - alert: ScoutOffWebhookDLQGrowing
+          expr: sum(scout_off_webhook_dead_letters_total) > {{ $r.webhookDlqDepth.threshold }}
+          for: {{ $r.webhookDlqDepth.for }}
+          labels:
+            severity: {{ $r.webhookDlqDepth.severity }}
+          annotations:
+            summary: "ScoutOff webhook dead-letter queue depth is {{ "{{" }} $value {{ "}}" }}"
+            description: >-
+              The total dead-letter depth has stayed above
+              {{ $r.webhookDlqDepth.threshold }} for {{ $r.webhookDlqDepth.for }}.
+              One or more subscribers keep failing delivery.
+            runbook_url: {{ $pr.runbookUrl }}
+        {{- end }}
+        {{- if $r.tierDivergence.enabled }}
+        # Off-chain derived tier disagrees with the stored progress_level.
+        - alert: ScoutOffTierDivergence
+          expr: increase(scout_off_tier_divergence_total[1h]) > 0
+          for: {{ $r.tierDivergence.for }}
+          labels:
+            severity: {{ $r.tierDivergence.severity }}
+          annotations:
+            summary: "ScoutOff detected player tier divergence"
+            description: >-
+              The tier-divergence job found a player whose derived tier does not
+              match the stored progress_level in the last hour. A milestone_approved
+              event was probably missed by the indexer.
+            runbook_url: {{ $pr.runbookUrl }}
+        {{- end }}
+        {{- if $r.stuckPins.enabled }}
+        # IPFS pins that have exceeded their retry budget.
+        - alert: ScoutOffStuckPins
+          expr: stuck_pending_pins_count > 0
+          for: {{ $r.stuckPins.for }}
+          labels:
+            severity: {{ $r.stuckPins.severity }}
+          annotations:
+            summary: "ScoutOff has {{ "{{" }} $value {{ "}}" }} stuck IPFS pin(s)"
+            description: >-
+              stuck_pending_pins_count has been above zero for {{ $r.stuckPins.for }}.
+              Highlight reels or photos may be permanently unpinned.
+            runbook_url: {{ $pr.runbookUrl }}
+        {{- end }}
+        {{- if $r.high5xxRate.enabled }}
+        # Server-error ratio (5xx / all requests) above the configured limit.
+        - alert: ScoutOffHigh5xxRate
+          expr: 'sum(rate(http_errors_total{range="5xx"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 1) > {{ $r.high5xxRate.threshold }}'
+          for: {{ $r.high5xxRate.for }}
+          labels:
+            severity: {{ $r.high5xxRate.severity }}
+          annotations:
+            summary: "ScoutOff 5xx rate is {{ "{{" }} $value | humanizePercentage {{ "}}" }}"
+            description: >-
+              More than {{ $r.high5xxRate.threshold }} of requests have returned
+              5xx for {{ $r.high5xxRate.for }}.
+            runbook_url: {{ $pr.runbookUrl }}
+        {{- end }}
+        {{- if $r.notReady.enabled }}
+        # Requires kube-state-metrics. Fires when a backend pod stays unready.
+        - alert: ScoutOffNotReady
+          expr: 'kube_pod_status_ready{namespace="{{ .Release.Namespace }}", pod=~"{{ include "scout-off-backend.fullname" . }}-[a-z0-9]+-[a-z0-9]+", condition="true"} == 0'
+          for: {{ $r.notReady.for }}
+          labels:
+            severity: {{ $r.notReady.severity }}
+          annotations:
+            summary: "ScoutOff pod {{ "{{" }} $labels.pod {{ "}}" }} is not ready"
+            description: >-
+              A backend pod has been unready for {{ $r.notReady.for }}; readiness
+              probes check DB writability and IPFS connectivity.
+            runbook_url: {{ $pr.runbookUrl }}
+        {{- end }}
+        {{- with $pr.extraRules }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

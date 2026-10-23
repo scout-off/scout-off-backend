@@ -8,8 +8,7 @@ process.env.PINATA_SECRET = 'test-secret-pinata';
 
 import axios from 'axios';
 import config from '../../src/config';
-import { ipfsBreaker } from '../../src/services/ipfs';
-import { pinJson, pinFile, checkHealth, clearPinJsonCache } from '../../src/services/ipfs';
+import { ipfsBreaker, pinJson, pinFile, checkHealth, clearPinJsonCache } from '../../src/services/ipfs';
 import { CircuitBreakerOpenError } from '../../src/utils/circuitBreaker';
 
 jest.mock('axios');

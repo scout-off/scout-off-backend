@@ -109,7 +109,7 @@ export function getOperationHash(document: string): string {
 export function createPersistedOperationsPlugin(): Plugin {
   return {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onExecute({ args, setResult, setResultHandler }: any) {
+    onExecute({ args, setResult }: any) {
       const document = args?.document;
       
       if (!document) {

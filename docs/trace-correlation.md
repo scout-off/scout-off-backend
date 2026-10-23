@@ -67,6 +67,15 @@ correlation and no span link — behaviour matches pre-#1113.
   `webhooks.postWithRetry`.
 - DB: `SELECT * FROM tx_correlations WHERE correlation_id = ?`.
 
+## Browser access to the trace id
+
+Every response also carries the OpenTelemetry trace id in the
+`X-Trace-Id` header (`src/middleware/traceId.ts`; omitted when tracing is
+disabled). The header is listed in CORS `exposedHeaders` (`src/app.ts`),
+so browser frontends can read it via
+`response.headers.get('X-Trace-Id')` and attach it to error reports or
+support tickets.
+
 ## Housekeeping
 
 `purgeOldTxCorrelations(maxAgeMs)` can drop stale rows; call from a periodic

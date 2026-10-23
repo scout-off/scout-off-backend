@@ -53,6 +53,17 @@ Welcome! This guide covers contribution workflows, code standards, and critical 
    - No security vulnerabilities: `npm audit`
    - Environment is set up: `cp .env.example .env`
 
+### Environment validation
+
+`scripts/validate-env.js` runs in two modes:
+
+| Command | Mode | Purpose |
+| ------- | ---- | ------- |
+| `npm run env:check` | Documentation check (default) | Fails if a `process.env.VAR` used in `src/` is missing from `.env.example`. CI runs this. |
+| `node scripts/validate-env.js --runtime` | Runtime check | Validates `NODE_ENV`, `NETWORK`, `DB_DRIVER`, required variables and CORS/PINATA settings for the current environment. `npm run dev` and `npm start` run this via `predev`/`prestart`, and `src/config.ts` performs the same validation on import. |
+
+The accepted values for `NODE_ENV`, `NETWORK`, `DB_DRIVER` and the required runtime variables live in **`src/config/env-constants.json`**. Both `src/config.ts` and `scripts/validate-env.js` read that file, so add new values there — never in one of the consumers. `tests/validate-env.test.ts` fails if the lists drift apart.
+
 ### Database Migrations
 
 The project uses SQL migrations to manage database schema across environments. Migrations are stored as numbered `.sql` files in the `db/` directory and are tracked in the `migrations` table. See [db/README.md](db/README.md) for the naming convention, SQLite/PostgreSQL pairing, and how to add a new migration.
@@ -228,6 +239,7 @@ Comment on the GitHub issue to indicate you're working on it. Maintainers will a
 npm run dev                  # Start dev server with hot-reload
 npm run test                 # Run full test suite
 npm run lint                 # Check code style
+npm run lint:fix             # Auto-fix lint issues across src/, tests/ and scripts/
 npm run typecheck            # Fast type-check (tsc --noEmit), no build output
 npm run check:sql-injection  # Scan src/db for unsafe SQL string interpolation
 npm audit                    # Check for security vulnerabilities
@@ -315,6 +327,16 @@ lifecycle hook). If the hook does not run after cloning, enable it manually:
 ```bash
 npx husky install
 ```
+
+The hook only covers staged files. To auto-fix the whole codebase (`src/`,
+`tests/` and `scripts/`, same globs as `npm run lint`), run:
+
+```bash
+npm run lint:fix
+```
+
+Review the diff afterwards; some fixes (for example merged imports) are worth a
+quick look.
 
 You can also run lint-staged on your current staged files at any time:
 

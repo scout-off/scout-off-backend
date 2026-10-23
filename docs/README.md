@@ -42,7 +42,10 @@ not a directory listing.
 
 | Doc | Audience | Description |
 | --- | -------- | ----------- |
+| [feature-flags.md](feature-flags.md) | Operator | Every runtime feature flag: what it gates, its default, where it's checked, the admin toggle API, caching/propagation across replicas, and the audit trail |
+| [metrics.md](metrics.md) | Operator | Every Prometheus metric on `GET /metrics` (type, labels, meaning), how to scrape it, and suggested alerts |
 | [runbook.md](runbook.md) | Operator | Incident → action runbook: indexer lag, wrong tiers, webhook failures, RPC/IPFS outages, DB slowness, reindex/replay, dead-letter drain, cache flush, circuit breaker, pause/unpause |
+| [background-jobs.md](background-jobs.md) | Operator | Every periodic in-process job (indexer, pin retry/reconcile, tier divergence, blocklist prune, IP decay, SSE sweeps, webhook DLQ): interval, config, start location, failure behaviour, and multi-replica safety |
 | [performance.md](performance.md) | Contributor | Latency budgets for key endpoints and how to run the load-test suites |
 | [soroban-sandbox-e2e.md](soroban-sandbox-e2e.md) | Contributor | Local + CI Soroban sandbox that deploys all five contracts and runs live backend E2E (#1117) |
 

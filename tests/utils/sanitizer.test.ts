@@ -1,4 +1,4 @@
-import { escapeHtml, sanitizeInput } from '../../src/utils/sanitizer';
+import { escapeHtml, sanitizeInput, sanitizeObject } from '../../src/utils/sanitizer';
 
 describe('sanitizeInput', () => {
   describe('normal, safe text', () => {
@@ -273,7 +273,6 @@ describe('sanitizeInput', () => {
   });
 });
 
-import { sanitizeObject } from '../../src/utils/sanitizer';
 
 describe('sanitizeObject', () => {
   it('normalizes strings in objects without HTML-encoding them', () => {

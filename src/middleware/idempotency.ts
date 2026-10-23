@@ -14,6 +14,11 @@ import { logger } from '../utils/logger';
  */
 const IN_PROGRESS_WAIT_MS = 5_000;
 const MAX_IDEMPOTENCY_KEY_BYTES = 255;
+/**
+ * Set to `true` on responses served from the idempotency store instead of a
+ * fresh handler run (Stripe convention). First executions do not carry it.
+ */
+export const REPLAYED_HEADER = 'Idempotent-Replayed';
 
 /**
  * Options for the idempotency middleware.
@@ -39,7 +44,8 @@ export interface IdempotencyOptions {
  *
  * Flow:
  *  1. No `Idempotency-Key` header → pass through unchanged.
- *  2. Key exists as a *complete* record → return cached response (no handler call),
+ *  2. Key exists as a *complete* record → return cached response (no handler call)
+ *       with `Idempotent-Replayed: true`,
  *       unless a fingerprint is configured and the stored fingerprint differs
  *       from the current request's → 409 Conflict.
  *  3. Key exists as a *pending* record (another request is in-flight) →
@@ -129,6 +135,7 @@ async function handleIdempotency(
         return;
       }
       logger.info(`[idempotency] cache_hit key=${trimmedKey}`);
+      res.set(REPLAYED_HEADER, 'true');
       res.status(existingRecord.status_code).json(JSON.parse(existingRecord.response));
       return;
     }
@@ -175,6 +182,7 @@ async function handleIdempotency(
       // because we lost the race; if the fingerprint conflicts the winner
       // would have returned 409 before marking complete).
       logger.info(`[idempotency] served_after_lose_race key=${trimmedKey}`);
+      res.set(REPLAYED_HEADER, 'true');
       res.status(existingRecord.status_code).json(JSON.parse(existingRecord.response));
       return;
     }
@@ -317,6 +325,7 @@ function waitForCompletion(
           return;
         }
         logger.info(`[idempotency] served_after_wait key=${key}`);
+        res.set(REPLAYED_HEADER, 'true');
         res.status(record.status_code).json(JSON.parse(record.response));
       } else {
         // Record is still pending or gone — return 409.

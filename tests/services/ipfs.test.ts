@@ -47,8 +47,7 @@ jest.mock('../../src/db', () => ({
 
 import { registerPlayer } from '../../src/controllers/playerController';
 import { submitMilestoneEvidence, downloadAndPinEvidence } from '../../src/controllers/validatorController';
-import { invalidatePlayerCache } from '../../src/services/cache';
-import { invalidateMilestoneCache } from '../../src/services/cache';
+import { invalidatePlayerCache, invalidateMilestoneCache } from '../../src/services/cache';
 import config from '../../src/config';
 
 // ── helpers ───────────────────────────────────────────────────────────────────

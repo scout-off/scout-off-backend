@@ -37,7 +37,7 @@ const feesQuerySchema = z
   );
 
 /** GET /api/admin/fees — returns fees_withdrawn event payloads */
-export async function getFeeSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getFeeSummary(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const parsed = feesQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
