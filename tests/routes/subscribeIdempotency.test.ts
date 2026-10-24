@@ -167,10 +167,10 @@ describe('POST /api/scouts/:wallet/subscribe — idempotency', () => {
     // The middleware must have claimed the key before the handler ran …
     // (the subscribe route configures no request fingerprint, so the claim
     // carries a null fingerprint — see #761).
-    expect(mockClaim).toHaveBeenCalledWith('key-001', null);
+    expect(mockClaim).toHaveBeenCalledWith(expect.stringContaining('key-001'), null, expect.any(Object));
     // … and persisted the response afterwards via updateIdempotencyRecord.
     expect(mockUpdate).toHaveBeenCalledWith(
-      'key-001',
+      expect.stringContaining('key-001'),
       201,
       expect.objectContaining({ success: true }),
     );
@@ -312,7 +312,7 @@ describe('POST /api/scouts/:wallet/subscribe — idempotency', () => {
 
     // The error response must have been cached by the middleware.
     expect(mockUpdate).toHaveBeenCalledWith(
-      key,
+      expect.stringContaining(key),
       402,
       expect.objectContaining({ success: false, code: 'INSUFFICIENT_FUNDS' }),
     );

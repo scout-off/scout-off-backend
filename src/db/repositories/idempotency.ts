@@ -14,6 +14,9 @@ import config from '../../config';
 
 export interface IdempotencyRecord {
   key: string;
+  principal?: string | null;
+  method?: string | null;
+  route?: string | null;
   status_code: number;
   response: string; // raw JSON string
   created_at: number;
@@ -79,6 +82,7 @@ export async function getIdempotencyRecord(key: string): Promise<IdempotencyReco
 export async function claimIdempotencyKey(
   key: string,
   requestFingerprint?: string | null,
+  scope?: { principal?: string | null; method?: string | null; route?: string | null },
 ): Promise<boolean> {
   const now = Date.now();
   const lockedUntil = now + IDEMPOTENCY_LEASE_MS;
@@ -94,20 +98,23 @@ export async function claimIdempotencyKey(
         created_at = ?,
         locked_until = ?,
         expires_at = ?,
-        request_fingerprint = ?
+        request_fingerprint = ?,
+        principal = ?,
+        method = ?,
+        route = ?
     WHERE key = ?
       AND status = 'pending'
       AND (locked_until IS NULL OR locked_until < ?)
     `;
   const insertSql = `
-    INSERT INTO idempotency_keys (key, status_code, response, created_at, expires_at, status, locked_until, request_fingerprint)
-    VALUES (?, 0, '', ?, ?, 'pending', ?, ?)
+    INSERT INTO idempotency_keys (key, status_code, response, created_at, expires_at, status, locked_until, request_fingerprint, principal, method, route)
+    VALUES (?, 0, '', ?, ?, 'pending', ?, ?, ?, ?, ?)
     ON CONFLICT (key) DO NOTHING
   `;
 
   // Attempt reclaim first (SQLite: no RETURNING, so we check changes)
   const reclaimResult = await timedQueryAsync(reclaimSql, () =>
-    getDriver().run(reclaimSql, [now, lockedUntil, expiresAt, requestFingerprint ?? null, key, now])
+    getDriver().run(reclaimSql, [now, lockedUntil, expiresAt, requestFingerprint ?? null, scope?.principal ?? null, scope?.method ?? null, scope?.route ?? null, key, now])
   );
 
   if (reclaimResult.changes === 1) {
@@ -116,7 +123,7 @@ export async function claimIdempotencyKey(
 
   // Reclaim didn't succeed; try a fresh insert
   const insertResult = await timedQueryAsync(insertSql, () =>
-    getDriver().run(insertSql, [key, now, expiresAt, lockedUntil, requestFingerprint ?? null])
+    getDriver().run(insertSql, [key, now, expiresAt, lockedUntil, requestFingerprint ?? null, scope?.principal ?? null, scope?.method ?? null, scope?.route ?? null])
   );
 
   return insertResult.changes === 1;

@@ -85,3 +85,13 @@ publishing a client with a breaking API change. See
 ## Adding a new resource router
 
 If you add an entirely new `src/routes/<name>.ts` file (not just a new endpoint on an existing router), add it to `ROUTE_FILES` in `scripts/generate-openapi-json.js` with its mount prefix and tag. `scripts/check-route-docs.js` cross-checks this list against `src/app.ts`'s `app.use(...)` calls and fails CI if a mounted router has no entry.
+
+## Idempotency Key Scoping
+
+Mutating endpoints accepting an `Idempotency-Key` header isolate records by:
+- Authenticated principal (hashed via SHA-256, or `sha256('anon')` for unauthenticated requests)
+- HTTP method (e.g. `POST`)
+- Route template path (e.g. `/api/scouts/:wallet/subscribe`)
+- Client key string
+
+This prevents cross-user and cross-route cached response leakage (#1308). Two different users sending the same key or one user reusing a key across two different routes will execute independently without interference.
