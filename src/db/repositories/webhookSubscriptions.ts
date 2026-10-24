@@ -12,6 +12,7 @@ import config from '../../config';
 import { EventRecord, ContractEventType } from '../../types';
 import { encryptWebhookSecret, decryptWebhookSecret } from '../../utils/webhookSecretCipher';
 import { ApiKeyLimitError, MAX_API_KEYS_PER_SCOUT, MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT, WebhookSubscriptionLimitError } from '../../utils/scoutResourceLimits';
+import { isSubscriptionMatchingEvent } from '../../services/webhookRelevance';
 
 // ─── Webhook subscriptions (#470) ────────────────────────────────────────────
 //
@@ -91,6 +92,27 @@ export function createWebhookSubscription(
       };
     });
     return insert();
+  });
+}
+
+/**
+ * List active webhook subscriptions matching a given event type and payload.
+ * Evaluates event_types filtering and scout relevance BEFORE decrypting secrets,
+ * avoiding unnecessary cipher operations on non-matching subscriptions (#1309).
+ */
+export function listWebhookSubscriptionsForEvent(
+  eventType: string,
+  payload: unknown,
+): WebhookSubscription[] {
+  const sql = 'SELECT * FROM webhook_subscriptions ORDER BY id ASC';
+  return timedQuery(sql, () => {
+    const rows = getDb().prepare(sql).all() as WebhookSubscription[];
+    const matching = rows.filter((row) => isSubscriptionMatchingEvent(row, eventType, payload));
+    return matching.map((row) => ({
+      ...row,
+      secret: decryptWebhookSecret(row.secret),
+      previous_secret: row.previous_secret ? decryptWebhookSecret(row.previous_secret) : null,
+    }));
   });
 }
 

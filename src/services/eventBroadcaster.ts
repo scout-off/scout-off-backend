@@ -3,6 +3,9 @@ import { ContractEventType } from '../types';
 import { logger } from '../utils/logger';
 import { getRedisSubscriberClient, publishSseEvent, subscribeSseEvents } from './redis';
 import config from '../config';
+import { isEventRelevantToWallet } from './webhookRelevance';
+
+export { isEventRelevantToWallet };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,68 +67,6 @@ export interface SseSubscriber {
 // contact_unlocked for the described use-cases, but we handle all event types
 // so the stream is self-documenting and future-proof.
 
-export function isEventRelevantToWallet(
-  event: BroadcastEvent,
-  wallet: string,
-  playerId?: string,
-): boolean {
-  const p = event.payload;
-
-  switch (event.type) {
-    case 'milestone_approved':
-      // Broadcast to the player who owns the milestone and to scouts watching.
-      return (
-        (playerId !== undefined && p.player_id === playerId) ||
-        p.wallet === wallet ||
-        p.scout === wallet
-      );
-
-    case 'scout_subscribed':
-      return p.scout === wallet || p.wallet === wallet;
-
-    case 'contact_unlocked':
-      return p.scout === wallet || p.wallet === wallet;
-
-    case 'trial_offer_logged':
-      return p.scout === wallet || (playerId !== undefined && p.player_id === playerId);
-
-    case 'trial_offer_accepted':
-    case 'trial_offer_rejected':
-      // Notify the scout who made the offer and the player who responded.
-      return p.scout === wallet || (playerId !== undefined && p.player_id === playerId);
-
-    case 'player_registered':
-      return p.wallet === wallet || (playerId !== undefined && p.player_id === playerId);
-
-    case 'milestone_submitted':
-      return (playerId !== undefined && p.player_id === playerId) || p.validator === wallet;
-
-    case 'fees_withdrawn':
-      return p.recipient === wallet || p.wallet === wallet;
-
-    case 'player_deactivated':
-      // Notify the player themselves and any scout who unlocked their contact.
-      return (playerId !== undefined && p.player_id === playerId) ||
-        p.wallet === wallet ||
-        p.scout_wallet === wallet;
-
-    case 'player_reactivated':
-      return (playerId !== undefined && p.player_id === playerId) || p.wallet === wallet;
-
-    default:
-      return false;
-  }
-}
-
-/**
- * Returns true if the event passes the subscriber's optional filter criteria.
- *
- * Rules:
- *  - No filter (undefined) → passes (wildcard / backward-compatible).
- *  - eventTypes set and non-empty → event.type must be in the set.
- *  - playerId set → a payload field that carries the player identity
- *    (player_id, wallet, scout — depending on event type) must match.
- */
 export function isEventMatchingFilter(
   event: BroadcastEvent,
   filter: SseFilterCriteria | undefined,

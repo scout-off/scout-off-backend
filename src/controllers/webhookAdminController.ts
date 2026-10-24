@@ -11,6 +11,7 @@ import {
   purgeOldWebhookDeadLetters,
 } from '../db';
 import { postWebhookWithRetry } from '../services/webhooks';
+import { isSubscriptionMatchingEvent } from '../services/webhookRelevance';
 import { logger } from '../utils/logger';
 import { incrementWebhookRetrySuccessTotal } from '../middleware/metrics';
 
@@ -99,6 +100,23 @@ try {
     const subscription =
       subscriptions.find((s) => s.id === deadLetter.subscription_id) ??
       subscriptions.find((s) => s.url === deadLetter.url);
+
+    if (subscription) {
+      let eventPayload: unknown = null;
+      try {
+        const parsedBody = JSON.parse(deadLetter.payload);
+        eventPayload = parsedBody?.payload ?? parsedBody;
+      } catch {
+        // payload parse failed
+      }
+      if (!isSubscriptionMatchingEvent(subscription, deadLetter.event_type, eventPayload)) {
+        res.status(409).json({
+          success: false,
+          error: "Subscription is no longer configured to receive this event type or payload",
+        });
+        return;
+      }
+    }
 
     try {
       await postWebhookWithRetry(deadLetter.url, JSON.parse(deadLetter.payload), {

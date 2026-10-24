@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 import crypto from 'crypto';
-import { listWebhookSubscriptions, insertWebhookDeadLetter, insertWebhookDelivery, WebhookSubscription } from '../db';
+import { listWebhookSubscriptionsForEvent, insertWebhookDeadLetter, insertWebhookDelivery, WebhookSubscription } from '../db';
 import { logger } from '../utils/logger';
 import { recordWebhookDelivery, incrementWebhookDeadLettersTotal, incrementWebhookCircuitOpenTotal } from '../middleware/metrics';
 import { context, propagation, trace, SpanStatusCode } from '@opentelemetry/api';
@@ -267,7 +267,7 @@ const RETRY_OPTIONS = { retries: 3, baseDelayMs: 500, maxDelayMs: 5000 };
  */
 export async function dispatchEventWebhook(eventType: string, payload: unknown): Promise<void> {
   // Suspended subscriptions receive no deliveries (#1512).
-  const subscriptions = listWebhookSubscriptions().filter((s) => !isSuspended(s));
+  const subscriptions = listWebhookSubscriptionsForEvent(eventType, payload).filter((s) => !isSuspended(s));
   if (subscriptions.length === 0) return;
 
   // Generate a stable delivery ID once for this logical event.

@@ -409,4 +409,48 @@ describe('dispatchEventWebhook', () => {
     },
     15000
   );
+
+  it("filters deliveries by subscription event_types (#1309)", async () => {
+    const onlyMilestonesUrl = uniqueUrl("only-milestones");
+    const onlyContactsUrl = uniqueUrl("only-contacts");
+
+    createWebhookSubscription(onlyMilestonesUrl, "secret-ms", undefined, ["milestone_approved"]);
+    createWebhookSubscription(onlyContactsUrl, "secret-ct", undefined, ["contact_unlocked"]);
+
+    await dispatchEventWebhook("milestone_approved", { player_id: "p1" });
+
+    const milestoneCalls = mockedFetch.mock.calls.filter(([u]) => u === onlyMilestonesUrl);
+    const contactCalls = mockedFetch.mock.calls.filter(([u]) => u === onlyContactsUrl);
+
+    expect(milestoneCalls.length).toBe(1);
+    expect(contactCalls.length).toBe(0);
+  });
+
+  it("filters deliveries by scout relevance and avoids cross-scout leaks (#1309)", async () => {
+    const scoutA = "GAWALLETAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    const scoutB = "GBWALLETBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+    const scoutAUrl = uniqueUrl("scout-a");
+    const scoutBUrl = uniqueUrl("scout-b");
+
+    createWebhookSubscription(scoutAUrl, "secret-scout-a", scoutA, ["contact_unlocked", "milestone_approved"]);
+    createWebhookSubscription(scoutBUrl, "secret-scout-b", scoutB, ["contact_unlocked", "milestone_approved"]);
+
+    // Scout A unlocks a contact -> Scout A receives it, Scout B must NOT receive it
+    await dispatchEventWebhook("contact_unlocked", { scout: scoutA, player_id: "player1" });
+
+    const scoutACalls = mockedFetch.mock.calls.filter(([u]) => u === scoutAUrl);
+    const scoutBCalls = mockedFetch.mock.calls.filter(([u]) => u === scoutBUrl);
+
+    expect(scoutACalls.length).toBe(1);
+    expect(scoutBCalls.length).toBe(0);
+
+    // Public event milestone_approved -> both scouts receive it
+    await dispatchEventWebhook("milestone_approved", { player_id: "player1" });
+
+    const scoutACallsAfter = mockedFetch.mock.calls.filter(([u]) => u === scoutAUrl);
+    const scoutBCallsAfter = mockedFetch.mock.calls.filter(([u]) => u === scoutBUrl);
+
+    expect(scoutACallsAfter.length).toBe(2);
+    expect(scoutBCallsAfter.length).toBe(1);
+  });
 });

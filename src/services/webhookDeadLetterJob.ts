@@ -32,6 +32,7 @@ import {
 } from '../db';
 import { postWebhookWithRetry } from './webhooks';
 import { isSuspended, refreshSubscriptionStatusGauge } from './webhookHealth';
+import { isSubscriptionMatchingEvent } from './webhookRelevance';
 import { logger } from '../utils/logger';
 import { incrementWebhookRetrySuccessTotal } from '../middleware/metrics';
 import { evaluateDeadLetterAlerts } from './webhookDeadLetterAlerts';
@@ -135,6 +136,24 @@ export async function runDeadLetterRetryJob(): Promise<number> {
       subscriptions.find((s) => s.id === deadLetter.subscription_id) ??
       subscriptions.find((s) => s.url === deadLetter.url);
     if (target && isSuspended(target)) continue;
+
+    // Check if subscription still matches event type and relevance (#1309)
+    if (target) {
+      let eventPayload: unknown = null;
+      try {
+        const parsedBody = JSON.parse(deadLetter.payload);
+        eventPayload = parsedBody?.payload ?? parsedBody;
+      } catch {
+        // payload parse failed
+      }
+      if (!isSubscriptionMatchingEvent(target, deadLetter.event_type, eventPayload)) {
+        logger.info(
+          `[webhooks] dead-letter replay skipped: subscription no longer matches event type/relevance — id=${deadLetter.id} url=${deadLetter.url} event_type=${deadLetter.event_type}`
+        );
+        markWebhookDeadLetterReplayed(deadLetter.id);
+        continue;
+      }
+    }
 
     // Atomically claim the row — only one caller wins.
     const claimed = claimWebhookDeadLetter(deadLetter.id, _currentWorkerId!);

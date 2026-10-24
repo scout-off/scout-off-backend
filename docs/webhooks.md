@@ -707,6 +707,35 @@ See [docs/secrets-rotation.md](secrets-rotation.md) — once a dedicated rotatio
 document zero-downtime rotation using a dual-secret validation window (analogous to the
 `JWT_SECRET_PREVIOUS` pattern used for JWT rotation).
 
+## Event Filtering and Scout Relevance (#1309)
+
+Outbound webhook fan-out applies two levels of filtering to prevent cross-tenant data leaks and unnecessary network traffic:
+
+### 1. Event Type Filtering (`event_types`)
+Subscriptions may specify an array of event types (e.g. `["milestone_approved", "contact_unlocked"]`). When set:
+- Only events whose `eventType` is present in the subscription's `event_types` list are delivered.
+- If `event_types` is `null` or empty, all event types permitted for the subscription owner are delivered.
+
+### 2. Scout Relevance Filtering (`scout_wallet`)
+Subscriptions created by scouts are scoped to their authenticated Stellar wallet (`scout_wallet`):
+- **Safe Public Events:** Public events containing non-sensitive on-chain activity are broadcast to all subscribed scouts:
+  - `player_registered`
+  - `milestone_approved`
+  - `player_deactivated`
+  - `player_reactivated`
+- **Private Scout Events:** Events representing private scout actions or inquiries are strictly filtered. A scout subscription receives them **only** if the event's scout identifier matches the subscription's `scout_wallet`:
+  - `contact_unlocked` (only the scout who unlocked the contact)
+  - `scout_subscribed` (only the subscribing scout)
+  - `trial_offer_logged` (only the scout who logged the offer)
+  - `trial_offer_accepted` (only the scout whose offer was accepted)
+  - `trial_offer_rejected` (only the scout whose offer was rejected)
+- **Validator & Internal Events:** Events such as `milestone_submitted` or `fees_withdrawn` are never delivered to scouts unless the scout matches the validator or recipient wallet.
+- **Admin Subscriptions:** Subscriptions without a `scout_wallet` (e.g. system/admin webhooks) retain global delivery across all events (subject only to `event_types` filtering).
+
+### Dead-Letter Queue & Secret Decryption Optimization
+- **Cipher Optimization:** Webhook secrets are encrypted at rest. During fan-out, candidate subscriptions are filtered by event type and scout relevance **before** secret decryption, avoiding decrypting secrets for non-matching endpoints.
+- **Replay Safety:** Dead-letter background retries and admin requeue endpoints re-verify that the target subscription's active filter configuration still matches the event type and payload.
+
 ## Admin endpoints
 
 Both require a Bearer JWT with the `admin` role.
