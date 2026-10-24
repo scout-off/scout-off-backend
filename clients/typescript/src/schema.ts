@@ -174,6 +174,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/encryption/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ciphertext counts per encryption key id for scout notes and webhook secrets (#1513).
+         * @description Ciphertext counts per encryption key id for scout notes and webhook secrets
+         *     (#1513). A key can be retired once its count is 0 everywhere.
+         */
+        get: operations["getEncryptionStatusEndpoint"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/events": {
         parameters: {
             query?: never;
@@ -942,6 +963,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/webhooks/{id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate a suspended webhook subscription (#1512).
+         * @description Reactivate a suspended webhook subscription (#1512). Sends a test ping first
+         *     and reactivates only if it succeeds.
+         */
+        post: operations["adminReactivateWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/webhooks/{id}/replay": {
         parameters: {
             query?: never;
@@ -1503,7 +1545,7 @@ export interface paths {
         /**
          * Return the list of token holders and their balances for the given player.
          * @description Return the list of token holders and their balances for the given player.
-         *     Gated by the `player_tokens` feature flag — returns 404 when disabled.
+         *     Gated by the `player_tokens_enabled` feature flag — returns 404 when disabled.
          */
         get: operations["getPlayerTokenHolders"];
         put?: never;
@@ -1527,7 +1569,7 @@ export interface paths {
          * Purchase Player Tokens for a given player.
          * @description Purchase Player Tokens for a given player. Purchases are persisted in the
          *     database, but this stub does not perform an XLM transfer.
-         *     Gated by the `player_tokens` feature flag — returns 404 when disabled.
+         *     Gated by the `player_tokens_enabled` feature flag — returns 404 when disabled.
          *     The authenticated scout account is the buyer; the optional buyerWallet field
          *     is accepted only when it matches that account.
          */
@@ -2216,6 +2258,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scouts/{wallet}/webhooks/{id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate a suspended webhook subscription (#1512).
+         * @description Reactivate a suspended webhook subscription (#1512). A test ping is sent
+         *     first and the subscription is reactivated only if it succeeds. Shares the
+         *     webhook-test rate limit because it also issues an outbound request.
+         */
+        post: operations["reactivateWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scouts/{wallet}/webhooks/{id}/test": {
         parameters: {
             query?: never;
@@ -2765,6 +2829,24 @@ export interface operations {
             };
             /** @description { success: false, error: string } - Non-admin role */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getEncryptionStatusEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description { success: true, data: { notes, webhook } } */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4058,6 +4140,45 @@ export interface operations {
         responses: {
             /** @description { success: true, data: WebhookDeliveryRow[], total, limit, offset } */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    adminReactivateWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Webhook subscription row ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description { success: true, data: { id, url, status: 'active' } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Test ping failed */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6698,6 +6819,54 @@ export interface operations {
             };
             /** @description { success: false, error: string } - Subscription not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reactivateWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scout's Stellar public key */
+                wallet: string;
+                /** @description Webhook subscription row ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description { success: true, data: { id, url, status: 'active' } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Wallet mismatch or subscription belongs to another scout */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Test ping failed; subscription stays suspended */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

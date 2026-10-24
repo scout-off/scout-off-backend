@@ -55,6 +55,7 @@ export async function reencryptBatch(
     let remaining = batchSize;
     while (remaining > 0) {
       const rows = await db.all<{ id: number; value: string }>(
+        // sql-injection-ok: table/column come from the hard-coded REENCRYPTION_TARGETS; values are bound.
         `SELECT id, ${t.column} AS value FROM ${t.table}
          WHERE id > ? AND ${t.column} NOT LIKE ?${notNull}
          ORDER BY id LIMIT ?`,
@@ -70,6 +71,7 @@ export async function reencryptBatch(
             purpose: t.purpose,
           });
           const { changes } = await db.run(
+            // sql-injection-ok: table/column come from the hard-coded REENCRYPTION_TARGETS; values are bound.
             `UPDATE ${t.table} SET ${t.column} = ? WHERE id = ? AND ${t.column} = ?`,
             [next, row.id, row.value],
           );
@@ -125,6 +127,7 @@ export async function getEncryptionStatus(): Promise<{
     ];
     const row =
       (await db.get<Record<string, number | string | null>>(
+        // sql-injection-ok: table/column come from the hard-coded REENCRYPTION_TARGETS; values are bound.
         `SELECT ${selects.join(', ')} FROM ${t.table} WHERE ${c} IS NOT NULL`,
         ids.map((id) => `v2:${id}:%`),
       )) ?? {};

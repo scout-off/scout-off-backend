@@ -257,6 +257,32 @@ spec:
                   name: {{ .Values.secretName }}
                   key: NOTES_ENCRYPTION_KEY_PREVIOUS
                   optional: true
+            # ── Keyrings, retention checkpoint key, player-token contract ──
+            # Optional; see docs/secrets-rotation.md and .env.example.
+            - name: NOTES_ENCRYPTION_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: NOTES_ENCRYPTION_KEYS
+                  optional: true
+            - name: WEBHOOK_SECRET_ENCRYPTION_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: WEBHOOK_SECRET_ENCRYPTION_KEYS
+                  optional: true
+            - name: RETENTION_CHECKPOINT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: RETENTION_CHECKPOINT_KEY
+                  optional: true
+            - name: PLAYER_TOKEN_CONTRACT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: PLAYER_TOKEN_CONTRACT_ID
+                  optional: true
           # ── Liveness probe ────────────────────────────────────────────────────
           # Restarts the container if this fails failureThreshold times in a row.
           # /health/liveness is a lightweight check with no external dependencies.

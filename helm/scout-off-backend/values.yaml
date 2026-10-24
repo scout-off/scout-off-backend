@@ -366,6 +366,245 @@ env:
   REINDEX_CATCHUP_THRESHOLD: "500"
   REINDEX_RATE_LIMIT_BACKOFF_MS: "2000"
 
+  # ── Admin & platform ──
+  # ADMIN_IP_ALLOWLIST — Optional. Comma-separated IPs/CIDRs allowed on admin routes. Leave unset to allow all.
+  ADMIN_IP_ALLOWLIST: ""
+  # ADMIN_THRESHOLD — Optional. Admin signatures required for high-value operations.
+  ADMIN_THRESHOLD: "1"
+  # WEB_AUTH_DOMAIN — Optional. When set, SEP-10 challenges include a 'web_auth_domain' manage_data operation with this value. See docs/auth.md.
+  WEB_AUTH_DOMAIN: ""
+  # PLATFORM_ADMIN_NOTIFY_URL — Optional. When set, a JSON POST is sent here whenever the dead-letter size or rate threshold is crossed.
+  PLATFORM_ADMIN_NOTIFY_URL: ""
+  # API_PREFIX — Optional.
+  API_PREFIX: "/api"
+  # API_V1_PREFIX — Optional. Full versioned prefix.
+  API_V1_PREFIX: "/api/v1"
+  # API_V2_PREFIX — Optional. Full v2 prefix.
+  API_V2_PREFIX: "/api/v2"
+
+  # ── Rate limiting ──
+  # AUTH_RATE_LIMIT_IP_MAX — Max requests per auth endpoint per IP and window (default: 60).
+  AUTH_RATE_LIMIT_IP_MAX: "60"
+  # PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS — Optional. Rate limit for POST /api/admin/players/import.
+  PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS: "60000"
+  # PLAYER_IMPORT_RATE_LIMIT_MAX — Player import rate limit max.
+  PLAYER_IMPORT_RATE_LIMIT_MAX: "5"
+  # PLAYER_IMPORT_MAX_BATCH — Optional. Max rows accepted per bulk player import request (POST /api/admin/players/import).
+  PLAYER_IMPORT_MAX_BATCH: "500"
+  # WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS — Optional. Rate limit for POST /api/scouts/:wallet/webhooks/:id/test, isolated from the shared default walletRateLimit() pool since each call makes the backend issue an outbound….
+  WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS: "60000"
+  # WEBHOOK_TEST_RATE_LIMIT_MAX — Webhook test rate limit max.
+  WEBHOOK_TEST_RATE_LIMIT_MAX: "5"
+  # RATE_LIMIT_ERROR_POLICY — Optional. When the rate limiter store (Redis) fails: open — allow requests (fail-open, availability over security) closed — reject with 503 (fail-closed, security over….
+  RATE_LIMIT_ERROR_POLICY: ""
+  # AUTH_RATE_LIMIT_ERROR_POLICY — Optional. Stricter policy for /auth endpoints.
+  AUTH_RATE_LIMIT_ERROR_POLICY: ""
+  # IP_REPUTATION_ENABLED — Optional. Tracks per-IP auth failures / 4xx errors and temporarily blocks abusive IPs. Defaults to true, except in NODE_ENV=test (disabled there so shared-IP negative-path test….
+  IP_REPUTATION_ENABLED: "true"
+
+  # ── Database ──
+  # DATABASE_POOL_SIZE — Optional. Maximum number of connections in the PostgreSQL connection pool. Only used when DB_DRIVER=postgres.
+  DATABASE_POOL_SIZE: "10"
+  # DATABASE_SSL — Optional. Controls TLS for the PostgreSQL connection. true — Enable SSL with full certificate verification (recommended for managed providers such as RDS, Heroku, Supabase,….
+  DATABASE_SSL: ""
+  # SQLITE_BUSY_TIMEOUT_MS — Database timeouts in ms (defaults shown).
+  SQLITE_BUSY_TIMEOUT_MS: "5000"
+  # DB_STATEMENT_TIMEOUT_MS — Db statement timeout ms.
+  DB_STATEMENT_TIMEOUT_MS: "25000"
+  # DB_QUERY_TIMEOUT_MS — Db query timeout ms.
+  DB_QUERY_TIMEOUT_MS: "30000"
+  # DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS — Db idle in transaction session timeout ms.
+  DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "60000"
+  # MIGRATION_CHECKSUM_MODE — Optional. "strict" fails startup if a migration file was edited after being applied (production-safe); "warn" logs the issue but continues (development).
+  MIGRATION_CHECKSUM_MODE: ""
+
+  # ── Caching ──
+  # CACHE_NAMESPACE — Optional. Prefix applied to every cache key written to Redis (#672). Prevents key collisions when two deployments (staging + production, or a blue/green pair) share the same….
+  CACHE_NAMESPACE: ""
+  # SEARCH_CACHE_MAX_ENTRIES — Optional. Max entries in the in-memory search cache before LRU/TTL eviction.
+  SEARCH_CACHE_MAX_ENTRIES: "1000"
+  # PIN_JSON_CACHE_TTL_MS — Optional. TTL for IPFS pin dedup cache, in ms.
+  PIN_JSON_CACHE_TTL_MS: "300000"
+  # IDEMPOTENCY_LEASE_MS — Optional. Lease expiry for pending idempotency claims, in ms. A crashed or hung request releases its claim after this window so a retry can re-use the key instead of waiting….
+  IDEMPOTENCY_LEASE_MS: "35000"
+
+  # ── SSE ──
+
+  # ── Indexer ──
+  # INDEXER_POLL_INTERVAL_MS — Optional. How often the contract-event indexer polls Soroban RPC for new ledgers. Stellar closes a ledger roughly every 5 seconds, so polling faster than that mostly spends RPC….
+  INDEXER_POLL_INTERVAL_MS: "5000"
+  # INDEXER_FINALITY_MARGIN — Optional. Ledgers to hold back from the RPC's reported tip before indexing, to avoid ingesting events from a ledger that later gets reorged.
+  INDEXER_FINALITY_MARGIN: "10"
+  # INDEXER_LAG_WARN_THRESHOLD — Optional. Ledgers behind tip before a lag warning logs.
+  INDEXER_LAG_WARN_THRESHOLD: "100"
+  # INDEXER_BACKFILL_FROM_LEDGER — Optional. Replay indexing from this ledger if earlier than the stored last_ledger. Leave unset to disable. See docs/reindexing.md for operational workflows and cursor management.
+  INDEXER_BACKFILL_FROM_LEDGER: ""
+  # TIER_DIVERGENCE_INTERVAL_MS — Optional. How often the tier-divergence reconciliation job (#1132) runs, in milliseconds.
+  TIER_DIVERGENCE_INTERVAL_MS: "300000"
+  # TIER_DIVERGENCE_SAMPLE_SIZE — Optional. Max active players checked per tier-divergence reconciliation pass.
+  TIER_DIVERGENCE_SAMPLE_SIZE: "100"
+
+  # ── Reindexing / catch-up ──
+
+  # ── IPFS / Pinata ──
+  # IPFS_GATEWAYS — Optional. Comma-separated fallback IPFS gateways (defaults to Pinata/Cloudflare/ipfs.io when unset). See docs/ipfs-pinata-gateway.md for detailed fallback semantics and….
+  IPFS_GATEWAYS: ""
+  # PINATA_GATEWAY — Optional. IPFS gateway used to resolve pinned content. Must be a valid HTTPS URL. When unset, defaults to https://gateway.pinata.cloud. See docs/ipfs-pinata-gateway.md for….
+  PINATA_GATEWAY: ""
+  # IPFS_HTTP_TIMEOUT_MS — Optional. Per-request HTTP timeout for Pinata/IPFS axios calls.
+  IPFS_HTTP_TIMEOUT_MS: "15000"
+  # IPFS_RECONCILE_AGE_MS — Optional. Age a pending pin must reach before it is reconciled.
+  IPFS_RECONCILE_AGE_MS: "300000"
+  # IPFS_RECONCILE_INTERVAL_MS — Optional. Interval between pending-pin reconciliation passes.
+  IPFS_RECONCILE_INTERVAL_MS: "60000"
+  # IPFS_RECONCILE_MAX_ATTEMPTS — Optional. Attempts before a stuck pending pin is expired during reconciliation.
+  IPFS_RECONCILE_MAX_ATTEMPTS: "5"
+
+  # ── Circuit breakers ──
+  # CIRCUIT_BREAKER_FAILURE_THRESHOLD — Optional. Failure count / open duration for the generic CircuitBreaker used by outbound calls (the Stellar RPC breaker). Validated at startup: threshold must be ≥ 1 and the….
+  CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
+  # CIRCUIT_BREAKER_RESET_TIMEOUT_MS — Circuit breaker reset timeout ms.
+  CIRCUIT_BREAKER_RESET_TIMEOUT_MS: "30000"
+  # IPFS_BREAKER_FAILURE_THRESHOLD — Optional. Consecutive IPFS failures before the pinning circuit breaker opens, and how long it stays open before a trial request.
+  IPFS_BREAKER_FAILURE_THRESHOLD: "5"
+  # IPFS_BREAKER_RESET_TIMEOUT_MS — Ipfs breaker reset timeout ms.
+  IPFS_BREAKER_RESET_TIMEOUT_MS: "30000"
+
+  # ── Milestones ──
+  # MILESTONE_LOADER_CONCURRENCY — Optional. Max in-flight RPC calls made by the GraphQL milestone DataLoader.
+  MILESTONE_LOADER_CONCURRENCY: "8"
+  # MILESTONE_RATE_WINDOW_MS — Optional.
+  MILESTONE_RATE_WINDOW_MS: "60000"
+  # MILESTONE_RATE_MAX — Milestone rate max.
+  MILESTONE_RATE_MAX: "10"
+  # MILESTONE_PLAYER_RATE_WINDOW_MS — Optional. Rolling window for the per-player milestone submission rate limit.
+  MILESTONE_PLAYER_RATE_WINDOW_MS: "3600000"
+  # MILESTONE_PLAYER_RATE_MAX — Optional. Max milestone submissions per player per window.
+  MILESTONE_PLAYER_RATE_MAX: "10"
+  # EVIDENCE_MAX_BYTES — Optional. Max size in bytes of a downloaded HTTPS evidence file for milestone submissions.
+  EVIDENCE_MAX_BYTES: "52428800"
+  # EVIDENCE_VALIDATOR_BYTES_PER_HOUR — Optional. Total evidence bytes the validator may download per hour.
+  EVIDENCE_VALIDATOR_BYTES_PER_HOUR: "524288000"
+
+  # ── Webhooks ──
+  # WEBHOOK_DLQ_SIZE_THRESHOLD — Optional.
+  WEBHOOK_DLQ_SIZE_THRESHOLD: "100"
+  # WEBHOOK_DLQ_RATE_THRESHOLD — Optional.
+  WEBHOOK_DLQ_RATE_THRESHOLD: "50"
+  # WEBHOOK_DLQ_RATE_WINDOW_MS — Optional.
+  WEBHOOK_DLQ_RATE_WINDOW_MS: "300000"
+
+  # ── Readiness probes ──
+  # READINESS_MAX_LAG — Optional. Max indexer ledger lag (in ledgers) still considered ready. Set to 0 to disable the lag check.
+  READINESS_MAX_LAG: "100"
+  # READINESS_GRACE_PERIOD_MS — Optional. Grace window after process start during which readiness always reports ok regardless of indexer lag.
+  READINESS_GRACE_PERIOD_MS: "300000"
+  # READINESS_DB_TIMEOUT_MS — Optional. Per-probe timeout for the DB readiness check.
+  READINESS_DB_TIMEOUT_MS: "2000"
+  # READINESS_IPFS_TIMEOUT_MS — Optional. Per-probe timeout for the IPFS readiness check.
+  READINESS_IPFS_TIMEOUT_MS: "5000"
+  # READINESS_STELLAR_TIMEOUT_MS — Optional. Per-probe timeout for the Stellar readiness check.
+  READINESS_STELLAR_TIMEOUT_MS: "5000"
+
+  # ── Timeouts & shutdown ──
+  # STELLAR_RPC_TIMEOUT_MS — Optional. Per-request HTTP timeout for Soroban RPC / Stellar SDK calls.
+  STELLAR_RPC_TIMEOUT_MS: "15000"
+  # TX_CONFIRMATION_TIMEOUT_MS — Optional. Bounded Soroban transaction-confirmation poll window for pay_to_contact / subscribe submissions.
+  TX_CONFIRMATION_TIMEOUT_MS: "60000"
+  # TRIAL_OFFER_TTL_MS — Optional. Time before a logged trial offer expires. Set to 0 to disable expiry (not recommended).
+  TRIAL_OFFER_TTL_MS: "2592000000"
+  # EXIT_ON_UNHANDLED_REJECTION — Shut down the process on an unhandled promise rejection (default: false).
+  EXIT_ON_UNHANDLED_REJECTION: "false"
+
+  # ── Payload limits & compression ──
+  # JSON_PAYLOAD_LIMIT — Optional. Max size of JSON request bodies.
+  JSON_PAYLOAD_LIMIT: "1mb"
+  # UPLOAD_PAYLOAD_LIMIT — Optional. Max size of JSON request bodies for upload endpoints (player registration, milestone evidence).
+  UPLOAD_PAYLOAD_LIMIT: "10mb"
+  # COMPRESSION_THRESHOLD — Optional. Response compression threshold, in bytes.
+  COMPRESSION_THRESHOLD: "1024"
+  # COMPRESSION_THRESHOLD_BYTES — Optional. Accepted alias for COMPRESSION_THRESHOLD above; only used as a fallback when COMPRESSION_THRESHOLD is unset. Leave unset.
+  COMPRESSION_THRESHOLD_BYTES: ""
+
+  # ── Security headers ──
+  # SECURITY_HSTS — Security headers (optional overrides).
+  SECURITY_HSTS: "max-age=31536000; includeSubDomains"
+  # SECURITY_X_CONTENT_TYPE_OPTIONS — Security x content type options.
+  SECURITY_X_CONTENT_TYPE_OPTIONS: "nosniff"
+  # SECURITY_X_FRAME_OPTIONS — Security x frame options.
+  SECURITY_X_FRAME_OPTIONS: "DENY"
+  # SECURITY_REFERRER_POLICY — Security referrer policy.
+  SECURITY_REFERRER_POLICY: "no-referrer"
+  # SECURITY_CSP — Security csp.
+  SECURITY_CSP: "default-src 'none'; frame-ancestors 'none'"
+  # SECURITY_PERMISSIONS_POLICY — Security permissions policy.
+  SECURITY_PERMISSIONS_POLICY: "camera=(), microphone=(), geolocation=()"
+
+  # ── Observability ──
+  # LOG_SAMPLE_RATE — Optional. Float 0–1 sample rate for non-skipped paths.
+  LOG_SAMPLE_RATE: "1"
+  # LOG_SKIP_PATHS — Optional. Comma-separated paths requestLogger never logs (default: health + metrics probes).
+  LOG_SKIP_PATHS: "/health,/health/liveness,/health/readiness,/ready,/metrics"
+  # LOG_REDACTION_ENABLED — Optional. Set to "false" to disable log redaction in non-development environments (redaction is always off in development).
+  LOG_REDACTION_ENABLED: "true"
+  # LOG_REDACTION_WALLET_PREFIX — Optional. Characters kept at the start of a masked wallet address.
+  LOG_REDACTION_WALLET_PREFIX: "1"
+  # LOG_REDACTION_WALLET_SUFFIX — Optional. Characters kept at the end of a masked wallet address.
+  LOG_REDACTION_WALLET_SUFFIX: "4"
+  # LOG_REDACTION_HASH_CORRELATION_IDS — Optional. Set to "true" to hash correlation IDs in logs instead of logging them raw.
+  LOG_REDACTION_HASH_CORRELATION_IDS: "false"
+  # OTEL_EXPORTER_OTLP_ENDPOINT — Optional. Leave unset to disable tracing export.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  # OTEL_SERVICE_NAME — Optional. Service name reported to the tracing backend.
+  OTEL_SERVICE_NAME: ""
+
+  # ── Misc ──
+  # GRAPHQL_PERSISTED_ONLY — Only accept registered persisted GraphQL operations (default: false).
+  GRAPHQL_PERSISTED_ONLY: "false"
+  # ALLOWED_ORIGINS — Legacy alias for CORS_ALLOWED_ORIGINS.
+  ALLOWED_ORIGINS: ""
+  # API_KEY_DEFAULT_TTL_DAYS — Optional. Default lifetime for issued API keys in days (#674). Keys issued without an explicit expiresInDays value expire after this many days.
+  API_KEY_DEFAULT_TTL_DAYS: "90"
+
+# -----------------------------------------------------------------------------
+# Pod annotations
+# Useful for Prometheus scraping or Datadog APM injection.
+
+  # ── Later features ──
+  # Empty means "use the application default" (the key is left out of the ConfigMap).
+  API_DOCS_HIDE_ADMIN: ""
+  API_DOCS_MODE: ""
+  AUDIT_ALERT_WEBHOOK_URL: ""
+  AUDIT_FULL_VERIFY_INTERVAL_MS: ""
+  AUDIT_READS_ENABLED: ""
+  AUDIT_VERIFY_BATCH_SIZE: ""
+  AUDIT_VERIFY_INTERVAL_MS: ""
+  AUTH_FAIL_THRESHOLD: ""
+  AUTH_FAIL_WINDOW_MS: ""
+  AUTH_LOCKOUT_BASE_MS: ""
+  AUTH_LOCKOUT_MAX_MS: ""
+  DATA_EXPORT_ARCHIVE_DIR: ""
+  DOTENV_ENABLED: ""
+  ENCRYPTION_REENCRYPT_BATCH_SIZE: ""
+  ENCRYPTION_REENCRYPT_INTERVAL_MS: ""
+  METRICS_LEGACY_MS: ""
+  NOTES_ENCRYPTION_ACTIVE_KEY_ID: ""
+  READINESS_CRITICAL: ""
+  RETENTION_ARCHIVE_DIR: ""
+  RETENTION_BATCH_SIZE: ""
+  RETENTION_ENABLED: ""
+  RETENTION_INTERVAL_MS: ""
+  RETENTION_MAX_BATCHES: ""
+  RETENTION_PAUSE_MS: ""
+  RETENTION_POLICIES: ""
+  SSE_MAX_SESSION_MS: ""
+  WEBHOOK_BREAKER_FAILURE_THRESHOLD: ""
+  WEBHOOK_BREAKER_RESET_TIMEOUT_MS: ""
+  WEBHOOK_LEGACY_SIGNATURE: ""
+  WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID: ""
+  WEBHOOK_SUSPEND_AFTER_FAILURES: ""
+  WEBHOOK_SUSPEND_AFTER_MS: ""
+
 # -----------------------------------------------------------------------------
 # Prometheus monitoring (optional)
 #
@@ -437,239 +676,6 @@ metrics:
     #   for: 5m
     extraRules: []
 
-  # ── Admin & platform ──
-  # ADMIN_IP_ALLOWLIST — Optional. Comma-separated IPs/CIDRs allowed on admin routes. Leave unset to allow all.
-  ADMIN_IP_ALLOWLIST: ""
-  # ADMIN_THRESHOLD — Optional. Admin signatures required for high-value operations.
-  ADMIN_THRESHOLD: "1"
-  # WEB_AUTH_DOMAIN — Optional. When set, SEP-10 challenges include a 'web_auth_domain' manage_data operation with this value. See docs/auth.md.
-  WEB_AUTH_DOMAIN: ""
-  # PLATFORM_ADMIN_NOTIFY_URL — Optional. When set, a JSON POST is sent here whenever the dead-letter size or rate threshold is crossed.
-  PLATFORM_ADMIN_NOTIFY_URL: ""
-  # API_PREFIX — Optional.
-  API_PREFIX: "/api"
-  # API_V1_PREFIX — Optional. Full versioned prefix.
-  API_V1_PREFIX: "/api/v1"
-  # API_V2_PREFIX — Optional. Full v2 prefix.
-  API_V2_PREFIX: "/api/v2"
-
-  # ── Rate limiting ──
-  # AUTH_RATE_LIMIT_IP_MAX — Max requests per auth endpoint per IP and window (default: 60).
-  AUTH_RATE_LIMIT_IP_MAX: "60"
-  # PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS — Optional. Rate limit for POST /api/admin/players/import.
-  PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS: "60000"
-  # PLAYER_IMPORT_RATE_LIMIT_MAX — Player import rate limit max.
-  PLAYER_IMPORT_RATE_LIMIT_MAX: "5"
-  # PLAYER_IMPORT_MAX_BATCH — Optional. Max rows accepted per bulk player import request (POST /api/admin/players/import).
-  PLAYER_IMPORT_MAX_BATCH: "500"
-  # WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS — Optional. Rate limit for POST /api/scouts/:wallet/webhooks/:id/test, isolated from the shared default walletRateLimit() pool since each call makes the backend issue an outbound….
-  WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS: "60000"
-  # WEBHOOK_TEST_RATE_LIMIT_MAX — Webhook test rate limit max.
-  WEBHOOK_TEST_RATE_LIMIT_MAX: "5"
-  # RATE_LIMIT_ERROR_POLICY — Optional. When the rate limiter store (Redis) fails: open — allow requests (fail-open, availability over security) closed — reject with 503 (fail-closed, security over….
-  RATE_LIMIT_ERROR_POLICY: ""
-  # AUTH_RATE_LIMIT_ERROR_POLICY — Optional. Stricter policy for /auth endpoints.
-  AUTH_RATE_LIMIT_ERROR_POLICY: ""
-  # IP_REPUTATION_ENABLED — Optional. Tracks per-IP auth failures / 4xx errors and temporarily blocks abusive IPs. Defaults to true, except in NODE_ENV=test (disabled there so shared-IP negative-path test….
-  IP_REPUTATION_ENABLED: "true"
-
-  # ── Database ──
-  # DATABASE_POOL_SIZE — Optional. Maximum number of connections in the PostgreSQL connection pool. Only used when DB_DRIVER=postgres.
-  DATABASE_POOL_SIZE: "10"
-  # DATABASE_SSL — Optional. Controls TLS for the PostgreSQL connection. true — Enable SSL with full certificate verification (recommended for managed providers such as RDS, Heroku, Supabase,….
-  DATABASE_SSL: ""
-  # SQLITE_BUSY_TIMEOUT_MS — Database timeouts in ms (defaults shown).
-  SQLITE_BUSY_TIMEOUT_MS: "5000"
-  # DB_STATEMENT_TIMEOUT_MS — Db statement timeout ms.
-  DB_STATEMENT_TIMEOUT_MS: "25000"
-  # DB_QUERY_TIMEOUT_MS — Db query timeout ms.
-  DB_QUERY_TIMEOUT_MS: "30000"
-  # DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS — Db idle in transaction session timeout ms.
-  DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "60000"
-  # MIGRATION_CHECKSUM_MODE — Optional. "strict" fails startup if a migration file was edited after being applied (production-safe); "warn" logs the issue but continues (development).
-  MIGRATION_CHECKSUM_MODE: ""
-
-  # ── Caching ──
-  # CACHE_MAX_ENTRIES — Optional. Max entries in the in-memory cache store (src/services/inMemoryCacheStore.ts) before eviction.
-  CACHE_MAX_ENTRIES: "1000"
-  # CACHE_MAX_SIZE — Optional. Max entries in the pluggable in-memory CacheStore (src/services/cacheStore.ts) before eviction.
-  CACHE_MAX_SIZE: "1000"
-  # CACHE_NAMESPACE — Optional. Prefix applied to every cache key written to Redis (#672). Prevents key collisions when two deployments (staging + production, or a blue/green pair) share the same….
-  CACHE_NAMESPACE: ""
-  # PLAYER_CACHE_MAX_SIZE — Optional. Max entries in the process-local bounded cache wrapper (LRU eviction) before Redis migration.
-  PLAYER_CACHE_MAX_SIZE: "1000"
-  # FEATURE_FLAG_CACHE_TTL_MS — Optional. How long the feature-flag lookup cache is held before re-reading from the database.
-  FEATURE_FLAG_CACHE_TTL_MS: "5000"
-  # WALLET_BLOCKLIST_CACHE_TTL_MS — Optional. How long a cached wallet-blocklist entry is trusted before a fresh DB read.
-  WALLET_BLOCKLIST_CACHE_TTL_MS: "30000"
-  # SEARCH_CACHE_MAX_ENTRIES — Optional. Max entries in the in-memory search cache before LRU/TTL eviction.
-  SEARCH_CACHE_MAX_ENTRIES: "1000"
-  # PIN_JSON_CACHE_TTL_MS — Optional. TTL for IPFS pin dedup cache, in ms.
-  PIN_JSON_CACHE_TTL_MS: "300000"
-  # IDEMPOTENCY_LEASE_MS — Optional. Lease expiry for pending idempotency claims, in ms. A crashed or hung request releases its claim after this window so a retry can re-use the key instead of waiting….
-  IDEMPOTENCY_LEASE_MS: "35000"
-
-  # ── SSE ──
-  # SSE_RETRY_MS — Optional. Base reconnect delay in milliseconds sent to SSE clients in the initial retry: frame (small random jitter is added per connection to avoid reconnect storms).
-  SSE_RETRY_MS: "5000"
-  # SSE_AUTH_SWEEP_INTERVAL_MS — Optional. Interval for the shared SSE authorization sweep that re-checks the token-revocation and wallet blocklists (one query per process, never per keep-alive tick). Bounds….
-  SSE_AUTH_SWEEP_INTERVAL_MS: "30000"
-  # SSE_MAX_CONNECTIONS_PER_WALLET — Max concurrent SSE streams per authenticated wallet (default: 5; 0 = unlimited).
-  SSE_MAX_CONNECTIONS_PER_WALLET: "5"
-
-  # ── Indexer ──
-  # INDEXER_POLL_INTERVAL_MS — Optional. How often the contract-event indexer polls Soroban RPC for new ledgers. Stellar closes a ledger roughly every 5 seconds, so polling faster than that mostly spends RPC….
-  INDEXER_POLL_INTERVAL_MS: "5000"
-  # INDEXER_FINALITY_MARGIN — Optional. Ledgers to hold back from the RPC's reported tip before indexing, to avoid ingesting events from a ledger that later gets reorged.
-  INDEXER_FINALITY_MARGIN: "10"
-  # INDEXER_LAG_WARN_THRESHOLD — Optional. Ledgers behind tip before a lag warning logs.
-  INDEXER_LAG_WARN_THRESHOLD: "100"
-  # INDEXER_BACKFILL_FROM_LEDGER — Optional. Replay indexing from this ledger if earlier than the stored last_ledger. Leave unset to disable. See docs/reindexing.md for operational workflows and cursor management.
-  INDEXER_BACKFILL_FROM_LEDGER: ""
-  # TIER_DIVERGENCE_INTERVAL_MS — Optional. How often the tier-divergence reconciliation job (#1132) runs, in milliseconds.
-  TIER_DIVERGENCE_INTERVAL_MS: "300000"
-  # TIER_DIVERGENCE_SAMPLE_SIZE — Optional. Max active players checked per tier-divergence reconciliation pass.
-  TIER_DIVERGENCE_SAMPLE_SIZE: "100"
-
-  # ── Reindexing / catch-up ──
-  # REINDEX_CATCHUP_THRESHOLD — Optional. Ledger lag above which the indexer switches to catch-up mode.
-  REINDEX_CATCHUP_THRESHOLD: "500"
-  # REINDEX_CATCHUP_BATCH_SIZE — Optional. Ledgers processed per batch in catch-up mode.
-  REINDEX_CATCHUP_BATCH_SIZE: "500"
-  # REINDEX_BATCH_SIZE — Optional. Ledgers processed per batch in steady mode.
-  REINDEX_BATCH_SIZE: "100"
-  # REINDEX_BATCH_DELAY_MS — Optional. Delay between reindex batches.
-  REINDEX_BATCH_DELAY_MS: "50"
-  # REINDEX_RATE_LIMIT_BACKOFF_MS — Optional. Backoff applied when the RPC returns a rate-limit error during reindex.
-  REINDEX_RATE_LIMIT_BACKOFF_MS: "2000"
-
-  # ── IPFS / Pinata ──
-  # IPFS_GATEWAYS — Optional. Comma-separated fallback IPFS gateways (defaults to Pinata/Cloudflare/ipfs.io when unset). See docs/ipfs-pinata-gateway.md for detailed fallback semantics and….
-  IPFS_GATEWAYS: ""
-  # PINATA_GATEWAY — Optional. IPFS gateway used to resolve pinned content. Must be a valid HTTPS URL. When unset, defaults to https://gateway.pinata.cloud. See docs/ipfs-pinata-gateway.md for….
-  PINATA_GATEWAY: ""
-  # IPFS_HTTP_TIMEOUT_MS — Optional. Per-request HTTP timeout for Pinata/IPFS axios calls.
-  IPFS_HTTP_TIMEOUT_MS: "15000"
-  # IPFS_RECONCILE_AGE_MS — Optional. Age a pending pin must reach before it is reconciled.
-  IPFS_RECONCILE_AGE_MS: "300000"
-  # IPFS_RECONCILE_INTERVAL_MS — Optional. Interval between pending-pin reconciliation passes.
-  IPFS_RECONCILE_INTERVAL_MS: "60000"
-  # IPFS_RECONCILE_MAX_ATTEMPTS — Optional. Attempts before a stuck pending pin is expired during reconciliation.
-  IPFS_RECONCILE_MAX_ATTEMPTS: "5"
-
-  # ── Circuit breakers ──
-  # CIRCUIT_BREAKER_FAILURE_THRESHOLD — Optional. Failure count / open duration for the generic CircuitBreaker used by outbound calls (the Stellar RPC breaker). Validated at startup: threshold must be ≥ 1 and the….
-  CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
-  # CIRCUIT_BREAKER_RESET_TIMEOUT_MS — Circuit breaker reset timeout ms.
-  CIRCUIT_BREAKER_RESET_TIMEOUT_MS: "30000"
-  # IPFS_BREAKER_FAILURE_THRESHOLD — Optional. Consecutive IPFS failures before the pinning circuit breaker opens, and how long it stays open before a trial request.
-  IPFS_BREAKER_FAILURE_THRESHOLD: "5"
-  # IPFS_BREAKER_RESET_TIMEOUT_MS — Ipfs breaker reset timeout ms.
-  IPFS_BREAKER_RESET_TIMEOUT_MS: "30000"
-
-  # ── Milestones ──
-  # MILESTONE_LOADER_CONCURRENCY — Optional. Max in-flight RPC calls made by the GraphQL milestone DataLoader.
-  MILESTONE_LOADER_CONCURRENCY: "8"
-  # MILESTONE_RATE_WINDOW_MS — Optional.
-  MILESTONE_RATE_WINDOW_MS: "60000"
-  # MILESTONE_RATE_MAX — Milestone rate max.
-  MILESTONE_RATE_MAX: "10"
-  # MILESTONE_PLAYER_RATE_WINDOW_MS — Optional. Rolling window for the per-player milestone submission rate limit.
-  MILESTONE_PLAYER_RATE_WINDOW_MS: "3600000"
-  # MILESTONE_PLAYER_RATE_MAX — Optional. Max milestone submissions per player per window.
-  MILESTONE_PLAYER_RATE_MAX: "10"
-  # EVIDENCE_MAX_BYTES — Optional. Max size in bytes of a downloaded HTTPS evidence file for milestone submissions.
-  EVIDENCE_MAX_BYTES: "52428800"
-  # EVIDENCE_VALIDATOR_BYTES_PER_HOUR — Optional. Total evidence bytes the validator may download per hour.
-  EVIDENCE_VALIDATOR_BYTES_PER_HOUR: "524288000"
-
-  # ── Webhooks ──
-  # WEBHOOK_DLQ_SIZE_THRESHOLD — Optional.
-  WEBHOOK_DLQ_SIZE_THRESHOLD: "100"
-  # WEBHOOK_DLQ_RATE_THRESHOLD — Optional.
-  WEBHOOK_DLQ_RATE_THRESHOLD: "50"
-  # WEBHOOK_DLQ_RATE_WINDOW_MS — Optional.
-  WEBHOOK_DLQ_RATE_WINDOW_MS: "300000"
-
-  # ── Readiness probes ──
-  # READINESS_MAX_LAG — Optional. Max indexer ledger lag (in ledgers) still considered ready. Set to 0 to disable the lag check.
-  READINESS_MAX_LAG: "100"
-  # READINESS_GRACE_PERIOD_MS — Optional. Grace window after process start during which readiness always reports ok regardless of indexer lag.
-  READINESS_GRACE_PERIOD_MS: "300000"
-  # READINESS_DB_TIMEOUT_MS — Optional. Per-probe timeout for the DB readiness check.
-  READINESS_DB_TIMEOUT_MS: "2000"
-  # READINESS_IPFS_TIMEOUT_MS — Optional. Per-probe timeout for the IPFS readiness check.
-  READINESS_IPFS_TIMEOUT_MS: "5000"
-  # READINESS_STELLAR_TIMEOUT_MS — Optional. Per-probe timeout for the Stellar readiness check.
-  READINESS_STELLAR_TIMEOUT_MS: "5000"
-
-  # ── Timeouts & shutdown ──
-  # STELLAR_RPC_TIMEOUT_MS — Optional. Per-request HTTP timeout for Soroban RPC / Stellar SDK calls.
-  STELLAR_RPC_TIMEOUT_MS: "15000"
-  # TX_CONFIRMATION_TIMEOUT_MS — Optional. Bounded Soroban transaction-confirmation poll window for pay_to_contact / subscribe submissions.
-  TX_CONFIRMATION_TIMEOUT_MS: "60000"
-  # TRIAL_OFFER_TTL_MS — Optional. Time before a logged trial offer expires. Set to 0 to disable expiry (not recommended).
-  TRIAL_OFFER_TTL_MS: "2592000000"
-  # SHUTDOWN_TIMEOUT_MS — Graceful shutdown: max time to drain before forcing exit, and an optional delay before draining starts (e.g. for load-balancer deregistration). Defaults shown.
-  SHUTDOWN_TIMEOUT_MS: "10000"
-  # SHUTDOWN_PRESTOP_DELAY_MS — Shutdown prestop delay ms.
-  SHUTDOWN_PRESTOP_DELAY_MS: "0"
-  # EXIT_ON_UNHANDLED_REJECTION — Shut down the process on an unhandled promise rejection (default: false).
-  EXIT_ON_UNHANDLED_REJECTION: "false"
-
-  # ── Payload limits & compression ──
-  # JSON_PAYLOAD_LIMIT — Optional. Max size of JSON request bodies.
-  JSON_PAYLOAD_LIMIT: "1mb"
-  # UPLOAD_PAYLOAD_LIMIT — Optional. Max size of JSON request bodies for upload endpoints (player registration, milestone evidence).
-  UPLOAD_PAYLOAD_LIMIT: "10mb"
-  # COMPRESSION_THRESHOLD — Optional. Response compression threshold, in bytes.
-  COMPRESSION_THRESHOLD: "1024"
-  # COMPRESSION_THRESHOLD_BYTES — Optional. Accepted alias for COMPRESSION_THRESHOLD above; only used as a fallback when COMPRESSION_THRESHOLD is unset. Leave unset.
-  COMPRESSION_THRESHOLD_BYTES: ""
-
-  # ── Security headers ──
-  # SECURITY_HSTS — Security headers (optional overrides).
-  SECURITY_HSTS: "max-age=31536000; includeSubDomains"
-  # SECURITY_X_CONTENT_TYPE_OPTIONS — Security x content type options.
-  SECURITY_X_CONTENT_TYPE_OPTIONS: "nosniff"
-  # SECURITY_X_FRAME_OPTIONS — Security x frame options.
-  SECURITY_X_FRAME_OPTIONS: "DENY"
-  # SECURITY_REFERRER_POLICY — Security referrer policy.
-  SECURITY_REFERRER_POLICY: "no-referrer"
-  # SECURITY_CSP — Security csp.
-  SECURITY_CSP: "default-src 'none'; frame-ancestors 'none'"
-  # SECURITY_PERMISSIONS_POLICY — Security permissions policy.
-  SECURITY_PERMISSIONS_POLICY: "camera=(), microphone=(), geolocation=()"
-
-  # ── Observability ──
-  # LOG_SAMPLE_RATE — Optional. Float 0–1 sample rate for non-skipped paths.
-  LOG_SAMPLE_RATE: "1"
-  # LOG_SKIP_PATHS — Optional. Comma-separated paths requestLogger never logs (default: health + metrics probes).
-  LOG_SKIP_PATHS: "/health,/health/liveness,/health/readiness,/ready,/metrics"
-  # LOG_REDACTION_ENABLED — Optional. Set to "false" to disable log redaction in non-development environments (redaction is always off in development).
-  LOG_REDACTION_ENABLED: "true"
-  # LOG_REDACTION_WALLET_PREFIX — Optional. Characters kept at the start of a masked wallet address.
-  LOG_REDACTION_WALLET_PREFIX: "1"
-  # LOG_REDACTION_WALLET_SUFFIX — Optional. Characters kept at the end of a masked wallet address.
-  LOG_REDACTION_WALLET_SUFFIX: "4"
-  # LOG_REDACTION_HASH_CORRELATION_IDS — Optional. Set to "true" to hash correlation IDs in logs instead of logging them raw.
-  LOG_REDACTION_HASH_CORRELATION_IDS: "false"
-  # OTEL_EXPORTER_OTLP_ENDPOINT — Optional. Leave unset to disable tracing export.
-  OTEL_EXPORTER_OTLP_ENDPOINT: ""
-  # OTEL_SERVICE_NAME — Optional. Service name reported to the tracing backend.
-  OTEL_SERVICE_NAME: ""
-
-  # ── Misc ──
-  # GRAPHQL_PERSISTED_ONLY — Only accept registered persisted GraphQL operations (default: false).
-  GRAPHQL_PERSISTED_ONLY: "false"
-  # ALLOWED_ORIGINS — Legacy alias for CORS_ALLOWED_ORIGINS.
-  ALLOWED_ORIGINS: ""
-  # API_KEY_DEFAULT_TTL_DAYS — Optional. Default lifetime for issued API keys in days (#674). Keys issued without an explicit expiresInDays value expire after this many days.
-  API_KEY_DEFAULT_TTL_DAYS: "90"
-
-# -----------------------------------------------------------------------------
-# Pod annotations
-# Useful for Prometheus scraping or Datadog APM injection.
 # -----------------------------------------------------------------------------
 podAnnotations: {}
 # prometheus.io/scrape: "true"
