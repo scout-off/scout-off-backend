@@ -140,6 +140,27 @@ export async function getBookmarkFolderById(folderId: number, scoutWallet: strin
 }
 
 /**
+ * Rename a bookmark folder, ensuring it belongs to the scout.
+ * Returns the updated folder, or null when it does not exist.
+ * Throws on unique-conflict when another folder already uses the name.
+ */
+export async function renameBookmarkFolder(
+  folderId: number,
+  scoutWallet: string,
+  name: string,
+): Promise<ScoutBookmarkFolderRow | null> {
+  const sql = `UPDATE scout_bookmark_folders SET name = ? WHERE id = ? AND scout_wallet = ?`;
+  return timedQueryAsync(sql, async () => {
+    const info = await getDriver().run(sql, [name, folderId, scoutWallet]);
+    if (info.changes === 0) return null;
+    return (await getDriver().get<ScoutBookmarkFolderRow>(
+      `SELECT * FROM scout_bookmark_folders WHERE id = ? AND scout_wallet = ?`,
+      [folderId, scoutWallet],
+    )) ?? null;
+  });
+}
+
+/**
  * Delete a bookmark folder by id, ensuring it belongs to the scout.
  * Returns true when a row was deleted, false when it did not exist.
  */
