@@ -1730,7 +1730,11 @@ export interface paths {
         delete: operations["deleteBookmarkFolderHandler"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename a bookmark folder owned by the authenticated scout.
+         * @description Rename a bookmark folder owned by the authenticated scout.
+         */
+        patch: operations["renameBookmarkFolderHandler"];
         trace?: never;
     };
     "/scouts/{wallet}/bookmarks": {
@@ -2458,6 +2462,8 @@ export interface components {
             success: false;
             error: string;
             code?: string;
+            /** @description Echo of the X-Correlation-ID request header, when present */
+            correlationId?: string;
         };
         VersionInfo: {
             version: string;
@@ -5495,6 +5501,57 @@ export interface operations {
             };
             /** @description { success: false, error: string } - Folder not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    renameBookmarkFolderHandler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scout's Stellar public key */
+                wallet: string;
+                /** @description Bookmark folder row ID */
+                folderId: number;
+            };
+            cookie?: never;
+        };
+        /** @description { name: string } */
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description { success: true, data: { id, scout_wallet, name, created_at } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Invalid folderId or name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Folder not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Name already in use */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

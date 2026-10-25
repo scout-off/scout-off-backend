@@ -591,7 +591,7 @@ describe('PATCH /api/scouts/:wallet/bookmark-folders/:folderId', () => {
     mockGetBookmarkFolderById.mockReturnValueOnce(null);
 
     const res = await request(app)
-      .patch(`/api/scouts/${SCOUT_B}/bookmark-folders/1`)
+      .patch(`/api/scouts/${SCOUT_A}/bookmark-folders/1`)
       .send({ name: 'New' })
       .set('Authorization', `Bearer ${scoutAToken}`);
 

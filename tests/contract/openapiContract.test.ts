@@ -394,6 +394,7 @@ const ALLOWLIST: Record<string, string> = {
   "POST /scouts/{wallet}/api-keys/{id}/rotate": "write op; requires scout JWT",
   "GET /scouts/{wallet}/bookmark-folders": "requires scout JWT + bookmark fixtures",
   "POST /scouts/{wallet}/bookmark-folders": "write op; requires scout JWT",
+  "PATCH /scouts/{wallet}/bookmark-folders/{folderId}": "write op; requires scout JWT",
   "DELETE /scouts/{wallet}/bookmark-folders/{folderId}": "write op; requires scout JWT",
   "GET /scouts/{wallet}/bookmarks": "requires scout JWT + bookmark fixtures",
   "POST /scouts/{wallet}/bookmarks": "write op; requires scout JWT",
