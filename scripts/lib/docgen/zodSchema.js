@@ -131,7 +131,8 @@ function applyZodBase(name, args, scope, seen, state) {
       return { schema: { type: 'array', items: inner.schema } };
     }
     case 'record': {
-      const inner = convert(args[0], scope, seen, { required: true });
+      // z.record(value) or z.record(key, value) — the value schema is always last.
+      const inner = convert(args[args.length - 1], scope, seen, { required: true });
       return { schema: { type: 'object', additionalProperties: inner.schema } };
     }
     case 'union': {

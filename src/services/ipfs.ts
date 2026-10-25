@@ -72,14 +72,14 @@ const PINATA_TEST_URL     = 'https://api.pinata.cloud/data/testAuthentication';
 
 /**
  * Circuit breaker for all outbound Pinata / IPFS calls (issue #1142).
- * Thresholds are configurable via:
- *   IPFS_BREAKER_FAILURE_THRESHOLD  (default: 5)
- *   IPFS_BREAKER_RESET_TIMEOUT_MS   (default: 30000)
+ * Thresholds are configurable via IPFS_BREAKER_FAILURE_THRESHOLD and
+ * IPFS_BREAKER_RESET_TIMEOUT_MS, parsed and validated once in
+ * `config.circuitBreaker.ipfs` (#1564).
  */
 export const ipfsBreaker = new CircuitBreaker({
   name: 'ipfs',
-  failureThreshold: parseInt(process.env.IPFS_BREAKER_FAILURE_THRESHOLD ?? '5', 10),
-  resetTimeoutMs: parseInt(process.env.IPFS_BREAKER_RESET_TIMEOUT_MS ?? '30000', 10),
+  failureThreshold: config.circuitBreaker.ipfs.failureThreshold,
+  resetTimeoutMs: config.circuitBreaker.ipfs.resetTimeoutMs,
 });
 
 export { CircuitBreakerOpenError };

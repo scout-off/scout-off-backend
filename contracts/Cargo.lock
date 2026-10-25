@@ -1090,6 +1090,7 @@ dependencies = [
 name = "scout-off-shared"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "soroban-sdk",
 ]
 

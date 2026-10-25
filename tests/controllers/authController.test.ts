@@ -7,12 +7,14 @@ describe('postToken authentication errors', () => {
     jest.restoreAllMocks();
   });
 
+  // verifyChallenge throws Sep10Error; the client sees the generic mapped
+  // message (getErrorMapping), never the detailed server-side reason.
   it.each([
-    ['Invalid challenge signature', 'TOKEN_INVALID'],
-    ['Challenge has expired', 'TOKEN_EXPIRED'],
-  ])('returns a machine-readable code for %s', (message, code) => {
+    [sep10.Sep10ErrorCode.INVALID_SIGNATURE, 'Invalid challenge signature', 'Invalid challenge', 'TOKEN_INVALID'],
+    [sep10.Sep10ErrorCode.CHALLENGE_EXPIRED, 'Challenge has expired', 'Challenge has expired', 'TOKEN_EXPIRED'],
+  ])('returns a machine-readable code for %s', async (sep10Code, reason, message, code) => {
     jest.spyOn(sep10, 'verifyChallenge').mockImplementation(() => {
-      throw new Error(message);
+      throw new sep10.Sep10Error(sep10Code, reason);
     });
 
     const req = {
@@ -26,7 +28,7 @@ describe('postToken authentication errors', () => {
     } as unknown as Response;
     const next = jest.fn() as NextFunction;
 
-    postToken(req, res, next);
+    await postToken(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({

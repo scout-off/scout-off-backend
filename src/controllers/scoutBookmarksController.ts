@@ -7,12 +7,13 @@
  */
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { requiredError } from '../validators/requiredError';
 import {
   getPlayerById,
   insertBookmark,
   deleteBookmark,
-  getBookmarksByScout,
   getBookmarkedPlayersWithDetails,
+  countBookmarkedPlayers,
   insertBookmarkFolder,
   getBookmarkFoldersByScout,
   getBookmarkFolderById,
@@ -20,18 +21,18 @@ import {
   deleteBookmarkFolder,
   moveBookmarksToRoot,
   countBookmarksInFolder,
-  ScoutBookmarkRow,
   ScoutBookmarkFolderRow,
   PlayerRow,
 } from '../db';
 import { getTierMeta } from '../utils/tier';
+import { DEFAULT_PAGE_SIZE, clampPageSize } from '../utils/pagination';
 import { logger } from '../utils/logger';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 export const addBookmarkSchema = z.object({
   playerId: z
-    .string({ required_error: 'playerId is required' })
+    .string(requiredError('playerId is required'))
     .min(1, 'playerId is required'),
   folderId: z.number().int().optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
@@ -39,7 +40,7 @@ export const addBookmarkSchema = z.object({
 
 export const createBookmarkFolderSchema = z.object({
   name: z
-    .string({ required_error: 'name is required and must be a string' })
+    .string(requiredError('name is required and must be a string'))
     .min(1, 'name is required and must be a string')
     .max(100),
 }).strict();
@@ -77,7 +78,7 @@ function serializePlayer(row: PlayerRow): Record<string, unknown> {
 export async function addBookmark(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const { playerId, folderId, note } = req.body;
 
@@ -135,7 +136,7 @@ export async function addBookmark(
 export async function removeBookmark(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {playerId} = req.params as {playerId: string};
   const removed = await deleteBookmark(req.params.wallet as string, playerId);
@@ -164,12 +165,20 @@ export async function removeBookmark(
 export async function listBookmarks(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const folderId = req.query.folderId ? parseInt(req.query.folderId as string, 10) : undefined;
 
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const pageSize = clampPageSize(req.query.pageSize ?? DEFAULT_PAGE_SIZE);
+  const offset = (page - 1) * pageSize;
+
   // Single JOIN query — replaces the previous per-bookmark getPlayerById() loop.
-  const rows = await getBookmarkedPlayersWithDetails(req.params.wallet as string, folderId);
+  const rows = await getBookmarkedPlayersWithDetails(req.params.wallet as string, folderId, {
+    limit: pageSize,
+    offset,
+  });
+  const total = await countBookmarkedPlayers(req.params.wallet as string, folderId);
 
   const enriched = rows.map((row) => ({
     ...serializePlayer(row),
@@ -178,7 +187,7 @@ export async function listBookmarks(
     note: row.bookmark_note,
   }));
 
-  res.json({ success: true, data: enriched });
+  res.json({ success: true, data: enriched, meta: { page, pageSize, total } });
 }
 
 // ─── Bookmark folder handlers ─────────────────────────────────────────────────────
@@ -192,7 +201,7 @@ export async function listBookmarks(
 export async function createBookmarkFolder(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const { name } = req.body;
 
@@ -229,7 +238,7 @@ export async function createBookmarkFolder(
 export async function listBookmarkFolders(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const folders: ScoutBookmarkFolderRow[] = await getBookmarkFoldersByScout(req.params.wallet as string);
 
@@ -310,7 +319,7 @@ export async function renameBookmarkFolderHandler(
 export async function deleteBookmarkFolderHandler(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {folderId} = req.params as {folderId: string};
   const folderIdNum = parseInt(folderId, 10);

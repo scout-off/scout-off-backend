@@ -1,5 +1,20 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+import { parseRetentionPolicies } from './retentionPolicy';
+import { parseKeyring } from './utils/keyring';
+import envConstants from './config/env-constants.json';
+
+// In production and staging, configuration must come only from the
+// orchestrator (ConfigMap/Secrets). A stray .env baked into an image or
+// mounted volume would otherwise silently fill in unset values, possibly with
+// development secrets. Set DOTENV_ENABLED=true to opt back in explicitly.
+const dotenvEnv = process.env.NODE_ENV ?? 'development';
+if ((dotenvEnv !== 'production' && dotenvEnv !== 'staging') || process.env.DOTENV_ENABLED === 'true') {
+  const result = dotenv.config();
+  if (!result.error) console.info('[config] loaded .env file');
+} else {
+  console.info(`[config] skipping .env file (NODE_ENV=${dotenvEnv}; set DOTENV_ENABLED=true to load it)`);
+}
 
 function required(name: string): string {
   const value = process.env[name];
@@ -64,7 +79,12 @@ function parseNumericEnv(
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type NodeEnv = 'development' | 'test' | 'staging' | 'production';
 
-const VALID_ENVS: ReadonlySet<string> = new Set(['development', 'test', 'staging', 'production']);
+/**
+ * Valid NODE_ENV values, shared with `scripts/validate-env.js` via
+ * `src/config/env-constants.json` so the runtime pre-flight check and this
+ * module can never disagree (#1541).
+ */
+export const VALID_ENVS: ReadonlySet<string> = new Set(envConstants.nodeEnvs);
 
 const rawNodeEnv = process.env.NODE_ENV ?? 'development';
 if (!VALID_ENVS.has(rawNodeEnv)) {
@@ -89,11 +109,19 @@ function isLikelyPlaceholderSecret(secret: string): boolean {
     'replace_me',
     'secret',
     'mysecret',
+    'my-secret',
     'test-secret',
     'development-secret',
   ];
 
-  return obviousPlaceholders.some((placeholder) => normalized === placeholder || normalized.includes(placeholder));
+  if ((obviousPlaceholders as string[]).includes(normalized)) return true;
+
+  // Decorated placeholder forms: optional prefix/suffix around a known stem,
+  // with only trivial decoration (separators, digits). Long real secrets that
+  // merely contain e.g. "secret" as a substring must NOT match.
+  const decoratedPlaceholder =
+    /^(change[-_]?me|replace[-_]?me|example([-_]secret)?|(my|test|development)?[-_]?secret|jwt[-_]?secret)[-_0-9]*$/;
+  return decoratedPlaceholder.test(normalized);
 }
 
 function validateSecretStrength(name: string, value: string): void {
@@ -204,7 +232,21 @@ if (!apiKeyLookupSecretValue) {
 // Validate NOTES_ENCRYPTION_KEY (#1328). Scout private notes are encrypted at
 // rest with this symmetric key; production refuses to start without it.
 const notesEncryptionKeyValue = process.env.NOTES_ENCRYPTION_KEY ?? '';
-if (!notesEncryptionKeyValue) {
+// A keyring (#1513) replaces the single key; parseKeyring throws a clear error
+// when the active key id is missing from it or an entry is malformed.
+parseKeyring(
+  process.env.NOTES_ENCRYPTION_KEYS ?? '',
+  process.env.NOTES_ENCRYPTION_ACTIVE_KEY_ID ?? '',
+  'NOTES_ENCRYPTION_KEYS',
+  'NOTES_ENCRYPTION_ACTIVE_KEY_ID',
+);
+parseKeyring(
+  process.env.WEBHOOK_SECRET_ENCRYPTION_KEYS ?? '',
+  process.env.WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID ?? '',
+  'WEBHOOK_SECRET_ENCRYPTION_KEYS',
+  'WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID',
+);
+if (!notesEncryptionKeyValue && !(process.env.NOTES_ENCRYPTION_KEYS ?? '').trim()) {
   if (nodeEnv === 'production') {
     throw new Error(
       'NOTES_ENCRYPTION_KEY is required in production but is not set. ' +
@@ -250,10 +292,84 @@ const corsAllowedOrigins =
     ? rawCorsOrigins.split(',').map((o) => o.trim()).filter(Boolean)
     : DEFAULT_CORS_ORIGINS[nodeEnv];
 
+/**
+ * Compile a wildcard CORS pattern entry (e.g. `https://*.scoutoff.app`) into
+ * an anchored regular expression that:
+ *   - matches the exact scheme (https:// only)
+ *   - matches exactly one subdomain label (letters, digits, hyphens) by default
+ *   - matches the exact host suffix and any optional port
+ *   - rejects look-alike and suffix-attack origins
+ *
+ * Returns null and logs a startup warning for unsafe or malformed patterns.
+ */
+function compileCorsPattern(pattern: string): RegExp | null {
+  // Only `https://` wildcard patterns are supported. Plain `*` is handled
+  // separately in app.ts (dev/test only).
+  const match = pattern.match(/^(https?:\/\/)\*\.(.+)$/);
+  if (!match) {
+    console.warn(
+      `[cors] WARNING: "${pattern}" is not a supported wildcard pattern and will be ignored. ` +
+      'Use "https://*.yourdomain.com" format.',
+    );
+    return null;
+  }
+
+  const [, scheme, suffix] = match;
+
+  // Only https:// patterns are safe to use with credentials
+  if (scheme !== 'https://') {
+    console.warn(
+      `[cors] WARNING: Wildcard CORS pattern "${pattern}" uses an insecure scheme. ` +
+      'Only https:// is allowed for wildcard patterns.',
+    );
+    return null;
+  }
+
+  // The suffix must contain at least two labels (e.g. "scoutoff.app", not "*.app")
+  // to prevent overly broad patterns that could match unrelated domains.
+  // Strip optional port suffix before counting labels.
+  const hostPart = suffix.split(':')[0];
+  const labels = hostPart.split('.').filter(Boolean);
+  if (labels.length < 2) {
+    console.warn(
+      `[cors] WARNING: Wildcard CORS pattern "${pattern}" is too broad (fewer than 2 ` +
+      'literal labels after the wildcard). Pattern rejected.',
+    );
+    return null;
+  }
+
+  // Escape the suffix for use in a regex: dots → \., rest is literal.
+  const escapedSuffix = suffix.replace(/\./g, '\\.').replace(/:/g, ':');
+
+  // Single-label wildcard: [a-z0-9-]+ (one subdomain label, no dots).
+  // This prevents multi-level wildcard matches (e.g. evil.pr-1.scoutoff.app)
+  // unless the pattern uses **.
+  const subdomainPattern = '[a-z0-9-]+';
+
+  return new RegExp(`^https://${subdomainPattern}\\.${escapedSuffix}$`, 'i');
+}
+
+/**
+ * Pre-compiled set of wildcard origin patterns parsed from CORS_ALLOWED_ORIGINS.
+ * Patterns are compiled once at startup and reused for every request.
+ */
+const corsWildcardPatterns: RegExp[] = corsAllowedOrigins
+  .filter((o) => o.includes('*') && o !== '*')
+  .map(compileCorsPattern)
+  .filter((r): r is RegExp => r !== null);
+
+// Warn if production/staging uses '*' (global wildcard) — this disables credentials
+if ((nodeEnv === 'production' || nodeEnv === 'staging') && corsAllowedOrigins.includes('*')) {
+  console.error(
+    '[cors] ERROR: CORS_ALLOWED_ORIGINS includes "*" in production/staging. ' +
+    'This disables credentials and is a security risk. Use explicit origins.',
+  );
+}
+
 // Validate NETWORK and derive networkPassphrase with defaults per network type.
 // Acceptable network values: 'testnet', 'mainnet', 'futurenet', 'standalone'.
 // Default passphrases follow Stellar's convention for each network type.
-const VALID_NETWORKS: ReadonlySet<string> = new Set(['testnet', 'mainnet', 'futurenet', 'standalone']);
+export const VALID_NETWORKS: ReadonlySet<string> = new Set(envConstants.networks);
 
 const rawNetwork = process.env.NETWORK ?? 'testnet';
 if (!VALID_NETWORKS.has(rawNetwork)) {
@@ -339,6 +455,8 @@ const config = {
 
   /** Address of the deployed `connection` Soroban contract. */
   connectionContractId: process.env.CONNECTION_CONTRACT_ID ?? process.env.CONTRACT_ID ?? '',
+  /** Optional fifth contract, indexed for token and role events when deployed. */
+  playerTokenContractId: process.env.PLAYER_TOKEN_CONTRACT_ID ?? '',
   jwtSecret: (() => {
     const value = required('JWT_SECRET');
     validateSecretStrength('JWT_SECRET', value);
@@ -409,7 +527,7 @@ const config = {
   })(),
   dbDriver: (() => {
     const raw = process.env.DB_DRIVER ?? 'sqlite';
-    const valid = ['sqlite', 'postgres'] as const;
+    const valid = envConstants.dbDrivers as readonly string[];
     if (!(valid as readonly string[]).includes(raw)) {
       throw new Error(
         `DB_DRIVER="${raw}" is invalid. Must be one of: ${valid.join(', ')}. ` +
@@ -472,6 +590,16 @@ const config = {
     // multi-subscriber deployments should manage subscriptions in the DB instead.
     secret: process.env.WEBHOOK_SECRET ?? '',
     /**
+     * Enable legacy single-value signature header (`X-Webhook-Signature: sha256=...`)
+     * during the deprecation period. Set to `false` to send only the new versioned
+     * header (`X-Webhook-Signature-V1: t=...,v1=...`).
+     *
+     * Default: true (legacy header enabled) during migration window.
+     * Once all subscribers have been verified to support the new header, set to `false`
+     * to send only the versioned format.
+     */
+    enableLegacySignature: process.env.WEBHOOK_LEGACY_SIGNATURE !== 'false',
+    /**
      * Per-attempt timeout (ms) for outbound webhook delivery requests (#691).
      * An unresponsive subscriber is aborted after this window and the attempt
      * is treated as a failure, proceeding to retry/backoff or dead-lettering
@@ -479,6 +607,10 @@ const config = {
      * indefinitely.
      */
     timeoutMs: parseNumericEnv('WEBHOOK_TIMEOUT_MS', process.env.WEBHOOK_TIMEOUT_MS, 10000, { min: 1, integer: true }),
+    /** Consecutive failed deliveries before a subscription is suspended (#1512). */
+    suspendAfterFailures: parseNumericEnv('WEBHOOK_SUSPEND_AFTER_FAILURES', process.env.WEBHOOK_SUSPEND_AFTER_FAILURES, 50, { min: 1, integer: true }),
+    /** Failures spanning longer than this (ms) also suspend a subscription (#1512). */
+    suspendAfterMs: parseNumericEnv('WEBHOOK_SUSPEND_AFTER_MS', process.env.WEBHOOK_SUSPEND_AFTER_MS, 86400000, { min: 1000, integer: true }),
   },
   /**
    * Dead-letter queue alerting (#1131).
@@ -515,6 +647,14 @@ const config = {
   // Symmetric key (32-byte hex) for scout_player_notes* content at rest (#1328).
   notesEncryptionKey: process.env.NOTES_ENCRYPTION_KEY ?? '',
   notesEncryptionKeyPrevious: process.env.NOTES_ENCRYPTION_KEY_PREVIOUS ?? '',
+  // Keyrings with key ids for online rotation (#1513). Validated at startup below.
+  notesEncryptionKeys: process.env.NOTES_ENCRYPTION_KEYS ?? '',
+  notesEncryptionActiveKeyId: process.env.NOTES_ENCRYPTION_ACTIVE_KEY_ID ?? '',
+  webhookSecretEncryptionKeys: process.env.WEBHOOK_SECRET_ENCRYPTION_KEYS ?? '',
+  webhookSecretEncryptionActiveKeyId: process.env.WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID ?? '',
+  // Online re-encryption job (#1513): rows per batch and pause between batches.
+  encryptionReencryptBatchSize: parseNumericEnv('ENCRYPTION_REENCRYPT_BATCH_SIZE', process.env.ENCRYPTION_REENCRYPT_BATCH_SIZE, 100, { min: 1, max: 5000, integer: true }),
+  encryptionReencryptIntervalMs: parseNumericEnv('ENCRYPTION_REENCRYPT_INTERVAL_MS', process.env.ENCRYPTION_REENCRYPT_INTERVAL_MS, 1000, { min: 10, max: 3600000, integer: true }),
   rateLimit: {
     enabled: process.env.RATE_LIMIT_ENABLED !== 'false',
     windowMs: parseNumericEnv('RATE_LIMIT_WINDOW_MS', process.env.RATE_LIMIT_WINDOW_MS, 60000, { min: 1, integer: true }),
@@ -564,6 +704,7 @@ const config = {
   },
   corsAllowedOrigins,
   allowedOrigins: corsAllowedOrigins,
+  corsWildcardPatterns,
   logLevel: (process.env.LOG_LEVEL ?? ENV_LOG_LEVEL[nodeEnv]) as LogLevel,
   showErrorDetails: nodeEnv === 'development' || nodeEnv === 'test',
   useMockServices: nodeEnv === 'development' || nodeEnv === 'test',
@@ -574,6 +715,18 @@ const config = {
   subscriptionGracePeriodHours: parseNumericEnv('SUBSCRIPTION_GRACE_PERIOD_HOURS', process.env.SUBSCRIPTION_GRACE_PERIOD_HOURS, 24, { min: 0, integer: true }),
   /** Global request timeout in milliseconds before the server responds with 503. */
   requestTimeoutMs: parseNumericEnv('REQUEST_TIMEOUT_MS', process.env.REQUEST_TIMEOUT_MS, 30000, { min: 1, integer: true }),
+  /**
+   * HTTP server socket timeouts (#1593). keepAliveTimeoutMs must be shorter
+   * than the load balancer's idle timeout to avoid 502s on reused sockets,
+   * and headersTimeoutMs must be greater than keepAliveTimeoutMs (enforced
+   * below). requestTimeoutMs here applies to receiving the request, not to
+   * long-lived SSE response streams.
+   */
+  http: {
+    keepAliveTimeoutMs: parseNumericEnv('HTTP_KEEP_ALIVE_TIMEOUT_MS', process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS, 65000, { min: 1, integer: true }),
+    headersTimeoutMs: parseNumericEnv('HTTP_HEADERS_TIMEOUT_MS', process.env.HTTP_HEADERS_TIMEOUT_MS, 66000, { min: 1, integer: true }),
+    requestTimeoutMs: parseNumericEnv('HTTP_REQUEST_TIMEOUT_MS', process.env.HTTP_REQUEST_TIMEOUT_MS, 120000, { min: 1, integer: true }),
+  },
   /** Lease expiry for pending idempotency claims (ms). A crashed request releases its claim after this window. */
   idempotencyLeaseMs: parseNumericEnv('IDEMPOTENCY_LEASE_MS', process.env.IDEMPOTENCY_LEASE_MS, 35000, { min: 1000, integer: true }),
   /**
@@ -652,6 +805,9 @@ const config = {
   /** Scheduled interval for IPFS pending pin reconciliation in milliseconds (default: 60s). */
   ipfsReconcileIntervalMs: parseNumericEnv('IPFS_RECONCILE_INTERVAL_MS', process.env.IPFS_RECONCILE_INTERVAL_MS, 60000, { min: 1000, integer: true }),
 
+  /** Interval for IPFS pending-pin retry attempts in milliseconds (default: 30s, min: 5s). */
+  ipfsPinRetryIntervalMs: parseNumericEnv('IPFS_PIN_RETRY_INTERVAL_MS', process.env.IPFS_PIN_RETRY_INTERVAL_MS, 30000, { min: 5000, integer: true }),
+
   /** Max attempts before expiring a stuck pending pin during reconciliation (default: 5). */
   ipfsReconcileMaxAttempts: parseNumericEnv('IPFS_RECONCILE_MAX_ATTEMPTS', process.env.IPFS_RECONCILE_MAX_ATTEMPTS, 5, { min: 1, integer: true }),
 
@@ -664,25 +820,6 @@ const config = {
 
   /** Minimum response size in bytes to trigger compression (default: 1024 bytes). */
   compressionThresholdBytes: parseNumericEnv('COMPRESSION_THRESHOLD', process.env.COMPRESSION_THRESHOLD ?? process.env.COMPRESSION_THRESHOLD_BYTES, 1024, { min: 1, integer: true }),
-
-  /** Base retry interval in milliseconds for SSE reconnect hints (default: 5000 ms). */
-  sseRetryMs: parseNumericEnv('SSE_RETRY_MS', process.env.SSE_RETRY_MS, 5000, { min: 1, integer: true }),
-
-  /**
-   * Maximum indexer ledger lag (in ledgers) allowed for readiness check.
-   * If the indexer is more than this many ledgers behind the chain tip,
-   * the readiness check will report the indexer as unavailable.
-   * Default: 100 ledgers. Set to 0 to disable the lag check.
-   */
-  readinessMaxLag: parseNumericEnv('READINESS_MAX_LAG', process.env.READINESS_MAX_LAG, 100, { min: 0, integer: true }),
-
-  /**
-   * Startup grace period in milliseconds for the readiness lag check.
-   * After process startup, the indexer is allowed to lag without failing
-   * readiness for this duration (to accommodate initial sync from persisted cursor).
-   * Default: 5 minutes. Set to 0 to disable the grace period.
-   */
-  readinessGracePeriodMs: parseNumericEnv('READINESS_GRACE_PERIOD_MS', process.env.READINESS_GRACE_PERIOD_MS, 5 * 60 * 1000, { min: 0, integer: true }),
 
   /**
    * Log redaction configuration for sensitive data in production logs.
@@ -712,62 +849,122 @@ const config = {
     sampleSize: parseNumericEnv('TIER_DIVERGENCE_SAMPLE_SIZE', process.env.TIER_DIVERGENCE_SAMPLE_SIZE, 100, { min: 1, integer: true }),
   },
 
+  // ── Sensitive-read auditing (#1531) ────────────────────────────────────
+  // Records admin/owner reads of sensitive data (audit trail, exports,
+  // webhook deliveries, notes, API-key listings) in the hash-chained audit
+  // log. Enabled by default in production; set AUDIT_READS_ENABLED=false to
+  // turn it off if audit volume becomes a problem.
+  auditReads: {
+    enabled: (() => {
+      const raw = process.env.AUDIT_READS_ENABLED;
+      if (raw === undefined || raw.trim() === '') return nodeEnv === 'production';
+      return ['true', '1', 'yes'].includes(raw.trim().toLowerCase());
+    })(),
+  },
+
+  // ── Audit-log hash-chain verification (#1539) ──────────────────────────
+  // The scheduled job verifies new audit rows incrementally once an hour and
+  // walks the whole chain weekly, catching edits to already-verified rows.
+  auditVerify: {
+    intervalMs: parseNumericEnv('AUDIT_VERIFY_INTERVAL_MS', process.env.AUDIT_VERIFY_INTERVAL_MS, 3_600_000, { min: 1000, integer: true }),
+    fullIntervalMs: parseNumericEnv('AUDIT_FULL_VERIFY_INTERVAL_MS', process.env.AUDIT_FULL_VERIFY_INTERVAL_MS, 604_800_000, { min: 60_000, integer: true }),
+    batchSize: parseNumericEnv('AUDIT_VERIFY_BATCH_SIZE', process.env.AUDIT_VERIFY_BATCH_SIZE, 5_000, { min: 1, integer: true }),
+    /** Optional SSRF-safe GET webhook fired when a break is detected. */
+    alertWebhookUrl: process.env.AUDIT_ALERT_WEBHOOK_URL?.trim() || null,
+  },
+
   // ── Readiness / health check timeouts ──────────────────────────────────
   // Per-component timeout for readiness probes (#1317)
-  readinessDb: {
-    timeoutMs: parseNumericEnv('READINESS_DB_TIMEOUT_MS', process.env.READINESS_DB_TIMEOUT_MS, 2000, { min: 1, integer: true }),
+  readiness: {
+    timeouts: {
+      dbMs: parseNumericEnv('READINESS_DB_TIMEOUT_MS', process.env.READINESS_DB_TIMEOUT_MS, 2000, { min: 100, max: 30000, integer: true }),
+      ipfsMs: parseNumericEnv('READINESS_IPFS_TIMEOUT_MS', process.env.READINESS_IPFS_TIMEOUT_MS, 5000, { min: 100, max: 30000, integer: true }),
+      stellarMs: parseNumericEnv('READINESS_STELLAR_TIMEOUT_MS', process.env.READINESS_STELLAR_TIMEOUT_MS, 5000, { min: 100, max: 30000, integer: true }),
+    },
+    maxLag: parseNumericEnv('READINESS_MAX_LAG', process.env.READINESS_MAX_LAG, 100, { min: 0, integer: true }),
+    gracePeriodMs: parseNumericEnv('READINESS_GRACE_PERIOD_MS', process.env.READINESS_GRACE_PERIOD_MS, 5 * 60 * 1000, { min: 0, integer: true }),
   },
-  readinessIpfs: {
-    timeoutMs: parseNumericEnv('READINESS_IPFS_TIMEOUT_MS', process.env.READINESS_IPFS_TIMEOUT_MS, 5000, { min: 1, integer: true }),
-  },
-  readinessStellar: {
-    timeoutMs: parseNumericEnv('READINESS_STELLAR_TIMEOUT_MS', process.env.READINESS_STELLAR_TIMEOUT_MS, 5000, { min: 1, integer: true }),
+
+  // ── SSE settings ──────────────────────────────────────────────────────
+
+  // ── Shutdown configuration ────────────────────────────────────────────
+  shutdown: {
+    timeoutMs: parseNumericEnv('SHUTDOWN_TIMEOUT_MS', process.env.SHUTDOWN_TIMEOUT_MS, 10_000, { min: 1_000, max: 600_000, integer: true }),
+    prestopDelayMs: parseNumericEnv('SHUTDOWN_PRESTOP_DELAY_MS', process.env.SHUTDOWN_PRESTOP_DELAY_MS, 0, { min: 0, max: 120_000, integer: true }),
+    /** In-flight request drain window. Unset: half of timeoutMs (see src/shutdown.ts). */
+    requestDrainMs: process.env.SHUTDOWN_REQUEST_DRAIN_MS?.trim()
+      ? parseNumericEnv('SHUTDOWN_REQUEST_DRAIN_MS', process.env.SHUTDOWN_REQUEST_DRAIN_MS, 0, { min: 0, max: 600000, integer: true })
+      : undefined,
+    /** Slice of the budget reserved for Redis/DB/tracing cleanup. */
+    cleanupReserveMs: parseNumericEnv('SHUTDOWN_CLEANUP_RESERVE_MS', process.env.SHUTDOWN_CLEANUP_RESERVE_MS, 2_000, { min: 0, max: 600000, integer: true }),
   },
 
   // ── Server-Sent Events (SSE) ──────────────────────────────────────────
+  // Read through the getters in src/routes/events.ts; tests override these
+  // fields directly (e.g. `config.sse.maxConnections = 1`).
   sse: {
     /** Interval between keep-alive pings sent to SSE clients (ms). */
-    keepaliveIntervalMs: parseNumericEnv('SSE_KEEPALIVE_INTERVAL_MS', process.env.SSE_KEEPALIVE_INTERVAL_MS, 15000, { min: 1, integer: true }),
+    keepaliveIntervalMs: parseNumericEnv('SSE_KEEPALIVE_INTERVAL_MS', process.env.SSE_KEEPALIVE_INTERVAL_MS, 15000, { min: 1000, max: 120000, integer: true }),
+    /** Interval for shared SSE auth sweep (re-check revocations, blocklists) (ms). */
+    authSweepIntervalMs: parseNumericEnv('SSE_AUTH_SWEEP_INTERVAL_MS', process.env.SSE_AUTH_SWEEP_INTERVAL_MS, 30000, { min: 1000, max: 600000, integer: true }),
     /** Max concurrent SSE connections (0 = unlimited). */
     maxConnections: parseNumericEnv('SSE_MAX_CONNECTIONS', process.env.SSE_MAX_CONNECTIONS, 0, { min: 0, integer: true }),
-    /** Interval for shared SSE auth sweep (re-check revocations, blocklists). */
-    authSweepIntervalMs: parseNumericEnv('SSE_AUTH_SWEEP_INTERVAL_MS', process.env.SSE_AUTH_SWEEP_INTERVAL_MS, 30000, { min: 1, integer: true }),
+    /** Max concurrent SSE connections per authenticated wallet (0 = unlimited). */
+    maxConnectionsPerWallet: parseNumericEnv('SSE_MAX_CONNECTIONS_PER_WALLET', process.env.SSE_MAX_CONNECTIONS_PER_WALLET, 5, { min: 0, integer: true }),
+    /** Base retry interval for SSE reconnect hints (ms); jitter is added per connection. */
+    retryMs: parseNumericEnv('SSE_RETRY_MS', process.env.SSE_RETRY_MS, 5000, { min: 1, max: 300000, integer: true }),
   },
 
-  // ── Wallet / cache settings ───────────────────────────────────────────
-  /** TTL for wallet blocklist cache entries (ms). */
-  walletBlocklistCacheTtlMs: parseNumericEnv('WALLET_BLOCKLIST_CACHE_TTL_MS', process.env.WALLET_BLOCKLIST_CACHE_TTL_MS, 30000, { min: 1, integer: true }),
-  
-  /** TTL for feature flag cache entries (ms). */
-  featureFlagCacheTtlMs: parseNumericEnv('FEATURE_FLAG_CACHE_TTL_MS', process.env.FEATURE_FLAG_CACHE_TTL_MS, 5000, { min: 1, integer: true }),
-
-  // ── In-memory cache limits ────────────────────────────────────────────
-  /** Max entries in generic cache stores (LRU eviction). */
-  cacheMaxSize: parseNumericEnv('CACHE_MAX_SIZE', process.env.CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
-  cacheMaxEntries: parseNumericEnv('CACHE_MAX_ENTRIES', process.env.CACHE_MAX_ENTRIES, 1000, { min: 1, integer: true }),
-  playerCacheMaxSize: parseNumericEnv('PLAYER_CACHE_MAX_SIZE', process.env.PLAYER_CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
+  // ── In-memory cache limits and TTLs ───────────────────────────────────
+  // Read at use time so tests can override fields directly.
+  cache: {
+    /** Max entries in src/services/inMemoryCacheStore.ts before eviction. */
+    maxEntries: parseNumericEnv('CACHE_MAX_ENTRIES', process.env.CACHE_MAX_ENTRIES, 1000, { min: 1, integer: true }),
+    /** Max entries in the in-memory store in src/services/cacheStore.ts (LRU eviction). */
+    maxSize: parseNumericEnv('CACHE_MAX_SIZE', process.env.CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
+    /** Max entries in the process-local bounded player cache (src/services/cache.ts). */
+    playerMaxSize: parseNumericEnv('PLAYER_CACHE_MAX_SIZE', process.env.PLAYER_CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
+    /** TTL for synchronous feature-flag lookups (ms). 0 disables caching. */
+    featureFlagTtlMs: parseNumericEnv('FEATURE_FLAG_CACHE_TTL_MS', process.env.FEATURE_FLAG_CACHE_TTL_MS, 5000, { min: 0, integer: true }),
+    /** TTL for cached wallet-blocklist entries (ms). 0 disables caching. */
+    walletBlocklistTtlMs: parseNumericEnv('WALLET_BLOCKLIST_CACHE_TTL_MS', process.env.WALLET_BLOCKLIST_CACHE_TTL_MS, 30000, { min: 0, integer: true }),
+  },
 
   // ── GraphQL DataLoader concurrency ────────────────────────────────────
   /** Max in-flight RPC calls for the milestone GraphQL DataLoader. */
   milestoneLoaderConcurrency: parseNumericEnv('MILESTONE_LOADER_CONCURRENCY', process.env.MILESTONE_LOADER_CONCURRENCY, 8, { min: 1, integer: true }),
 
   // ── Reindexing / catch-up mode ────────────────────────────────────────
-  /** Ledger lag threshold for entering catch-up mode (ledgers). */
-  reindexCatchupThreshold: parseNumericEnv('REINDEX_CATCHUP_THRESHOLD', process.env.REINDEX_CATCHUP_THRESHOLD, 500, { min: 1, integer: true }),
-  /** Ledgers processed per batch in catch-up mode. */
-  reindexCatchupBatchSize: parseNumericEnv('REINDEX_CATCHUP_BATCH_SIZE', process.env.REINDEX_CATCHUP_BATCH_SIZE, 500, { min: 1, integer: true }),
-  /** Ledgers processed per batch in steady-state mode. */
-  reindexBatchSize: parseNumericEnv('REINDEX_BATCH_SIZE', process.env.REINDEX_BATCH_SIZE, 100, { min: 1, integer: true }),
-  /** Delay between reindex batches (ms). */
-  reindexBatchDelayMs: parseNumericEnv('REINDEX_BATCH_DELAY_MS', process.env.REINDEX_BATCH_DELAY_MS, 50, { min: 0, integer: true }),
-  /** Backoff when RPC returns rate-limit errors during reindex (ms). */
-  reindexRateLimitBackoffMs: parseNumericEnv('REINDEX_RATE_LIMIT_BACKOFF_MS', process.env.REINDEX_RATE_LIMIT_BACKOFF_MS, 2000, { min: 1, integer: true }),
+  // Batch sizes are capped at 10 000 ledgers, the maximum reindex range
+  // (MAX_REINDEX_RANGE in src/services/reindexService.ts).
+  reindex: {
+    /** Ledgers processed per batch in steady-state mode. */
+    batchSize: parseNumericEnv('REINDEX_BATCH_SIZE', process.env.REINDEX_BATCH_SIZE, 100, { min: 1, max: 10000, integer: true }),
+    /** Delay between reindex batches in steady-state mode (ms). */
+    batchDelayMs: parseNumericEnv('REINDEX_BATCH_DELAY_MS', process.env.REINDEX_BATCH_DELAY_MS, 50, { min: 0, max: 60000, integer: true }),
+    /** Ledgers processed per batch in catch-up mode (further capped at 1 000 by the service). */
+    catchupBatchSize: parseNumericEnv('REINDEX_CATCHUP_BATCH_SIZE', process.env.REINDEX_CATCHUP_BATCH_SIZE, 500, { min: 1, max: 10000, integer: true }),
+    /** Remaining-ledger threshold above which catch-up mode activates. */
+    catchupThreshold: parseNumericEnv('REINDEX_CATCHUP_THRESHOLD', process.env.REINDEX_CATCHUP_THRESHOLD, 500, { min: 1, integer: true }),
+    /** Backoff when RPC returns rate-limit errors during reindex (ms). */
+    rateLimitBackoffMs: parseNumericEnv('REINDEX_RATE_LIMIT_BACKOFF_MS', process.env.REINDEX_RATE_LIMIT_BACKOFF_MS, 2000, { min: 1, max: 300000, integer: true }),
+  },
 
   // ── Indexer settings ──────────────────────────────────────────────────
-  /** Finality margin: ledgers to hold back from tip to avoid reorgs. */
-  indexerFinalityMargin: parseNumericEnv('INDEXER_FINALITY_MARGIN', process.env.INDEXER_FINALITY_MARGIN, 10, { min: 1, integer: true }),
-  /** Ledger lag threshold before warning logs are emitted. */
-  indexerLagWarnThreshold: parseNumericEnv('INDEXER_LAG_WARN_THRESHOLD', process.env.INDEXER_LAG_WARN_THRESHOLD, 100, { min: 1, integer: true }),
+  /**
+   * How often the contract-event indexer polls Soroban for new ledgers, in
+   * milliseconds (#1568). Stellar closes a ledger roughly every 5 seconds, so
+   * polling faster than that mostly burns RPC quota without new events. Raise
+   * it on testnet/staging to cut RPC usage, lower it for local sandboxes.
+   * Values below 1 s are rejected because they only multiply RPC load.
+   */
+  indexerPollIntervalMs: parseNumericEnv('INDEXER_POLL_INTERVAL_MS', process.env.INDEXER_POLL_INTERVAL_MS, 5000, { min: 1000, max: 300000, integer: true }),
+  indexer: {
+    /** Finality margin: ledgers to hold back from tip to avoid reorgs. */
+    finalityMargin: parseNumericEnv('INDEXER_FINALITY_MARGIN', process.env.INDEXER_FINALITY_MARGIN, 10, { min: 0, max: 1000, integer: true }),
+    /** Ledger lag threshold before warning logs are emitted. */
+    lagWarnThreshold: parseNumericEnv('INDEXER_LAG_WARN_THRESHOLD', process.env.INDEXER_LAG_WARN_THRESHOLD, 100, { min: 1, integer: true }),
+  },
 
   // ── Proxy settings ────────────────────────────────────────────────────
   /** Number of trusted reverse-proxy hops in front of this server (for IP resolution). */
@@ -777,16 +974,48 @@ const config = {
   /** Log queries slower than this threshold (ms). */
   slowQueryThresholdMs: parseNumericEnv('SLOW_QUERY_THRESHOLD_MS', process.env.SLOW_QUERY_THRESHOLD_MS, 50, { min: 0, integer: true }),
 
-  // ── Circuit breakers ──────────────────────────────────────────────────
-  // Default circuit breaker thresholds for generic outbound calls (Stellar RPC, etc.).
-  circuitBreaker: {
-    failureThreshold: parseNumericEnv('CIRCUIT_BREAKER_FAILURE_THRESHOLD', process.env.CIRCUIT_BREAKER_FAILURE_THRESHOLD, 5, { min: 1, integer: true }),
-    resetTimeoutMs: parseNumericEnv('CIRCUIT_BREAKER_RESET_TIMEOUT_MS', process.env.CIRCUIT_BREAKER_RESET_TIMEOUT_MS, 30000, { min: 1, integer: true }),
+  // ── Metrics endpoint protection ────────────────────────────────────────
+  /**
+   * Optional bearer token for /metrics endpoint protection.
+   * When set, requests must include Authorization: Bearer <token>.
+   * Recommended in production to prevent unauthorized scraping of operational metrics.
+   */
+  metrics: {
+    authToken: process.env.METRICS_AUTH_TOKEN ?? '',
+    /**
+     * Optional CIDR allowlist for /metrics endpoint.
+     * Comma-separated list of IPv4 addresses or CIDR ranges (e.g., "10.0.0.0/8,192.168.1.0/24").
+     * When set, requests from outside the CIDRs are rejected with 403.
+     * Uses req.socket.remoteAddress (not X-Forwarded-For) since scrapers connect directly.
+     */
+    allowedCidrs: (() => {
+      const raw = process.env.METRICS_ALLOWED_CIDRS;
+      if (!raw || raw.trim() === '') return [];
+      return raw.split(',').map((cidr) => cidr.trim()).filter(Boolean);
+    })(),
   },
-  // IPFS pinning circuit breaker (often tighter than generic).
-  ipfsBreaker: {
-    failureThreshold: parseNumericEnv('IPFS_BREAKER_FAILURE_THRESHOLD', process.env.IPFS_BREAKER_FAILURE_THRESHOLD, 5, { min: 1, integer: true }),
-    resetTimeoutMs: parseNumericEnv('IPFS_BREAKER_RESET_TIMEOUT_MS', process.env.IPFS_BREAKER_RESET_TIMEOUT_MS, 30000, { min: 1, integer: true }),
+
+  // ── Circuit breakers (#1564) ──────────────────────────────────────────
+  // Thresholds are parsed and validated here so a bad value (`0`, `NaN`,
+  // negative) fails at startup instead of leaving a breaker permanently open
+  // or permanently passing traffic. Empty keys read these values; the breaker
+  // utilities themselves never touch process.env.
+  circuitBreaker: {
+    /** Generic breaker for outbound calls (Stellar RPC, etc.). */
+    default: {
+      failureThreshold: parseNumericEnv('CIRCUIT_BREAKER_FAILURE_THRESHOLD', process.env.CIRCUIT_BREAKER_FAILURE_THRESHOLD, 5, { min: 1, integer: true }),
+      resetTimeoutMs: parseNumericEnv('CIRCUIT_BREAKER_RESET_TIMEOUT_MS', process.env.CIRCUIT_BREAKER_RESET_TIMEOUT_MS, 30000, { min: 1000, integer: true }),
+    },
+    /** Per-webhook-subscription breaker, keyed by subscription id (#1512). */
+    webhook: {
+      failureThreshold: parseNumericEnv('WEBHOOK_BREAKER_FAILURE_THRESHOLD', process.env.WEBHOOK_BREAKER_FAILURE_THRESHOLD, 5, { min: 1, integer: true }),
+      resetTimeoutMs: parseNumericEnv('WEBHOOK_BREAKER_RESET_TIMEOUT_MS', process.env.WEBHOOK_BREAKER_RESET_TIMEOUT_MS, 60000, { min: 1000, integer: true }),
+    },
+    /** IPFS / Pinata pinning breaker (often tuned tighter than the generic one). */
+    ipfs: {
+      failureThreshold: parseNumericEnv('IPFS_BREAKER_FAILURE_THRESHOLD', process.env.IPFS_BREAKER_FAILURE_THRESHOLD, 5, { min: 1, integer: true }),
+      resetTimeoutMs: parseNumericEnv('IPFS_BREAKER_RESET_TIMEOUT_MS', process.env.IPFS_BREAKER_RESET_TIMEOUT_MS, 30000, { min: 1000, integer: true }),
+    },
   },
 
   // ── Database migration validation (#1318) ─────────────────────────────
@@ -848,9 +1077,99 @@ const config = {
    */
   webAuthDomain: process.env.WEB_AUTH_DOMAIN ?? '',
 
+  retention: (() => {
+    const enabledRaw = process.env.RETENTION_ENABLED ?? 'false';
+    if (!['true', 'false'].includes(enabledRaw)) throw new Error('RETENTION_ENABLED must be true or false');
+    const policies = parseRetentionPolicies(process.env.RETENTION_POLICIES);
+    const checkpointKey = process.env.RETENTION_CHECKPOINT_KEY ?? '';
+    if (checkpointKey && !/^[a-fA-F0-9]{64}$/.test(checkpointKey)) throw new Error('RETENTION_CHECKPOINT_KEY must be 32 bytes in hex');
+    if (enabledRaw === 'true' && policies.some(p => p.table === 'audit_log') && !checkpointKey) {
+      throw new Error('Audit retention requires RETENTION_CHECKPOINT_KEY');
+    }
+    return {
+      enabled: enabledRaw === 'true', policies, checkpointKey,
+      batchSize: parseNumericEnv('RETENTION_BATCH_SIZE', process.env.RETENTION_BATCH_SIZE, 1000, { min: 1, max: 1000, integer: true }),
+      pauseMs: parseNumericEnv('RETENTION_PAUSE_MS', process.env.RETENTION_PAUSE_MS, 100, { min: 1, max: 60000, integer: true }),
+      intervalMs: parseNumericEnv('RETENTION_INTERVAL_MS', process.env.RETENTION_INTERVAL_MS, 86400000, { min: 1000, integer: true }),
+      maxBatches: parseNumericEnv('RETENTION_MAX_BATCHES', process.env.RETENTION_MAX_BATCHES, 100, { min: 1, max: 10000, integer: true }),
+      archiveDir: path.resolve(process.env.RETENTION_ARCHIVE_DIR ?? './data/audit-archives'),
+      exportDir: path.resolve(process.env.DATA_EXPORT_ARCHIVE_DIR ?? './data/exports'),
+    };
+  })(),
+
+  /**
+   * Per-dependency readiness criticality configuration (#1317).
+   * Only failures in critical dependencies cause the /ready endpoint to return 503.
+   * Non-critical failures show as degraded in the response body and metrics
+   * while keeping HTTP 200.
+   *
+   * READINESS_CRITICAL — Comma-separated list of critical dependencies.
+   * Valid dependency names: db, ipfs, stellar, indexer
+   * Default: 'db,stellar' (core dependencies that make reads fail)
+   *
+   * When a dependency fails:
+   * - Critical: /ready returns 503 (pod removed from Service)
+   * - Non-critical: /ready returns 200 with degraded status (pod stays in Service)
+   *
+   * Example:
+   *   READINESS_CRITICAL=db,stellar         # Only db and stellar are critical
+   *   READINESS_CRITICAL=db,stellar,indexer # Include indexer as critical
+   *   READINESS_CRITICAL=db                 # Only db is critical
+   */
+  readinessCriticalDependencies: (() => {
+    const raw = process.env.READINESS_CRITICAL ?? 'db,stellar';
+    const deps = raw.split(',').map((d) => d.trim().toLowerCase()).filter((d) => d);
+    const valid = new Set(['db', 'ipfs', 'stellar', 'indexer']);
+    
+    for (const dep of deps) {
+      if (!valid.has(dep)) {
+        throw new Error(
+          `Invalid READINESS_CRITICAL value: "${dep}" is not a valid dependency. ` +
+          `Valid dependencies are: ${Array.from(valid).join(', ')}.`,
+        );
+      }
+    }
+    
+    return new Set(deps);
+  })(),
+
 };
 
+// ── Post-config validation ────────────────────────────────────────────────────
+
+// Validate shutdown configuration: prestopDelayMs must be less than timeoutMs
+if (config.shutdown.prestopDelayMs >= config.shutdown.timeoutMs) {
+  throw new Error(
+    `Invalid shutdown config: SHUTDOWN_PRESTOP_DELAY_MS (${config.shutdown.prestopDelayMs}) ` +
+    `must be less than SHUTDOWN_TIMEOUT_MS (${config.shutdown.timeoutMs}). ` +
+    `The pre-stop delay must leave time for the actual shutdown sequence.`,
+  );
+}
+
 export default config;
+
+// ── Metrics protection warning ────────────────────────────────────────────
+//
+// Warn at startup if /metrics is exposed without protection in production.
+if (nodeEnv === 'production' || nodeEnv === 'staging') {
+  if (!config.metrics.authToken && config.metrics.allowedCidrs.length === 0) {
+    console.warn(
+      '[config] WARNING: /metrics endpoint is exposed without protection (METRICS_AUTH_TOKEN or METRICS_ALLOWED_CIDRS not set). ' +
+      'This exposes operational and business signals to any internet client. ' +
+      'Set METRICS_AUTH_TOKEN or METRICS_ALLOWED_CIDRS to restrict access.',
+    );
+  }
+}
+
+// Validate the HTTP server timeout relationship (#1593): Node requires
+// headersTimeout > keepAliveTimeout, otherwise keep-alive sockets can be
+// closed while headers are still in flight.
+if (config.http.headersTimeoutMs <= config.http.keepAliveTimeoutMs) {
+  throw new Error(
+    `HTTP_HEADERS_TIMEOUT_MS (${config.http.headersTimeoutMs}) must be greater than ` +
+    `HTTP_KEEP_ALIVE_TIMEOUT_MS (${config.http.keepAliveTimeoutMs})`,
+  );
+}
 
 export function isProduction(): boolean { return config.nodeEnv === 'production'; }
 export function isStaging(): boolean { return config.nodeEnv === 'staging'; }

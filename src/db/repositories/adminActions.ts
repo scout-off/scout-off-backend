@@ -1,10 +1,10 @@
 /**
  * Repository: admin multi-sig actions and signatures.
  * Moved from src/db/index.ts (#1322).
- * All functions use getDriver() (async) — compatible with both SQLite and PostgreSQL.
+ *
+ * Driver status: fully on `getDriver()` (async) — works on both SQLite and PostgreSQL.
  */
-import { timedQueryAsync } from '../index';
-import { getDriver } from '../index';
+import { getDriver, timedQueryAsync } from '../query';
 
 export interface PendingAdminActionRow {
   id: string;

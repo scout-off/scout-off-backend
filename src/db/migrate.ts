@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { DbDriver, DbTxHandle } from './driver';
-import { getMigrationFiles } from './migration-files';
+import { getMigrationFiles, isPostgresDialectFile } from './migration-files';
 import { PostgresDriver } from './postgres-driver';
 
 const MIGRATIONS_DIR = path.resolve(__dirname, '../../db');
@@ -102,9 +102,9 @@ function getDownMigrationFile(allFiles: string[], upFilename: string): string | 
  * on anything beyond trivial syntax differences).
  */
 function getDialectCounterpart(filename: string, allFiles: string[]): string | null {
-  const counterpart = filename.includes('_postgres')
-    ? filename.replace('_postgres.sql', '.sql')
-    : filename.replace('.sql', '_postgres.sql');
+  const counterpart = isPostgresDialectFile(filename)
+    ? filename.replace(/_postgres(\.down)?\.sql$/, '$1.sql')
+    : filename.replace(/(\.down)?\.sql$/, '_postgres$1.sql');
   return allFiles.includes(counterpart) ? counterpart : null;
 }
 
@@ -125,7 +125,7 @@ async function processUpMigrations(
   const filesToApply = pendingFiles.slice(0, maxSteps);
 
   for (const filename of filesToApply) {
-    const isPostgresFile = filename.includes('_postgres');
+    const isPostgresFile = isPostgresDialectFile(filename);
     const dialectMismatch = isPostgresFile !== isPostgres;
 
     // A dedicated, correctly-dialected file for this migration already
@@ -248,7 +248,7 @@ async function processDownMigrations(
     }
 
     const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, downFile), 'utf8');
-    const isPostgresFile = downFile.includes('_postgres');
+    const isPostgresFile = isPostgresDialectFile(downFile);
     let finalSql: string;
 
     if (isPostgres) {
@@ -369,7 +369,7 @@ function convertSqlToPostgres(sql: string): string {
   if (!converted.includes('ON CONFLICT')) {
     converted = converted.replace(
       /INSERT INTO ([a-z_]+) \(([^)]+)\) VALUES/gi,
-      (match, table, columns) => {
+      (match) => {
         if (sql.includes('INSERT OR IGNORE')) {
           return match + ' ON CONFLICT DO NOTHING ';
         }

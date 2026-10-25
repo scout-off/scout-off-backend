@@ -7,6 +7,9 @@
  *   - Event normalization and deterministic ordering
  *   - Duplicate-safe insertion via INSERT OR IGNORE
  *   - Progress tracking and audit logging
+ *   - Support for dynamic batch sizing (catch-up mode)
+ *   - Support for cancellation
+ *   - Support for rate-limit backoff
  *
  * This module contains the core event processing pipeline without any
  * cursor management logic, making it suitable for both full reindex
@@ -16,9 +19,8 @@
 import { server } from './stellar';
 import config from '../config';
 import { getDb } from '../db';
-import { normalizeEventId, normalizeSorobanEvent } from './indexer';
+import { normalizeEventId, normalizeSorobanEvent, getIndexedContractIds } from './indexer';
 import { normalizeAndSortEvents, type RawIndexerEvent } from './eventOrdering';
-import { logAuditEvent } from './audit';
 import { logger } from '../utils/logger';
 
 export interface BatchProcessorOptions {
@@ -34,6 +36,20 @@ export interface BatchProcessorOptions {
   adminWallet: string;
   /** Optional progress callback called after each batch. */
   onProgress?: (progress: BatchProcessorProgress) => void;
+  /** Contract IDs to fetch events from. Defaults to the full indexed contract list. */
+  contractIds?: string[];
+  /** Optional function to dynamically compute batch size based on remaining ledgers. */
+  getBatchSize?: (remainingLedgers: number) => number;
+  /** Optional function to dynamically compute batch delay based on current batch state. */
+  getBatchDelay?: (currentBatchStart: number, remainingLedgers: number) => number;
+  /** Optional hook called after each batch completes (for cursor persistence, etc.). */
+  onBatchComplete?: (lastLedger: number, eventsInserted: number) => void | Promise<void>;
+  /** Optional hook to check if the job should be cancelled. */
+  shouldCancel?: () => boolean;
+  /** Optional function to detect rate-limit errors (for backoff logic). */
+  isRateLimitError?: (err: unknown) => boolean;
+  /** Backoff delay in ms when a rate-limit error is detected. */
+  rateLimitBackoffMs?: number;
 }
 
 export interface BatchProcessorProgress {
@@ -59,6 +75,9 @@ export interface BatchProcessorResult {
  *   - Inserts events using INSERT OR IGNORE (duplicate-safe)
  *   - Calls the progress callback after each batch
  *   - Does NOT modify the indexer cursor (persistLastIndexedLedger)
+ *   - Supports dynamic batch sizing and delays via hooks
+ *   - Supports cancellation via shouldCancel hook
+ *   - Supports rate-limit backoff via isRateLimitError hook
  *
  * @param options - Configuration for the batch processor
  * @returns Result with count of newly inserted events
@@ -71,10 +90,18 @@ export async function processEventBatches(
     toLedger,
     batchSize,
     batchDelayMs,
-    adminWallet,
     onProgress,
+    contractIds: explicitContractIds,
+    getBatchSize,
+    getBatchDelay,
+    onBatchComplete,
+    shouldCancel,
+    isRateLimitError,
+    rateLimitBackoffMs = 2000,
   } = options;
 
+  const contractIds = explicitContractIds ?? getIndexedContractIds();
+  const primaryContractId = contractIds.length > 0 ? contractIds[0] : config.registerContractId;
   const db = getDb();
   const insert = db.prepare(
     `INSERT OR IGNORE INTO events
@@ -87,18 +114,39 @@ export async function processEventBatches(
 
   try {
     while (currentBatchStart <= toLedger) {
-      const batchEnd = Math.min(currentBatchStart + batchSize - 1, toLedger);
+      // Check for cancellation before processing the batch
+      if (shouldCancel?.()) {
+        logger.info(`[batchProcessor] cancelled at ledger=${currentBatchStart}`);
+        return {
+          eventsInserted,
+          ledgersProcessed: currentBatchStart - fromLedger,
+          error: 'cancelled',
+        };
+      }
+
+      const remaining = toLedger - currentBatchStart + 1;
+      const dynamicBatchSize = getBatchSize ? getBatchSize(remaining) : batchSize;
+      const batchEnd = Math.min(currentBatchStart + dynamicBatchSize - 1, toLedger);
 
       let batchEvents: Awaited<ReturnType<typeof server.getEvents>>['events'] = [];
       try {
         const response = await server.getEvents({
           startLedger: currentBatchStart,
-          filters: [{ type: 'contract', contractIds: [config.registerContractId] }],
+          filters: [{ type: 'contract', contractIds: contractIds.length ? contractIds : [primaryContractId] }],
         });
         batchEvents = response.events.filter(
           (e: (typeof response.events)[number]) => e.ledger >= currentBatchStart && e.ledger <= batchEnd,
         );
       } catch (rpcErr: unknown) {
+        if (isRateLimitError?.(rpcErr)) {
+          // Rate-limit error: back off and retry the same batch
+          logger.warn(
+            `[batchProcessor] rate-limited, backing off ${rateLimitBackoffMs}ms ` +
+            `(ledger ${currentBatchStart}-${batchEnd})`,
+          );
+          await _delay(rateLimitBackoffMs);
+          continue; // retry without advancing currentBatchStart
+        }
         logger.warn(
           `[batchProcessor] RPC error on ledger batch ${currentBatchStart}-${batchEnd}: ${
             rpcErr instanceof Error ? rpcErr.message : String(rpcErr)
@@ -111,14 +159,14 @@ export async function processEventBatches(
         ledger: raw.ledger,
         txHash: raw.txHash,
         id: raw.id,
-        contractId: raw.contractId ?? config.registerContractId,
+        contractId: raw.contractId ?? primaryContractId,
         topic: raw.topic,
         value: raw.value,
         ledgerClosedAt: raw.ledgerClosedAt,
         txIndex: raw.txIndex,
         eventIndex: raw.eventIndex,
       }));
-      const ordered = normalizeAndSortEvents(rawEvents, config.registerContractId);
+      const ordered = normalizeAndSortEvents(rawEvents, primaryContractId);
 
       // Insert events from this batch in a single transaction, in total order.
       const insertBatch = db.transaction(
@@ -156,14 +204,20 @@ export async function processEventBatches(
         },
       );
 
-      eventsInserted += insertBatch(ordered);
+      const batchInserted = insertBatch(ordered);
+      eventsInserted += batchInserted;
 
       const ledgersProcessed = batchEnd - fromLedger + 1;
 
       logger.info(
         `[batchProcessor] batch done ledgers=${currentBatchStart}-${batchEnd} ` +
-        `batchSize=${batchSize} eventsInserted=${eventsInserted} total`,
+        `batchSize=${dynamicBatchSize} eventsInserted=${eventsInserted} total`,
       );
+
+      // Call onBatchComplete hook for cursor persistence, etc.
+      if (onBatchComplete) {
+        await onBatchComplete(batchEnd, batchInserted);
+      }
 
       if (onProgress) {
         onProgress({
@@ -177,9 +231,10 @@ export async function processEventBatches(
 
       currentBatchStart = batchEnd + 1;
 
-      // Throttle between batches if configured
-      if (batchDelayMs > 0 && currentBatchStart <= toLedger) {
-        await _delay(batchDelayMs);
+      // Throttle between batches
+      const dynamicDelay = getBatchDelay ? getBatchDelay(currentBatchStart, toLedger - currentBatchStart + 1) : batchDelayMs;
+      if (dynamicDelay > 0 && currentBatchStart <= toLedger) {
+        await _delay(dynamicDelay);
       }
     }
 

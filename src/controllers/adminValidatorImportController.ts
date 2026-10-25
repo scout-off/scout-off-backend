@@ -222,7 +222,7 @@ export async function processBatch(
  * @response 400 { success: false, error: string } - Unparseable body or no entries
  * @auth Bearer (admin role required)
  */
-export async function importValidators(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function importValidators(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const adminWallet = req.account ?? 'unknown';
   const contentType = (req.headers['content-type'] ?? '').toLowerCase();
 

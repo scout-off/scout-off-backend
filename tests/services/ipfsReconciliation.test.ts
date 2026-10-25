@@ -12,6 +12,11 @@ jest.mock('../../src/config', () => ({
     },
     logLevel: 'warn',
     nodeEnv: 'test',
+    // Circuit-breaker thresholds are injected from config (#1564).
+    circuitBreaker: {
+      default: { failureThreshold: 5, resetTimeoutMs: 30000 },
+      ipfs: { failureThreshold: 5, resetTimeoutMs: 30000 },
+    },
     pinJsonCacheTtlMs: 300000,
     ipfsReconcileAgeMs: 300000, // 5 min
     ipfsReconcileIntervalMs: 60000,

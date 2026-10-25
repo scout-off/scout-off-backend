@@ -12,6 +12,9 @@
  *   NOTES_ENCRYPTION_KEY=<new-key> \
  *   NOTES_ENCRYPTION_KEY_PREVIOUS=<old-key> \
  *   node scripts/reencrypt-notes.js
+ *
+ * Deprecated (#1513): prefer the online re-encryption job and keyring described in
+ * docs/secrets-rotation.md. This script shares the same fieldCipher code path.
  */
 
 require('dotenv').config();

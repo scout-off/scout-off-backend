@@ -31,6 +31,7 @@ import {
   WebhookDeadLetter,
 } from '../db';
 import { postWebhookWithRetry } from './webhooks';
+import { isSuspended, refreshSubscriptionStatusGauge } from './webhookHealth';
 import { logger } from '../utils/logger';
 import { incrementWebhookRetrySuccessTotal } from '../middleware/metrics';
 import { evaluateDeadLetterAlerts } from './webhookDeadLetterAlerts';
@@ -79,6 +80,7 @@ export async function runDeadLetterRetryJob(): Promise<number> {
   const total = countWebhookDeadLetters();
   const bySubscription = countWebhookDeadLettersBySubscription();
   await evaluateDeadLetterAlerts(total, bySubscription);
+  refreshSubscriptionStatusGauge();
 
   // ── Pick eligible rows ───────────────────────────────────────────────────────
   // Fetch a generous page (up to 200) and filter in-process so we don't need
@@ -127,6 +129,13 @@ export async function runDeadLetterRetryJob(): Promise<number> {
   // Process sequentially (not Promise.all) to avoid overwhelming subscribers.
   // Each claim is atomic — only one concurrent sweep wins.
   for (const deadLetter of refreshedEligible) {
+    // Suspended subscriptions get no delivery attempts (#1512); leave the row
+    // pending, without consuming a retry, until the owner reactivates.
+    const target =
+      subscriptions.find((s) => s.id === deadLetter.subscription_id) ??
+      subscriptions.find((s) => s.url === deadLetter.url);
+    if (target && isSuspended(target)) continue;
+
     // Atomically claim the row — only one caller wins.
     const claimed = claimWebhookDeadLetter(deadLetter.id, _currentWorkerId!);
     if (!claimed) {

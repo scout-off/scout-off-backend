@@ -1,5 +1,6 @@
 #![no_std]
 
+use scout_off_shared::access;
 use scout_off_shared::{
     errors::Error,
     events::{emit_contact_unlocked, emit_scout_subscribed},
@@ -54,6 +55,87 @@ pub struct SubscriptionContract;
 
 #[contractimpl]
 impl SubscriptionContract {
+    /// Bootstrap RBAC on an upgraded instance. Only the stored legacy admin may authorize.
+    pub fn initialize_roles(env: Env, admin: Address) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        let legacy: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+        if admin != legacy {
+            return Err(Error::Unauthorized);
+        }
+        access::initialize(&env, &admin)
+    }
+
+    pub fn has_role(env: Env, role: soroban_sdk::Symbol, account: Address) -> bool {
+        access::has_role(&env, &role, &account)
+    }
+
+    pub fn get_role_admin(env: Env, role: soroban_sdk::Symbol) -> soroban_sdk::Symbol {
+        access::get_role_admin(&env, &role)
+    }
+
+    pub fn grant_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::grant_role(&env, &caller, &role, &account)
+    }
+
+    pub fn revoke_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::revoke_role(&env, &caller, &role, &account)
+    }
+
+    pub fn renounce_role(
+        env: Env,
+        account: Address,
+        role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::renounce_role(&env, &account, &role)
+    }
+
+    pub fn set_role_admin(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        admin_role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::set_role_admin(&env, &caller, &role, &admin_role)
+    }
+
+    pub fn upgrade(
+        env: Env,
+        caller: Address,
+        wasm_hash: soroban_sdk::BytesN<32>,
+    ) -> Result<(), Error> {
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::DEFAULT_ADMIN),
+            &caller,
+        )?;
+        env.deployer().update_current_contract_wasm(wasm_hash);
+        Ok(())
+    }
+
+    /// Return the contract's semantic version as `(major, minor, patch)`.
+    ///
+    /// Read-only, auth-free. Used by the backend at startup for compatibility checks.
+    pub fn version(_env: Env) -> (u32, u32, u32) {
+        (0, 1, 0)
+    }
+
     /// One-time contract setup. Stores the admin, payment token, and platform fee config.
     pub fn initialize(
         env: Env,
@@ -66,6 +148,7 @@ impl SubscriptionContract {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
+        access::initialize(&env, &admin)?;
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage()
             .instance()
@@ -294,16 +377,11 @@ impl SubscriptionContract {
             return Err(Error::InvalidInput);
         }
 
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::FEE_MANAGER),
+            &admin,
+        )?;
 
         let balance: i128 = env
             .storage()
@@ -346,7 +424,7 @@ impl SubscriptionContract {
     ///
     /// # Errors
     /// * [`Error::NotInitialized`] — Contract has not been initialized.
-    /// * [`Error::InvalidInput`] — `platform_fee_bps` exceeds 10000.
+    /// * [`Error::FeeBpsOutOfRange`] — `platform_fee_bps` exceeds 10000.
     /// * [`Error::Unauthorized`] — Caller is not the stored admin.
     pub fn set_platform_fee_bps(
         env: Env,
@@ -360,17 +438,13 @@ impl SubscriptionContract {
             return Err(Error::ContractPaused);
         }
         if platform_fee_bps > 10000 {
-            return Err(Error::InvalidInput);
+            return Err(Error::FeeBpsOutOfRange);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::FEE_MANAGER),
+            &admin,
+        )?;
         env.storage()
             .instance()
             .set(&DataKey::PlatformFeeBps, &platform_fee_bps);
@@ -406,15 +480,11 @@ impl SubscriptionContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         scout_off_shared::storage::set_paused(&env, true);
         bump_instance(&env);
         Ok(())
@@ -432,15 +502,11 @@ impl SubscriptionContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         scout_off_shared::storage::set_paused(&env, false);
         bump_instance(&env);
         Ok(())
@@ -464,8 +530,9 @@ impl SubscriptionContract {
     /// # Errors
     /// * [`Error::NotInitialized`] — Contract has not been initialized.
     /// * [`Error::ContractPaused`] — Contract is paused.
-    /// * [`Error::NotSubscribed`] — Scout has no active subscription or it has
-    ///   already expired/been cancelled.
+    /// * [`Error::NotSubscribed`] — Scout has never subscribed.
+    /// * [`Error::SubscriptionExpired`] — Scout's subscription has expired or
+    ///   was already cancelled.
     pub fn cancel_subscription(env: Env, scout: Address) -> Result<(), Error> {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
@@ -485,7 +552,7 @@ impl SubscriptionContract {
         // Reject if the subscription is already expired or previously cancelled
         // (expires_at == 0 is the sentinel we write below).
         if env.ledger().sequence() >= record.expires_at || record.expires_at == 0 {
-            return Err(Error::NotSubscribed);
+            return Err(Error::SubscriptionExpired);
         }
 
         // Mark as cancelled by setting expires_at to the current ledger (= expired now).
@@ -788,7 +855,7 @@ mod tests {
         client.initialize(&admin, &token, &100);
         assert_eq!(
             client.try_set_platform_fee_bps(&admin, &10001u32),
-            Err(Ok(Error::InvalidInput))
+            Err(Ok(Error::FeeBpsOutOfRange))
         );
     }
 
@@ -986,5 +1053,13 @@ mod tests {
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
         }
+    }
+
+    #[test]
+    fn version_returns_semver_tuple() {
+        let env = Env::default();
+        let (client, _admin, _token_addr) = setup(&env);
+        let (major, _minor, _patch) = client.version();
+        assert_eq!(major, 0);
     }
 }

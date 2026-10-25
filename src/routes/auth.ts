@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
 import { methodNotAllowed } from '../middleware/methodNotAllowed';
 import { validateBody } from '../middleware/validate';
+import { enforceAuthLockout } from '../middleware/authFailureLockout';
 import config from '../config';
 import { extractAccount } from '../services/sep10';
 import { verifyJwt } from '../utils/jwt';
@@ -71,7 +72,7 @@ function refreshAccountKey(req: Request): string | undefined {
  * /auth/token.
  *
  * @query account {string} - Stellar public key (G...) to build the challenge for
- * @response 200 { challenge: string, networkPassphrase: string }
+ * @response 200 { challenge: string, networkPassphrase: string, expiresAt: number }
  * @response 400 { success: false, error: string } - Missing/invalid account
  */
 router.route('/challenge')
@@ -87,7 +88,7 @@ router.route('/challenge')
  * `player`) is used.
  *
  * @body { transaction: string, role?: 'validator' | 'player' | 'scout' } - Signed challenge XDR
- * @response 200 { token, accessToken, refreshToken, account, expiresAt }
+ * @response 200 { success: true, token, accessToken, refreshToken, account, expiresAt }
  * @response 400 { success: false, error: string } - Invalid body or malformed XDR
  * @response 401 { success: false, error: string } - Invalid signature or expired challenge
  */
@@ -95,6 +96,7 @@ router.route('/token')
   .post(
     authIpRateLimit('token'),
     authAccountRateLimit('token', tokenAccountKey),
+    enforceAuthLockout,
     validateBody(tokenSchema),
     postToken,
   )

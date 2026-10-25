@@ -1,6 +1,5 @@
 import {
   rpc,
-  Networks,
   Contract,
   TransactionBuilder,
   BASE_FEE,
@@ -8,14 +7,14 @@ import {
   Account,
   Address,
   scValToNative,
-  nativeToScVal,
 } from '@stellar/stellar-sdk';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
+import { extractContractErrorCode } from '../utils/contractErrors';
 import { correlationMemoFromContext, recordTxCorrelation } from './txCorrelation';
 import { getRequestSignal } from '../utils/requestContext';
 
-import { stellarBreaker } from '../utils/circuitBreaker';
+import { RetryingCircuitBreaker } from '../utils/circuitBreaker';
 import { getPlayerById } from '../db';
 
 const tracer = trace.getTracer('scout-off-backend');
@@ -32,6 +31,16 @@ if ((rawServer as { httpClient?: { defaults?: { timeout?: number } } }).httpClie
     config.stellarRpcTimeoutMs;
 }
 
+/**
+ * Stellar RPC breaker (#1564). Thresholds come from the validated config so an
+ * invalid CIRCUIT_BREAKER_* value fails at startup instead of silently
+ * disabling the breaker.
+ */
+export const stellarBreaker = new RetryingCircuitBreaker({
+  failureThreshold: config.circuitBreaker.default.failureThreshold,
+  resetTimeoutMs: config.circuitBreaker.default.resetTimeoutMs,
+});
+
 const server = new Proxy(rawServer, {
   get(target, prop, receiver) {
     const value = Reflect.get(target, prop, receiver);
@@ -42,7 +51,7 @@ const server = new Proxy(rawServer, {
   }
 });
 
-export { server, stellarBreaker };
+export { server };
 
 export function networkPassphrase(): string {
   return config.networkPassphrase;
@@ -79,7 +88,7 @@ export async function sendTransactionWithCorrelation(
   }
   const sendResult = await server.sendTransaction(preparedTx);
   if (sendResult.hash) {
-    recordTxCorrelation(sendResult.hash);
+    await recordTxCorrelation(sendResult.hash);
   }
   return sendResult;
 }
@@ -140,17 +149,17 @@ export async function requireOnChainPlayerId(playerId: string): Promise<bigint> 
 
 /** Matches the contract's ContractPaused (#10) error in a simulation/result error string. */
 export function isContractPausedError(message: string): boolean {
-  return /#10\b/.test(message) || /contract.?paused/i.test(message);
+  return extractContractErrorCode(message) === 10 || /contract.?paused/i.test(message);
 }
 
 /** Matches the contract's PlayerNotFound (#3) error in a simulation/result error string. */
 export function isPlayerNotFoundError(message: string): boolean {
-  return /#3\b/.test(message) || /player.?not.?found/i.test(message);
+  return extractContractErrorCode(message) === 3 || /player.?not.?found/i.test(message);
 }
 
 /** Matches Soroban contract error #7 (InsufficientFee) in a simulation/result error string. */
 export function isInsufficientFeeError(message: string): boolean {
-  return /#7\b/.test(message) || /insufficient.?fee/i.test(message);
+  return extractContractErrorCode(message) === 7 || /insufficient.?fee/i.test(message);
 }
 
 /**

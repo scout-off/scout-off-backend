@@ -29,6 +29,10 @@ jest.mock('../../src/services/stellar', () => ({
     getEvents: (...args: unknown[]) => mockGetEvents(...args),
   },
 }));
+jest.mock('../../src/services/indexer', () => ({
+  ...jest.requireActual('../../src/services/indexer'),
+  getIndexedContractIds: jest.fn(() => ['CONTRACT_A']),
+}));
 
 // Reset the singleton reindex state before each test so tests are independent.
 import { _resetReindexState } from '../../src/services/reindexService';

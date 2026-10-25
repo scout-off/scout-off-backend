@@ -43,12 +43,12 @@ describe('featureFlags cache and audit behaviour', () => {
     jest.spyOn(db, 'upsertFeatureFlag').mockResolvedValue(undefined);
     jest.spyOn(audit, 'logAuditEvent').mockResolvedValue(undefined);
 
-    await setFeatureFlag('player_tokens', true, 'admin-wallet');
+    await setFeatureFlag('player_tokens_enabled', true, 'admin-wallet');
 
     // Cache is refreshed synchronously — no further DB read needed.
     const getFeatureFlag = jest.spyOn(db, 'getFeatureFlag');
     const callsBefore = getFeatureFlag.mock.calls.length;
-    expect(await isFeatureEnabled('player_tokens')).toBe(true);
+    expect(await isFeatureEnabled('player_tokens_enabled')).toBe(true);
     expect(getFeatureFlag.mock.calls.length).toBe(callsBefore);
   });
 

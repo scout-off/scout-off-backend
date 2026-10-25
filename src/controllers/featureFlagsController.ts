@@ -11,6 +11,7 @@
  */
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { requiredError } from '../validators/requiredError';
 import { getAllFeatureFlags, getFeatureFlag } from '../db';
 import { setFeatureFlag, clearFeatureFlagCache } from '../services/featureFlags';
 
@@ -29,7 +30,7 @@ export const updateFeatureFlagBodySchema = z.object({
 }).strict();
 
 export const toggleFlagBodySchema = z.object({
-  enabled: z.boolean({ required_error: 'enabled is required' }),
+  enabled: z.boolean(requiredError('enabled is required')),
 }).strict();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ function serializeFlag(row: { name: string; enabled: number; updated_at: number;
 export async function getFeatureFlags(
   _req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   // Force re-read from DB by clearing cache first
   clearFeatureFlagCache();
@@ -80,13 +81,13 @@ export async function getFeatureFlags(
 export async function updateFeatureFlag(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const parsed = updateFeatureFlagBodySchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
       success: false,
-      error: parsed.error.errors[0]?.message ?? 'Invalid request body',
+      error: parsed.error.issues[0]?.message ?? 'Invalid request body',
     });
     return;
   }
@@ -120,7 +121,7 @@ export async function updateFeatureFlag(
 export async function toggleFeatureFlag(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {name} = req.params as {name: string};
 
@@ -136,7 +137,7 @@ export async function toggleFeatureFlag(
   if (!parsed.success) {
     res.status(400).json({
       success: false,
-      error: parsed.error.errors[0]?.message ?? 'Invalid request body',
+      error: parsed.error.issues[0]?.message ?? 'Invalid request body',
     });
     return;
   }

@@ -149,6 +149,26 @@ describe('POST /auth/refresh', () => {
     expect(res.body.code).toBe('TOKEN_INVALID');
   });
 
+  it('returns 401 TOKEN_INVALID for a refresh token without a role', async () => {
+    const noRole = jwt.sign(
+      { sub: 'GACCOUNT123', type: 'refresh', jti: crypto.randomUUID() },
+      SECRET,
+      { expiresIn: 3600 },
+    );
+    const res = await request(app).post('/auth/refresh').send({ refreshToken: noRole });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/malformed/i);
+    expect(res.body.code).toBe('TOKEN_INVALID');
+  });
+
+  it('returns 401 TOKEN_INVALID for a refresh token with an unknown role', async () => {
+    const refreshToken = makeRefreshToken('GACCOUNT123', 'superuser');
+    const res = await request(app).post('/auth/refresh').send({ refreshToken });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/malformed/i);
+    expect(res.body.code).toBe('TOKEN_INVALID');
+  });
+
   it('returns a new token pair for a valid refresh token', async () => {
     const refreshToken = makeRefreshToken('GACCOUNT123', 'scout');
     const res = await request(app)

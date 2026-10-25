@@ -14,7 +14,7 @@
 
 import fc from 'fast-check';
 import { normalizeEventId, normalizePayload } from '../../src/services/indexer';
-import { insertEvent, dbAll, countEvents } from '../helpers/db';
+import { insertEvent, dbAll, countEvents, dbRun } from '../helpers/db';
 
 const PROPERTY_SEED = 1323;
 const NUM_RUNS = 60;
@@ -59,6 +59,14 @@ describe('indexer normalizePayload / normalizeEventId properties (#1323)', () =>
 });
 
 describe('indexer DB idempotency properties (#1323)', () => {
+  // The generated rows span ledgers 1–500 and were previously left behind in
+  // the shared test database. On PostgreSQL that leaked into later suites
+  // (e.g. indexer.test.ts asserts on every row with ledger >= 300), so clean
+  // up everything this suite generated.
+  afterEach(async () => {
+    await dbRun("DELETE FROM events WHERE tx_hash LIKE 'prop-tx-%'");
+  });
+
   it('re-inserting the same batch (or overlapping windows) yields the same unique rows', async () => {
     await fc.assert(
       fc.asyncProperty(

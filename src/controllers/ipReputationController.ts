@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { requiredError } from '../validators/requiredError';
 import { setIpScore, getReputation } from '../services/ipReputation';
 import { isValidIpAddress } from '../utils/validators';
 
 export const setIpReputationSchema = z.object({
-  ip: z.string({ required_error: 'ip is required' }).min(1, 'ip is required'),
+  ip: z.string(requiredError('ip is required')).min(1, 'ip is required'),
   score: z.number().int().min(0).max(100),
 }).strict();
 
@@ -24,7 +25,7 @@ export function setIpReputationController(req: Request, res: Response): void {
   if (!parsed.success) {
     res.status(400).json({
       success: false,
-      error: parsed.error.errors[0]?.message ?? 'Validation error',
+      error: parsed.error.issues[0]?.message ?? 'Validation error',
     });
     return;
   }

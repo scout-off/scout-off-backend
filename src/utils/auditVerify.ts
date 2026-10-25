@@ -1,4 +1,5 @@
-import { getAllAuditLogRows, AuditLogRow } from '../db';
+import { getDriver, AuditLogRow } from '../db';
+import { latestAuditCheckpoint, verifyCheckpointArchive } from './auditCheckpoint';
 import { computeChainHash, auditChainContent, GENESIS_HASH } from './hashChain';
 import { logger } from './logger';
 import config from '../config';
@@ -34,6 +35,17 @@ export interface AuditChainReport {
 
 const BATCH_SIZE = 1000;
 
+async function auditSnapshot(): Promise<{ rows: AuditLogRow[]; initialHash: string }> {
+  return getDriver().transaction(async tx => {
+    await tx.lockForWrite('audit_log');
+    const checkpoint = await latestAuditCheckpoint(tx);
+    if (checkpoint) await verifyCheckpointArchive(checkpoint);
+    const rows = await tx.all<AuditLogRow>('SELECT * FROM audit_log ORDER BY id ASC');
+    if (checkpoint && rows.some(row => Number(row.id) <= checkpoint.last_id)) throw new Error('Live audit rows overlap the signed checkpoint');
+    return { rows, initialHash: checkpoint?.last_hash ?? GENESIS_HASH };
+  });
+}
+
 /**
  * Walks the entire audit_log table in id ASC order, recomputing each row's
  * expected hash and collecting ALL violations rather than stopping at the
@@ -52,12 +64,19 @@ const BATCH_SIZE = 1000;
 export async function verifyAuditChainFull(deadlineMs?: number): Promise<AuditChainReport> {
   const deadline = deadlineMs ?? Date.now() + config.requestTimeoutMs - 500;
 
-  // Fetch all rows at once (getAllAuditLogRows does not support limit/offset).
-  const allRows: AuditLogRow[] = await getAllAuditLogRows();
+  let snapshot: Awaited<ReturnType<typeof auditSnapshot>>;
+  try { snapshot = await auditSnapshot(); }
+  catch (err) {
+    logger.error({ err }, 'Audit checkpoint verification failed');
+    return { status: 'tampered', chain_length: 0, rows_checked: 0, violations: [{
+      id: 0, expected_hash: 'valid signed checkpoint and archive', stored_hash: 'invalid', audit_event_type: 'checkpoint', created_at: '',
+    }] };
+  }
+  const allRows = snapshot.rows;
   const totalRows = allRows.length;
 
   const violations: AuditViolation[] = [];
-  let expectedPrevHash = GENESIS_HASH;
+  let expectedPrevHash = snapshot.initialHash;
   let rowsChecked = 0;
 
   // Process in logical batches so the deadline can be checked periodically
@@ -78,7 +97,7 @@ export async function verifyAuditChainFull(deadlineMs?: number): Promise<AuditCh
         expectedPrevHash,
       );
 
-      if (row.hash !== expectedHash) {
+      if (row.hash !== expectedHash || row.prev_hash !== expectedPrevHash) {
         const violation: AuditViolation = {
           id: row.id,
           expected_hash: expectedHash,
@@ -129,8 +148,13 @@ export async function verifyAuditChainFull(deadlineMs?: number): Promise<AuditCh
  * @deprecated Use verifyAuditChainFull() for richer reporting (#764).
  */
 export async function verifyAuditChain(): Promise<AuditChainVerification> {
-  const rows: AuditLogRow[] = await getAllAuditLogRows();
-  let expectedPrevHash = GENESIS_HASH;
+  let snapshot: Awaited<ReturnType<typeof auditSnapshot>>;
+  try { snapshot = await auditSnapshot(); }
+  catch (err) {
+    return { valid: false, brokenAtId: null, reason: `Audit checkpoint verification failed: ${(err as Error).message}`, rowsChecked: 0 };
+  }
+  const rows = snapshot.rows;
+  let expectedPrevHash = snapshot.initialHash;
 
   for (const row of rows) {
     if (row.prev_hash !== expectedPrevHash) {

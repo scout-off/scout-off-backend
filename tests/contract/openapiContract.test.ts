@@ -312,6 +312,11 @@ const ALLOWLIST: Record<string, string> = {
   "GET /admin/audit": "admin-only read; requires admin JWT + audit rows",
   "GET /admin/audit/trail": "admin-only read; requires admin JWT + audit rows",
   "GET /admin/audit/verify": "admin-only read; requires admin JWT + audit rows",
+  "GET /admin/encryption/status": "admin-only read; keyring status covered in fieldReencryptionJob.test.ts",
+  "GET /admin/indexer/unprocessed": "admin-only read; requires admin JWT + unprocessed event rows (indexerUnprocessed.test.ts)",
+  "POST /admin/indexer/unprocessed/{id}/retry": "admin-only write; replay path covered in indexerUnprocessed.test.ts",
+  "POST /admin/webhooks/{id}/reactivate": "admin-only write; covered in webhookHealth.test.ts",
+  "GET /admin/retention/dry-run": "admin-only read; retention candidate fixtures covered in retention.test.ts",
   "POST /admin/contract/pause": "admin-only write; requires admin JWT",
   "POST /admin/contract/unpause": "admin-only write; requires admin JWT",
   "GET /admin/events": "admin-only read; requires admin JWT + indexed events",
@@ -421,6 +426,7 @@ const ALLOWLIST: Record<string, string> = {
   "GET /scouts/{wallet}/webhooks": "requires scout JWT + webhook fixtures",
   "POST /scouts/{wallet}/webhooks": "write op; requires scout JWT",
   "DELETE /scouts/{wallet}/webhooks/{id}": "write op; requires scout JWT",
+  "POST /scouts/{wallet}/webhooks/{id}/reactivate": "write op; requires scout JWT + suspended webhook (webhookHealth.test.ts)",
   "POST /scouts/{wallet}/webhooks/{id}/test": "write op; issues outbound HTTP request",
 
   // Validators — require validator JWT + milestone evidence fixtures.

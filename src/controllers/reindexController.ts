@@ -8,6 +8,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { requiredError } from '../validators/requiredError';
 import {
   startReindex,
   getReindexStatus,
@@ -29,11 +30,11 @@ import { ErrorCode } from '../utils/errorCodes';
 export const reindexBodyShapeSchema = z
   .object({
     fromLedger: z
-      .number({ required_error: 'fromLedger is required' })
+      .number(requiredError('fromLedger is required'))
       .int('fromLedger must be an integer')
       .min(0, 'fromLedger must be ≥ 0'),
     toLedger: z
-      .number({ required_error: 'toLedger is required' })
+      .number(requiredError('toLedger is required'))
       .int('toLedger must be an integer')
       .min(1, 'toLedger must be ≥ 1'),
   })
@@ -77,7 +78,7 @@ export function triggerReindex(
 try {
     const parsed = reindexBodySchema.safeParse(req.body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       const isRangeError =
         firstError?.message?.includes('10 000') ||
         firstError?.message?.includes('fromLedger must be less than');
@@ -142,7 +143,7 @@ try {
 export function reindexStatusHandler(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): void {
   const s = getReindexStatus();
   res.json({

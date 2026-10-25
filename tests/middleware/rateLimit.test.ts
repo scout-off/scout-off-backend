@@ -1,5 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import request from 'supertest';
 import { rateLimit, walletRateLimit } from '../../src/middleware/rateLimit';
 import { InMemoryRateLimitStore } from '../../src/middleware/inMemoryRateLimitStore';

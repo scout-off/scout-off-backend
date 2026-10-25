@@ -2,9 +2,14 @@
 name = "scout-off-shared"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 
 [lib]
 crate-type = ["rlib"]
 
 [dependencies]
 soroban-sdk = { workspace = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+proptest = { workspace = true }

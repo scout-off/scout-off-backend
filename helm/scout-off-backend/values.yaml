@@ -136,11 +136,15 @@ networkPolicy:
 # -----------------------------------------------------------------------------
 ingress:
   enabled: false
-  # Ingress class name (e.g. "nginx", "traefik", "alb").
+  # Ingress class name (e.g., "nginx", "traefik", "alb").
   className: "nginx"
   annotations: {}
   #  kubernetes.io/ingress.class: nginx
   #  cert-manager.io/cluster-issuer: letsencrypt-prod
+  # Exclude /metrics from ingress (recommended when metrics are unprotected)
+  # When true, Prometheus scrapes should go through a ServiceMonitor or
+  # direct pod access (node port, port-forward) rather than public ingress.
+  excludeMetrics: false
   hosts:
     - host: api.scoutoff.io
       paths:
@@ -150,6 +154,21 @@ ingress:
     - secretName: scout-off-tls
       hosts:
         - api.scoutoff.io
+
+# -----------------------------------------------------------------------------
+# Graceful shutdown
+#
+# Kubernetes sends SIGTERM and then SIGKILLs the container once
+# terminationGracePeriodSeconds elapses. Keep this strictly greater than the
+# app's SHUTDOWN_TIMEOUT_MS (env above) plus preStopSleepSeconds, with a few
+# seconds of buffer for signal delivery and container runtime overhead.
+#
+# preStopSleepSeconds delays SIGTERM so load balancers can observe the failed
+# readiness probe first. It is applied as a `sleep` preStop hook; leave it at 0
+# when no external load balancer needs the extra window.
+# -----------------------------------------------------------------------------
+terminationGracePeriodSeconds: 30
+preStopSleepSeconds: 0
 
 # -----------------------------------------------------------------------------
 # Liveness probe
@@ -183,6 +202,22 @@ readinessProbe:
   timeoutSeconds: 5
 
 # -----------------------------------------------------------------------------
+# Startup probe
+#
+# Kubernetes holds off liveness/readiness checks until startup succeeds, so a
+# slow start (migrations, Redis connect, token-blocklist warm-up, backfill)
+# no longer risks a liveness-kill restart loop. Generous budget: 30 x 5s = 150s.
+# Set to null to disable. Once this is in place, the liveness probe's
+# initialDelaySeconds can be lowered since slow startups are covered here.
+# -----------------------------------------------------------------------------
+startupProbe:
+  httpGet:
+    path: /health/liveness
+    port: http
+  periodSeconds: 5
+  failureThreshold: 30
+
+# -----------------------------------------------------------------------------
 # Kubernetes Secret reference
 #
 # ALL sensitive values are sourced from a pre-existing Kubernetes Secret named
@@ -213,6 +248,11 @@ readinessProbe:
 #     --from-literal=ADMIN_WALLET=<single-admin-address-for-compat>
 #     --from-literal=REDIS_URL=redis://:password@host:6379
 #     --from-literal=WEBHOOK_SECRET=<hmac-secret-for-legacy-webhook-url>
+#     --from-literal=WEBHOOK_URL=<https-url-for-legacy-webhook-url>
+#     --from-literal=WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS=<old-key-during-rotation>
+#     --from-literal=NOTES_ENCRYPTION_KEY=<openssl rand -hex 32>
+#     --from-literal=NOTES_ENCRYPTION_KEY_PREVIOUS=<old-key-during-rotation>
+#     --from-literal=PLATFORM_SECRET=<legacy-platform-secret>
 #
 # The secret name can be overridden here if your naming convention differs.
 # -----------------------------------------------------------------------------
@@ -252,12 +292,24 @@ env:
   DB_PATH: /data/scout-off.db
   # Platform fee in basis points (100 bps = 1%). Default: 500 (5%).
   PLATFORM_FEE_BPS: "500"
-  # SSE keep-alive interval in ms
+  # SSE keep-alive interval in ms (1000-120000)
   SSE_KEEPALIVE_INTERVAL_MS: "15000"
+  # SSE authorization sweep interval in ms (1000-600000); bounds cross-instance revocation detection
+  SSE_AUTH_SWEEP_INTERVAL_MS: "30000"
   # Maximum concurrent SSE connections (0 = unlimited)
   SSE_MAX_CONNECTIONS: "0"
+  # Maximum concurrent SSE connections per wallet (0 = unlimited)
+  SSE_MAX_CONNECTIONS_PER_WALLET: "5"
+  # Base SSE reconnect delay in ms sent to clients (jitter is added per connection)
+  SSE_RETRY_MS: "5000"
   # Request timeout in ms
   REQUEST_TIMEOUT_MS: "30000"
+  # HTTP server socket timeouts (ms). keepAlive (65s) exceeds the AWS ALB 60s
+  # idle timeout so the LB closes idle sockets first; headers must stay
+  # greater than keepAlive. requestTimeout covers receiving the request only.
+  HTTP_KEEP_ALIVE_TIMEOUT_MS: "65000"
+  HTTP_HEADERS_TIMEOUT_MS: "66000"
+  HTTP_REQUEST_TIMEOUT_MS: "120000"
   # Rate limiting
   RATE_LIMIT_ENABLED: "true"
   RATE_LIMIT_WINDOW_MS: "60000"
@@ -284,10 +336,347 @@ env:
   ADMIN_ACTION_TTL_MS: "3600000"
   # Player cache TTL in ms. Default: 60000 (1 min).
   PLAYER_CACHE_TTL_MS: "60000"
+  # Metrics endpoint protection (recommended in production)
+  # METRICS_AUTH_TOKEN: bearer token for /metrics endpoint
+  # METRICS_ALLOWED_CIDRS: comma-separated CIDR list (e.g., "10.0.0.0/8,192.168.1.0/24")
+  # Set either or both to restrict access. If neither is set, /metrics is open (warning logged in production).
+  METRICS_AUTH_TOKEN: ""
+  METRICS_ALLOWED_CIDRS: ""
+  # Graceful shutdown (#1538). The overall budget must stay below
+  # terminationGracePeriodSeconds (see below). In-flight requests get
+  # SHUTDOWN_REQUEST_DRAIN_MS before connections are force-closed, and the
+  # last SHUTDOWN_CLEANUP_RESERVE_MS are reserved for Redis/DB/tracing.
+  SHUTDOWN_TIMEOUT_MS: "10000"
+  SHUTDOWN_PRESTOP_DELAY_MS: "0"
+  # Empty: half of SHUTDOWN_TIMEOUT_MS (5000 with the default timeout).
+  SHUTDOWN_REQUEST_DRAIN_MS: ""
+  SHUTDOWN_CLEANUP_RESERVE_MS: "2000"
+  # In-memory cache size caps (entries, >= 1)
+  CACHE_MAX_ENTRIES: "1000"
+  CACHE_MAX_SIZE: "1000"
+  PLAYER_CACHE_MAX_SIZE: "1000"
+  # Feature-flag and wallet-blocklist cache TTLs in ms (>= 0; 0 disables caching)
+  FEATURE_FLAG_CACHE_TTL_MS: "5000"
+  WALLET_BLOCKLIST_CACHE_TTL_MS: "30000"
+  # IPFS pending-pin retry interval in ms. Default: 30000 (30s). Min: 5000.
+  IPFS_PIN_RETRY_INTERVAL_MS: "30000"
+  # Reindex tuning. Batch sizes are in ledgers (1-10000); delays in ms.
+  REINDEX_BATCH_SIZE: "100"
+  REINDEX_BATCH_DELAY_MS: "50"
+  REINDEX_CATCHUP_BATCH_SIZE: "500"
+  REINDEX_CATCHUP_THRESHOLD: "500"
+  REINDEX_RATE_LIMIT_BACKOFF_MS: "2000"
+
+  # ── Admin & platform ──
+  # ADMIN_IP_ALLOWLIST — Optional. Comma-separated IPs/CIDRs allowed on admin routes. Leave unset to allow all.
+  ADMIN_IP_ALLOWLIST: ""
+  # ADMIN_THRESHOLD — Optional. Admin signatures required for high-value operations.
+  ADMIN_THRESHOLD: "1"
+  # WEB_AUTH_DOMAIN — Optional. When set, SEP-10 challenges include a 'web_auth_domain' manage_data operation with this value. See docs/auth.md.
+  WEB_AUTH_DOMAIN: ""
+  # PLATFORM_ADMIN_NOTIFY_URL — Optional. When set, a JSON POST is sent here whenever the dead-letter size or rate threshold is crossed.
+  PLATFORM_ADMIN_NOTIFY_URL: ""
+  # API_PREFIX — Optional.
+  API_PREFIX: "/api"
+  # API_V1_PREFIX — Optional. Full versioned prefix.
+  API_V1_PREFIX: "/api/v1"
+  # API_V2_PREFIX — Optional. Full v2 prefix.
+  API_V2_PREFIX: "/api/v2"
+
+  # ── Rate limiting ──
+  # AUTH_RATE_LIMIT_IP_MAX — Max requests per auth endpoint per IP and window (default: 60).
+  AUTH_RATE_LIMIT_IP_MAX: "60"
+  # PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS — Optional. Rate limit for POST /api/admin/players/import.
+  PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS: "60000"
+  # PLAYER_IMPORT_RATE_LIMIT_MAX — Player import rate limit max.
+  PLAYER_IMPORT_RATE_LIMIT_MAX: "5"
+  # PLAYER_IMPORT_MAX_BATCH — Optional. Max rows accepted per bulk player import request (POST /api/admin/players/import).
+  PLAYER_IMPORT_MAX_BATCH: "500"
+  # WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS — Optional. Rate limit for POST /api/scouts/:wallet/webhooks/:id/test, isolated from the shared default walletRateLimit() pool since each call makes the backend issue an outbound….
+  WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS: "60000"
+  # WEBHOOK_TEST_RATE_LIMIT_MAX — Webhook test rate limit max.
+  WEBHOOK_TEST_RATE_LIMIT_MAX: "5"
+  # RATE_LIMIT_ERROR_POLICY — Optional. When the rate limiter store (Redis) fails: open — allow requests (fail-open, availability over security) closed — reject with 503 (fail-closed, security over….
+  RATE_LIMIT_ERROR_POLICY: ""
+  # AUTH_RATE_LIMIT_ERROR_POLICY — Optional. Stricter policy for /auth endpoints.
+  AUTH_RATE_LIMIT_ERROR_POLICY: ""
+  # IP_REPUTATION_ENABLED — Optional. Tracks per-IP auth failures / 4xx errors and temporarily blocks abusive IPs. Defaults to true, except in NODE_ENV=test (disabled there so shared-IP negative-path test….
+  IP_REPUTATION_ENABLED: "true"
+
+  # ── Database ──
+  # DATABASE_POOL_SIZE — Optional. Maximum number of connections in the PostgreSQL connection pool. Only used when DB_DRIVER=postgres.
+  DATABASE_POOL_SIZE: "10"
+  # DATABASE_SSL — Optional. Controls TLS for the PostgreSQL connection. true — Enable SSL with full certificate verification (recommended for managed providers such as RDS, Heroku, Supabase,….
+  DATABASE_SSL: ""
+  # SQLITE_BUSY_TIMEOUT_MS — Database timeouts in ms (defaults shown).
+  SQLITE_BUSY_TIMEOUT_MS: "5000"
+  # DB_STATEMENT_TIMEOUT_MS — Db statement timeout ms.
+  DB_STATEMENT_TIMEOUT_MS: "25000"
+  # DB_QUERY_TIMEOUT_MS — Db query timeout ms.
+  DB_QUERY_TIMEOUT_MS: "30000"
+  # DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS — Db idle in transaction session timeout ms.
+  DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "60000"
+  # MIGRATION_CHECKSUM_MODE — Optional. "strict" fails startup if a migration file was edited after being applied (production-safe); "warn" logs the issue but continues (development).
+  MIGRATION_CHECKSUM_MODE: ""
+
+  # ── Caching ──
+  # CACHE_NAMESPACE — Optional. Prefix applied to every cache key written to Redis (#672). Prevents key collisions when two deployments (staging + production, or a blue/green pair) share the same….
+  CACHE_NAMESPACE: ""
+  # SEARCH_CACHE_MAX_ENTRIES — Optional. Max entries in the in-memory search cache before LRU/TTL eviction.
+  SEARCH_CACHE_MAX_ENTRIES: "1000"
+  # PIN_JSON_CACHE_TTL_MS — Optional. TTL for IPFS pin dedup cache, in ms.
+  PIN_JSON_CACHE_TTL_MS: "300000"
+  # IDEMPOTENCY_LEASE_MS — Optional. Lease expiry for pending idempotency claims, in ms. A crashed or hung request releases its claim after this window so a retry can re-use the key instead of waiting….
+  IDEMPOTENCY_LEASE_MS: "35000"
+
+  # ── SSE ──
+
+  # ── Indexer ──
+  # INDEXER_POLL_INTERVAL_MS — Optional. How often the contract-event indexer polls Soroban RPC for new ledgers. Stellar closes a ledger roughly every 5 seconds, so polling faster than that mostly spends RPC….
+  INDEXER_POLL_INTERVAL_MS: "5000"
+  # INDEXER_FINALITY_MARGIN — Optional. Ledgers to hold back from the RPC's reported tip before indexing, to avoid ingesting events from a ledger that later gets reorged.
+  INDEXER_FINALITY_MARGIN: "10"
+  # INDEXER_LAG_WARN_THRESHOLD — Optional. Ledgers behind tip before a lag warning logs.
+  INDEXER_LAG_WARN_THRESHOLD: "100"
+  # INDEXER_BACKFILL_FROM_LEDGER — Optional. Replay indexing from this ledger if earlier than the stored last_ledger. Leave unset to disable. See docs/reindexing.md for operational workflows and cursor management.
+  INDEXER_BACKFILL_FROM_LEDGER: ""
+  # TIER_DIVERGENCE_INTERVAL_MS — Optional. How often the tier-divergence reconciliation job (#1132) runs, in milliseconds.
+  TIER_DIVERGENCE_INTERVAL_MS: "300000"
+  # TIER_DIVERGENCE_SAMPLE_SIZE — Optional. Max active players checked per tier-divergence reconciliation pass.
+  TIER_DIVERGENCE_SAMPLE_SIZE: "100"
+
+  # ── Reindexing / catch-up ──
+
+  # ── IPFS / Pinata ──
+  # IPFS_GATEWAYS — Optional. Comma-separated fallback IPFS gateways (defaults to Pinata/Cloudflare/ipfs.io when unset). See docs/ipfs-pinata-gateway.md for detailed fallback semantics and….
+  IPFS_GATEWAYS: ""
+  # PINATA_GATEWAY — Optional. IPFS gateway used to resolve pinned content. Must be a valid HTTPS URL. When unset, defaults to https://gateway.pinata.cloud. See docs/ipfs-pinata-gateway.md for….
+  PINATA_GATEWAY: ""
+  # IPFS_HTTP_TIMEOUT_MS — Optional. Per-request HTTP timeout for Pinata/IPFS axios calls.
+  IPFS_HTTP_TIMEOUT_MS: "15000"
+  # IPFS_RECONCILE_AGE_MS — Optional. Age a pending pin must reach before it is reconciled.
+  IPFS_RECONCILE_AGE_MS: "300000"
+  # IPFS_RECONCILE_INTERVAL_MS — Optional. Interval between pending-pin reconciliation passes.
+  IPFS_RECONCILE_INTERVAL_MS: "60000"
+  # IPFS_RECONCILE_MAX_ATTEMPTS — Optional. Attempts before a stuck pending pin is expired during reconciliation.
+  IPFS_RECONCILE_MAX_ATTEMPTS: "5"
+
+  # ── Circuit breakers ──
+  # CIRCUIT_BREAKER_FAILURE_THRESHOLD — Optional. Failure count / open duration for the generic CircuitBreaker used by outbound calls (the Stellar RPC breaker). Validated at startup: threshold must be ≥ 1 and the….
+  CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
+  # CIRCUIT_BREAKER_RESET_TIMEOUT_MS — Circuit breaker reset timeout ms.
+  CIRCUIT_BREAKER_RESET_TIMEOUT_MS: "30000"
+  # IPFS_BREAKER_FAILURE_THRESHOLD — Optional. Consecutive IPFS failures before the pinning circuit breaker opens, and how long it stays open before a trial request.
+  IPFS_BREAKER_FAILURE_THRESHOLD: "5"
+  # IPFS_BREAKER_RESET_TIMEOUT_MS — Ipfs breaker reset timeout ms.
+  IPFS_BREAKER_RESET_TIMEOUT_MS: "30000"
+
+  # ── Milestones ──
+  # MILESTONE_LOADER_CONCURRENCY — Optional. Max in-flight RPC calls made by the GraphQL milestone DataLoader.
+  MILESTONE_LOADER_CONCURRENCY: "8"
+  # MILESTONE_RATE_WINDOW_MS — Optional.
+  MILESTONE_RATE_WINDOW_MS: "60000"
+  # MILESTONE_RATE_MAX — Milestone rate max.
+  MILESTONE_RATE_MAX: "10"
+  # MILESTONE_PLAYER_RATE_WINDOW_MS — Optional. Rolling window for the per-player milestone submission rate limit.
+  MILESTONE_PLAYER_RATE_WINDOW_MS: "3600000"
+  # MILESTONE_PLAYER_RATE_MAX — Optional. Max milestone submissions per player per window.
+  MILESTONE_PLAYER_RATE_MAX: "10"
+  # EVIDENCE_MAX_BYTES — Optional. Max size in bytes of a downloaded HTTPS evidence file for milestone submissions.
+  EVIDENCE_MAX_BYTES: "52428800"
+  # EVIDENCE_VALIDATOR_BYTES_PER_HOUR — Optional. Total evidence bytes the validator may download per hour.
+  EVIDENCE_VALIDATOR_BYTES_PER_HOUR: "524288000"
+
+  # ── Webhooks ──
+  # WEBHOOK_DLQ_SIZE_THRESHOLD — Optional.
+  WEBHOOK_DLQ_SIZE_THRESHOLD: "100"
+  # WEBHOOK_DLQ_RATE_THRESHOLD — Optional.
+  WEBHOOK_DLQ_RATE_THRESHOLD: "50"
+  # WEBHOOK_DLQ_RATE_WINDOW_MS — Optional.
+  WEBHOOK_DLQ_RATE_WINDOW_MS: "300000"
+
+  # ── Readiness probes ──
+  # READINESS_MAX_LAG — Optional. Max indexer ledger lag (in ledgers) still considered ready. Set to 0 to disable the lag check.
+  READINESS_MAX_LAG: "100"
+  # READINESS_GRACE_PERIOD_MS — Optional. Grace window after process start during which readiness always reports ok regardless of indexer lag.
+  READINESS_GRACE_PERIOD_MS: "300000"
+  # READINESS_DB_TIMEOUT_MS — Optional. Per-probe timeout for the DB readiness check.
+  READINESS_DB_TIMEOUT_MS: "2000"
+  # READINESS_IPFS_TIMEOUT_MS — Optional. Per-probe timeout for the IPFS readiness check.
+  READINESS_IPFS_TIMEOUT_MS: "5000"
+  # READINESS_STELLAR_TIMEOUT_MS — Optional. Per-probe timeout for the Stellar readiness check.
+  READINESS_STELLAR_TIMEOUT_MS: "5000"
+
+  # ── Timeouts & shutdown ──
+  # STELLAR_RPC_TIMEOUT_MS — Optional. Per-request HTTP timeout for Soroban RPC / Stellar SDK calls.
+  STELLAR_RPC_TIMEOUT_MS: "15000"
+  # TX_CONFIRMATION_TIMEOUT_MS — Optional. Bounded Soroban transaction-confirmation poll window for pay_to_contact / subscribe submissions.
+  TX_CONFIRMATION_TIMEOUT_MS: "60000"
+  # TRIAL_OFFER_TTL_MS — Optional. Time before a logged trial offer expires. Set to 0 to disable expiry (not recommended).
+  TRIAL_OFFER_TTL_MS: "2592000000"
+  # EXIT_ON_UNHANDLED_REJECTION — Shut down the process on an unhandled promise rejection (default: false).
+  EXIT_ON_UNHANDLED_REJECTION: "false"
+
+  # ── Payload limits & compression ──
+  # JSON_PAYLOAD_LIMIT — Optional. Max size of JSON request bodies.
+  JSON_PAYLOAD_LIMIT: "1mb"
+  # UPLOAD_PAYLOAD_LIMIT — Optional. Max size of JSON request bodies for upload endpoints (player registration, milestone evidence).
+  UPLOAD_PAYLOAD_LIMIT: "10mb"
+  # COMPRESSION_THRESHOLD — Optional. Response compression threshold, in bytes.
+  COMPRESSION_THRESHOLD: "1024"
+  # COMPRESSION_THRESHOLD_BYTES — Optional. Accepted alias for COMPRESSION_THRESHOLD above; only used as a fallback when COMPRESSION_THRESHOLD is unset. Leave unset.
+  COMPRESSION_THRESHOLD_BYTES: ""
+
+  # ── Security headers ──
+  # SECURITY_HSTS — Security headers (optional overrides).
+  SECURITY_HSTS: "max-age=31536000; includeSubDomains"
+  # SECURITY_X_CONTENT_TYPE_OPTIONS — Security x content type options.
+  SECURITY_X_CONTENT_TYPE_OPTIONS: "nosniff"
+  # SECURITY_X_FRAME_OPTIONS — Security x frame options.
+  SECURITY_X_FRAME_OPTIONS: "DENY"
+  # SECURITY_REFERRER_POLICY — Security referrer policy.
+  SECURITY_REFERRER_POLICY: "no-referrer"
+  # SECURITY_CSP — Security csp.
+  SECURITY_CSP: "default-src 'none'; frame-ancestors 'none'"
+  # SECURITY_PERMISSIONS_POLICY — Security permissions policy.
+  SECURITY_PERMISSIONS_POLICY: "camera=(), microphone=(), geolocation=()"
+
+  # ── Observability ──
+  # LOG_SAMPLE_RATE — Optional. Float 0–1 sample rate for non-skipped paths.
+  LOG_SAMPLE_RATE: "1"
+  # LOG_SKIP_PATHS — Optional. Comma-separated paths requestLogger never logs (default: health + metrics probes).
+  LOG_SKIP_PATHS: "/health,/health/liveness,/health/readiness,/ready,/metrics"
+  # LOG_REDACTION_ENABLED — Optional. Set to "false" to disable log redaction in non-development environments (redaction is always off in development).
+  LOG_REDACTION_ENABLED: "true"
+  # LOG_REDACTION_WALLET_PREFIX — Optional. Characters kept at the start of a masked wallet address.
+  LOG_REDACTION_WALLET_PREFIX: "1"
+  # LOG_REDACTION_WALLET_SUFFIX — Optional. Characters kept at the end of a masked wallet address.
+  LOG_REDACTION_WALLET_SUFFIX: "4"
+  # LOG_REDACTION_HASH_CORRELATION_IDS — Optional. Set to "true" to hash correlation IDs in logs instead of logging them raw.
+  LOG_REDACTION_HASH_CORRELATION_IDS: "false"
+  # OTEL_EXPORTER_OTLP_ENDPOINT — Optional. Leave unset to disable tracing export.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  # OTEL_SERVICE_NAME — Optional. Service name reported to the tracing backend.
+  OTEL_SERVICE_NAME: ""
+
+  # ── Misc ──
+  # GRAPHQL_PERSISTED_ONLY — Only accept registered persisted GraphQL operations (default: false).
+  GRAPHQL_PERSISTED_ONLY: "false"
+  # ALLOWED_ORIGINS — Legacy alias for CORS_ALLOWED_ORIGINS.
+  ALLOWED_ORIGINS: ""
+  # API_KEY_DEFAULT_TTL_DAYS — Optional. Default lifetime for issued API keys in days (#674). Keys issued without an explicit expiresInDays value expire after this many days.
+  API_KEY_DEFAULT_TTL_DAYS: "90"
 
 # -----------------------------------------------------------------------------
 # Pod annotations
 # Useful for Prometheus scraping or Datadog APM injection.
+
+  # ── Later features ──
+  # Empty means "use the application default" (the key is left out of the ConfigMap).
+  API_DOCS_HIDE_ADMIN: ""
+  API_DOCS_MODE: ""
+  AUDIT_ALERT_WEBHOOK_URL: ""
+  AUDIT_FULL_VERIFY_INTERVAL_MS: ""
+  AUDIT_READS_ENABLED: ""
+  AUDIT_VERIFY_BATCH_SIZE: ""
+  AUDIT_VERIFY_INTERVAL_MS: ""
+  AUTH_FAIL_THRESHOLD: ""
+  AUTH_FAIL_WINDOW_MS: ""
+  AUTH_LOCKOUT_BASE_MS: ""
+  AUTH_LOCKOUT_MAX_MS: ""
+  DATA_EXPORT_ARCHIVE_DIR: ""
+  DOTENV_ENABLED: ""
+  ENCRYPTION_REENCRYPT_BATCH_SIZE: ""
+  ENCRYPTION_REENCRYPT_INTERVAL_MS: ""
+  METRICS_LEGACY_MS: ""
+  NOTES_ENCRYPTION_ACTIVE_KEY_ID: ""
+  READINESS_CRITICAL: ""
+  RETENTION_ARCHIVE_DIR: ""
+  RETENTION_BATCH_SIZE: ""
+  RETENTION_ENABLED: ""
+  RETENTION_INTERVAL_MS: ""
+  RETENTION_MAX_BATCHES: ""
+  RETENTION_PAUSE_MS: ""
+  RETENTION_POLICIES: ""
+  SSE_MAX_SESSION_MS: ""
+  WEBHOOK_BREAKER_FAILURE_THRESHOLD: ""
+  WEBHOOK_BREAKER_RESET_TIMEOUT_MS: ""
+  WEBHOOK_LEGACY_SIGNATURE: ""
+  WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID: ""
+  WEBHOOK_SUSPEND_AFTER_FAILURES: ""
+  WEBHOOK_SUSPEND_AFTER_MS: ""
+
+# -----------------------------------------------------------------------------
+# Prometheus monitoring (optional)
+#
+# Both resources require the Prometheus Operator CRDs (monitoring.coreos.com/v1)
+# and are disabled by default, so a default render is unchanged. Install the
+# chart with --set metrics.serviceMonitor.enabled=true and/or
+# --set metrics.prometheusRule.enabled=true to enable them.
+# -----------------------------------------------------------------------------
+metrics:
+  serviceMonitor:
+    enabled: false
+    # Extra labels for the ServiceMonitor. Set the label your Prometheus
+    # instance's serviceMonitorSelector expects (for kube-prometheus-stack
+    # this is usually `release: <prometheus-release>`).
+    additionalLabels: {}
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    # Name/key of a Secret holding a bearer token, for when /metrics is
+    # protected ("metrics auth"). Leave empty when scraping is unauthenticated.
+    bearerTokenSecret:
+      name: ""
+      key: ""
+    relabelings: []
+    metricRelabelings: []
+
+  prometheusRule:
+    enabled: false
+    additionalLabels: {}
+    # Base link used in each alert's runbook_url annotation.
+    runbookUrl: https://github.com/scout-off/scout-off-backend/blob/main/docs/runbook.md#prometheus-alerts
+    # Every alert can be disabled and tuned here. Expressions reference the
+    # metric names the backend actually exports (see src/middleware/metrics.ts).
+    rules:
+      indexerLag:
+        enabled: true
+        # indexer_ledger_lag above this many ledgers fires the alert.
+        threshold: 100
+        for: 10m
+        severity: warning
+      webhookDlqDepth:
+        enabled: true
+        # Total scout_off_webhook_dead_letters_total across subscriptions.
+        threshold: 100
+        for: 15m
+        severity: warning
+      tierDivergence:
+        enabled: true
+        for: 0m
+        severity: critical
+      stuckPins:
+        enabled: true
+        for: 30m
+        severity: warning
+      high5xxRate:
+        enabled: true
+        # Ratio (0.05 = 5 %) of 5xx responses over all responses.
+        threshold: 0.05
+        for: 5m
+        severity: critical
+      notReady:
+        # Requires kube-state-metrics (kube_pod_status_ready).
+        enabled: false
+        for: 10m
+        severity: warning
+    # Additional PrometheusRule rules appended to the group, e.g.
+    # - alert: ScoutOffCustom
+    #   expr: up{job="scout-off-backend"} == 0
+    #   for: 5m
+    extraRules: []
+
 # -----------------------------------------------------------------------------
 podAnnotations: {}
 # prometheus.io/scrape: "true"

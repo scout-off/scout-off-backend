@@ -1,0 +1,35 @@
+/**
+ * PATCH: Add signal property to Express Request type
+ *
+ * Apply this to src/types/index.ts:
+ *
+ * Add to the Request interface extension:
+ */
+
+// declare global {
+//   namespace Express {
+//     interface Request {
+//       /**
+//        * AbortSignal from the request timeout middleware.
+//        * Set when a request starts; aborted on timeout or client disconnect.
+//        * Check isRequestCancelled() to bail out of expensive operations.
+//        */
+//       signal?: AbortSignal;
+//
+//       /**
+//        * Correlation ID for tracing across logs. Set by correlationId middleware.
+//        */
+//       correlationId?: string;
+//
+//       /**
+//        * Trace ID from OpenTelemetry instrumentation.
+//        */
+//       traceId?: string;
+//
+//       /**
+//        * API version from the Accept header or URL (e.g., 'v1', 'v2').
+//        */
+//       apiVersion?: string;
+//     }
+//   }
+// }

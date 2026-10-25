@@ -116,13 +116,33 @@
       "issue": "#670"
     },
     {
-      "path": "tests/services/txCorrelation.test.ts",
-      "reason": "txCorrelation service uses sync getDb()",
+      "path": "tests/db/scoutResourceLimits.test.ts",
+      "reason": "createWebhookSubscription quota check uses sync getDb() transaction (SQLite-only)",
+      "issue": "#640"
+    },
+    {
+      "path": "tests/services/eventBatchProcessor.test.ts",
+      "reason": "processEventBatches inserts through the sync getDb() indexer path (SQLite-only)",
       "issue": "#670"
     },
     {
-      "path": "tests/db/scoutResourceLimits.test.ts",
-      "reason": "createWebhookSubscription quota check uses sync getDb() transaction (SQLite-only)",
+      "path": "tests/services/eventBatchProcessor.hooks.test.ts",
+      "reason": "processEventBatches inserts through the sync getDb() indexer path (SQLite-only)",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/services/reindexReplayParity.test.ts",
+      "reason": "Reindex and replay share the sync getDb() indexer path; asserts via getDb()",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/services/indexerUnprocessed.test.ts",
+      "reason": "indexEvents()/replayUnprocessedEvent use the sync getDb() indexer path",
+      "issue": "#670"
+    },
+    {
+      "path": "tests/services/webhookHealth.test.ts",
+      "reason": "Seeds via createWebhookSubscription, whose quota check uses a sync getDb() transaction (SQLite-only)",
       "issue": "#640"
     }
   ]

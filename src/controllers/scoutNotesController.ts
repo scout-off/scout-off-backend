@@ -31,14 +31,14 @@ export const upsertNoteSchema = z.object({
 export async function putScoutNote(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {playerId} = req.params as {playerId: string};
   const parsed = upsertNoteSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
       success: false,
-      error: parsed.error.errors[0]?.message ?? 'Invalid request body',
+      error: parsed.error.issues[0]?.message ?? 'Invalid request body',
     });
     return;
   }
@@ -77,7 +77,7 @@ export async function putScoutNote(
 export async function getScoutNoteHandler(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {playerId} = req.params as {playerId: string};
   const row = await getScoutNote(req.params.wallet as string, playerId);
@@ -108,7 +108,7 @@ export async function getScoutNoteHandler(
 export async function listScoutNotesHandler(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const rows = await getScoutNotes(req.params.wallet as string);
 
@@ -152,13 +152,13 @@ export const noteContentSchema = z.object({
 export async function createPlayerNote(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const parsed = noteContentSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
       success: false,
-      error: parsed.error.errors[0]?.message ?? 'Invalid request body',
+      error: parsed.error.issues[0]?.message ?? 'Invalid request body',
     });
     return;
   }
@@ -203,7 +203,7 @@ export async function createPlayerNote(
 export async function listPlayerNotes(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {playerId} = req.params as {playerId: string};
   const rows = await getScoutPlayerNotes(req.params.wallet as string, playerId);
@@ -237,7 +237,7 @@ export async function listPlayerNotes(
 export async function updatePlayerNote(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {playerId, noteId} = req.params as {playerId: string, noteId: string};
   const id = parseInt(noteId, 10);
@@ -250,7 +250,7 @@ export async function updatePlayerNote(
   if (!parsed.success) {
     res.status(400).json({
       success: false,
-      error: parsed.error.errors[0]?.message ?? 'Invalid request body',
+      error: parsed.error.issues[0]?.message ?? 'Invalid request body',
     });
     return;
   }
@@ -298,7 +298,7 @@ export async function updatePlayerNote(
 export async function deletePlayerNote(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const {playerId, noteId} = req.params as {playerId: string, noteId: string};
   const id = parseInt(noteId, 10);

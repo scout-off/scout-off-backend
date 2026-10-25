@@ -17,6 +17,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { requiredError } from '../validators/requiredError';
 import {
   getPlayerById,
   deactivatePlayerWithReason,
@@ -36,7 +37,7 @@ import { sanitizeInput } from '../utils/sanitizer';
 
 export const deactivateBodySchema = z.object({
   reason: z
-    .string({ required_error: 'reason is required' })
+    .string(requiredError('reason is required'))
     .min(1, 'reason is required')
     .max(500, 'reason must be 500 characters or fewer')
     .transform((s) => s.trim()),
@@ -47,14 +48,14 @@ export const deactivateBodySchema = z.object({
 export async function adminDeactivatePlayer(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   // ── Validate playerId path param ─────────────────────────────────────────
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
     res.status(400).json({
       success: false,
-      error: idResult.error.errors[0]?.message ?? 'Invalid playerId',
+      error: idResult.error.issues[0]?.message ?? 'Invalid playerId',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -66,7 +67,7 @@ export async function adminDeactivatePlayer(
   if (!bodyResult.success) {
     res.status(400).json({
       success: false,
-      error: bodyResult.error.errors[0]?.message ?? 'reason is required',
+      error: bodyResult.error.issues[0]?.message ?? 'reason is required',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -170,14 +171,14 @@ export async function adminDeactivatePlayer(
 export async function adminReactivatePlayer(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   // ── Validate playerId ────────────────────────────────────────────────────
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
     res.status(400).json({
       success: false,
-      error: idResult.error.errors[0]?.message ?? 'Invalid playerId',
+      error: idResult.error.issues[0]?.message ?? 'Invalid playerId',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;

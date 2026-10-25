@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
+import { retentionMetrics } from '../services/retentionMetrics';
 import { ipReputationCounters, resetIpReputationCounters } from '../services/ipReputation';
+import type { CircuitState, CircuitBreaker } from '../utils/circuitBreaker';
+import { monitorEventLoopDelay, type IntervalHistogram } from 'perf_hooks';
 
 // ── Tier divergence counter injection (#1132) ──────────────────────────────────
 //
@@ -20,6 +23,41 @@ function getTierDivergenceForMetrics(): number {
   return _getTierDivergenceTotal();
 }
 
+// ── Audit chain verification (#1539) ─────────────────────────────────────────
+//
+// Kept here (rather than in the verifier service) so the values survive
+// between scheduled runs and are available even before the first run. The
+// gauge starts at 1 because no break has been observed yet; a failed run sets
+// it to 0 until a later run verifies cleanly again.
+
+let _auditChainValid = 1;
+let _auditChainBreaksTotal = 0;
+
+/** Records the outcome of the most recent audit chain verification run. */
+export function setAuditChainValid(valid: boolean): void {
+  _auditChainValid = valid ? 1 : 0;
+}
+
+/** Increments `scout_off_audit_chain_breaks_total` and invalidates the gauge. */
+export function recordAuditChainBreak(): void {
+  _auditChainBreaksTotal += 1;
+  _auditChainValid = 0;
+}
+
+/** Resets both audit chain metrics (used in tests). */
+export function resetAuditChainMetrics(): void {
+  _auditChainValid = 1;
+  _auditChainBreaksTotal = 0;
+}
+
+export function getAuditChainValid(): number {
+  return _auditChainValid;
+}
+
+export function getAuditChainBreaksTotal(): number {
+  return _auditChainBreaksTotal;
+}
+
 export interface RouteMetric {
   count: number;
   totalLatencyMs: number;
@@ -36,6 +74,11 @@ export const errorCountsStore: Record<ErrorRange, number> = { '4xx': 0, '5xx': 0
 /** Whether metrics collection is enabled. Controlled by METRICS_ENABLED env var. */
 export function isMetricsEnabled(): boolean {
   return process.env.METRICS_ENABLED !== 'false';
+}
+
+/** Whether legacy http_request_duration_ms metric is exported. Default true for one release. */
+export function isLegacyMsMetricEnabled(): boolean {
+  return process.env.METRICS_LEGACY_MS !== 'false';
 }
 
 /**
@@ -56,20 +99,22 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
     next();
     return;
   }
-  const start = Date.now();
+  const start = process.hrtime.bigint();
   res.on('finish', () => {
     // Use the matched Express route pattern when available; fall back to a
     // single constant label for all unmatched requests so scanner/bot traffic
     // cannot grow metricsStore without bound.
     const routeLabel = req.route?.path ?? UNMATCHED_ROUTE_LABEL;
     const key = `${req.method} ${routeLabel}`;
-    const latency = Date.now() - start;
+    // High-resolution timer: Date.now() rounds sub-millisecond requests to 0.
+    const latency = Number(process.hrtime.bigint() - start) / 1e6;
     if (!metricsStore[key]) {
       metricsStore[key] = { count: 0, totalLatencyMs: 0 };
     }
     metricsStore[key].count += 1;
     metricsStore[key].totalLatencyMs += latency;
     observeLatency(latency);
+    observeHttpLatencySeconds(latency / 1000);
 
     const status = res.statusCode;
     if (status >= 400 && status < 500) {
@@ -124,6 +169,42 @@ export function getLatencyHistogram(): LatencyHistogram {
     bucketCounts: [...latencyHistogram.bucketCounts],
     sum: latencyHistogram.sum,
     count: latencyHistogram.count,
+  };
+}
+
+// ─── Seconds histogram buckets for HTTP requests (0.005 to 10s) ───────────────
+//
+// Standard Prometheus histogram for HTTP latency uses seconds with buckets
+// suited to API latency: 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s
+export const HTTP_SECONDS_BUCKETS: ReadonlyArray<number> = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+
+export interface HttpSecondsHistogram {
+  bucketCounts: number[];
+  sum: number;
+  count: number;
+}
+
+export const httpSecondsHistogram: HttpSecondsHistogram = {
+  bucketCounts: HTTP_SECONDS_BUCKETS.map(() => 0),
+  sum: 0,
+  count: 0,
+};
+
+/** Records a single request latency in seconds into the cumulative histogram. */
+function observeHttpLatencySeconds(latencySeconds: number): void {
+  for (let i = 0; i < HTTP_SECONDS_BUCKETS.length; i++) {
+    if (latencySeconds <= HTTP_SECONDS_BUCKETS[i]) httpSecondsHistogram.bucketCounts[i] += 1;
+  }
+  httpSecondsHistogram.sum += latencySeconds;
+  httpSecondsHistogram.count += 1;
+}
+
+/** Returns a snapshot of the HTTP seconds histogram. */
+export function getHttpSecondsHistogram(): HttpSecondsHistogram {
+  return {
+    bucketCounts: [...httpSecondsHistogram.bucketCounts],
+    sum: httpSecondsHistogram.sum,
+    count: httpSecondsHistogram.count,
   };
 }
 
@@ -205,6 +286,38 @@ export type SorobanRpcOperation =
 
 export function observeSorobanRpcLatency(operation: SorobanRpcOperation, durationMs: number): void {
   observeLabelledSeconds(sorobanRpcHistogram, operation, durationMs / 1000);
+}
+
+// ─── Indexer event outcome counters (#1540) ─────────────────────────────────
+
+/**
+ * Classification of how the indexer handled a single contract event.
+ *  - `applied`       — recognised event type, side effects ran (or no-op).
+ *  - `unknown_type`  — topic did not match any known `CONTRACT_EVENT_TYPES` entry.
+ *  - `decode_error`  — normalisation/decoding threw (unexpected value shape).
+ */
+export type IndexerEventOutcome = 'applied' | 'unknown_type' | 'decode_error';
+
+/** Nested store: `type` → `outcome` → count. */
+const indexerEventsStore: Record<string, Record<IndexerEventOutcome, number>> = {};
+
+function blankOutcomes(): Record<IndexerEventOutcome, number> {
+  return { applied: 0, unknown_type: 0, decode_error: 0 };
+}
+
+/** Increment `scout_off_indexer_events_total{type,outcome}` by one. */
+export function recordIndexerEvent(type: string, outcome: IndexerEventOutcome): void {
+  if (!indexerEventsStore[type]) indexerEventsStore[type] = blankOutcomes();
+  indexerEventsStore[type][outcome] += 1;
+}
+
+/** Snapshot of the nested indexer event counters. */
+export function getIndexerEventMetrics(): Record<string, Record<IndexerEventOutcome, number>> {
+  const out: Record<string, Record<IndexerEventOutcome, number>> = {};
+  for (const [type, outcomes] of Object.entries(indexerEventsStore)) {
+    out[type] = { ...outcomes };
+  }
+  return out;
 }
 
 // ─── Webhook delivery counters ────────────────────────────────────────────────
@@ -299,6 +412,23 @@ export function incrementWebhookDeadLettersTotal(): void {
   }
 }
 
+const webhookSubscriptionStatusStore: Record<string, number> = { active: 0, degraded: 0, suspended: 0 };
+export function setWebhookSubscriptionStatusCounts(counts: Record<string, number>): void {
+  Object.assign(webhookSubscriptionStatusStore, { active: 0, degraded: 0, suspended: 0 }, counts);
+}
+export function getWebhookSubscriptionStatusCounts(): Record<string, number> {
+  return { ...webhookSubscriptionStatusStore };
+}
+
+/** Lifetime count of deliveries skipped because a subscription's circuit was open (#1512). */
+let webhookCircuitOpenTotal = 0;
+export function incrementWebhookCircuitOpenTotal(): void {
+  webhookCircuitOpenTotal += 1;
+}
+export function getWebhookCircuitOpenTotal(): number {
+  return webhookCircuitOpenTotal;
+}
+
 /** Increment webhook_retry_success_total counter. */
 export function incrementWebhookRetrySuccessTotal(): void {
   webhookCountersStore.retrySuccessTotal += 1;
@@ -333,6 +463,83 @@ export function resetWebhookDeadLetterInsertTimestamps(): void {
   webhookDeadLetterInsertTimestamps.length = 0;
 }
 
+// ─── Circuit breaker state gauges & transition counters (#1573) ───────────────
+//
+// scout_off_circuit_breaker_state{breaker}         — 0=closed, 1=half-open, 2=open
+// scout_off_circuit_breaker_transitions_total{breaker,to} — lifetime transitions
+
+/** Maps CircuitState to an integer suitable for a gauge. */
+const CIRCUIT_STATE_VALUE: Record<CircuitState, number> = {
+  closed: 0,
+  'half-open': 1,
+  open: 2,
+};
+
+/** Live getter functions registered by each breaker (keyed by breaker name). */
+const _circuitBreakerGetters: Map<string, () => CircuitState> = new Map();
+
+/** Transition counters: key is `${breakerName}:${toState}`. */
+const _circuitBreakerTransitions: Map<string, number> = new Map();
+
+/**
+ * Minimal interface that both CircuitBreaker and RetryingCircuitBreaker satisfy
+ * after the #1573 changes. Using a loose string type for onStateChange so both
+ * breaker variants (lowercase CircuitState and uppercase CircuitBreakerState)
+ * are compatible.
+ */
+export interface RegisterableBreaker {
+  readonly name: string;
+  getState(): CircuitState;
+  onStateChange?: ((from: string, to: string) => void) | undefined;
+}
+
+/**
+ * Register a circuit breaker so its state is exported as a gauge at scrape time
+ * and its transitions are counted.
+ *
+ * The breaker's `onStateChange` hook is set here; callers must not overwrite it
+ * after registration.
+ */
+export function registerCircuitBreaker(breaker: RegisterableBreaker): void {
+  const name = breaker.name;
+
+  _circuitBreakerGetters.set(name, (): CircuitState => breaker.getState!());
+
+  breaker.onStateChange = (_from: string, to: string) => {
+    // Normalize 'HALF_OPEN' → 'half-open' etc. for consistent label values
+    const normalizedTo = to.toLowerCase().replace('_', '-') as CircuitState;
+    const key = `${name}:${normalizedTo}`;
+    _circuitBreakerTransitions.set(key, (_circuitBreakerTransitions.get(key) ?? 0) + 1);
+  };
+}
+
+/** Returns current state gauge value (0/1/2) for the named breaker, or -1 if unknown. */
+export function getCircuitBreakerStateValue(name: string): number {
+  const getter = _circuitBreakerGetters.get(name);
+  if (!getter) return -1;
+  return CIRCUIT_STATE_VALUE[getter()];
+}
+
+/** Returns a snapshot of all breaker-state gauge values keyed by breaker name. */
+export function getCircuitBreakerStates(): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const [name, getter] of _circuitBreakerGetters) {
+    result[name] = CIRCUIT_STATE_VALUE[getter()];
+  }
+  return result;
+}
+
+/** Returns a snapshot of all transition counters keyed by `${breaker}:${to}`. */
+export function getCircuitBreakerTransitions(): Record<string, number> {
+  return Object.fromEntries(_circuitBreakerTransitions);
+}
+
+/** Test helper — clear all registered breakers and their counters. */
+export function resetCircuitBreakerMetrics(): void {
+  _circuitBreakerGetters.clear();
+  _circuitBreakerTransitions.clear();
+}
+
 /** Resets every metric store. Intended for test isolation. */
 export function resetMetrics(): void {
   Object.keys(metricsStore).forEach((k) => delete metricsStore[k]);
@@ -341,12 +548,23 @@ export function resetMetrics(): void {
   latencyHistogram.bucketCounts = LATENCY_BUCKETS_MS.map(() => 0);
   latencyHistogram.sum = 0;
   latencyHistogram.count = 0;
+  httpSecondsHistogram.bucketCounts = HTTP_SECONDS_BUCKETS.map(() => 0);
+  httpSecondsHistogram.sum = 0;
+  httpSecondsHistogram.count = 0;
   cacheCountsStore.hits = 0;
   cacheCountsStore.misses = 0;
   cacheCountsStore.evictions = 0;
   cacheInvalidationStore.total = 0;
   stuckPendingPinsCount = 0;
+  for (const key of Object.keys(indexerEventsStore)) {
+    delete indexerEventsStore[key];
+  }
+  unhandledRejectionsTotal = 0;
+  Object.keys(rateLimitRejectedStore).forEach((k) => delete rateLimitRejectedStore[k]);
+  rateLimitStoreErrorsTotal = 0;
+  Object.keys(authFailuresStore).forEach((k) => delete authFailuresStore[k]);
   resetIpReputationCounters();
+  resetRuntimeMetrics();
 }
 
 // ─── Cache hit / miss / eviction counters ─────────────────────────────────────
@@ -415,6 +633,65 @@ export function getCacheInvalidationTotal(): number {
   return cacheInvalidationStore.total;
 }
 
+// ─── Unhandled promise-rejection counter (#1570) ──────────────────────────────
+
+let unhandledRejectionsTotal = 0;
+
+/** Increment the unhandled-rejection counter. Called from src/index.ts. */
+export function incUnhandledRejections(): void {
+  unhandledRejectionsTotal++;
+}
+
+// ─── Rate-limit rejection counter (#1571) ─────────────────────────────────────
+
+/** Per-limiter rejection counts keyed by limiter namespace. */
+const rateLimitRejectedStore: Record<string, number> = {};
+
+/** Global counter for rate-limit store errors (fail-open path). */
+let rateLimitStoreErrorsTotal = 0;
+
+/**
+ * Increment the rate-limit rejection counter for the given limiter namespace.
+ * Namespace is a fixed string, so label cardinality is bounded.
+ */
+export function incRateLimitRejected(namespace: string): void {
+  rateLimitRejectedStore[namespace] = (rateLimitRejectedStore[namespace] ?? 0) + 1;
+}
+
+/** Increment the rate-limit store-error counter (fail-open path). */
+export function incRateLimitStoreError(): void {
+  rateLimitStoreErrorsTotal++;
+}
+
+// ─── Authentication-failure counter (#1572) ───────────────────────────────────
+
+/** Fixed set of valid auth-failure reason labels (bounded cardinality). */
+export const AUTH_FAILURE_REASONS = [
+  'missing_token',
+  'invalid_token',
+  'expired_token',
+  'revoked_token',
+  'forbidden_role',
+  'invalid_api_key',
+  'forbidden_scope',
+  'sep10_invalid',
+] as const;
+
+export type AuthFailureReason = (typeof AUTH_FAILURE_REASONS)[number];
+
+const authFailuresStore: Record<string, number> = {};
+
+/**
+ * Increment the auth-failure counter for the given reason.
+ * Unknown reasons are mapped to `other` to keep cardinality bounded.
+ */
+export function incAuthFailure(reason: string): void {
+  const validReason = (AUTH_FAILURE_REASONS as readonly string[]).includes(reason)
+    ? reason
+    : 'other';
+  authFailuresStore[validReason] = (authFailuresStore[validReason] ?? 0) + 1;
+}
+
 // ─── Fee withdrawal DB-write failure counter ──────────────────────────────────
 
 const feeWithdrawalDbWriteFailuresStore = { total: 0 };
@@ -427,6 +704,122 @@ export function incrementFeeWithdrawalDbWriteFailuresTotal(): void {
 /** Returns the current fee-withdrawal DB-write-failure counter. */
 export function getFeeWithdrawalDbWriteFailuresTotal(): number {
   return feeWithdrawalDbWriteFailuresStore.total;
+}
+
+// ─── Runtime metrics (process CPU, RSS, heap, event-loop lag, GC, handles) ────
+
+/**
+ * Event-loop lag monitor. Uses perf_hooks.monitorEventLoopDelay to measure
+ * how long the event loop is blocked. Started at module load if metrics enabled.
+ */
+let eventLoopDelayMonitor: IntervalHistogram | null = null;
+
+/** Initialize event-loop lag monitoring. Called at startup. */
+export function initEventLoopMonitoring(): void {
+  if (!isMetricsEnabled()) return;
+  try {
+    eventLoopDelayMonitor = monitorEventLoopDelay({
+      resolution: 10, // 10ms resolution
+    });
+    eventLoopDelayMonitor.enable();
+  } catch (err) {
+    // monitorEventLoopDelayMonitor may not be available in all Node versions
+    console.warn('[metrics] Failed to initialize event-loop monitoring:', err);
+  }
+}
+
+/** Get current event-loop lag in seconds (95th percentile over the sampling window). */
+export function getEventLoopLagSeconds(): number {
+  if (!eventLoopDelayMonitor) return 0;
+  if (eventLoopDelayMonitor.count === 0) return 0;
+  // Histogram values are in nanoseconds
+  return eventLoopDelayMonitor.percentile(95) / 1e9;
+}
+
+/** GC duration histogram buckets (in seconds). */
+export const GC_DURATION_BUCKETS: ReadonlyArray<number> = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1];
+
+interface GcHistogram {
+  bucketCounts: number[];
+  sum: number;
+  count: number;
+}
+
+const gcHistogram: GcHistogram = {
+  bucketCounts: GC_DURATION_BUCKETS.map(() => 0),
+  sum: 0,
+  count: 0,
+};
+
+/** GC performance observer. Initialized at startup if metrics enabled. */
+let gcObserver: PerformanceObserver | null = null;
+
+/** Initialize GC performance observer. Called at startup. */
+export function initGcMonitoring(): void {
+  if (!isMetricsEnabled()) return;
+  try {
+    gcObserver = new PerformanceObserver((list) => {
+      const entries = list.getEntries();
+      for (const entry of entries) {
+        if (entry.name === 'gc') {
+          const duration = entry.duration / 1000; // Convert to seconds
+          for (let i = 0; i < GC_DURATION_BUCKETS.length; i++) {
+            if (duration <= GC_DURATION_BUCKETS[i]) gcHistogram.bucketCounts[i] += 1;
+          }
+          gcHistogram.sum += duration;
+          gcHistogram.count += 1;
+        }
+      }
+    });
+    gcObserver.observe({ entryTypes: ['gc'] });
+  } catch (err) {
+    // GC observation may not be available in all Node versions
+    console.warn('[metrics] Failed to initialize GC monitoring:', err);
+  }
+}
+
+/** Get GC histogram snapshot. */
+export function getGcHistogram(): GcHistogram {
+  return {
+    bucketCounts: [...gcHistogram.bucketCounts],
+    sum: gcHistogram.sum,
+    count: gcHistogram.count,
+  };
+}
+
+/** Get process CPU seconds total (user + system). */
+export function getProcessCpuSecondsTotal(): number {
+  const usage = process.cpuUsage();
+  return (usage.user + usage.system) / 1e6; // Convert microseconds to seconds
+}
+
+/** Get process resident memory in bytes. */
+export function getProcessResidentMemoryBytes(): number {
+  return process.memoryUsage().rss;
+}
+
+/** Get Node.js heap size used in bytes. */
+export function getHeapSizeUsedBytes(): number {
+  return process.memoryUsage().heapUsed;
+}
+
+/** Get Node.js heap size total in bytes. */
+export function getHeapSizeTotalBytes(): number {
+  return process.memoryUsage().heapTotal;
+}
+
+/** Get active handles count. */
+export function getActiveHandles(): number {
+  // process._getActiveHandles() is undocumented but widely used for monitoring
+  // @ts-expect-error - accessing undocumented Node API
+  return process._getActiveHandles?.()?.length ?? 0;
+}
+
+/** Reset runtime metrics (for test isolation). */
+export function resetRuntimeMetrics(): void {
+  gcHistogram.bucketCounts = GC_DURATION_BUCKETS.map(() => 0);
+  gcHistogram.sum = 0;
+  gcHistogram.count = 0;
 }
 
 // ─── Prometheus exposition ──────────────────────────────────────────────────────
@@ -446,6 +839,10 @@ export interface SerializeMetricsExtras {
   sseConnectionsActive?: number;
   /** Optional stuck_pending_pins_count gauge value, injected by the caller. */
   stuckPendingPinsCount?: number;
+  /** Epoch seconds of the last successful indexer poll (0 = never). */
+  indexerLastSuccessTimestamp?: number;
+  /** Lifetime count of indexer poll failures. */
+  indexerPollFailuresTotal?: number;
 }
 
 /**
@@ -458,8 +855,10 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   const routes = getMetrics();
   const errors = getErrorMetrics();
   const hist = getLatencyHistogram();
+  const httpSecondsHist = getHttpSecondsHistogram();
   const cache = getCacheMetrics();
   const webhook = getWebhookCounters();
+  const gcHist = getGcHistogram();
   const lines: string[] = [];
 
   // Request count (counter) — one series per route.
@@ -470,14 +869,27 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   }
 
   // Request duration (histogram) — cumulative buckets plus _sum and _count.
-  lines.push('# HELP http_request_duration_ms Request latency in milliseconds');
-  lines.push('# TYPE http_request_duration_ms histogram');
-  for (let i = 0; i < LATENCY_BUCKETS_MS.length; i++) {
-    lines.push(`http_request_duration_ms_bucket{le="${LATENCY_BUCKETS_MS[i]}"} ${hist.bucketCounts[i]}`);
+  // NEW: http_request_duration_seconds (standard Prometheus metric)
+  lines.push('# HELP http_request_duration_seconds HTTP request latency in seconds');
+  lines.push('# TYPE http_request_duration_seconds histogram');
+  for (let i = 0; i < HTTP_SECONDS_BUCKETS.length; i++) {
+    lines.push(`http_request_duration_seconds_bucket{le="${HTTP_SECONDS_BUCKETS[i]}"} ${httpSecondsHist.bucketCounts[i]}`);
   }
-  lines.push(`http_request_duration_ms_bucket{le="+Inf"} ${hist.count}`);
-  lines.push(`http_request_duration_ms_sum ${hist.sum}`);
-  lines.push(`http_request_duration_ms_count ${hist.count}`);
+  lines.push(`http_request_duration_seconds_bucket{le="+Inf"} ${httpSecondsHist.count}`);
+  lines.push(`http_request_duration_seconds_sum ${httpSecondsHist.sum}`);
+  lines.push(`http_request_duration_seconds_count ${httpSecondsHist.count}`);
+
+  // LEGACY: http_request_duration_ms (deprecated, will be removed in next release)
+  if (isLegacyMsMetricEnabled()) {
+    lines.push('# HELP http_request_duration_ms HTTP request latency in milliseconds (DEPRECATED: use http_request_duration_seconds)');
+    lines.push('# TYPE http_request_duration_ms histogram');
+    for (let i = 0; i < LATENCY_BUCKETS_MS.length; i++) {
+      lines.push(`http_request_duration_ms_bucket{le="${LATENCY_BUCKETS_MS[i]}"} ${hist.bucketCounts[i]}`);
+    }
+    lines.push(`http_request_duration_ms_bucket{le="+Inf"} ${hist.count}`);
+    lines.push(`http_request_duration_ms_sum ${hist.sum}`);
+    lines.push(`http_request_duration_ms_count ${hist.count}`);
+  }
 
   // Error rate (counter) — labelled by status class.
   lines.push('# HELP http_errors_total Total number of HTTP error responses by status class');
@@ -565,6 +977,16 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
     lines.push(`indexer_ledger_lag ${extras.indexerLedgerLag}`);
   }
 
+  // Indexer last success timestamp (#1574).
+  lines.push('# HELP scout_off_indexer_last_success_timestamp_seconds Unix timestamp of the last successful indexer poll (0 = never)');
+  lines.push('# TYPE scout_off_indexer_last_success_timestamp_seconds gauge');
+  lines.push(`scout_off_indexer_last_success_timestamp_seconds ${(extras.indexerLastSuccessTimestamp ?? 0) / 1000}`);
+
+  // Indexer poll failure counter (#1574).
+  lines.push('# HELP scout_off_indexer_poll_failures_total Total number of indexer poll failures since process start');
+  lines.push('# TYPE scout_off_indexer_poll_failures_total counter');
+  lines.push(`scout_off_indexer_poll_failures_total ${extras.indexerPollFailuresTotal ?? 0}`);
+
   // Stuck pending IPFS pins gauge.
   const stuckPins = extras.stuckPendingPinsCount !== undefined ? extras.stuckPendingPinsCount : getStuckPendingPinsCount();
   lines.push('# HELP stuck_pending_pins_count Current number of stuck pending IPFS pins');
@@ -584,6 +1006,14 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# HELP scout_off_webhook_dead_letters_inserted_total Lifetime webhook dead-letter inserts');
   lines.push('# TYPE scout_off_webhook_dead_letters_inserted_total counter');
   lines.push(`scout_off_webhook_dead_letters_inserted_total ${webhook.deadLettersTotal}`);
+  lines.push('# HELP scout_off_webhook_subscriptions Webhook subscriptions by health status');
+  lines.push('# TYPE scout_off_webhook_subscriptions gauge');
+  for (const [status, count] of Object.entries(getWebhookSubscriptionStatusCounts())) {
+    lines.push(`scout_off_webhook_subscriptions{status="${status}"} ${count}`);
+  }
+  lines.push('# HELP scout_off_webhook_circuit_open_total Deliveries skipped because the subscription circuit was open');
+  lines.push('# TYPE scout_off_webhook_circuit_open_total counter');
+  lines.push(`scout_off_webhook_circuit_open_total ${webhookCircuitOpenTotal}`);
   lines.push('# HELP scout_off_webhook_retry_success_total Successful dead-letter auto-retries');
   lines.push('# TYPE scout_off_webhook_retry_success_total counter');
   lines.push(`scout_off_webhook_retry_success_total ${webhook.retrySuccessTotal}`);
@@ -604,6 +1034,103 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# TYPE scout_off_tier_divergence_total counter');
   lines.push(`scout_off_tier_divergence_total ${getTierDivergenceForMetrics()}`);
 
+  // Circuit breaker state gauges and transition counters (#1573).
+  // scout_off_circuit_breaker_state: 0=closed, 1=half-open, 2=open
+  const cbStates = getCircuitBreakerStates();
+  lines.push('# HELP scout_off_circuit_breaker_state Circuit breaker state (0=closed, 1=half-open, 2=open)');
+  lines.push('# TYPE scout_off_circuit_breaker_state gauge');
+  for (const [name, value] of Object.entries(cbStates)) {
+    lines.push(`scout_off_circuit_breaker_state{breaker="${escapeLabelValue(name)}"} ${value}`);
+  }
+  // scout_off_circuit_breaker_transitions_total: count of state transitions labelled by target state
+  const cbTransitions = getCircuitBreakerTransitions();
+  lines.push('# HELP scout_off_circuit_breaker_transitions_total Total circuit breaker state transitions by target state');
+  lines.push('# TYPE scout_off_circuit_breaker_transitions_total counter');
+  for (const [key, count] of Object.entries(cbTransitions)) {
+    const colonIdx = key.lastIndexOf(':');
+    const breakerName = key.slice(0, colonIdx);
+    const toState = key.slice(colonIdx + 1);
+    lines.push(`scout_off_circuit_breaker_transitions_total{breaker="${escapeLabelValue(breakerName)}",to="${escapeLabelValue(toState)}"} ${count}`);
+  }
+
+  lines.push(...retentionMetrics());
+  // ─── Runtime metrics (process CPU, RSS, heap, event-loop lag, GC, handles) ────
+  lines.push('# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds');
+  lines.push('# TYPE process_cpu_seconds_total counter');
+  lines.push(`process_cpu_seconds_total ${getProcessCpuSecondsTotal()}`);
+
+  lines.push('# HELP process_resident_memory_bytes Resident memory size in bytes');
+  lines.push('# TYPE process_resident_memory_bytes gauge');
+  lines.push(`process_resident_memory_bytes ${getProcessResidentMemoryBytes()}`);
+
+  lines.push('# HELP nodejs_heap_size_used_bytes Process heap size used in bytes');
+  lines.push('# TYPE nodejs_heap_size_used_bytes gauge');
+  lines.push(`nodejs_heap_size_used_bytes ${getHeapSizeUsedBytes()}`);
+
+  lines.push('# HELP nodejs_heap_size_total_bytes Total heap size in bytes');
+  lines.push('# TYPE nodejs_heap_size_total_bytes gauge');
+  lines.push(`nodejs_heap_size_total_bytes ${getHeapSizeTotalBytes()}`);
+
+  lines.push('# HELP nodejs_eventloop_lag_seconds Event-loop lag in seconds (95th percentile)');
+  lines.push('# TYPE nodejs_eventloop_lag_seconds gauge');
+  lines.push(`nodejs_eventloop_lag_seconds ${getEventLoopLagSeconds()}`);
+
+  lines.push('# HELP nodejs_gc_duration_seconds Garbage collection duration in seconds');
+  lines.push('# TYPE nodejs_gc_duration_seconds histogram');
+  for (let i = 0; i < GC_DURATION_BUCKETS.length; i++) {
+    lines.push(`nodejs_gc_duration_seconds_bucket{le="${GC_DURATION_BUCKETS[i]}"} ${gcHist.bucketCounts[i]}`);
+  }
+  lines.push(`nodejs_gc_duration_seconds_bucket{le="+Inf"} ${gcHist.count}`);
+  lines.push(`nodejs_gc_duration_seconds_sum ${gcHist.sum}`);
+  lines.push(`nodejs_gc_duration_seconds_count ${gcHist.count}`);
+
+  lines.push('# HELP nodejs_active_handles_total Number of active libuv handles');
+  lines.push('# TYPE nodejs_active_handles_total gauge');
+  lines.push(`nodejs_active_handles_total ${getActiveHandles()}`);
+  // Indexer event outcomes (#1540) — labelled by event type and outcome.
+  // A sustained non-zero `unknown_type`/`decode_error` rate means a contract
+  // upgrade renamed or reshaped an event; those rows are parked in
+  // `indexer_unprocessed_events` for replay (see docs/indexer.md).
+  lines.push('# HELP scout_off_indexer_events_total Total number of contract events seen by the indexer, by type and outcome');
+  lines.push('# TYPE scout_off_indexer_events_total counter');
+  for (const [type, outcomes] of Object.entries(getIndexerEventMetrics())) {
+    for (const [outcome, count] of Object.entries(outcomes)) {
+      lines.push(
+        `scout_off_indexer_events_total{type="${escapeLabelValue(type)}",outcome="${escapeLabelValue(outcome)}"} ${count}`,
+      );
+    }
+  }
+
+  // Audit chain verification (#1539). `scout_off_audit_chain_valid` is 1 when
+  // the most recent scheduled verification passed, 0 after a break is found.
+  lines.push('# HELP scout_off_audit_chain_valid Whether the last audit-log hash-chain verification passed (1) or found a break (0)');
+  lines.push('# TYPE scout_off_audit_chain_valid gauge');
+  lines.push(`scout_off_audit_chain_valid ${getAuditChainValid()}`);
+  lines.push('# HELP scout_off_audit_chain_breaks_total Total number of audit-log hash-chain breaks detected since process start');
+  lines.push('# TYPE scout_off_audit_chain_breaks_total counter');
+  lines.push(`scout_off_audit_chain_breaks_total ${getAuditChainBreaksTotal()}`);
+  // Unhandled promise-rejection counter (#1570).
+  lines.push('# HELP scout_off_unhandled_rejections_total Total number of unhandled promise rejections since process start');
+  lines.push('# TYPE scout_off_unhandled_rejections_total counter');
+  lines.push(`scout_off_unhandled_rejections_total ${unhandledRejectionsTotal}`);
+
+  // Rate-limit rejection counter (#1571).
+  lines.push('# HELP scout_off_rate_limit_rejected_total Total rate-limited (429) requests by limiter namespace');
+  lines.push('# TYPE scout_off_rate_limit_rejected_total counter');
+  for (const [limiter, count] of Object.entries(rateLimitRejectedStore)) {
+    lines.push(`scout_off_rate_limit_rejected_total{limiter="${escapeLabelValue(limiter)}"} ${count}`);
+  }
+  lines.push('# HELP scout_off_rate_limit_store_errors_total Total rate-limit store errors (fail-open path)');
+  lines.push('# TYPE scout_off_rate_limit_store_errors_total counter');
+  lines.push(`scout_off_rate_limit_store_errors_total ${rateLimitStoreErrorsTotal}`);
+
+  // Authentication-failure counter (#1572).
+  lines.push('# HELP scout_off_auth_failures_total Total authentication failures by reason');
+  lines.push('# TYPE scout_off_auth_failures_total counter');
+  for (const [reason, count] of Object.entries(authFailuresStore)) {
+    lines.push(`scout_off_auth_failures_total{reason="${escapeLabelValue(reason)}"} ${count}`);
+  }
+
   return lines.join('\n') + '\n';
 }
 
@@ -615,6 +1142,8 @@ export function createMetricsHandler(
   getIndexerLedgerLag: () => number = () => 0,
   getSseConnectionsActive: () => number = () => 0,
   getStuckPinsCount: () => number = () => getStuckPendingPinsCount(),
+  getIndexerLastSuccessAt: () => number = () => 0,
+  getIndexerPollFailuresTotal: () => number = () => 0,
 ) {
   return (_req: Request, res: Response): void => {
     res.set('Content-Type', PROMETHEUS_CONTENT_TYPE);
@@ -622,6 +1151,8 @@ export function createMetricsHandler(
       indexerLedgerLag: getIndexerLedgerLag(),
       sseConnectionsActive: getSseConnectionsActive(),
       stuckPendingPinsCount: getStuckPinsCount(),
+      indexerLastSuccessTimestamp: getIndexerLastSuccessAt(),
+      indexerPollFailuresTotal: getIndexerPollFailuresTotal(),
     }));
   };
 }

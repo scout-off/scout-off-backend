@@ -190,6 +190,46 @@ for var in \
 done
 
 echo ""
+echo "--- Every env var read by src/ is configurable through the chart ---"
+# Guards against the failure mode in #1567: a new `process.env.X` lands in the
+# backend, but operators cannot set it without hand-editing manifests. Any
+# variable the backend reads must be either a key under `env:` in values.yaml
+# (rendered into the ConfigMap) or a name in the rendered manifest (Secret).
+#
+# Excluded:
+#   src/frontend/   a separate Next.js app with its own environment
+#   GIT_COMMIT      baked into the image at build time, never set by Helm
+ALLOWLIST="GIT_COMMIT"
+
+VALUES_FILE="${CHART_DIR}/values.yaml"
+SRC_VARS="$(grep -rhoE "process\.env\.[A-Z_][A-Z0-9_]*" "${REPO_ROOT}/src" \
+  --include='*.ts' --exclude-dir=frontend \
+  | sed 's/process\.env\.//' | sort -u)"
+
+UNWIRED=0
+for var in ${SRC_VARS}; do
+  if [[ " ${ALLOWLIST} " == *" ${var} "* ]]; then
+    continue
+  fi
+  # Present as a values.yaml env key (ConfigMap-backed)?
+  if grep -qE "^  ${var}:" "${VALUES_FILE}"; then
+     continue
+  fi
+  # Otherwise it must be injected by name (Secret-backed or literal).
+  if grep -qE "name: ${var}$" <<< "${RENDERED}"; then
+    continue
+  fi
+  echo "[validate-helm-env-wiring] FAIL: ${var} is read by src/ but is not wired into the chart (values.yaml env key or Secret key)" >&2
+  UNWIRED=$(( UNWIRED + 1 ))
+done
+
+if [[ "${UNWIRED}" -gt 0 ]]; then
+  FAILURES=$(( FAILURES + UNWIRED ))
+else
+  pass "all $(grep -c . <<< "${SRC_VARS}") env vars read by src/ are wired into the chart"
+fi
+
+echo ""
 if [[ "${FAILURES}" -gt 0 ]]; then
   fail "${FAILURES} env var(s) missing from the rendered Helm manifest — see failures above"
 fi

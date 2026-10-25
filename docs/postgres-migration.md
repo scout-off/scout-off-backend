@@ -153,69 +153,80 @@ CREATE DATABASE scout_off OWNER scout_user;
 GRANT ALL PRIVILEGES ON DATABASE scout_off TO scout_user;
 ```
 
-## Step 2: Export Data from SQLite
+## Step 2: Freeze writes and capture the source
 
-While the backend is running, export the SQLite database:
+Rehearse this procedure using a production backup in staging first. Upgrade
+the SQLite deployment to this checkout so every migration is recorded before
+the maintenance window. Migration 036 repairs historical dialect drift without
+editing old migration files. Stop every API replica, indexer, webhook retry
+worker, retention job and other writer. An HTTP maintenance page alone does
+not stop background writers. Keep PostgreSQL application instances stopped.
 
-```bash
-# SQLite to CSV export (example - adjust based on your needs)
-sqlite3 scout-off.db <<'EOF'
-.mode csv
-.output events.csv
-SELECT * FROM events;
-
-.output players.csv
-SELECT * FROM players;
-
--- Export all tables similarly
-.output events.csv
-SELECT * FROM events;
-EOF
-```
-
-Or use `sqlite3` dump format:
+Create a consistent backup using SQLite's backup API/CLI (including committed
+WAL contents); do not copy only the `.db` file while its WAL may be live:
 
 ```bash
-sqlite3 scout-off.db ".dump" > scout-off-dump.sql
+sqlite3 /data/scout-off.db ".backup '/backups/scout-off-cutover.db'"
 ```
 
-## Step 3: Run Migrations
+Keep this backup immutable throughout copy and resume. Preserve the existing
+encryption keys and any external export/audit archives: database rows contain
+archive paths, and migrating those rows does not move the corresponding files.
 
-The Scout-Off backend automatically runs migrations on startup. To switch to PostgreSQL:
+## Step 3: Copy into an empty PostgreSQL target
 
-1. Set the `DB_DRIVER` environment variable to `postgres`:
+Use a dedicated empty database/schema owned by the migration user, with the
+same connection/TLS settings intended for the application. Run from a checkout
+with development dependencies installed (the CLI uses ts-node):
 
 ```bash
-export DB_DRIVER=postgres
-export DATABASE_URL="postgresql://scout_user:[password]@postgres-host:5432/scout_off"
+export DATABASE_URL='postgresql://scout_user:[password]@postgres-host:5432/scout_off'
+export DATABASE_SSL=true
+npm run db:migrate-to-postgres -- --sqlite /backups/scout-off-cutover.db --batch-size 500
 ```
 
-2. Start the backend:
+The tool opens SQLite read-only in one snapshot and applies PostgreSQL
+migrations. It compares the complete migration history, validates any stored
+file checksums, rejects table/column drift, orders tables by foreign keys,
+and streams rows using SQLite iterators and bounded multi-row inserts.
+Migration-seeded feature flags are replaced with their exact source contents.
+Integer booleans become native booleans only where the target schema requires
+them; JSON/JSONB columns are parsed where present. JSON stored as TEXT stays
+TEXT. Epoch units, null timestamps, encrypted notes and webhook secrets remain
+unchanged. No decryption is performed.
+
+Each batch and its `_migration_progress` checkpoint commit atomically. If the
+process or network fails, keep writes frozen and use the identical backup:
 
 ```bash
-npm run build
-npm start
+npm run db:migrate-to-postgres -- --sqlite /backups/scout-off-cutover.db --batch-size 500 --resume
 ```
 
-The backend will:
-- Connect to PostgreSQL
-- Detect any unapplied migrations
-- Create schema using PostgreSQL-specific migration files (`*_postgres.sql`)
-- Apply all pending migrations in order
+Resume validates source contents, row order and the migration bundle against
+the manifest before continuing. It never ignores duplicate keys. A fresh run
+refuses any occupied target schema; resume requires a manifest created by the
+tool. If schema preparation failed before the manifest committed, provision a
+new empty target and rerun. If the source changes, create a new frozen backup
+and a new empty target. This tool is an offline copy, not incremental replication.
 
-## Step 4: Verify Data Integrity
+## Step 4: Verify, perform the final copy and cut over
 
-After migration, verify that all data has been transferred:
+The CLI prints every application table's source count, target count, 256-bit
+order-independent checksum and verification status. Checksums hash canonical
+rows and add hashes modulo 2^256, preserving duplicate multiplicity. All tables
+must report `verified: true` and the process must exit successfully. It resets
+every serial sequence after copying (including empty tables) and blocks target
+writes while verifying. Retain the report in the change record.
 
-```sql
--- Connect to PostgreSQL
-SELECT COUNT(*) FROM events;
-SELECT COUNT(*) FROM players;
-SELECT COUNT(*) FROM subscriptions;
--- ... verify counts match SQLite exports
-```
-
-Check application logs for any errors during migration or startup.
+If rehearsal used an earlier snapshot, repeat the full copy from the final
+frozen backup into a new empty target. Do not resume an old rehearsal against a
+newer source. While external writes remain blocked, point one backend at the
+verified target using `DB_DRIVER=postgres`, the same `DATABASE_URL`, TLS settings
+and encryption keys. Check readiness, player/scout reads, role introspection,
+audit verification and an approved test write. Then enable workers and restore
+traffic. Keep the SQLite backup and verification report through the rollback
+window. The progress table may remain for diagnosis; do not use `--resume`
+after production writes have begun.
 
 ## Step 5: Configure for Production
 
@@ -342,7 +353,14 @@ export DB_PATH=scout-off.db
 
 4. Restart backend instances
 
-**Note:** If you made changes to data in PostgreSQL after switching, those changes will not be reflected in SQLite. Only rollback if the migration completed but you encounter unexpected issues during testing.
+Before PostgreSQL accepts production writes, rollback can restore the frozen
+SQLite snapshot and original environment immediately. After any PostgreSQL
+writes, stop traffic and workers again and preserve a PostgreSQL backup. Those
+writes are absent from SQLite: reconcile/replay them through an approved data
+recovery procedure before reopening SQLite, or repair PostgreSQL forward.
+Blindly switching back after writes would lose data. This CLI does not implement
+reverse replication. Preserve audit archives, checkpoint files and encryption
+keys alongside the restored database.
 
 ## SSL / TLS Configuration
 

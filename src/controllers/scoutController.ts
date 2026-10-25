@@ -33,7 +33,6 @@ import { invalidatePlayerCache } from '../services/cache';
 import config from '../config';
 import { ErrorCode } from '../utils/errorCodes';
 import { insertTrialOffer, getTrialOffers } from '../services/indexer';
-import { invokeContract, strVal } from '../utils/contract';
 import { isValidIpfsOrHttpsUri } from '../utils/uriValidator';
 
 /**
@@ -154,7 +153,7 @@ async function scoutHasPlayerAccess(scoutWallet: string, playerId: string): Prom
 // ─── GET /api/scouts/:wallet/subscription ─────────────────────────────────────
 
 /** GET /api/scouts/:wallet/subscription */
-export async function getSubscription(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getSubscription(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const {wallet} = req.params as {wallet: string};
 
   const now = Math.floor(Date.now() / 1000);
@@ -236,7 +235,7 @@ try {
 
     const parsed = subscribeSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid request body' });
+      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request body' });
       return;
     }
     const { tier, duration } = parsed.data;
@@ -298,7 +297,7 @@ try {
     const {wallet} = req.params as {wallet: string};
     const parsed = subscribeSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid request body' });
+      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request body' });
       return;
     }
     const { tier, duration } = parsed.data;
@@ -393,7 +392,7 @@ try {
 // ─── GET /api/scouts/:wallet/contacts ─────────────────────────────────────────
 
 /** GET /api/scouts/:wallet/contacts */
-export async function getUnlockedContacts(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getUnlockedContacts(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const {wallet} = req.params as {wallet: string};
   const { playerId } = req.query as { playerId?: string };
 
@@ -515,7 +514,7 @@ try {
 // ─── GET/POST /api/scouts/:wallet/trial-offers (#285) ──────────────────────────
 
 /** GET /api/scouts/:wallet/trial-offers — on-chain trial offer event history */
-export async function listTrialOffers(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function listTrialOffers(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const {wallet} = req.params as {wallet: string};
   res.json({ success: true, data: await getTrialOffers(wallet) });
 }
@@ -534,7 +533,7 @@ try {
 
     const parsed = trialOfferSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid request body' });
+      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request body' });
       return;
     }
     const { playerId, detailsUri } = parsed.data;
@@ -660,12 +659,12 @@ const paymentHistoryQuerySchema = z.object({
 });
 
 /** GET /api/scouts/:wallet/payments — payment history */
-export async function getPaymentHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getPaymentHistory(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const {wallet} = req.params as {wallet: string};
 
   const parsed = paymentHistoryQuerySchema.safeParse(req.query);
   if (!parsed.success) {
-    res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid query parameters', code: ErrorCode.VALIDATION_ERROR });
+    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid query parameters', code: ErrorCode.VALIDATION_ERROR });
     return;
   }
   const { from, to, type, page, pageSize, format } = parsed.data;
@@ -808,7 +807,7 @@ export async function getPaymentHistory(req: Request, res: Response, next: NextF
 }
 
 /** GET /api/scouts/:wallet/contacts/:playerId */
-export async function getContactDetails(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getContactDetails(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const {wallet, playerId} = req.params as {wallet: string, playerId: string};
 
   const player = await getPlayerById(playerId);

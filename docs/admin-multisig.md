@@ -542,3 +542,72 @@ Not all admin endpoints require multi-sig. Only the above and any future high-va
 - [Admin Multi-Sig Implementation](../src/services/adminMultiSig.ts)
 - [Admin Multi-Sig Routes](../src/routes/admin.ts)
 - [DEPLOYMENT.md: Multi-Sig Admin Operations Section](../DEPLOYMENT.md#multi-sig-admin-operations)
+
+## Contract roles
+
+Each deployed contract stores its own memberships in `scout_off_shared::access`.
+`initialize` grants all six roles to the initial admin, preserving the existing
+single-admin workflows. Possessing a role still requires Soroban authorization
+from that address; a backend JWT role is a separate access layer.
+
+| Role | Authorized operations |
+| --- | --- |
+| `DEFAULT_ADMIN` | Grant/revoke roles, configure role administrators, upgrade WASM, issue player tokens, administrative connection operations |
+| `PAUSER` | Pause/unpause |
+| `FEE_MANAGER` | Set platform fee, withdraw fees, distribute player-token fees |
+| `VALIDATOR_MANAGER` | Register/revoke progress validators |
+| `UPDATER_MANAGER` | Add/remove authorized register updater contracts |
+| `MIGRATOR` | Migrate player records and legacy token holder pages |
+
+Every role is initially administered by `DEFAULT_ADMIN`. `set_role_admin` can
+assign another operational role to administer a role. The root role always
+administers itself. Granting an existing membership and revoking a missing
+membership are idempotent. Both revocation and renunciation reject removal of
+the last root administrator. Root administration does not implicitly confer
+operational roles after the initial grants have been changed.
+
+All contracts expose `has_role(role, account)`, `get_role_admin(role)`,
+`grant_role(caller, role, account)`, `revoke_role(caller, role, account)`,
+`renounce_role(account, role)` and `set_role_admin(caller, role, admin_role)`.
+Membership is scoped to the current contract. Existing implicit-admin APIs
+remain available, but they also require the appropriate role. Delegates use
+`register_validator_as`, `revoke_validator_as`, `add_authorized_updater_as`,
+`remove_authorized_updater_as`, `migrate_players_as`, `issue_tokens_as`,
+`distribute_fee_as`, and `migrate_player_step_as`; each takes `caller` directly
+after `env`. The pause and fee APIs already accept the caller address.
+
+### Existing deployment migration and rotation
+
+Preserve existing storage keys and deploy the RBAC WASM through the deployment's
+existing authorized upgrade mechanism. Older WASM without an upgrade entrypoint
+requires the deployment's supported migration/redeployment procedure; adding an
+upgrade entrypoint to new WASM does not make old WASM upgradeable. Before resuming
+operations, have the stored legacy admin authorize `initialize_roles(admin)` on
+each upgraded instance. The call refuses uninitialized instances, non-admins and
+repeat bootstraps. Until bootstrap finishes, privileged role checks fail closed.
+New deployments should only call normal `initialize`, which bootstraps roles.
+
+Grant roles to each team's Soroban account or multisig account, verify membership
+with `has_role`, and test its authorized operations before revoking initial
+memberships. Grant a second `DEFAULT_ADMIN` before rotating the original root.
+An account's Stellar signer thresholds enforce its on-chain multisig policy;
+the backend's proposal approvals alone do not satisfy another account's Soroban
+authorization. The backend transaction service signs with the configured platform
+keypair, which must hold the relevant role. `changeContractRole` submits grants
+and revocations using that signer. Validator submissions use the explicit-caller
+APIs so a delegated platform signer does not depend on the legacy admin key.
+
+The indexer decodes `role_granted`, `role_revoked` and `role_admin_changed` events.
+`POST /api/admin/introspect` includes `data.contractRoles` with indexed
+`contract_id`, `role`, and `account` memberships. This is an eventually consistent
+chain snapshot, not an authorization decision. The SQL view derives membership
+from canonical events, so reorg deletion and replay do not leave stale grants.
+Index from initialization (or RBAC bootstrap) to reconstruct every membership;
+never prune role events. Configure indexing for every deployed contract whose
+memberships operators need to inspect. Query `has_role` on-chain for authoritative
+current access.
+
+Set `PLAYER_TOKEN_CONTRACT_ID` when the optional player-token contract is deployed
+so its role events are included alongside the four core contracts. The backend
+pause/unpause methods submit the platform signer's address as the Soroban caller;
+the approving HTTP admin identities remain part of the off-chain approval trail.

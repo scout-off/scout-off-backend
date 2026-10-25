@@ -227,3 +227,55 @@ describe('tokenBlocklist — Redis-down failover', () => {
     unloadRedisDown();
   });
 });
+
+describe('tokenBlocklist — pipelined startup warm-up (#1592)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { warmRevocationsIntoRedis, WARMUP_PIPELINE_CHUNK } = require('../../src/services/tokenBlocklist');
+
+  function makePipelineClient(store: Map<string, number>) {
+    let execCalls = 0;
+    const client = {
+      pipeline() {
+        const queued: Array<{ key: string; ttl: number }> = [];
+        return {
+          setex(key: string, ttl: number, _v: string) {
+            queued.push({ key, ttl });
+            return this;
+          },
+          async exec(): Promise<Array<[null, string]>> {
+            execCalls++;
+            const results: Array<[null, string]> = [];
+            for (const { key, ttl } of queued) {
+              store.set(key, ttl);
+              results.push([null, 'OK']);
+            }
+            return results;
+          },
+        };
+      },
+    };
+    return { client, execCalls: () => execCalls };
+  }
+
+  it('writes 1200 rows in three pipeline executions with per-jti TTLs', async () => {
+    expect(WARMUP_PIPELINE_CHUNK).toBe(500);
+    const now = Math.floor(Date.now() / 1000);
+    const rows = Array.from({ length: 1200 }, (_, i) => ({
+      jti: `warm-jti-${i}`,
+      expires_at: now + 3600 + i,
+    }));
+    // Already-expired rows must be skipped, not written.
+    rows.push({ jti: 'expired-jti', expires_at: now - 10 });
+
+    const store = new Map<string, number>();
+    const { client, execCalls } = makePipelineClient(store);
+    const loaded = await warmRevocationsIntoRedis(client, rows, now);
+
+    expect(loaded).toBe(1200);
+    expect(execCalls()).toBe(3);
+    expect(store.size).toBe(1200);
+    expect(store.has('jti:revoked:expired-jti')).toBe(false);
+    expect(store.get('jti:revoked:warm-jti-0')).toBe(3600);
+    expect(store.get('jti:revoked:warm-jti-1199')).toBe(3600 + 1199);
+  });
+});

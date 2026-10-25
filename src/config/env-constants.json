@@ -1,0 +1,6 @@
+{
+  "nodeEnvs": ["development", "test", "staging", "production"],
+  "networks": ["testnet", "mainnet", "futurenet", "standalone"],
+  "dbDrivers": ["sqlite", "postgres"],
+  "requiredRuntimeVars": ["CONTRACT_ID", "JWT_SECRET"]
+}

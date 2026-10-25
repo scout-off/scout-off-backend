@@ -16,17 +16,13 @@ const DB_DIR = path.resolve(__dirname, '../../db');
 // Base migrations that intentionally have no dedicated `_postgres.sql` file
 // because they contain only syntax convertSqlToPostgres() already translates
 // (see src/db/migrate.ts). Linked to #1190.
-const ALLOWLIST = new Set([
-  '027_api_key_rate_limits.sql', // ALTER TABLE ADD COLUMN + CREATE TABLE/INDEX, portable
-  '028_security_event_metrics.sql', // INTEGER PRIMARY KEY AUTOINCREMENT -> SERIAL PRIMARY KEY
-  '029_gdpr_data_export.sql', // INTEGER PRIMARY KEY AUTOINCREMENT -> SERIAL PRIMARY KEY
-]);
+const ALLOWLIST = new Set<string>([]);
 
 describe('db/ migration Postgres parity', () => {
   it('every base migration has a _postgres.sql counterpart or is allowlisted', () => {
     const files = fs.readdirSync(DB_DIR).filter((f) => f.endsWith('.sql'));
     const baseFiles = files.filter(
-      (f) => !f.includes('_postgres') && !f.endsWith('.down.sql'),
+      (f) => !f.endsWith('_postgres.sql') && !f.endsWith('.down.sql'),
     );
 
     const unpaired = baseFiles.filter((f) => {

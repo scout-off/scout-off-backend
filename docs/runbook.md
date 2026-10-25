@@ -17,14 +17,56 @@ Start every investigation with the health and metrics endpoints:
 | -------- | ----------------- |
 | `GET /health` | Process liveness, Stellar RPC reachability (`healthStatus.stellar`), DB probe (`healthStatus.db`) |
 | `GET /ready`  | Readiness: `ipfs`, `db`, `stellar` — returns `503`/`degraded` when any dependency is down |
-| `GET /metrics`| Prometheus metrics: `indexer_ledger_lag`, `http_requests_total`, `http_errors_total`, `db_query_duration_seconds`, `soroban_rpc_duration_seconds`, `webhook_delivery_total`, `scout_off_webhook_dead_letters_total`, `ip_reputation_blocked_total`, `sse_connections_active`, … |
+| `GET /metrics`| Prometheus metrics: `indexer_ledger_lag`, `scout_off_indexer_last_success_timestamp_seconds`, `scout_off_indexer_poll_failures_total`, `scout_off_circuit_breaker_state`, `scout_off_circuit_breaker_transitions_total`, `http_requests_total`, `http_errors_total`, `db_query_duration_seconds`, `soroban_rpc_duration_seconds`, `webhook_delivery_total`, `scout_off_webhook_dead_letters_total`, `ip_reputation_blocked_total`, `sse_connections_active`, … |
 
 **`indexer_ledger_lag`** is the single most useful indexer signal: ledgers
 behind the chain tip after the last poll. It is exposed as
 `indexer_ledger_lag` on `/metrics` and a warning is logged when it exceeds
 `INDEXER_LAG_WARN_THRESHOLD` (default `100`). Small, transient lag is normal
-(polls run every 5 s, and `INDEXER_FINALITY_MARGIN` — default `10` ledgers —
+(polls run every `INDEXER_POLL_INTERVAL_MS`, default 5 s, and
+`INDEXER_FINALITY_MARGIN` — default `10` ledgers —
 intentionally treats the tip as non-final); persistent three-figure lag is not.
+
+`scout_off_indexer_last_success_timestamp_seconds` is the Unix timestamp of the
+last successful poll, including successful polls that found no events.
+`scout_off_indexer_poll_failures_total` counts failed polls since process start.
+Alert when the indexer has not polled successfully for more than a minute:
+
+```promql
+time() - scout_off_indexer_last_success_timestamp_seconds > 60
+```
+
+Circuit breaker gauges use `0` for closed, `1` for half-open, and `2` for open.
+Inspect `scout_off_circuit_breaker_state{breaker="stellar"}` and
+`scout_off_circuit_breaker_state{breaker="ipfs"}` for current state;
+`scout_off_circuit_breaker_transitions_total{breaker,to}` counts transitions
+by destination state.
+
+## Prometheus alerts
+
+The Helm chart can install a `ServiceMonitor` and a `PrometheusRule`
+(`metrics.serviceMonitor.enabled=true` / `metrics.prometheusRule.enabled=true`,
+see [DEPLOYMENT.md → Monitoring](../DEPLOYMENT.md#6a-monitoring-prometheus-operator)).
+Every alert below references metrics the backend actually exports and can be
+tuned or disabled under `metrics.prometheusRule.rules.<name>`.
+
+| Alert | Signal | First response |
+| ----- | ------ | -------------- |
+| `ScoutOffIndexerLagHigh` | `indexer_ledger_lag > 100` for 10m | Check `GET /health` → `healthStatus.stellar` and the RPC provider. If RPC is healthy, check indexer poll errors and [replay](#targeted-replay-vs-full-reindex) the gap. |
+| `ScoutOffWebhookDLQGrowing` | `sum(scout_off_webhook_dead_letters_total) > 100` for 15m | Inspect `GET /api/admin/webhooks/dead-letters`, then [drain the dead-letter queue](#draining-the-dead-letter-queue). A permanently failing subscriber must be fixed or removed, not replayed forever. |
+| `ScoutOffTierDivergence` | `increase(scout_off_tier_divergence_total[1h]) > 0` | A `milestone_approved` event was missed. Compare the player's milestones with the stored tier and run a [targeted replay](#targeted-replay-vs-full-reindex) over the approval range. |
+| `ScoutOffStuckPins` | `stuck_pending_pins_count > 0` for 30m | Check `PINATA_API_KEY`/`PINATA_SECRET` and Pinata status. Pending pins past their retry budget need a manual retry once IPFS is reachable (see [docs/ipfs-pinata-gateway.md](ipfs-pinata-gateway.md)). |
+| `ScoutOffHigh5xxRate` | 5xx ratio > 5% for 5m | Check `http_errors_total{range="5xx"}` by route, the structured error logs (with `X-Correlation-ID`), `/health` and `/ready`. Most 5xx bursts are a dependency outage (RPC, DB, IPFS) or a bad deploy — roll back if the rate started at rollout. |
+| `ScoutOffNotReady` | pod unready for 10m (kube-state-metrics; disabled by default) | `GET /ready` on the pod: `db`, `ipfs` or `stellar` is failing. Readiness also fails while the pod is draining, so check whether a rollout is in progress before restarting anything. |
+
+To silence or retune an alert during an incident, change its `enabled`,
+`threshold`, `for` or `severity` under `metrics.prometheusRule.rules` and run
+`helm upgrade` — do not edit the generated PrometheusRule directly.
+
+**Metrics authentication:** if `/metrics` is protected by a bearer token,
+create the token Secret in the release namespace and set
+`metrics.serviceMonitor.bearerTokenSecret.name` / `.key`. Without it the
+ServiceMonitor's scrapes return `401` and no alerts can fire.
 
 ## Incident → action
 
@@ -284,37 +326,73 @@ The backend maintains circuit breakers to fail fast when downstream dependencies
 
 When open, calls fail immediately with `CircuitBreakerOpenError` rather than consuming sockets while waiting on network timeouts. See [docs/degradation-contracts.md](degradation-contracts.md#circuit-breakers) for degradation contracts and behavior under failure.
 
+All four values are parsed and validated once in `src/config.ts` (under
+`config.circuitBreaker.default` and `config.circuitBreaker.ipfs`) and passed
+into the breaker constructors (#1564). An invalid value — a threshold below 1
+or a reset timeout below 1000 ms — aborts startup with a clear error instead of
+silently disabling the breaker. The utilities themselves read no environment
+variables.
+
+## Indexer poll interval (#1568)
+
+The contract-event indexer polls Soroban RPC on a schedule driven by
+`INDEXER_POLL_INTERVAL_MS`. The default (5000 ms) matches Stellar's ledger
+close time: polling faster than that usually returns the same ledger again and
+only spends RPC quota.
+
+| Variable | Default | Range | Effect |
+| -------- | ------- | ----- | ------ |
+| `INDEXER_POLL_INTERVAL_MS` | `5000` | `1000`–`300000` ms | How often the indexer asks RPC for new ledgers |
+
+Guidance:
+
+- **Testnet / staging:** raise it (e.g. `15000`–`30000`) to cut RPC usage and
+  cost; a few extra seconds of indexing lag is harmless there.
+- **Production:** leave it at `5000`. Larger values increase `indexer_ledger_lag`
+  and the delay before events reach webhooks/SSE clients.
+- **Local sandbox / tests:** a smaller value speeds up end-to-end feedback, but
+  never below `1000`, which the config rejects at startup.
+
+This interval is separate from `INDEXER_BACKFILL_FROM_LEDGER` (replay start
+ledger) and from the reindex batching knobs (`REINDEX_*`), which control how
+much work each poll performs rather than how often it runs.
+
 ## Graceful shutdown (#1315)
 
-The server implements an ordered drain sequence on `SIGTERM`/`SIGINT`:
+The server implements a deadline-driven drain sequence on `SIGTERM`/`SIGINT`
+(implementation: `src/shutdown.ts`, tests: `tests/shutdown.test.ts`):
 
-1. Flip draining flag → `/ready` and `/health/readiness` return `503` immediately (liveness stays `200`).
+1. Flip draining flag → `/ready` and `/health/readiness` return `503` immediately (liveness stays `200`). Responses sent from now on carry `Connection: close` so keep-alive clients stop reusing the socket.
 2. Optional pre-stop delay (`SHUTDOWN_PRESTOP_DELAY_MS`, default `0`) so load balancers observe the `503` before traffic stops.
 3. Stop all background schedulers (indexer poll, IPFS retry/reconcile, tier-divergence check).
-4. Await in-flight job executions (up to 60 % of `SHUTDOWN_TIMEOUT_MS`).
+4. Await in-flight job executions (bounded by `SHUTDOWN_JOB_DRAIN_MS`, default 30 % of the budget). Jobs still running at the deadline are abandoned so cleanup can proceed.
 5. Drain SSE sessions — sends `event: session_ended\ndata: {"reason":"server_shutdown"}` to every connected client.
 6. `server.close()` + `closeIdleConnections()` — stops accepting new HTTP connections.
-7. Close Redis, database, tracing SDK.
-8. Exit `0`.
+7. Wait for in-flight HTTP requests (tracked per request, including slow exports and streams) up to `SHUTDOWN_REQUEST_DRAIN_MS` (default 50 % of the budget).
+8. `server.closeAllConnections()` — force-closes whatever is still connected. A slow `GET /admin/events/export` therefore can no longer hold the process open.
+9. Close Redis, database and tracing SDK inside the reserved `SHUTDOWN_CLEANUP_RESERVE_MS` slice (default 2 s). This always runs, even when steps 4–8 hit their deadline.
+10. Exit `0`; exit `1` only if a cleanup step threw or exceeded its budget.
 
 **Configuration:**
 
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
-| `SHUTDOWN_TIMEOUT_MS` | `10000` | Hard limit before forced `exit(1)`. Align with Helm `terminationGracePeriodSeconds`. |
-| `SHUTDOWN_PRESTOP_DELAY_MS` | `0` | Pre-stop sleep to let load balancers drain in-flight connections before traffic stops. |
+| `SHUTDOWN_TIMEOUT_MS` | `10000` | Overall shutdown budget. Every wait below is clamped to it. |
+| `SHUTDOWN_PRESTOP_DELAY_MS` | `0` | Pre-stop sleep to let load balancers observe the `503` before traffic stops. |
+| `SHUTDOWN_REQUEST_DRAIN_MS` | 50 % of timeout (`5000`) | How long in-flight requests may finish before connections are force-closed. |
+| `SHUTDOWN_JOB_DRAIN_MS` | 30 % of timeout (`3000`) | How long in-flight background jobs may finish before they are abandoned. |
+| `SHUTDOWN_CLEANUP_RESERVE_MS` | `2000` | Slice at the end of the budget reserved for Redis, DB and tracing cleanup (clamped to half the budget). |
 
 **Kubernetes alignment:**
 
-Set `terminationGracePeriodSeconds` ≥ `SHUTDOWN_TIMEOUT_MS / 1000 + 5` (buffer for OS signal delivery and container runtime overhead). A `preStop` hook sleep of `SHUTDOWN_PRESTOP_DELAY_MS / 1000` seconds ensures the pod stops receiving traffic before `SIGTERM` is sent:
+Set `terminationGracePeriodSeconds` greater than `SHUTDOWN_TIMEOUT_MS / 1000 + preStopSleepSeconds + 5` (the extra seconds cover OS signal delivery and container runtime overhead). The Helm chart exposes this as `terminationGracePeriodSeconds` (default `30`) and `preStopSleepSeconds` (default `0`):
 
 ```yaml
-lifecycle:
-  preStop:
-    exec:
-      command: ["sleep", "5"]
-terminationGracePeriodSeconds: 20
+terminationGracePeriodSeconds: 30
+preStopSleepSeconds: 5
 ```
+
+With the app defaults, the container finishes draining in at most 10 s and the 30 s grace period leaves ample room for the preStop hook and SIGKILL escalation. Do not set `terminationGracePeriodSeconds` below `SHUTDOWN_TIMEOUT_MS / 1000`: Kubernetes would SIGKILL the pod mid-cleanup.
 
 **Expected log sequence on clean shutdown:**
 
@@ -322,10 +400,86 @@ terminationGracePeriodSeconds: 20
 Received SIGTERM, starting graceful shutdown...
 [shutdown] waiting for 1 in-flight job(s)...
 [sse] draining 3 session(s) for shutdown
-HTTP server closed
-Redis connections closed
-Database connection closed
-Tracing SDK shut down
+[shutdown] 2 request(s) still in flight after 5000ms, force-closing connections
+[shutdown] HTTP server closed
+[shutdown] redis cleanup complete
+[shutdown] database cleanup complete
+[shutdown] tracing cleanup complete
+Graceful shutdown complete in 5031ms
 ```
 
-Exit code `0` confirms clean drain. Exit code `1` with "timed out" means a job or SSE session blocked beyond `SHUTDOWN_TIMEOUT_MS` — increase the timeout or investigate the blocking operation.
+The watchdog line (`Graceful shutdown watchdog fired ... forcing exit`) should never appear: it only fires if a native dependency hangs past `SHUTDOWN_TIMEOUT_MS + 1s`. If it does, the pod exited without closing Redis/DB — investigate the hanging dependency.
+
+Exit code `0` confirms clean drain. Exit code `1` with `cleanup failure(s)` means Redis, the database or tracing failed to close within the reserved slice — check the preceding `[shutdown]` log lines; the request drain itself never causes a non-zero exit.
+
+## Configurable retention (#1506)
+
+Retention starts after DB migrations and is disabled by default. Before enabling
+it, inspect `GET /api/admin/retention/dry-run` with an admin bearer token. This
+read-only endpoint returns candidate counts, zero deleted rows and zero batches;
+it creates no archives and changes no retention metrics. Audit candidate counts
+may exceed the next removable prefix when a recent row blocks older backdated
+entries. A sweep never skips a blocking audit entry.
+
+Default policy durations: profile views 180 days (daily rollup), webhook delivery
+history 30 days, security events 90 days, unclaimed dead letters 90 days, indexed
+events 365 days, audit records 365 days (archive + checkpoint). Idempotency and
+completed/failed export jobs expire at their stored deadline. Indexed role events
+are exempt because `/api/admin/introspect` derives membership from their history.
+Unknown tables/columns, invalid strategies, duplicate policies and non-integer
+or negative days are rejected at startup. Profile/audit retention must be at
+least one day. Null timestamps are retained for operator investigation.
+
+Environment settings:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `RETENTION_ENABLED` | `false` | Enable scheduled sweeps |
+| `RETENTION_INTERVAL_MS` | `86400000` | Delay before first and between completed sweeps |
+| `RETENTION_BATCH_SIZE` | `1000` | Maximum rows per mutation transaction, 1–1000 |
+| `RETENTION_PAUSE_MS` | `100` | Yield between batches, 1–60000 ms |
+| `RETENTION_MAX_BATCHES` | `100` | Per-table budget per sweep |
+| `RETENTION_ARCHIVE_DIR` | `./data/audit-archives` | Durable restricted audit archive volume |
+| `RETENTION_CHECKPOINT_KEY` | unset | Independent 32-byte hex HMAC signing key; required when enabling audit retention |
+| `DATA_EXPORT_ARCHIVE_DIR` | `./data/exports` | Only root within which export files can be deleted |
+| `RETENTION_POLICIES` | defaults above | JSON array replacing all policies; `[]` disables all table policies |
+
+For example, retain only webhook history and roll up profile views:
+
+```json
+[
+  { "table": "webhook_deliveries", "column": "created_at", "days": 30, "strategy": "delete" },
+  { "table": "profile_views", "column": "viewed_at", "days": 180, "strategy": "aggregate-then-delete" }
+]
+```
+
+Set `RETENTION_ENABLED=true` after reviewing the dry run and backing up the DB.
+Use a secret manager for `RETENTION_CHECKPOINT_KEY`; it must be identical across
+replicas. Store audit archives on persistent storage available to every replica
+that verifies the chain. On Unix new directories/files use 0700/0600; provision
+equivalent restricted ACLs on Windows. Backup the archives, database checkpoints
+and signing key together. Key rotation requires re-signing checkpoints under a
+controlled migration; removing/replacing the key immediately invalidates old
+checkpoints. Do not reuse a JWT or webhook secret as the checkpoint key.
+
+Sweeps do not overlap in-process; transaction/advisory locks serialize mutation
+batches across replicas. PostgreSQL batches lock candidate rows. Audit archive
+I/O happens before the mutation transaction, which rechecks the exact prefix
+and previous checkpoint to avoid deleting a prefix changed by another replica.
+A crash before commit may leave an unreferenced archive; identify these by
+comparing filenames to `audit_checkpoints` and retain them for investigation
+before manual cleanup. A committed archive must never be removed while its
+checkpoint is needed. The verifier checks the latest archive and live suffix;
+for a historical compliance audit also verify every retained archive digest and
+replay its rows in checkpoint order, including previous-hash links.
+
+`scout_off_retention_rows_deleted_total{table}` counts successful deletions since
+process start, and `scout_off_retention_last_run_timestamp_seconds{table}` records
+the last successful sweep. A bounded sweep can leave a backlog; monitor these
+alongside dry-run candidate counts and tune batch budget, pause or schedule.
+The scheduler logs and surfaces failures without pruning unarchived audit rows.
+Graceful shutdown stops the timer, lets the current batch finish, and drains
+retention before closing the DB. Restore a failed export cleanup's job metadata
+only if its archive still exists; expired files removed before a transaction
+rollback may already be gone. See [data privacy](data-privacy.md) for erasure,
+rollup identity and archive handling.

@@ -97,13 +97,13 @@ async function findPlayerByIdOrWallet(playerId: string) {
 export async function getPlayerHistory(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
     res.status(400).json({
       success: false,
-      error: idResult.error.errors[0]?.message ?? "Invalid playerId",
+      error: idResult.error.issues[0]?.message ?? "Invalid playerId",
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -150,13 +150,13 @@ export async function getPlayerHistory(
 export async function getPlayerHistoryVersion(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
     res.status(400).json({
       success: false,
-      error: idResult.error.errors[0]?.message ?? "Invalid playerId",
+      error: idResult.error.issues[0]?.message ?? "Invalid playerId",
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -166,7 +166,7 @@ export async function getPlayerHistoryVersion(
   if (!versionResult.success) {
     res.status(400).json({
       success: false,
-      error: versionResult.error.errors[0]?.message ?? "Invalid version",
+      error: versionResult.error.issues[0]?.message ?? "Invalid version",
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -223,13 +223,13 @@ export async function getPlayerHistoryVersion(
 export async function getPlayerHistoryDiff(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const idResult = playerIdSchema.safeParse(req.params.playerId as string);
   if (!idResult.success) {
     res.status(400).json({
       success: false,
-      error: idResult.error.errors[0]?.message ?? "Invalid playerId",
+      error: idResult.error.issues[0]?.message ?? "Invalid playerId",
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -239,7 +239,7 @@ export async function getPlayerHistoryDiff(
   if (!versionResult.success) {
     res.status(400).json({
       success: false,
-      error: versionResult.error.errors[0]?.message ?? "Invalid version",
+      error: versionResult.error.issues[0]?.message ?? "Invalid version",
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;

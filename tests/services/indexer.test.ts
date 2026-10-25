@@ -324,3 +324,43 @@ describe('rollbackEventsFromLedger', () => {
     expect(remaining.map((r) => r.ledger)).toEqual([300]);
   });
 });
+
+
+describe('__indexerHooks: fault injection API', () => {
+  // Needs a full indexEvents() harness (mocked RPC + DB) to drive the crash
+  // and the replay; tracked as a todo rather than a test that always throws.
+  it.todo('allows beforeInsert to simulate a crash and verify idempotent reprocessing');
+
+  it('exports __indexerHooks as a typed hook registration API for tests', () => {
+    const { __indexerHooks } = require('../../src/services/indexer');
+
+    // Verify the API shape
+    expect(typeof __indexerHooks.beforeInsert).toBe('function');
+    expect(typeof __indexerHooks.afterInsert).toBe('function');
+
+    // Verify it can be reassigned
+    const originalBefore = __indexerHooks.beforeInsert;
+    const originalAfter = __indexerHooks.afterInsert;
+
+    let beforeCalled = false;
+    let afterCalled = false;
+
+    __indexerHooks.beforeInsert = (_id: string) => {
+      beforeCalled = true;
+    };
+    __indexerHooks.afterInsert = (_id: string) => {
+      afterCalled = true;
+    };
+
+    // Simulate a call (this is just to verify the API is callable)
+    __indexerHooks.beforeInsert('test-event-1');
+    __indexerHooks.afterInsert('test-event-1');
+
+    expect(beforeCalled).toBe(true);
+    expect(afterCalled).toBe(true);
+
+    // Restore
+    __indexerHooks.beforeInsert = originalBefore;
+    __indexerHooks.afterInsert = originalAfter;
+  });
+});

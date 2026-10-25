@@ -1,0 +1,58 @@
+extends: ["spectral:oas"]
+
+rules:
+  # Require operationId on every operation
+  operation-operationId: error
+
+  # Enforce camelCase operationIds
+  scoutoff-operationid-camelcase:
+    given: "$.paths[*][*].operationId"
+    then:
+      function: pattern
+      functionOptions:
+        match: "^[a-z][a-zA-Z0-9]*$"
+    severity: error
+
+  # 4xx responses must use shared error schema
+  scoutoff-4xx-error-schema:
+    given: "$.paths[*][*].responses[?(@property >= '400' && @property < '500')]"
+    then:
+      - field: "content.application/json.schema"
+        function: truthy
+        severity: error
+      - field: "content.application/json.schema.$ref"
+        function: pattern
+        functionOptions:
+          match: "ErrorResponse"
+        severity: error
+
+  # 5xx responses must use shared error schema
+  scoutoff-5xx-error-schema:
+    given: "$.paths[*][*].responses[?(@property >= '500')]"
+    then:
+      - field: "content.application/json.schema"
+        function: truthy
+        severity: error
+      - field: "content.application/json.schema.$ref"
+        function: pattern
+        functionOptions:
+          match: "ErrorResponse"
+        severity: error
+
+  # Every 2xx response must have an example
+  scoutoff-2xx-has-example:
+    given: "$.paths[*][*].responses[?(@property >= '200' && @property < '300')]"
+    then:
+      field: "content.application/json.example"
+      function: truthy
+      severity: warn
+
+  # Auth-protected operations must declare security
+  scoutoff-auth-declared:
+    given: "$.paths[*][*]"
+    then:
+      function: authorizedOperations
+      severity: warn
+
+  # Disallow unused components
+  unusedComponent: false

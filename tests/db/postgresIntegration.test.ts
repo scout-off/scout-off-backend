@@ -52,7 +52,7 @@ async function applyPostgresMigrations(driver: DbDriver): Promise<void> {
 
   const files = fs
     .readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql') && !f.includes('_postgres'))
+    .filter((f) => f.endsWith('.sql') && !f.endsWith('_postgres.sql'))
     .sort();
 
   for (const file of files) {

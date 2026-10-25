@@ -103,16 +103,23 @@ const READINESS_PATHS = ['/ready', '/health/readiness'];
 
 describe.each(READINESS_PATHS)('%s', (path) => {
   const previousBreakerState = stellarService.stellarBreaker.state;
-  const previousGracePeriodMs = config.readinessGracePeriodMs;
+  const previousGracePeriodMs = config.readiness.gracePeriodMs;
+  const previousCritical = config.readinessCriticalDependencies;
 
   beforeEach(() => {
     // The indexer-lag probe short-circuits to 'ok' during the post-boot grace
     // window; these tests assert lag behaviour directly, so disable it.
-    (config as { readinessGracePeriodMs: number }).readinessGracePeriodMs = 0;
+    (config.readiness as { gracePeriodMs: number }).gracePeriodMs = 0;
+    // Treat every probe as critical so a single failing dependency turns the
+    // response into a 503 (the default, READINESS_CRITICAL=db,stellar, is
+    // covered in 'readiness criticality (#1317)' below).
+    (config as { readinessCriticalDependencies: Set<string> }).readinessCriticalDependencies =
+      new Set(['db', 'ipfs', 'stellar', 'indexer']);
   });
 
   afterEach(() => {
-    (config as { readinessGracePeriodMs: number }).readinessGracePeriodMs = previousGracePeriodMs;
+    (config.readiness as { gracePeriodMs: number }).gracePeriodMs = previousGracePeriodMs;
+    (config as { readinessCriticalDependencies: Set<string> }).readinessCriticalDependencies = previousCritical;
     mockCheckHealth.mockReset();
     mockStellarHealth.mockReset();
     mockStellarHealth.mockResolvedValue(true);
@@ -144,7 +151,7 @@ describe.each(READINESS_PATHS)('%s', (path) => {
     mockCheckHealth.mockResolvedValueOnce(undefined);
     const res = await request(app).get(path);
     expect(res.status).toBe(200);
-    // Each probe should report latency as a non-negative integer
+    // I/O probes report latency as ms; the indexer probe uses lag/maxLag (#1575)
     for (const key of ['db', 'ipfs', 'stellar']) {
       const probe = res.body.services[key];
       if (probe && typeof probe === 'object') {
@@ -152,6 +159,17 @@ describe.each(READINESS_PATHS)('%s', (path) => {
         expect(probe.ms).toBeGreaterThanOrEqual(0);
       }
     }
+  });
+
+  it('indexer probe includes lag and maxLag instead of ms (#1575)', async () => {
+    mockCheckHealth.mockResolvedValueOnce(undefined);
+    const res = await request(app).get(path);
+    const indexerProbe = res.body.services.indexer;
+    expect(indexerProbe).toHaveProperty('lag');
+    expect(indexerProbe).toHaveProperty('maxLag');
+    expect(typeof indexerProbe.lag).toBe('number');
+    expect(typeof indexerProbe.maxLag).toBe('number');
+    expect(indexerProbe).not.toHaveProperty('ms');
   });
 
   it('probes run concurrently — total latency is bounded by max single probe, not the sum', async () => {
@@ -305,21 +323,17 @@ describe('GET /health', () => {
 });
 
 describe('readiness DB probe timeout and latency', () => {
-  const originalTimeout = process.env.READINESS_DB_TIMEOUT_MS;
+  const originalTimeout = config.readiness.timeouts.dbMs;
 
   afterEach(() => {
-    if (originalTimeout === undefined) {
-      delete process.env.READINESS_DB_TIMEOUT_MS;
-    } else {
-      process.env.READINESS_DB_TIMEOUT_MS = originalTimeout;
-    }
+    (config.readiness.timeouts as { dbMs: number }).dbMs = originalTimeout;
     mockGetDriver.mockReset();
     mockGetDriver.mockImplementation(getRealDriver);
     mockCheckHealth.mockReset();
   });
 
   it('uses the configured timeout and reports the DB probe duration', async () => {
-    process.env.READINESS_DB_TIMEOUT_MS = '30';
+    (config.readiness.timeouts as { dbMs: number }).dbMs = 30;
     mockCheckHealth.mockResolvedValue(undefined);
     mockGetDriver.mockImplementation(() =>
       driverWith({ run: () => new Promise(() => {}) }),
@@ -334,8 +348,9 @@ describe('readiness DB probe timeout and latency', () => {
     expect(Date.now() - startedAt).toBeLessThan(1_000);
   });
 
-  it('falls back to the default timeout for an invalid setting', async () => {
-    process.env.READINESS_DB_TIMEOUT_MS = 'not-a-number';
+  // READINESS_DB_TIMEOUT_MS is validated once at startup by src/config.ts
+  // (an invalid value fails boot), so only the parsed default is exercised here.
+  it('reports ok when the DB answers within the default timeout', async () => {
     mockCheckHealth.mockResolvedValue(undefined);
     mockGetDriver.mockImplementation(() =>
       driverWith({
@@ -351,6 +366,22 @@ describe('readiness DB probe timeout and latency', () => {
   });
 });
 
+describe('readiness criticality (#1317)', () => {
+  afterEach(() => {
+    mockCheckHealth.mockReset();
+  });
+
+  it('stays ready (200) when only a non-critical dependency fails', async () => {
+    // Default READINESS_CRITICAL is db,stellar: IPFS is reported but not gating.
+    expect([...config.readinessCriticalDependencies].sort()).toEqual(['db', 'stellar']);
+    mockCheckHealth.mockRejectedValueOnce(new Error('IPFS connection refused'));
+    const res = await request(app).get('/ready');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ok');
+    expectProbeStatus(res.body.services.ipfs, 'unavailable');
+  });
+});
+
 describe('GET /ready and GET /health/readiness return identical responses', () => {
   afterEach(() => {
     mockCheckHealth.mockReset();
@@ -359,11 +390,15 @@ describe('GET /ready and GET /health/readiness return identical responses', () =
   // Each probe reports its own measured latency (`ms`), so two requests issued
   // in parallel can legitimately differ by a millisecond. Zero the timing
   // fields before comparing — this suite asserts the two routes return the
-  // same *shape*, not the same wall-clock measurement.
+  // same *shape*, not the same wall-clock measurement. The indexer probe uses
+  // lag/maxLag instead of ms (#1575), so those fields are also normalised.
   const normalizeTiming = (body: Record<string, unknown>): Record<string, unknown> => {
-    const services = (body.services ?? {}) as Record<string, { ms?: number }>;
+    const services = (body.services ?? {}) as Record<string, { ms?: number; lag?: number; maxLag?: number }>;
     for (const probe of Object.values(services)) {
-      if (probe && typeof probe === 'object' && 'ms' in probe) probe.ms = 0;
+      if (probe && typeof probe === 'object') {
+        if ('ms' in probe) probe.ms = 0;
+        if ('lag' in probe) probe.lag = 0;
+      }
     }
     return body;
   };
@@ -387,4 +422,24 @@ describe('GET /ready and GET /health/readiness return identical responses', () =
     expect(a.status).toBe(b.status);
     expect(normalizeTiming(a.body)).toEqual(normalizeTiming(b.body));
   });
+});
+
+// ─── Cache-Control on operational endpoints ──────────────────────────────────
+
+describe('operational endpoints set Cache-Control: no-store', () => {
+  beforeEach(() => {
+    mockCheckHealth.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    mockCheckHealth.mockReset();
+  });
+
+  it.each(['/health', '/ready', '/health/liveness', '/health/readiness', '/health/dependencies', '/metrics', '/version'])(
+    '%s responds with Cache-Control: no-store',
+    async (path) => {
+      const res = await request(app).get(path);
+      expect(res.headers['cache-control']).toBe('no-store');
+    },
+  );
 });

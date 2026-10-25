@@ -7,6 +7,11 @@ jest.mock('../../src/config', () => ({
     pinata: { apiKey: 'test-key', secret: 'test-secret', gateway: 'https://gateway.pinata.cloud' },
     logLevel: 'warn',
     nodeEnv: 'test',
+    // Circuit-breaker thresholds are injected from config (#1564).
+    circuitBreaker: {
+      default: { failureThreshold: 5, resetTimeoutMs: 30000 },
+      ipfs: { failureThreshold: 5, resetTimeoutMs: 30000 },
+    },
     pinJsonCacheTtlMs: 300_000, // 5 min default; overridden per-test where needed
   },
 }));

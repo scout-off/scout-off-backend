@@ -23,7 +23,7 @@ export async function getWebhookDeliveriesEndpoint(req: Request, res: Response, 
     if (!parsed.success) {
       res.status(400).json({
         success: false,
-        error: parsed.error.errors[0]?.message ?? 'Invalid query parameters',
+        error: parsed.error.issues[0]?.message ?? 'Invalid query parameters',
         code: ErrorCode.VALIDATION_ERROR,
       });
       return;
@@ -48,7 +48,7 @@ export async function getWebhookDeliverySummaryEndpoint(req: Request, res: Respo
     if (!parsed.success) {
       res.status(400).json({
         success: false,
-        error: parsed.error.errors[0]?.message ?? 'Invalid query parameters',
+        error: parsed.error.issues[0]?.message ?? 'Invalid query parameters',
         code: ErrorCode.VALIDATION_ERROR,
       });
       return;

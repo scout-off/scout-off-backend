@@ -10,7 +10,7 @@ import { ErrorCode } from '../utils/errorCodes';
 import { proposeAction } from '../services/adminMultiSig';
 
 /** GET /api/admin/validators */
-export async function listValidators(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function listValidators(req: Request, res: Response, _next: NextFunction): Promise<void> {
   res.json({ success: true, data: await getAllValidators() });
 }
 
@@ -44,7 +44,7 @@ export async function registerValidator(req: Request, res: Response, next: NextF
 
   const proposal = await proposeAction('register_validator', { validatorWallet, action: 'register_validator' }, adminWallet);
   if (proposal.status === 'proposed') {
-    logAuditEvent({
+    await logAuditEvent({
       action: 'validator_registration',
       adminWallet,
       queryParams: { validatorWallet, actionId: proposal.actionId, outcome: 'multisig_pending' },
@@ -156,7 +156,7 @@ export async function revokeValidator(req: Request, res: Response, next: NextFun
 
   const proposal = await proposeAction('revoke_validator', { validatorWallet, action: 'revoke_validator' }, adminWallet);
   if (proposal.status === 'proposed') {
-    logAuditEvent({
+    await logAuditEvent({
       action: 'validator_revocation',
       adminWallet,
       queryParams: { validatorWallet, actionId: proposal.actionId, outcome: 'multisig_pending' },
@@ -245,7 +245,7 @@ export async function revokeValidator(req: Request, res: Response, next: NextFun
  * GET /api/admin/validators/:wallet/stats
  * Returns validator stats: milestones_approved and milestones_rejected.
  */
-export async function getValidatorStatsEndpoint(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getValidatorStatsEndpoint(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const wallet = req.params.wallet as string;
   // Validate wallet address
   if (!isValidStellarAddress(wallet)) {

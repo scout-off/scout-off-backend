@@ -1,5 +1,6 @@
 #![no_std]
 
+use scout_off_shared::access;
 use scout_off_shared::{
     errors::Error,
     storage::{
@@ -93,6 +94,87 @@ pub struct ConnectionContract;
 
 #[contractimpl]
 impl ConnectionContract {
+    /// Bootstrap RBAC on an upgraded instance. Only the stored legacy admin may authorize.
+    pub fn initialize_roles(env: Env, admin: Address) -> Result<(), Error> {
+        if !is_initialized(&env) {
+            return Err(Error::NotInitialized);
+        }
+        let legacy: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+        if admin != legacy {
+            return Err(Error::Unauthorized);
+        }
+        access::initialize(&env, &admin)
+    }
+
+    pub fn has_role(env: Env, role: soroban_sdk::Symbol, account: Address) -> bool {
+        access::has_role(&env, &role, &account)
+    }
+
+    pub fn get_role_admin(env: Env, role: soroban_sdk::Symbol) -> soroban_sdk::Symbol {
+        access::get_role_admin(&env, &role)
+    }
+
+    pub fn grant_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::grant_role(&env, &caller, &role, &account)
+    }
+
+    pub fn revoke_role(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        account: Address,
+    ) -> Result<(), Error> {
+        access::revoke_role(&env, &caller, &role, &account)
+    }
+
+    pub fn renounce_role(
+        env: Env,
+        account: Address,
+        role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::renounce_role(&env, &account, &role)
+    }
+
+    pub fn set_role_admin(
+        env: Env,
+        caller: Address,
+        role: soroban_sdk::Symbol,
+        admin_role: soroban_sdk::Symbol,
+    ) -> Result<(), Error> {
+        access::set_role_admin(&env, &caller, &role, &admin_role)
+    }
+
+    pub fn upgrade(
+        env: Env,
+        caller: Address,
+        wasm_hash: soroban_sdk::BytesN<32>,
+    ) -> Result<(), Error> {
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::DEFAULT_ADMIN),
+            &caller,
+        )?;
+        env.deployer().update_current_contract_wasm(wasm_hash);
+        Ok(())
+    }
+
+    /// Return the contract's semantic version as `(major, minor, patch)`.
+    ///
+    /// Read-only, auth-free. Used by the backend at startup for compatibility checks.
+    pub fn version(_env: Env) -> (u32, u32, u32) {
+        (0, 1, 0)
+    }
+
     /// One-time contract setup.
     pub fn initialize(
         env: Env,
@@ -105,6 +187,7 @@ impl ConnectionContract {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
+        access::initialize(&env, &admin)?;
         env.storage()
             .instance()
             .set(&DataKey::RegisterContract, &register_contract);
@@ -132,15 +215,11 @@ impl ConnectionContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         set_paused(&env, true);
         bump_instance(&env);
         Ok(())
@@ -158,15 +237,11 @@ impl ConnectionContract {
         if !is_initialized(&env) {
             return Err(Error::NotInitialized);
         }
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
-        admin.require_auth();
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        access::require_role(
+            &env,
+            &soroban_sdk::Symbol::new(&env, access::PAUSER),
+            &admin,
+        )?;
         set_paused(&env, false);
         bump_instance(&env);
         Ok(())
@@ -278,7 +353,7 @@ impl ConnectionContract {
         Ok(())
     }
 
-    /// Return the ConnectionRecord for (scout, player_id), or PlayerNotFound if none.
+    /// Return the ConnectionRecord for (scout, player_id), or ConnectionNotFound if none.
     pub fn get_connection(
         env: Env,
         scout: Address,
@@ -287,7 +362,7 @@ impl ConnectionContract {
         env.storage()
             .instance()
             .get(&DataKey::Connection(scout, player_id))
-            .ok_or(Error::PlayerNotFound)
+            .ok_or(Error::ConnectionNotFound)
     }
 
     /// Return all connection records for a scout.
@@ -325,11 +400,7 @@ impl ConnectionContract {
         }
         caller.require_auth();
 
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
+        let admin_role = Symbol::new(&env, access::DEFAULT_ADMIN);
 
         // Locate the connection by iterating scout connections when caller is admin,
         // or directly by (caller, player_id) when caller is the scout.
@@ -339,17 +410,22 @@ impl ConnectionContract {
         let (record, conn_key_final) = if let Some(r) = record_opt {
             // Caller is the scout owner — allowed.
             (r, conn_key)
-        } else if caller == stored_admin {
+        } else if access::has_role(&env, &admin_role, &caller) {
+            access::require_role(&env, &admin_role, &caller)?;
             // Admin path: scan all scout connections to find this player_id.
-            // Since we don't have a global index, return PlayerNotFound for now.
+            // Since we don't have a global index, return ConnectionNotFound for now.
             // In production, admin would pass the scout address explicitly.
-            return Err(Error::PlayerNotFound);
+            return Err(Error::ConnectionNotFound);
         } else {
-            return Err(Error::PlayerNotFound);
+            return Err(Error::ConnectionNotFound);
         };
 
-        if record.scout != caller && caller != stored_admin {
-            return Err(Error::Unauthorized);
+        if record.scout != caller {
+            access::require_role(&env, &admin_role, &caller)?;
+        }
+
+        if record.status == ConnectionStatus::Closed {
+            return Err(Error::ConnectionAlreadyClosed);
         }
 
         let mut updated = record;
@@ -1108,5 +1184,13 @@ mod tests {
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
         }
+    }
+
+    #[test]
+    fn version_returns_semver_tuple() {
+        let env = Env::default();
+        let (client, _reg, _sub, _admin, _token_addr) = setup(&env);
+        let (major, _minor, _patch) = client.version();
+        assert_eq!(major, 0);
     }
 }

@@ -48,8 +48,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
         working-directory: contracts
 
-      - name: Report optimized WASM sizes
-        run: bash scripts/report-contract-wasm-size.sh
+      - name: Check WASM sizes against budgets
+        run: node scripts/check-contract-wasm-size.js
 
       # contracts/.cargo/config.toml sets wasm32-unknown-unknown as the
       # default build target for this workspace, so host-target commands

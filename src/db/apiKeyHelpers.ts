@@ -4,7 +4,7 @@
  * Database query helpers for per-key rate limits and monthly quota enforcement.
  */
 
-import { getDriver } from './index';
+import { getDriver } from './query';
 
 export interface ApiKeyRateLimitConfig {
   rate_limit_per_minute: number | null;

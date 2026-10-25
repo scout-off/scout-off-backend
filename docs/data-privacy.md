@@ -116,3 +116,48 @@ No request body is required. The endpoint:
 Admin users cannot anonymize on behalf of a player — this is a self-service
 action only. For admin-initiated deactivation (without full PII scrub), use
 `POST /api/admin/players/:playerId/deactivate`.
+
+## Retention and archives (#1506)
+
+Retention is opt-in (`RETENTION_ENABLED=false` by default). Once enabled, the
+default policies keep detailed profile views for 180 days, webhook attempts for
+30 days, security events and unclaimed dead letters for 90 days, and indexed
+events and live audit records for 365 days. Expired idempotency responses and
+completed/failed data-export jobs are removed at their existing `expires_at`
+deadline (no extra retention days). Pending exports, claimed dead letters,
+rows with null timestamps, and role events used to derive live role membership
+are preserved. `RETENTION_POLICIES` replaces the whole policy list; see the
+runbook for its JSON format and the bounded scheduler settings.
+
+Old profile views become daily counts per player and viewer in
+`profile_view_daily`. This preserves both lifetime views and exact unique
+viewer counts, including viewers present in both recent and historical data.
+The rollup still contains wallet identifiers and is personal data; it is not
+an anonymous statistic. Player anonymization removes these rollups in the same
+transaction as detailed views, serialized against retention. Any data-subject
+export implementation must include the player's/viewer's daily rollups along
+with recent raw views; it cannot reconstruct individual historical timestamps
+from the rollup. The existing export controller is a scaffold; retention does
+not turn its placeholder download handlers into a functioning export worker.
+
+Audit pruning only archives a verified contiguous prefix of the hash chain.
+An immutable JSON archive is flushed to storage before the database atomically
+adds an HMAC-SHA256 checkpoint and removes that prefix. The checkpoint binds the
+last id/hash, previous boundary, archive filename and SHA-256 digest. Verification
+checks the latest signature and archive digest, then walks the live suffix from
+that checkpoint. Missing keys, missing/corrupt archives and invalid signatures
+fail verification; an archive failure prevents pruning. The PII side table
+`audit_log_pii` is deliberately excluded from archives and its rows cascade on
+pruning. Existing immutable audit fields can still identify individuals: protect
+archives as compliance records, document the lawful retention basis, and handle
+erasure requests against archive backups through the organization's approved
+process. Never edit an archive in place to redact it, which breaks its digest.
+
+Export expiry removes a persisted job's local archive before removing tokens
+and job metadata. `DATA_EXPORT_ARCHIVE_DIR` constrains which files may be
+deleted; symlinks resolving outside it cause the sweep to fail closed. An
+already missing file is safe to clean up. External/object-store archives require
+their own provider lifecycle policy; this engine never interprets a URL as a
+local path. Archived audit history and its checkpoints have no automatic
+deletion policy: retain them together with the signing key for as long as the
+live chain depends on their boundary.

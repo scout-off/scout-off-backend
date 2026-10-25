@@ -1,8 +1,12 @@
-use soroban_sdk::{contracttype, Address, Env, Vec};
+use soroban_sdk::{contracttype, Address, Env, Symbol, Vec};
 
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
+    Role(Symbol, Address),
+    RoleAdmin(Symbol),
+    RoleAdminCount,
+    RolesInitialized,
     Admin,
     Initialized,
     Paused,

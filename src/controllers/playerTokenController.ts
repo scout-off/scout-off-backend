@@ -2,7 +2,7 @@
  * playerTokenController.ts
  *
  * DB-backed stub handlers for the fractionalized player-sponsorship (Player Token) feature.
- * All endpoints are gated behind the `player_tokens` feature flag. When the flag
+ * All endpoints are gated behind the `player_tokens_enabled` feature flag. When the flag
  * is off they return 404 so the routes are invisible to callers.
  * Purchases persist in the shared database, but do not perform an XLM transfer.
  */
@@ -37,8 +37,8 @@ export const buyTokenSchema = z.object({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function featureFlagGuard(res: Response): boolean {
-  if (!isFeatureEnabled(FeatureFlags.PLAYER_TOKENS)) {
+async function featureFlagGuard(res: Response): Promise<boolean> {
+  if (!(await isFeatureEnabled(FeatureFlags.PLAYER_TOKENS_ENABLED))) {
     res.status(404).json({
       success: false,
       error: 'Player token endpoints are not enabled on this platform.',
@@ -58,7 +58,7 @@ export async function getPlayerTokenHolders(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  if (!featureFlagGuard(res)) return;
+  if (!(await featureFlagGuard(res))) return;
 
   const {playerId} = req.params as {playerId: string};
   try {
@@ -93,7 +93,7 @@ export async function buyPlayerToken(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  if (!featureFlagGuard(res)) return;
+  if (!(await featureFlagGuard(res))) return;
 
   const {playerId} = req.params as {playerId: string};
   const buyerWallet = req.account;
@@ -106,7 +106,7 @@ export async function buyPlayerToken(
   if (!parsed.success) {
     res.status(400).json({
       success: false,
-      error: parsed.error.errors.map((e) => e.message).join('; '),
+      error: parsed.error.issues.map((e) => e.message).join('; '),
     });
     return;
   }

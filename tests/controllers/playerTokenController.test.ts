@@ -12,8 +12,7 @@ import {
   _stubSeedTokens,
   _stubReset,
 } from '../../src/controllers/playerTokenController';
-import { clearFeatureFlagCache, setFeatureFlag } from '../../src/services/featureFlags';
-import { FeatureFlags } from '../../src/services/featureFlags';
+import { clearFeatureFlagCache, setFeatureFlag, FeatureFlags } from '../../src/services/featureFlags';
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 
@@ -59,13 +58,13 @@ function mockReqRes(
 describe('playerTokenController', () => {
   beforeEach(async () => {
     // Enable the feature flag so the guards pass.
-    setFeatureFlag(FeatureFlags.PLAYER_TOKENS, true, 'test');
+    await setFeatureFlag(FeatureFlags.PLAYER_TOKENS_ENABLED, true, 'test');
     await _stubReset();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Disable the flag and flush cache so other test suites are unaffected.
-    setFeatureFlag(FeatureFlags.PLAYER_TOKENS, false, 'test');
+    await setFeatureFlag(FeatureFlags.PLAYER_TOKENS_ENABLED, false, 'test');
     clearFeatureFlagCache();
     jest.restoreAllMocks();
   });
@@ -73,8 +72,8 @@ describe('playerTokenController', () => {
   // ── Feature flag guard ──────────────────────────────────────────────────────
 
   describe('feature flag guard', () => {
-    it('returns 404 when player_tokens flag is disabled', async () => {
-      setFeatureFlag(FeatureFlags.PLAYER_TOKENS, false, 'test');
+    it('returns 404 when player_tokens_enabled flag is disabled', async () => {
+      await setFeatureFlag(FeatureFlags.PLAYER_TOKENS_ENABLED, false, 'test');
       clearFeatureFlagCache();
 
       const { req, res, next, getStatus, getBody } = mockReqRes('player-1', {
@@ -86,6 +85,17 @@ describe('playerTokenController', () => {
       expect(getStatus()).toBe(404);
       expect(getBody().success).toBe(false);
       expect(next).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 from getPlayerTokenHolders when the flag is disabled', async () => {
+      await setFeatureFlag(FeatureFlags.PLAYER_TOKENS_ENABLED, false, 'test');
+      clearFeatureFlagCache();
+
+      const { req, res, next, getStatus, getBody } = mockReqRes('player-1');
+      await getPlayerTokenHolders(req, res, next);
+
+      expect(getStatus()).toBe(404);
+      expect(getBody().success).toBe(false);
     });
   });
 

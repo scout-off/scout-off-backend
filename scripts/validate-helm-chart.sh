@@ -174,4 +174,87 @@ if grep -q 'emptyDir: {}' <<<"${out}"; then
 fi
 pass "configured data PVC replaces the default emptyDir"
 
+# ─── 7. Monitoring resources are opt-in ───────────────────────────────────────
+
+if grep -q 'kind: ServiceMonitor' <<<"${out}"; then
+  fail "ServiceMonitor rendered despite metrics.serviceMonitor.enabled=false default"
+fi
+if grep -q 'kind: PrometheusRule' <<<"${out}"; then
+  fail "PrometheusRule rendered despite metrics.prometheusRule.enabled=false default"
+fi
+pass "monitoring resources are not rendered by default"
+
+# ─── 8. ServiceMonitor + PrometheusRule render when enabled ───────────────────
+
+monitoring_out=$(render \
+  --set metrics.serviceMonitor.enabled=true \
+  --set metrics.prometheusRule.enabled=true \
+  --set metrics.serviceMonitor.bearerTokenSecret.name=metrics-token \
+  --set metrics.serviceMonitor.bearerTokenSecret.key=token \
+  --set metrics.prometheusRule.rules.indexerLag.threshold=42 \
+  --set 'metrics.prometheusRule.extraRules[0].alert=ScoutOffCustomRule' \
+  --set 'metrics.prometheusRule.extraRules[0].expr=up == 0')
+
+grep -q 'kind: ServiceMonitor' <<<"${monitoring_out}" \
+  || fail "ServiceMonitor not rendered when metrics.serviceMonitor.enabled=true"
+grep -q 'kind: PrometheusRule' <<<"${monitoring_out}" \
+  || fail "PrometheusRule not rendered when metrics.prometheusRule.enabled=true"
+grep -q 'port: http' <<<"${monitoring_out}" \
+  || fail "ServiceMonitor does not select the chart's http service port"
+grep -q 'path: "/metrics"' <<<"${monitoring_out}" \
+  || fail "ServiceMonitor does not scrape /metrics"
+grep -q 'name: metrics-token' <<<"${monitoring_out}" \
+  || fail "ServiceMonitor bearerTokenSecret was not rendered"
+
+for alert in \
+  ScoutOffIndexerLagHigh \
+  ScoutOffWebhookDLQGrowing \
+  ScoutOffTierDivergence \
+  ScoutOffStuckPins \
+  ScoutOffHigh5xxRate \
+  ScoutOffCustomRule; do
+  grep -q "alert: ${alert}" <<<"${monitoring_out}" \
+    || fail "expected alert ${alert} is missing from the rendered PrometheusRule"
+done
+
+grep -q 'indexer_ledger_lag > 42' <<<"${monitoring_out}" \
+  || fail "configurable indexer-lag threshold was not applied"
+grep -q 'scout_off_webhook_dead_letters_total' <<<"${monitoring_out}" \
+  || fail "webhook DLQ alert does not reference the exported metric"
+grep -q 'scout_off_tier_divergence_total' <<<"${monitoring_out}" \
+  || fail "tier-divergence alert does not reference the exported metric"
+grep -q 'stuck_pending_pins_count' <<<"${monitoring_out}" \
+  || fail "stuck-pins alert does not reference the exported metric"
+grep -q 'http_errors_total{range="5xx"}' <<<"${monitoring_out}" \
+  || fail "5xx-rate alert does not reference the exported error metric"
+
+# NotReady requires kube-state-metrics and must stay opt-in.
+if grep -q 'alert: ScoutOffNotReady' <<<"${monitoring_out}"; then
+  fail "ScoutOffNotReady rendered despite being disabled by default"
+fi
+pass "monitoring resources and alerts render correctly when enabled"
+
+# ─── 9. Validate CRD schemas with kubeconform (when available) ─────────────────
+#
+# The Prometheus Operator CRDs are not part of the default Kubernetes schema
+# bundle, so the datree CRDs-catalog is used as an additional schema source.
+# kubeconform is not installed by default; install it locally or in CI to run
+# this step (see DEPLOYMENT.md → Monitoring). Without it the render assertions
+# above still run.
+
+if command -v kubeconform >/dev/null 2>&1; then
+  tmp_render=$(mktemp --suffix=.yaml)
+  trap 'rm -f "${tmp_render}"' EXIT
+  printf '%s\n' "${monitoring_out}" > "${tmp_render}"
+  if ! kubeconform -strict -summary \
+    -schema-location default \
+    -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+    "${tmp_render}"; then
+    fail "kubeconform rejected the rendered monitoring manifests"
+  fi
+  pass "kubeconform validated the Prometheus Operator resources"
+else
+  echo "[validate-helm-chart] SKIP: kubeconform not on PATH (CRD schema validation skipped)"
+fi
+
 echo "[validate-helm-chart] All Helm chart consistency checks passed."

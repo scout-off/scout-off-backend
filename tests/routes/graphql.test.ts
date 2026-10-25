@@ -2,12 +2,12 @@
  * Tests for the graphql_enabled feature flag gating of the /graphql endpoint.
  *
  * The flag is read dynamically per request via src/services/featureFlags.
- * We mock isEnabled so tests don't need a real DB.
+ * We mock isFeatureEnabled so tests don't need a real DB.
  */
 
 jest.mock('../../src/services/featureFlags', () => ({
   ...jest.requireActual('../../src/services/featureFlags'),
-  isEnabled: jest.fn(),
+  isFeatureEnabled: jest.fn(),
   bootstrapFeatureFlags: jest.fn(),
   GRAPHQL_ENABLED: 'graphql_enabled',
 }));
@@ -28,7 +28,7 @@ import * as featureFlags from '../../src/services/featureFlags';
 import config from '../../src/config';
 import { mountGraphQL } from '../../src/graphql';
 
-const mockIsEnabled = featureFlags.isEnabled as jest.Mock;
+const mockIsEnabled = featureFlags.isFeatureEnabled as jest.Mock;
 
 describe('GET /graphql — feature flag gating', () => {
   afterEach(() => {
@@ -36,13 +36,13 @@ describe('GET /graphql — feature flag gating', () => {
   });
 
   it('returns 404 when graphql_enabled flag is OFF', async () => {
-    mockIsEnabled.mockReturnValue(false);
+    mockIsEnabled.mockResolvedValue(false);
     const res = await request(app).get('/graphql');
     expect(res.status).toBe(404);
   });
 
   it('does not expose a GraphQL schema when flag is OFF', async () => {
-    mockIsEnabled.mockReturnValue(false);
+    mockIsEnabled.mockResolvedValue(false);
     const res = await request(app)
       .post('/graphql')
       .send({ query: '{ __schema { types { name } } }' })
@@ -51,7 +51,7 @@ describe('GET /graphql — feature flag gating', () => {
   });
 
   it('forwards to GraphQL handler (returns non-404) when flag is ON', async () => {
-    mockIsEnabled.mockReturnValue(true);
+    mockIsEnabled.mockResolvedValue(true);
     const res = await request(app)
       .post('/graphql')
       .send({ query: '{ __typename }' })
@@ -61,8 +61,8 @@ describe('GET /graphql — feature flag gating', () => {
     expect(res.status).not.toBe(404);
   });
 
-  it('calls isEnabled with the GRAPHQL_ENABLED key on each request', async () => {
-    mockIsEnabled.mockReturnValue(false);
+  it('calls isFeatureEnabled with the GRAPHQL_ENABLED key on each request', async () => {
+    mockIsEnabled.mockResolvedValue(false);
     await request(app).get('/graphql');
     expect(mockIsEnabled).toHaveBeenCalledWith('graphql_enabled');
   });
@@ -74,7 +74,7 @@ describe('POST /graphql — feature flag gating', () => {
   });
 
   it('returns 404 for POST when flag is OFF', async () => {
-    mockIsEnabled.mockReturnValue(false);
+    mockIsEnabled.mockResolvedValue(false);
     const res = await request(app)
       .post('/graphql')
       .send({ query: '{ __typename }' })
@@ -92,7 +92,7 @@ describe('GraphQL rate limiting', () => {
       const rateLimitedApp = express();
       rateLimitedApp.set('trust proxy', true);
       rateLimitedApp.use(express.json());
-      mockIsEnabled.mockReturnValue(true);
+      mockIsEnabled.mockResolvedValue(true);
       mountGraphQL(rateLimitedApp);
 
       const ip = `198.51.100.${Math.floor(Math.random() * 200) + 1}`;
@@ -138,18 +138,22 @@ describe('GraphQL rate limiting', () => {
 });
 
 describe('featureFlags service unit tests', () => {
-  const { isEnabled: realIsEnabled, clearFlagCache } =
-    jest.requireActual<typeof import('../../src/services/featureFlags')>(
-      '../../src/services/featureFlags',
-    );
+  const real = jest.requireActual<typeof import('../../src/services/featureFlags')>(
+    '../../src/services/featureFlags',
+  );
 
   beforeEach(() => {
-    clearFlagCache();
+    real.clearFeatureFlagCache();
   });
 
-  it('returns false for graphql_enabled by default (no DB)', () => {
-    // With no DB initialised the service falls back to DEFAULTS (false)
-    const result = realIsEnabled('graphql_enabled');
-    expect(result).toBe(false);
+  it('reflects setFeatureFlag() on the very next read and does no DB read on a cache hit', async () => {
+    const db = jest.requireActual<typeof import('../../src/db')>('../../src/db');
+    await real.setFeatureFlag('graphql_enabled', true, 'test');
+    const spy = jest.spyOn(db, 'getFeatureFlag');
+    expect(await real.isFeatureEnabled('graphql_enabled')).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+    await real.setFeatureFlag('graphql_enabled', false, 'test');
+    expect(await real.isFeatureEnabled('graphql_enabled')).toBe(false);
+    spy.mockRestore();
   });
 });

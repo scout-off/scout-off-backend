@@ -27,7 +27,9 @@
  */
 
 import { EventEmitter } from 'events';
+import { encodeTracedMessage } from '../utils/traceContext';
 import { logger } from '../utils/logger';
+import config from '../config';
 import { getRedisClient } from './redis';
 import {
   blockWalletDb,
@@ -37,9 +39,6 @@ import {
 } from '../db';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
-
-/** How long a cached blocklist entry is trusted before a fresh DB read. */
-const CACHE_TTL_MS = parseInt(process.env.WALLET_BLOCKLIST_CACHE_TTL_MS ?? '30000', 10);
 
 /** Redis pub/sub channels for cross-instance security events. */
 const REDIS_CHANNEL_WALLET_BLOCKED = 'security:wallet_blocked';
@@ -92,7 +91,7 @@ export async function blocklistWallet(wallet: string, reason: string | null = nu
     const redis = getRedisClient();
     if (redis) {
       try {
-        await redis.publish(REDIS_CHANNEL_WALLET_BLOCKED, JSON.stringify({ wallet }));
+        await redis.publish(REDIS_CHANNEL_WALLET_BLOCKED, encodeTracedMessage({ wallet }));
       } catch (err) {
         logger.warn(`[walletBlocklist] Redis publish failed for ${wallet}:`, err);
         // Continue; in-process effect still works, cross-instance effect deferred to sweep
@@ -117,7 +116,7 @@ export async function unblocklistWallet(wallet: string): Promise<boolean> {
       const redis = getRedisClient();
       if (redis) {
         try {
-          await redis.publish(REDIS_CHANNEL_WALLET_UNBLOCKED, JSON.stringify({ wallet }));
+          await redis.publish(REDIS_CHANNEL_WALLET_UNBLOCKED, encodeTracedMessage({ wallet }));
         } catch (err) {
           logger.warn(`[walletBlocklist] Redis publish failed for unblock ${wallet}:`, err);
         }
@@ -133,11 +132,12 @@ export async function unblocklistWallet(wallet: string): Promise<boolean> {
 
 /**
  * Cache-first blocklist check. At most one fresh DB read per wallet per
- * CACHE_TTL_MS — safe to call on connection setup, never on keep-alive ticks.
+ * config.cache.walletBlocklistTtlMs — safe to call on connection setup, never
+ * on keep-alive ticks.
  */
 export async function isWalletBlocklisted(wallet: string): Promise<boolean> {
   const lastChecked = blockedCache.get(wallet);
-  const cacheFresh = lastChecked !== undefined && Date.now() - lastChecked < CACHE_TTL_MS;
+  const cacheFresh = lastChecked !== undefined && Date.now() - lastChecked < config.cache.walletBlocklistTtlMs;
   if (cacheFresh) return true; // cached as blocked
   return refreshWallet(wallet);
 }

@@ -1,5 +1,5 @@
 import Redis from 'ioredis';
-import { getDriver } from '../../src/db';
+import { getDriver, getFeatureFlag, upsertFeatureFlag } from '../../src/db';
 import { RedisRateLimitStore } from '../../src/middleware/redisRateLimitStore';
 import { RedisCacheStore } from '../../src/services/redisCacheStore';
 import {
@@ -17,9 +17,8 @@ import {
   clearFeatureFlagCache,
   isFeatureEnabled,
   setFeatureFlag,
+  FeatureFlags,
 } from '../../src/services/featureFlags';
-import { getFeatureFlag, upsertFeatureFlag } from '../../src/db';
-import { FeatureFlags } from '../../src/services/featureFlags';
 
 const redisUrl = process.env.REDIS_URL;
 const describeWithRedis = redisUrl ? describe : describe.skip;

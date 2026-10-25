@@ -603,13 +603,13 @@ describe('registerValidatorOnChain', () => {
     expect(mockGetTransaction).toHaveBeenCalledTimes(3);
   });
 
-  it('throws ValidatorActionError ALREADY_REGISTERED when simulation returns contract error #13', async () => {
+  it('throws ValidatorActionError NOT_REGISTERED when simulation returns contract error #13', async () => {
     sdk.rpc.Api.isSimulationError.mockReturnValue(true);
     mockSimulate.mockResolvedValue({ error: 'Contract error: #13' });
 
     await expect(registerValidatorOnChain(WALLET)).rejects.toMatchObject({
       name: 'ValidatorActionError',
-      code: 'ALREADY_REGISTERED',
+      code: 'NOT_REGISTERED',
     });
     expect(mockSendTransaction).not.toHaveBeenCalled();
   });
@@ -659,7 +659,7 @@ describe('registerValidatorOnChain', () => {
     });
   });
 
-  it('throws ValidatorActionError ALREADY_REGISTERED when FAILED tx XDR contains #13', async () => {
+  it('throws ValidatorActionError NOT_REGISTERED when FAILED tx XDR contains #13', async () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'register-fail-hash-13' });
     mockGetTransaction.mockResolvedValue({
       status: 'FAILED',
@@ -668,7 +668,7 @@ describe('registerValidatorOnChain', () => {
 
     await expect(registerValidatorOnChain(WALLET)).rejects.toMatchObject({
       name: 'ValidatorActionError',
-      code: 'ALREADY_REGISTERED',
+      code: 'NOT_REGISTERED',
     });
   });
 

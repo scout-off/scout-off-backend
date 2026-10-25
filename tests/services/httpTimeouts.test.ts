@@ -14,6 +14,11 @@ jest.mock('../../src/config', () => ({
     pinata: { apiKey: 'test-key', secret: 'test-secret', gateway: 'https://gateway.pinata.cloud' },
     logLevel: 'warn',
     nodeEnv: 'test',
+    // Circuit-breaker thresholds are injected from config (#1564).
+    circuitBreaker: {
+      default: { failureThreshold: 5, resetTimeoutMs: 30000 },
+      ipfs: { failureThreshold: 5, resetTimeoutMs: 30000 },
+    },
     pinJsonCacheTtlMs: 300_000,
     ipfsHttpTimeoutMs: 1234,
     stellarRpcTimeoutMs: 5678,
@@ -175,11 +180,11 @@ describe('Stellar RPC timeouts (#1143)', () => {
         sorobanRpcUrl: 'https://soroban-testnet.stellar.org',
         network: 'testnet',
         contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
-      },
-    }));
-    jest.doMock('../../src/utils/circuitBreaker', () => ({
-      stellarBreaker: {
-        execute: <T>(fn: () => T) => fn(),
+        // stellarCore builds its breaker from config (#1564).
+        circuitBreaker: {
+          default: { failureThreshold: 5, resetTimeoutMs: 30000 },
+          ipfs: { failureThreshold: 5, resetTimeoutMs: 30000 },
+        },
       },
     }));
     jest.doMock('../../src/utils/signer', () => ({

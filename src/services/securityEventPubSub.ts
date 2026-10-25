@@ -17,6 +17,7 @@
  */
 
 import Redis from 'ioredis';
+import { consumeTracedMessage } from '../utils/traceContext';
 import { getRedisClient, getRedisSubscriberClient } from './redis';
 import { logger } from '../utils/logger';
 
@@ -43,6 +44,7 @@ export async function initSecurityEventSubscriber(): Promise<void> {
       'security:wallet_blocked',
       'security:wallet_unblocked',
       'security:token_revoked',
+      'security:api_key_revoked',
       (err) => {
         if (err) {
           logger.error('[securityEventPubSub] subscription error:', err);
@@ -53,8 +55,11 @@ export async function initSecurityEventSubscriber(): Promise<void> {
     // Handle incoming messages
     subscriber.on('message', async (channel: string, message: string) => {
       try {
-        const payload = JSON.parse(message);
-        await handleSecurityEvent(channel, payload);
+        await consumeTracedMessage(message, 'redis.security.consume', async (payload) => {
+          if (payload && typeof payload === 'object') {
+            await handleSecurityEvent(channel, payload as Record<string, unknown>);
+          }
+        }, { 'messaging.destination.name': channel });
       } catch (err) {
         logger.warn(`[securityEventPubSub] failed to parse message on ${channel}:`, err);
       }
@@ -85,8 +90,11 @@ export async function closeSecurityEventSubscriber(): Promise<void> {
   }
 }
 
-/** Handle incoming security events and trigger local actions. */
-async function handleSecurityEvent(channel: string, payload: Record<string, unknown>): Promise<void> {
+/** Handle incoming security events and trigger local actions.
+ * @internal Exported for unit tests; prefer driving tests through the
+ * subscriber 'message' event instead of calling this directly.
+ */
+export async function handleSecurityEvent(channel: string, payload: Record<string, unknown>): Promise<void> {
   try {
     switch (channel) {
       case 'security:wallet_blocked': {
@@ -114,8 +122,18 @@ async function handleSecurityEvent(channel: string, payload: Record<string, unkn
         const { onTokenRevokedRemote } = await import('./tokenBlocklist');
         const tokenHash = payload.token_hash as string;
         if (tokenHash) {
-          onTokenRevokedRemote(tokenHash);
+          await onTokenRevokedRemote(tokenHash);
           logger.debug(`[securityEventPubSub] processed token_revoked`);
+        }
+        break;
+      }
+
+      case 'security:api_key_revoked': {
+        const { onApiKeyRevokedRemote } = await import('./apiKeyService');
+        const apiKeyId = payload.apiKeyId as number;
+        if (apiKeyId) {
+          onApiKeyRevokedRemote(apiKeyId);
+          logger.debug(`[securityEventPubSub] processed api_key_revoked for key ${apiKeyId}`);
         }
         break;
       }

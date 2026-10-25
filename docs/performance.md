@@ -327,3 +327,67 @@ A baseline run has not yet been conducted.  To record one:
 ```
 
 *Environment* *(fill in when recording)*: Node vX.Y.Z, SQLite on SSD, single-process, no Redis.
+
+---
+
+## Metrics Endpoint Protection
+
+The `/metrics` endpoint exposes operational signals (request counts, latencies, indexer lag, tier divergence, webhook dead-letter depth, etc.). In production, this endpoint should be protected to prevent unauthorized scraping of sensitive operational and business metrics.
+
+### Protection Options
+
+You can protect `/metrics` using one or both of:
+
+1. **Bearer Token** (`METRICS_AUTH_TOKEN`): Require `Authorization: Bearer <token>` header
+2. **CIDR Allowlist** (`METRICS_ALLOWED_CIDRS`): Restrict access to specific IP ranges
+
+### Configuration
+
+```bash
+# Option 1: Bearer token only
+METRICS_AUTH_TOKEN=your-secret-token-here
+
+# Option 2: CIDR allowlist only
+METRICS_ALLOWED_CIDRS=10.0.0.0/8,192.168.1.0/24
+
+# Option 3: Both (token AND IP must be valid)
+METRICS_AUTH_TOKEN=your-secret-token-here
+METRICS_ALLOWED_CIDRS=10.0.0.0/8
+```
+
+### Prometheus ServiceMonitor
+
+When using Prometheus in Kubernetes, configure the `ServiceMonitor` to include the bearer token:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: scout-off-backend
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: scout-off-backend
+  endpoints:
+  - port: http
+    path: /metrics
+    scheme: http
+    bearerTokenSecret:
+      name: scout-off-secrets
+      key: METRICS_AUTH_TOKEN
+```
+
+### Ingress Exclusion
+
+Consider excluding `/metrics` from public ingress. Set `ingress.excludeMetrics: true` in Helm values to reduce attack surface. With ingress exclusion, Prometheus should use a `ServiceMonitor` with direct pod access or a separate internal ingress.
+
+### Startup Warning
+
+In production and staging, if neither `METRICS_AUTH_TOKEN` nor `METRICS_ALLOWED_CIDRS` is configured, the server logs a warning at startup:
+
+```
+[config] WARNING: /metrics endpoint is exposed without protection (METRICS_AUTH_TOKEN or METRICS_ALLOWED_CIDRS not set). This exposes operational and business signals to any internet client. Set METRICS_AUTH_TOKEN or METRICS_ALLOWED_CIDRS to restrict access.
+```
+
+See [DEPLOYMENT.md](../DEPLOYMENT.md#metrics-endpoint-protection) for full deployment instructions.
+

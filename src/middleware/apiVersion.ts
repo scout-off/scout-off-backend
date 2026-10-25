@@ -26,7 +26,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { API_V2_PREFIX, API_V1_PREFIX } from '../config';
+import { API_V2_PREFIX } from '../config';
 
 /**
  * Determine the API major version that will serve this request.

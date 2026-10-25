@@ -3,13 +3,20 @@ import jwt from 'jsonwebtoken';
 import app from '../../src/app';
 import config from '../../src/config';
 import { sanitizeEndpointUrl } from '../../src/controllers/healthDependenciesController';
-import axios from 'axios';
+import * as httpClientModule from '../../src/utils/httpClient';
 import * as dbModule from '../../src/db';
 import * as redisModule from '../../src/services/redis';
 import * as stellarModule from '../../src/services/stellar';
 
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+// The controller probes Horizon and the IPFS gateway through the shared
+// HTTP client (src/utils/httpClient.ts); stub it so tests never hit the network.
+jest.mock('../../src/utils/httpClient', () => ({
+  ...jest.requireActual('../../src/utils/httpClient'),
+  httpGet: jest.fn(),
+  httpHead: jest.fn(),
+}));
+const mockedHttpGet = httpClientModule.httpGet as jest.MockedFunction<typeof httpClientModule.httpGet>;
+const mockedHttpHead = httpClientModule.httpHead as jest.MockedFunction<typeof httpClientModule.httpHead>;
 
 jest.mock('../../src/services/stellar', () => {
   const actual = jest.requireActual('../../src/services/stellar');
@@ -35,22 +42,15 @@ describe('GET /health/dependencies', () => {
     jest.clearAllMocks();
 
     // Default mock implementations for external calls
-    mockedAxios.get.mockImplementation(async (url) => {
-      if (typeof url === 'string' && url.includes(config.horizonUrl)) {
-        return {
-          status: 200,
-          data: { horizon_version: '2.30.0', stellar_core_version: '20.1.0' },
-          headers: {},
-        } as any;
+    mockedHttpGet.mockImplementation(async (url) => {
+      if (url.includes(config.horizonUrl)) {
+        return JSON.stringify({ horizon_version: '2.30.0', stellar_core_version: '20.1.0' });
       }
-      return { status: 200, data: {}, headers: {} } as any;
+      return '{}';
     });
 
-    mockedAxios.head.mockImplementation(async () => {
-      return {
-        status: 200,
-        headers: { server: 'nginx/1.22.1' },
-      } as any;
+    mockedHttpHead.mockImplementation(async () => {
+      return new Response(null, { status: 200, headers: { server: 'nginx/1.22.1' } });
     });
   });
 
@@ -141,7 +141,7 @@ describe('GET /health/dependencies', () => {
     });
 
     it('reports status degraded when one dependency fails', async () => {
-      mockedAxios.get.mockRejectedValueOnce(new Error('Horizon connection refused'));
+      mockedHttpGet.mockRejectedValueOnce(new Error('Horizon connection refused'));
 
       const res = await request(app)
         .get('/health/dependencies')

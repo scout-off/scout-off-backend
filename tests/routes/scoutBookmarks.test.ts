@@ -44,6 +44,7 @@ jest.mock('../../src/db', () => ({
   deleteBookmark: jest.fn(),
   getBookmarksByScout: jest.fn(),
   getBookmarkedPlayersWithDetails: jest.fn(),
+  countBookmarkedPlayers: jest.fn().mockResolvedValue(0),
   insertBookmarkFolder: jest.fn(),
   getBookmarkFoldersByScout: jest.fn(),
   getBookmarkFolderById: jest.fn(),
@@ -387,7 +388,7 @@ describe('GET /api/scouts/:wallet/bookmarks', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toHaveLength(1);
-    expect(mockGetBookmarkedPlayers).toHaveBeenCalledWith(SCOUT_A, 1);
+    expect(mockGetBookmarkedPlayers).toHaveBeenCalledWith(SCOUT_A, 1, { limit: 20, offset: 0 });
   });
 
   it('returns empty array when scout has no bookmarks', async () => {

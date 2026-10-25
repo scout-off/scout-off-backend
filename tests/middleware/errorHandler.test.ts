@@ -7,6 +7,7 @@ jest.mock('../../src/utils/logger', () => ({
 
 import { errorHandler } from '../../src/middleware/errorHandler';
 import { ErrorCode } from '../../src/utils/errorCodes';
+import { ContractExecutionError } from '../../src/utils/contractErrors';
 import { logger } from '../../src/utils/logger';
 
 function makeReq(correlationId?: string): Request {
@@ -354,5 +355,21 @@ describe('errorHandler', () => {
     expect((res.status as jest.Mock)).toHaveBeenCalledWith(400);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.VALIDATION_ERROR);
+  });
+
+  it('maps a contract failure to its specific ErrorCode and HTTP status (#1530)', () => {
+    const req = makeReq('corr-contract');
+    const res = makeRes();
+    errorHandler(
+      new ContractExecutionError('HostError: Error(Contract, #16)'),
+      req,
+      res,
+      next,
+    );
+    expect((res.status as jest.Mock)).toHaveBeenCalledWith(409);
+    const body = getBody(res);
+    expect(body.code).toBe(ErrorCode.MILESTONE_ALREADY_APPROVED);
+    expect(body.error).toBe('Milestone is already approved');
+    expect(body.correlationId).toBe('corr-contract');
   });
 });

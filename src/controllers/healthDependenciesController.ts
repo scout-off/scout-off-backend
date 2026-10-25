@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import axios from 'axios';
 import config from '../config';
 import { getDriver } from '../db';
 import { getRedisClient } from '../services/redis';
 import { server } from '../services/stellar';
 import { logger } from '../utils/logger';
+import { httpGet, httpHead, HttpClientError } from '../utils/httpClient';
 
 export interface DependencyHealth {
   endpoint: string;
@@ -174,8 +174,8 @@ export async function probeHorizonDependency(): Promise<DependencyHealth> {
   const endpoint = sanitizeEndpointUrl(config.horizonUrl);
   const start = Date.now();
   try {
-    const res = await axios.get(config.horizonUrl, { timeout: 5000 });
-    const data = res.data ?? {};
+    const body = await httpGet(config.horizonUrl, { timeoutMs: 5000 });
+    const data = body ? JSON.parse(body) : {};
     const versionStr = data.horizon_version ?? data.stellar_core_version ?? data.version ?? 'healthy';
     const latencyMs = Math.max(0, Date.now() - start);
     return { endpoint, version: versionStr, status: 'ok', latencyMs };
@@ -198,18 +198,13 @@ export async function probeIpfsDependency(): Promise<DependencyHealth> {
   const endpoint = sanitizeEndpointUrl(config.pinata?.gateway || 'https://gateway.pinata.cloud');
   const start = Date.now();
   try {
-    const res = await axios.head(endpoint, { timeout: 5000 });
-    const serverHeader = res.headers ? res.headers['server'] : undefined;
-    const versionStr = serverHeader ? String(serverHeader) : `HTTP ${res.status}`;
+    const response = await httpHead(config.pinata.gateway || 'https://gateway.pinata.cloud', { timeoutMs: 5000 });
+    const serverHeader = response.headers.get('server');
+    const versionStr = serverHeader ? String(serverHeader) : `HTTP ${response.status}`;
     const latencyMs = Math.max(0, Date.now() - start);
     return { endpoint, version: versionStr, status: 'ok', latencyMs };
   } catch (err) {
     const latencyMs = Math.max(0, Date.now() - start);
-    if (axios.isAxiosError(err) && err.response) {
-      const serverHeader = err.response.headers ? err.response.headers['server'] : undefined;
-      const versionStr = serverHeader ? String(serverHeader) : `HTTP ${err.response.status}`;
-      return { endpoint, version: versionStr, status: 'ok', latencyMs };
-    }
     return {
       endpoint,
       version: null,

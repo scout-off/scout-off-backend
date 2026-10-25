@@ -19,14 +19,13 @@ import { Application, Request, Response, NextFunction } from 'express';
 import { GraphQLError, visit } from 'graphql';
 import { optionalAuth } from '../middleware/auth';
 import { rateLimit, walletRateLimit } from '../middleware/rateLimit';
-import { isEnabled, GRAPHQL_ENABLED } from '../services/featureFlags';
+import { isFeatureEnabled, GRAPHQL_ENABLED } from '../services/featureFlags';
 import { typeDefs } from './schema';
 import { resolvers } from './resolvers';
 import { createContext } from './context';
 import { createDepthLimitRule, createQueryCostRule, MAX_DEPTH, MAX_QUERY_COST } from './validation';
 import { logger } from '../utils/logger';
 import { createPersistedOperationsPlugin } from './persisted-operations';
-import config from '../config';
 
 // ─── Production introspection-blocking plugin ────────────────────────────────
 
@@ -115,18 +114,22 @@ export function mountGraphQL(app: Application): void {
 
   // Dynamic per-request feature-flag guard (#1126). The /graphql endpoint is
   // served only when `graphql_enabled` is on; otherwise it 404s exactly like an
-  // unmounted route. Toggle takes effect within one flag-cache TTL, no restart.
+  // unmounted route. Served from the in-process flag cache (driver-agnostic); a toggle via setFeatureFlag() applies on the next request, no restart.
   app.use(
     '/graphql',
     optionalAuth,
     graphqlIpRateLimit,
     graphqlWalletRateLimit,
-    (req: Request, res: Response, next: NextFunction) => {
-      if (!isEnabled(GRAPHQL_ENABLED)) {
-        res.status(404).json({ success: false, error: 'Not Found', code: 'NOT_FOUND' });
-        return;
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!(await isFeatureEnabled(GRAPHQL_ENABLED))) {
+          res.status(404).json({ success: false, error: 'Not Found', code: 'NOT_FOUND' });
+          return;
+        }
+        next();
+      } catch (err) {
+        next(err);
       }
-      next();
     },
   );
 

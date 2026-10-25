@@ -62,6 +62,12 @@ export const ErrorCode = {
   RATE_LIMITED: 'RATE_LIMITED',
 
   /**
+   * HTTP 429 — The account has been temporarily locked after too many failed
+   * SEP-10 token exchanges. Client should wait for the `Retry-After` duration.
+   */
+  AUTH_LOCKED: 'AUTH_LOCKED',
+
+  /**
    * HTTP 415 — Request Content-Type is not supported (e.g., text/plain instead of application/json).
    * Client should: Set Content-Type: application/json in request headers.
    */
@@ -223,41 +229,82 @@ export const ErrorCode = {
    * Client should: Reconnect after the number of seconds given in the Retry-After header.
    */
   SSE_CAPACITY: 'SSE_CAPACITY',
+
+  // ── Specific contract errors (#1530) ──────────────────────────────────────
+  // These mirror the granular variants in contracts/shared/src/errors.rs.
+  // See src/utils/contractErrors.ts for the full contract error table.
+
+  /**
+   * HTTP 409 — Not enough unsold tokens remain to fulfil the purchase.
+   * Client should: Reduce the amount or choose another player token.
+   */
+  INSUFFICIENT_SUPPLY: 'INSUFFICIENT_SUPPLY',
+
+  /**
+   * HTTP 403 — The caller is not a registered validator.
+   * Client should: Ask an admin to register the validator address on-chain.
+   */
+  VALIDATOR_NOT_REGISTERED: 'VALIDATOR_NOT_REGISTERED',
+
+  /**
+   * HTTP 403 — The validator was revoked and may no longer act.
+   * Client should: Ask an admin to re-register the validator if appropriate.
+   */
+  VALIDATOR_REVOKED: 'VALIDATOR_REVOKED',
+
+  /**
+   * HTTP 404 — No milestone exists with the requested id.
+   * Client should: Verify the milestone id from the player's milestone list.
+   */
+  MILESTONE_NOT_FOUND: 'MILESTONE_NOT_FOUND',
+
+  /**
+   * HTTP 409 — The milestone has already been approved.
+   * Client should: Treat the approval as successful; do not resubmit.
+   */
+  MILESTONE_ALREADY_APPROVED: 'MILESTONE_ALREADY_APPROVED',
+
+  /**
+   * HTTP 403 — A validator attempted to approve their own submission.
+   * Client should: Have a different registered validator approve it.
+   */
+  SELF_APPROVAL_FORBIDDEN: 'SELF_APPROVAL_FORBIDDEN',
+
+  /**
+   * HTTP 402 — The scout's subscription expired before this operation.
+   * Client should: Renew via /api/scouts/:wallet/subscribe and retry.
+   */
+  SUBSCRIPTION_EXPIRED: 'SUBSCRIPTION_EXPIRED',
+
+  /**
+   * HTTP 409 — The scout has already paid to contact this player.
+   * Client should: Read the existing connection instead of paying again.
+   */
+  CONTACT_ALREADY_PAID: 'CONTACT_ALREADY_PAID',
+
+  /**
+   * HTTP 400 — The platform fee is outside the allowed 0–10 000 bps range.
+   * Client should: Supply a fee between 0 and 10000 basis points.
+   */
+  FEE_BPS_OUT_OF_RANGE: 'FEE_BPS_OUT_OF_RANGE',
+
+  /**
+   * HTTP 404 — No connection exists for this scout and player.
+   * Client should: Create the connection first.
+   */
+  CONNECTION_NOT_FOUND: 'CONNECTION_NOT_FOUND',
+
+  /**
+   * HTTP 409 — The connection is already closed.
+   * Client should: Treat the close as successful; do not resubmit.
+   */
+  CONNECTION_ALREADY_CLOSED: 'CONNECTION_ALREADY_CLOSED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
 /**
- * Mapping from Soroban contract numeric error codes (as defined in
- * contracts/shared/src/errors.rs) to machine-readable backend error codes.
- *
- * Used by the XDR error parser and any code that pattern-matches on '#N'
- * substrings in simulation/result error strings.
- *
- * | Code | Contract variant  | Backend code         |
- * |------|-------------------|----------------------|
- * |  1   | AlreadyInitialized| CONFLICT             |
- * |  2   | NotInitialized    | INTERNAL_SERVER_ERROR|
- * |  3   | PlayerNotFound    | PLAYER_NOT_FOUND     |
- * |  4   | NotFound          | NOT_FOUND            |
- * |  5   | InvalidInput      | VALIDATION_ERROR     |
- * |  6   | AlreadyVerified   | CONFLICT             |
- * |  7   | InsufficientFee   | INSUFFICIENT_FUNDS   |
- * |  8   | NotSubscribed     | NOT_SUBSCRIBED       |
- * |  9   | Unauthorized      | UNAUTHORIZED         |
- * | 10   | ContractPaused    | CONTRACT_PAUSED      |
- * | 11   | Overflow          | INTERNAL_SERVER_ERROR|
+ * The single contract-error table now lives in `src/utils/contractErrors.ts`
+ * (#1530), because it maps every discriminant to an ErrorCode, an HTTP status
+ * and a client-facing message. Import `SOROBAN_ERROR_CODE_MAP` from there.
  */
-export const SOROBAN_ERROR_CODE_MAP: Record<number, ErrorCode> = {
-  1:  ErrorCode.CONFLICT,
-  2:  ErrorCode.INTERNAL_SERVER_ERROR,
-  3:  ErrorCode.PLAYER_NOT_FOUND,
-  4:  ErrorCode.NOT_FOUND,
-  5:  ErrorCode.VALIDATION_ERROR,
-  6:  ErrorCode.CONFLICT,
-  7:  ErrorCode.INSUFFICIENT_FUNDS,
-  8:  ErrorCode.NOT_SUBSCRIBED,
-  9:  ErrorCode.UNAUTHORIZED,
-  10: ErrorCode.CONTRACT_PAUSED,
-  11: ErrorCode.INTERNAL_SERVER_ERROR,
-} as const;

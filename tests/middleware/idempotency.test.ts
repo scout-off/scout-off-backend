@@ -249,6 +249,7 @@ describe('idempotency middleware — claim-first concurrency', () => {
       .send(VALID_BODY);
 
     expect(first.status).toBe(201);
+    expect(first.headers['idempotent-replayed']).toBeUndefined();
     expect(mockPurchase).toHaveBeenCalledTimes(1);
 
     // Second request after first completes — must return cached response.
@@ -259,6 +260,7 @@ describe('idempotency middleware — claim-first concurrency', () => {
       .send(VALID_BODY);
 
     expect(second.status).toBe(201);
+    expect(second.headers['idempotent-replayed']).toBe('true');
     expect(second.body).toEqual(first.body);
     // Handler must not have been invoked a second time.
     expect(mockPurchase).toHaveBeenCalledTimes(1);

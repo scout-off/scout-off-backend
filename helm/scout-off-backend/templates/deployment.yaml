@@ -30,6 +30,8 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "scout-off-backend.serviceAccountName" . }}
+      # Must exceed SHUTDOWN_TIMEOUT_MS + preStopSleepSeconds (#1538).
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -42,6 +44,12 @@ spec:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ include "scout-off-backend.imageTag" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if gt (int .Values.preStopSleepSeconds) 0 }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep {{ .Values.preStopSleepSeconds }}"]
+          {{- end }}
           {{- with .Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -205,6 +213,76 @@ spec:
                   name: {{ .Values.secretName }}
                   key: REDIS_URL
                   optional: true
+            # ── Legacy outbound webhook URL ────────────────────────────────
+            # May embed a token in the path or query string, so it belongs in
+            # the Secret rather than the ConfigMap. Only used when
+            # WEBHOOK_ENABLED=true.
+            - name: WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: WEBHOOK_URL
+                  optional: true
+            # ── Legacy platform signing secret ─────────────────────────────
+            # Optional; superseded by PLATFORM_SECRET_KEY. Kept for
+            # deployments that still use it for legacy HMAC payloads.
+            - name: PLATFORM_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: PLATFORM_SECRET
+                  optional: true
+            # ── Rotation: previous webhook encryption key ──────────────────
+            # Optional. Set during key rotation so already-encrypted
+            # webhook_subscriptions.secret rows can still be decrypted.
+            - name: WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS
+                  optional: true
+            # ── Scout note encryption keys (#1328) ─────────────────────────
+            # Optional: when unset, notes are stored unencrypted in
+            # development but production refuses to start without them.
+            # Generate with: openssl rand -hex 32
+            - name: NOTES_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: NOTES_ENCRYPTION_KEY
+                  optional: true
+            - name: NOTES_ENCRYPTION_KEY_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: NOTES_ENCRYPTION_KEY_PREVIOUS
+                  optional: true
+            # ── Keyrings, retention checkpoint key, player-token contract ──
+            # Optional; see docs/secrets-rotation.md and .env.example.
+            - name: NOTES_ENCRYPTION_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: NOTES_ENCRYPTION_KEYS
+                  optional: true
+            - name: WEBHOOK_SECRET_ENCRYPTION_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: WEBHOOK_SECRET_ENCRYPTION_KEYS
+                  optional: true
+            - name: RETENTION_CHECKPOINT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: RETENTION_CHECKPOINT_KEY
+                  optional: true
+            - name: PLAYER_TOKEN_CONTRACT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: PLAYER_TOKEN_CONTRACT_ID
+                  optional: true
           # ── Liveness probe ────────────────────────────────────────────────────
           # Restarts the container if this fails failureThreshold times in a row.
           # /health/liveness is a lightweight check with no external dependencies.
@@ -215,6 +293,14 @@ spec:
           # /health/readiness checks DB writability and IPFS connectivity.
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
+          # ── Startup probe ────────────────────────────────────────────────────
+          # Holds off liveness/readiness until the app has started (migrations,
+          # Redis connect, blocklist warm-up). Set .Values.startupProbe to null
+          # to disable.
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           # ── Resources ──────────────────────────────────────────────────────────
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

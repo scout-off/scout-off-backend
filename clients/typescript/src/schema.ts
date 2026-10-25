@@ -174,6 +174,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/encryption/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ciphertext counts per encryption key id for scout notes and webhook secrets (#1513).
+         * @description Ciphertext counts per encryption key id for scout notes and webhook secrets
+         *     (#1513). A key can be retired once its count is 0 everywhere.
+         */
+        get: operations["getEncryptionStatusEndpoint"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/events": {
         parameters: {
             query?: never;
@@ -404,6 +425,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/indexer/unprocessed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List contract events the indexer could not apply.
+         * @description Paginated list of contract events the indexer could not apply (unknown topic
+         *     or decode failure), newest first. Each row carries the raw topic/value XDR
+         *     needed to replay the event once the decoder is fixed.
+         */
+        get: operations["listUnprocessed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/indexer/unprocessed/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replay a stored unprocessed event after a decoder fix.
+         * @description Reruns the indexer's apply path for a stored unprocessed event after a
+         *     decoder fix. On success the unprocessed row is removed; on failure it is
+         *     kept and the failure detail is returned.
+         */
+        post: operations["retryUnprocessed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/introspect": {
         parameters: {
             query?: never;
@@ -609,6 +674,26 @@ export interface paths {
          * @description Return the current state of the background reindex job (live progress).
          */
         get: operations["reindexStatusHandler"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/retention/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview retention candidate counts without deleting rows or writing archives.
+         * @description Preview retention candidate counts without deleting rows or writing archives.
+         */
+        get: operations["getRetentionDryRun"];
         put?: never;
         post?: never;
         delete?: never;
@@ -872,6 +957,27 @@ export interface paths {
         get: operations["getWebhookDeliveriesEndpoint"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/webhooks/{id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate a suspended webhook subscription (#1512).
+         * @description Reactivate a suspended webhook subscription (#1512). Sends a test ping first
+         *     and reactivates only if it succeeds.
+         */
+        post: operations["adminReactivateWebhook"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1439,7 +1545,7 @@ export interface paths {
         /**
          * Return the list of token holders and their balances for the given player.
          * @description Return the list of token holders and their balances for the given player.
-         *     Gated by the `player_tokens` feature flag — returns 404 when disabled.
+         *     Gated by the `player_tokens_enabled` feature flag — returns 404 when disabled.
          */
         get: operations["getPlayerTokenHolders"];
         put?: never;
@@ -1460,11 +1566,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Purchase Player Tokens for the given player (stub — no real XLM transfer).
-         * @description Purchase Player Tokens for the given player (stub — no real XLM transfer).
-         *     Gated by the `player_tokens` feature flag — returns 404 when disabled.
-         *     The authenticated account is the buyer; the optional buyerWallet field is
-         *     accepted for compatibility only when it matches that account.
+         * Purchase Player Tokens for a given player.
+         * @description Purchase Player Tokens for a given player. Purchases are persisted in the
+         *     database, but this stub does not perform an XLM transfer.
+         *     Gated by the `player_tokens_enabled` feature flag — returns 404 when disabled.
+         *     The authenticated scout account is the buyer; the optional buyerWallet field
+         *     is accepted only when it matches that account.
          */
         post: operations["buyPlayerToken"];
         delete?: never;
@@ -2151,6 +2258,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scouts/{wallet}/webhooks/{id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate a suspended webhook subscription (#1512).
+         * @description Reactivate a suspended webhook subscription (#1512). A test ping is sent
+         *     first and the subscription is reactivated only if it succeeds. Shares the
+         *     webhook-test rate limit because it also issues an outbound request.
+         */
+        post: operations["reactivateWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scouts/{wallet}/webhooks/{id}/test": {
         parameters: {
             query?: never;
@@ -2330,6 +2459,19 @@ export interface components {
             error: string;
             code?: string;
         };
+        VersionInfo: {
+            version: string;
+            commit: string;
+            node: string;
+            environment: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp recorded when the process started
+             */
+            startedAt: string;
+            /** @description Process uptime in whole seconds */
+            uptimeSeconds: number;
+        };
         PlayerSummary: {
             /** @description API player identifier (cuid2) */
             player_id: string;
@@ -2447,7 +2589,10 @@ export interface components {
         walletParam: string;
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Present with value `true` when the response was replayed from the idempotency store because the request repeated an earlier `Idempotency-Key`. Absent on first execution. */
+        IdempotentReplayed: "true";
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -2684,6 +2829,24 @@ export interface operations {
             };
             /** @description { success: false, error: string } - Non-admin role */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getEncryptionStatusEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description { success: true, data: { notes, webhook } } */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3136,6 +3299,70 @@ export interface operations {
             };
         };
     };
+    listUnprocessed: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number (default 1) */
+                page?: number;
+                /** @description Page size, 1-100 (default 20) */
+                pageSize?: number;
+                /** @description Optional filter by failure reason */
+                reason?: "unknown_type" | "decode_error";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description { success: true, data: UnprocessedEvent[], total, page, pageSize } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Invalid query parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    retryUnprocessed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Id of the stored unprocessed event */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description { success: true, data: { id, status, detail } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Unknown id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     introspectToken: {
         parameters: {
             query?: never;
@@ -3447,6 +3674,24 @@ export interface operations {
              *       }
              *     }
              */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getRetentionDryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description { success: true, dryRun: true, data: RetentionResult[] } */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3906,6 +4151,45 @@ export interface operations {
             };
         };
     };
+    adminReactivateWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Webhook subscription row ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description { success: true, data: { id, url, status: 'active' } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Test ping failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     replayDeadLetter: {
         parameters: {
             query?: never;
@@ -3994,7 +4278,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description { challenge: string, networkPassphrase: string } */
+            /** @description { challenge: string, networkPassphrase: string, expiresAt: number } */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4092,7 +4376,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description { token, accessToken, refreshToken, account, expiresAt } */
+            /** @description { success: true, token, accessToken, refreshToken, account, expiresAt } */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4849,7 +5133,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description { success: false, error: string } - Invalid amount */
+            /** @description { success: false, error: string } - Invalid request body or amount */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4870,8 +5154,15 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description { success: false, error: string } - Feature flag disabled or player not found */
+            /** @description { success: false, error: string } - Feature flag disabled or no tokens issued for player */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string, code: TOKEN_SUPPLY_EXHAUSTED } - Token supply exhausted */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6532,6 +6823,54 @@ export interface operations {
             };
             /** @description { success: false, error: string } - Subscription not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reactivateWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scout's Stellar public key */
+                wallet: string;
+                /** @description Webhook subscription row ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description { success: true, data: { id, url, status: 'active' } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Wallet mismatch or subscription belongs to another scout */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Test ping failed; subscription stays suspended */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

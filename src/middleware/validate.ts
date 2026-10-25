@@ -71,13 +71,13 @@ export function validateBody<T>(schema: ZodSchema<T>, options?: ValidationOption
     const result = schema.safeParse(body);
     if (!result.success) {
       const correlationId = getCorrelationId(req);
-      const details = result.error.errors.map((err) => ({
+      const details = result.error.issues.map((err) => ({
         field: err.path.join('.'),
         message: err.message,
       }));
       logger.warn(
         `[validation] ${options?.context ?? 'body'} rejected — error=${
-          result.error.errors[0]?.message ?? 'Invalid request body'
+          result.error.issues[0]?.message ?? 'Invalid request body'
         } correlationId=${correlationId}`
       );
       res.status(400).json({
@@ -133,13 +133,13 @@ export function validateQuery<T>(schema: ZodSchema<T>, options?: ValidationOptio
     const result = schema.safeParse(req.query);
     if (!result.success) {
       const correlationId = getCorrelationId(req);
-      const details = result.error.errors.map((err) => ({
+      const details = result.error.issues.map((err) => ({
         field: err.path.join('.'),
         message: err.message,
       }));
       logger.warn(
         `[validation] ${options?.context ?? 'query'} rejected — error=${
-          result.error.errors[0]?.message ?? 'Invalid query parameters'
+          result.error.issues[0]?.message ?? 'Invalid query parameters'
         } correlationId=${correlationId}`
       );
       res.status(400).json({
@@ -178,12 +178,12 @@ export function validateParams<T>(schema: ZodSchema<T>, options?: ValidationOpti
       const correlationId = getCorrelationId(req);
       logger.warn(
         `[validation] ${options?.context ?? 'params'} rejected — error=${
-          result.error.errors[0]?.message ?? 'Invalid route parameters'
+          result.error.issues[0]?.message ?? 'Invalid route parameters'
         } correlationId=${correlationId}`
       );
       res.status(400).json({
         success: false,
-        error: result.error.errors[0]?.message ?? 'Invalid route parameters',
+        error: result.error.issues[0]?.message ?? 'Invalid route parameters',
       });
       return;
     }

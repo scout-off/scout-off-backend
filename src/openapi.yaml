@@ -91,9 +91,32 @@ components:
           type: string
         code:
           type: string
-        correlationId:
+    VersionInfo:
+      type: object
+      required:
+        - version
+        - commit
+        - node
+        - environment
+        - startedAt
+        - uptimeSeconds
+      properties:
+        version:
           type: string
-          description: Echo of the X-Correlation-ID request header, when present
+        commit:
+          type: string
+        node:
+          type: string
+        environment:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp recorded when the process started
+        uptimeSeconds:
+          type: integer
+          minimum: 0
+          description: Process uptime in whole seconds
     PlayerSummary:
       type: object
       required:
@@ -267,6 +290,15 @@ components:
             - pending
             - approved
           description: Approval state added by the milestones endpoint ("all" status param)
+  headers:
+    IdempotentReplayed:
+      description: >-
+        Present with value `true` when the response was replayed from the idempotency store because
+        the request repeated an earlier `Idempotency-Key`. Absent on first execution.
+      schema:
+        type: string
+        enum:
+          - 'true'
   responses:
     Unauthorized:
       description: Missing or invalid JWT
@@ -477,6 +509,22 @@ paths:
           description: '{ success: false, error: string } - Missing token'
         '403':
           description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/encryption/status:
+    get:
+      tags:
+        - admin
+      summary: Ciphertext counts per encryption key id for scout notes and webhook secrets (#1513).
+      operationId: getEncryptionStatusEndpoint
+      description: |-
+        Ciphertext counts per encryption key id for scout notes and webhook secrets
+        (#1513). A key can be retired once its count is 0 everywhere.
+      responses:
+        '200':
+          description: '{ success: true, data: { notes, webhook } }'
       security:
         - bearerAuth: []
       x-required-role:
@@ -874,6 +922,86 @@ paths:
         - bearerAuth: []
       x-required-role:
         - admin
+  /admin/indexer/unprocessed:
+    get:
+      tags:
+        - admin
+      summary: List contract events the indexer could not apply.
+      operationId: listUnprocessed
+      description: |-
+        Paginated list of contract events the indexer could not apply (unknown topic
+        or decode failure), newest first. Each row carries the raw topic/value XDR
+        needed to replay the event once the decoder is fixed.
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number (default 1)
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Page size, 1-100 (default 20)
+        - name: reason
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - unknown_type
+              - decode_error
+          description: Optional filter by failure reason
+      responses:
+        '200':
+          description: '{ success: true, data: UnprocessedEvent[], total, page, pageSize }'
+        '400':
+          description: '{ success: false, error: string } - Invalid query parameters'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/indexer/unprocessed/{id}/retry:
+    post:
+      tags:
+        - admin
+      summary: Replay a stored unprocessed event after a decoder fix.
+      operationId: retryUnprocessed
+      description: |-
+        Reruns the indexer's apply path for a stored unprocessed event after a
+        decoder fix. On success the unprocessed row is removed; on failure it is
+        kept and the failure detail is returned.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+          description: Id of the stored unprocessed event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        '200':
+          description: '{ success: true, data: { id, status, detail } }'
+        '404':
+          description: '{ success: false, error: string } - Unknown id'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
   /admin/introspect:
     post:
       tags:
@@ -1169,6 +1297,20 @@ paths:
                 started_at, completed_at, error_message
               }
             }
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/retention/dry-run:
+    get:
+      tags:
+        - admin
+      summary: Preview retention candidate counts without deleting rows or writing archives.
+      operationId: getRetentionDryRun
+      description: Preview retention candidate counts without deleting rows or writing archives.
+      responses:
+        '200':
+          description: '{ success: true, dryRun: true, data: RetentionResult[] }'
       security:
         - bearerAuth: []
       x-required-role:
@@ -1548,6 +1690,41 @@ paths:
         - bearerAuth: []
       x-required-role:
         - admin
+  /admin/webhooks/{id}/reactivate:
+    post:
+      tags:
+        - admin
+      summary: Reactivate a suspended webhook subscription (#1512).
+      operationId: adminReactivateWebhook
+      description: |-
+        Reactivate a suspended webhook subscription (#1512). Sends a test ping first
+        and reactivates only if it succeeds.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Webhook subscription row ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        '200':
+          description: '{ success: true, data: { id, url, status: ''active'' } }'
+        '404':
+          description: '{ success: false, error: string } - Subscription not found'
+        '502':
+          description: '{ success: false, error: string } - Test ping failed'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
   /admin/webhooks/{id}/replay:
     post:
       tags:
@@ -1641,7 +1818,7 @@ paths:
           description: Stellar public key (G...) to build the challenge for
       responses:
         '200':
-          description: '{ challenge: string, networkPassphrase: string }'
+          description: '{ challenge: string, networkPassphrase: string, expiresAt: number }'
         '400':
           description: '{ success: false, error: string } - Missing/invalid account'
       security: []
@@ -1740,7 +1917,7 @@ paths:
               additionalProperties: false
       responses:
         '200':
-          description: '{ token, accessToken, refreshToken, account, expiresAt }'
+          description: '{ success: true, token, accessToken, refreshToken, account, expiresAt }'
         '400':
           description: '{ success: false, error: string } - Invalid body or malformed XDR'
         '401':
@@ -2418,7 +2595,7 @@ paths:
       operationId: getPlayerTokenHolders
       description: |-
         Return the list of token holders and their balances for the given player.
-        Gated by the `player_tokens` feature flag — returns 404 when disabled.
+        Gated by the `player_tokens_enabled` feature flag — returns 404 when disabled.
       parameters:
         - name: playerId
           in: path
@@ -2438,13 +2615,14 @@ paths:
     post:
       tags:
         - players
-      summary: Purchase Player Tokens for the given player (stub — no real XLM transfer).
+      summary: Purchase Player Tokens for a given player.
       operationId: buyPlayerToken
       description: |-
-        Purchase Player Tokens for the given player (stub — no real XLM transfer).
-        Gated by the `player_tokens` feature flag — returns 404 when disabled.
-        The authenticated account is the buyer; the optional buyerWallet field is
-        accepted for compatibility only when it matches that account.
+        Purchase Player Tokens for a given player. Purchases are persisted in the
+        database, but this stub does not perform an XLM transfer.
+        Gated by the `player_tokens_enabled` feature flag — returns 404 when disabled.
+        The authenticated scout account is the buyer; the optional buyerWallet field
+        is accepted only when it matches that account.
       parameters:
         - name: playerId
           in: path
@@ -2473,13 +2651,15 @@ paths:
         '200':
           description: '{ success: true, data: { playerId, buyerWallet, amount, newBalance } }'
         '400':
-          description: '{ success: false, error: string } - Invalid amount'
+          description: '{ success: false, error: string } - Invalid request body or amount'
         '401':
           description: '{ success: false, error: string } - Authentication required'
         '403':
           description: '{ success: false, error: string } - buyerWallet does not match authenticated account'
         '404':
-          description: '{ success: false, error: string } - Feature flag disabled or player not found'
+          description: '{ success: false, error: string } - Feature flag disabled or no tokens issued for player'
+        '409':
+          description: '{ success: false, error: string, code: TOKEN_SUPPLY_EXHAUSTED } - Token supply exhausted'
       security:
         - bearerAuth: []
         - apiKeyAuth:
@@ -4300,6 +4480,56 @@ paths:
           description: '{ success: false, error: string } - Wallet mismatch'
         '404':
           description: '{ success: false, error: string } - Subscription not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:webhooks
+      x-required-role:
+        - scout
+      x-api-key-scope: write:webhooks
+      x-owner-only: true
+  /scouts/{wallet}/webhooks/{id}/reactivate:
+    post:
+      tags:
+        - scouts
+      summary: Reactivate a suspended webhook subscription (#1512).
+      operationId: reactivateWebhook
+      description: |-
+        Reactivate a suspended webhook subscription (#1512). A test ping is sent
+        first and the subscription is reactivated only if it succeeds. Shares the
+        webhook-test rate limit because it also issues an outbound request.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Webhook subscription row ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        '200':
+          description: '{ success: true, data: { id, url, status: ''active'' } }'
+        '403':
+          description: >-
+            { success: false, error: string } - Wallet mismatch or subscription belongs to another
+            scout
+        '404':
+          description: '{ success: false, error: string } - Subscription not found'
+        '502':
+          description: '{ success: false, error: string } - Test ping failed; subscription stays suspended'
       security:
         - bearerAuth: []
         - apiKeyAuth:

@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { ApiResponse } from '../types';
 import { logger } from '../utils/logger';
 import { ErrorCode } from '../utils/errorCodes';
+import { ContractExecutionError, mapContractError } from '../utils/contractErrors';
 
 interface HttpError extends Error {
   type?: string;
@@ -100,11 +101,27 @@ export function errorHandler(
   if (err instanceof ZodError) {
     const body: ApiResponse & { code: string; correlationId?: string } = {
       success: false,
-      error: err.errors[0]?.message ?? 'Validation error',
+      error: err.issues[0]?.message ?? 'Validation error',
       code: ErrorCode.VALIDATION_ERROR,
       ...(correlationId !== undefined && { correlationId }),
     };
     res.status(400).json(body);
+    return;
+  }
+
+  // Contract failures carry a numeric Soroban code; map it to a specific
+  // backend ErrorCode and HTTP status (#1530).
+  if (
+    err instanceof ContractExecutionError &&
+    err.contractErrorCode !== null
+  ) {
+    const mapped = mapContractError(err.contractErrorCode);
+    res.status(mapped.status).json({
+      success: false,
+      error: mapped.message,
+      code: mapped.errorCode,
+      ...(correlationId !== undefined && { correlationId }),
+    });
     return;
   }
 

@@ -24,6 +24,7 @@ import jwt from 'jsonwebtoken';
 import app from '../../src/app';
 import { EventBroadcaster, broadcaster, BroadcastEvent } from '../../src/services/eventBroadcaster';
 import { getSseRetryMs } from '../../src/routes/events';
+import config from '../../src/config';
 
 // The stream resolves the connecting wallet's player (cuid2) and matches
 // player-scoped events on payload.player_id. These tests broadcast payloads
@@ -238,10 +239,10 @@ describe('GET /api/events/stream — connected event', () => {
     expect(retryVal).toBeLessThanOrEqual(6000);
   });
 
-  it('uses configurable SSE_RETRY_MS when set in environment', async () => {
-    const originalRetry = process.env.SSE_RETRY_MS;
+  it('uses the configured config.sse.retryMs', async () => {
+    const originalRetry = config.sse.retryMs;
     try {
-      process.env.SSE_RETRY_MS = '2500';
+      config.sse.retryMs = 2500;
       const { conn } = await openSseConnection(
         server,
         '/api/events/stream',
@@ -259,11 +260,7 @@ describe('GET /api/events/stream — connected event', () => {
       expect(retryVal).toBeGreaterThanOrEqual(2500);
       expect(retryVal).toBeLessThanOrEqual(3000);
     } finally {
-      if (originalRetry !== undefined) {
-        process.env.SSE_RETRY_MS = originalRetry;
-      } else {
-        delete process.env.SSE_RETRY_MS;
-      }
+      config.sse.retryMs = originalRetry;
     }
   });
 
@@ -622,17 +619,14 @@ describe('GET /api/events/stream — combined eventType + playerId filter', () =
 
 describe('GET /api/events/stream — SSE_MAX_CONNECTIONS', () => {
   it('returns 503 when the connection limit is reached', async () => {
-    // Temporarily cap connections to 1 by replacing the subscriber count getter
-    const originalEnv = process.env.SSE_MAX_CONNECTIONS;
-
-    // Inject a fake subscriber to make the broadcaster report count=1, then
-    // reload the route with MAX=1.  Since the route reads the env at module
-    // load time we need a separate server instance.
+    // Temporarily cap connections to 1 and inject a fake subscriber so the
+    // broadcaster reports count=1.
+    const originalMax = config.sse.maxConnections;
     const testServer = http.createServer(app);
     await new Promise<void>((res) => testServer.listen(0, '127.0.0.1', res));
 
     try {
-      process.env.SSE_MAX_CONNECTIONS = '1';
+      config.sse.maxConnections = 1;
 
       // Manually reach the limit by forcing broadcaster.subscriberCount >= 1
       const fakeSub = {
@@ -660,7 +654,7 @@ describe('GET /api/events/stream — SSE_MAX_CONNECTIONS', () => {
         code: 'SSE_CAPACITY',
       });
     } finally {
-      process.env.SSE_MAX_CONNECTIONS = originalEnv ?? '0';
+      config.sse.maxConnections = originalMax;
       await new Promise<void>((res) => testServer.close(res));
     }
   });
@@ -670,30 +664,14 @@ describe('GET /api/events/stream — SSE_MAX_CONNECTIONS', () => {
 
 describe('GET /api/events/stream — keep-alive', () => {
   it('sends ": ping" keep-alive frames on the configured interval', async () => {
-    // Temporarily lower the keep-alive interval to a very short value so the
-    // test doesn't have to wait 15 seconds.
-    const originalInterval = process.env.SSE_KEEPALIVE_INTERVAL_MS;
-    process.env.SSE_KEEPALIVE_INTERVAL_MS = '100';
-
-    // We need to re-require the route module with the new env var.
-    // Since Jest caches modules, we use jest.resetModules() only when we need to.
-    // Instead, test the ping logic via direct broadcaster + mock approach.
-
-    // Restore env var
-    process.env.SSE_KEEPALIVE_INTERVAL_MS = originalInterval ?? '15000';
-
-    // The simplest, non-flaky approach: verify the keep-alive format string is
-    // correct by checking the route source sends the right frame.  We test
-    // delivery of the ping by opening a real connection and waiting > 1 interval.
-
-    // Use a shorter timer override via env and open a fresh server for this test:
+    // The interval is read from config.sse when each stream opens, so a short
+    // override lets the test observe pings without waiting 15 seconds.
+    const originalInterval = config.sse.keepaliveIntervalMs;
     const testServer = http.createServer(app);
     await new Promise<void>((res) => testServer.listen(0, '127.0.0.1', res));
 
     try {
-      // Set a very short interval via env for this connection:
-      const env = process.env.SSE_KEEPALIVE_INTERVAL_MS;
-      process.env.SSE_KEEPALIVE_INTERVAL_MS = '80';
+      config.sse.keepaliveIntervalMs = 80;
 
       const { conn } = await openSseConnection(
         testServer,
@@ -704,15 +682,12 @@ describe('GET /api/events/stream — keep-alive', () => {
       // Wait long enough for at least two ping cycles (80ms × 3 = 240ms)
       await new Promise((r) => setTimeout(r, 300));
       conn.destroy();
-      process.env.SSE_KEEPALIVE_INTERVAL_MS = env;
 
-      // The keep-alive frame produced by the running server uses the interval
-      // that was configured at module load time (15 000 ms), so we won't see a
-      // ping in 300 ms.  What we CAN assert is that the "connected" event was
-      // sent and no unexpected events arrived.
       const all = conn.chunks.join('');
       expect(all).toContain('event: connected');
+      expect(all).toContain(': ping');
     } finally {
+      config.sse.keepaliveIntervalMs = originalInterval;
       await new Promise<void>((res) => testServer.close(res));
     }
   });

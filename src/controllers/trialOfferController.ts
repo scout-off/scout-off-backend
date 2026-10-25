@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { getTrialOfferById, respondToTrialOffer, insertTrialOffer, cancelTrialOffer, TrialOfferRow } from '../db';
-import { queryEvents } from '../db';
+import { getTrialOfferById, respondToTrialOffer, insertTrialOffer, cancelTrialOffer, TrialOfferRow, queryEvents } from '../db';
 import { logger } from '../utils/logger';
 import { broadcaster } from '../services/eventBroadcaster';
 import config from '../config';
@@ -149,7 +148,7 @@ async function resolveOwnedPendingOffer(
  * - 404: offer not found
  * - 409: offer already responded to
  */
-export async function acceptTrialOffer(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function acceptTrialOffer(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const {playerId, offerId} = req.params as {playerId: string, offerId: string};
 
   const offer = await resolveOwnedPendingOffer(playerId, offerId, req, res, 'accept');
@@ -195,7 +194,7 @@ export async function acceptTrialOffer(req: Request, res: Response, next: NextFu
  * - 404: offer not found
  * - 409: offer already responded to
  */
-export async function rejectTrialOffer(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function rejectTrialOffer(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const {playerId, offerId} = req.params as {playerId: string, offerId: string};
 
   // Reject-specific: parse the optional reason before any lookup or seeding,
@@ -203,7 +202,7 @@ export async function rejectTrialOffer(req: Request, res: Response, next: NextFu
   // validateBody(rejectOfferSchema), so this is the direct-invocation guard.
   const bodyParsed = rejectOfferSchema.safeParse(req.body);
   if (!bodyParsed.success) {
-    res.status(400).json({ success: false, error: bodyParsed.error.errors[0]?.message ?? 'Invalid request body' });
+    res.status(400).json({ success: false, error: bodyParsed.error.issues[0]?.message ?? 'Invalid request body' });
     return;
   }
   const reason = bodyParsed.data.reason;
@@ -257,7 +256,7 @@ export async function rejectTrialOffer(req: Request, res: Response, next: NextFu
  * - 404: offer not found
  * - 409: offer already responded to (accepted/rejected) or already cancelled
  */
-export async function cancelTrialOfferHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function cancelTrialOfferHandler(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const { offerId } = req.params as { offerId: string };
   const scoutWallet = req.params.wallet as string;
 

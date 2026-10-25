@@ -7,5 +7,9 @@ metadata:
     {{- include "scout-off-backend.labels" . | nindent 4 }}
 data:
   {{- range $key, $value := .Values.env }}
+  {{- /* An empty value means "use the application default": leave the key out
+         so config.ts applies its own default instead of receiving "". */}}
+  {{- if ne (toString $value) "" }}
   {{ $key }}: {{ $value | quote }}
+  {{- end }}
   {{- end }}

@@ -69,6 +69,24 @@ Return content
 
 ## Operational Notes
 
+### IPFS Pin Retry Interval
+
+The backend periodically retries pinning pending IPFS content that has not yet
+been confirmed. The interval between retry attempts is configurable via
+`IPFS_PIN_RETRY_INTERVAL_MS` (default: `30000` ms / 30 s, minimum: `5000` ms).
+
+The retry job runs once at startup and then on the configured interval, for
+consistency with the reconciliation and tier-divergence jobs.
+
+```bash
+# Retry every 60 seconds instead of the default 30
+IPFS_PIN_RETRY_INTERVAL_MS=60000
+```
+
+This is distinct from `IPFS_RECONCILE_INTERVAL_MS`, which controls how often
+the reconciliation job checks whether existing pins are stuck and need
+expiring.
+
 ### Setting Only `PINATA_GATEWAY` (Single Gateway, No Fallback)
 
 When `IPFS_GATEWAYS` is **not** set, `PINATA_GATEWAY` is used as the **only** gateway:

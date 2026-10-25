@@ -80,12 +80,12 @@ const auditQuerySchema = z.object({
 });
 
 /** GET /api/admin/audit (legacy #345 endpoint — backward-compatible) */
-export async function getAuditLog(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getAuditLog(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const parsed = auditQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({
       success: false,
-      error: parsed.error.errors[0]?.message ?? 'Invalid query parameters',
+      error: parsed.error.issues[0]?.message ?? 'Invalid query parameters',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -110,7 +110,7 @@ const auditTrailQuerySchema = z.object({
     .string()
     .refine(
       (v) => (KNOWN_AUDIT_EVENT_TYPES as readonly string[]).includes(v),
-      (v) => ({ message: `Invalid eventType "${v}". Must be one of: ${KNOWN_AUDIT_EVENT_TYPES.join(', ')}` })
+      { error: (issue) => `Invalid eventType "${String(issue.input)}". Must be one of: ${KNOWN_AUDIT_EVENT_TYPES.join(', ')}` }
     )
     .optional(),
   /** ISO 8601 start of date range (inclusive). */
@@ -147,12 +147,12 @@ const auditTrailQuerySchema = z.object({
  * @response 400 { success: false, error: string } - Invalid query parameters
  * @auth Bearer (admin role required)
  */
-export async function getAuditTrail(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getAuditTrail(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const parsed = auditTrailQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({
       success: false,
-      error: parsed.error.errors[0]?.message ?? 'Invalid query parameters',
+      error: parsed.error.issues[0]?.message ?? 'Invalid query parameters',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -193,7 +193,7 @@ export async function getAuditTrail(req: Request, res: Response, next: NextFunct
  * total chain_length, and rows_checked. Useful for periodic compliance checks
  * and incident response.
  */
-export async function getAuditChainVerification(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getAuditChainVerification(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const result = await verifyAuditChainFull();
   res.json({ success: true, data: result });
 }

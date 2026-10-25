@@ -12,6 +12,9 @@
  *
  * Requires the project to be built first (`npm run build`), since it loads
  * compiled output from dist/, matching scripts/backfill.js's convention.
+ *
+ * Deprecated (#1513): prefer the online re-encryption job and keyring described in
+ * docs/secrets-rotation.md. This script shares the same fieldCipher code path.
  */
 
 require('dotenv').config();

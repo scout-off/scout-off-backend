@@ -4,11 +4,10 @@ initTracing();
 import app, { setDraining } from "./app";
 import config from "./config";
 import { logger } from "./utils/logger";
-import { initDb, closeDb } from "./db";
-import { stellarHealth } from "./services/stellar";
-import { checkHealth, retryPendingPins, reconcilePendingPins } from "./services/ipfs";
+import { initDb, closeDb, fetchLastIndexedLedger, persistLastIndexedLedger } from "./db";
+import { stellarHealth, stellarBreaker } from "./services/stellar";
+import { checkHealth, retryPendingPins, reconcilePendingPins, ipfsBreaker } from "./services/ipfs";
 import { indexEvents } from "./services/indexer";
-import { fetchLastIndexedLedger, persistLastIndexedLedger } from "./db";
 import { initBlocklist } from "./services/tokenBlocklist";
 import { startDecayTimer } from "./services/ipReputation";
 import {
@@ -20,17 +19,34 @@ import {
   closeSecurityEventSubscriber,
 } from "./services/securityEventPubSub";
 import { closeRedisClients } from "./services/redis";
-import { runTierDivergenceCheck } from "./services/tierDivergenceJob";
-import { getTierDivergenceTotal } from "./services/tierDivergenceJob";
-import { setTierDivergenceGetter } from "./middleware/metrics";
+import { runTierDivergenceCheck, getTierDivergenceTotal } from "./services/tierDivergenceJob";
+import { runScheduledAuditChainVerification } from "./services/auditChainVerifier";
+import {
+  setTierDivergenceGetter,
+  initEventLoopMonitoring,
+  initGcMonitoring,
+  incUnhandledRejections,
+  registerCircuitBreaker,
+} from "./middleware/metrics";
 import { drainAllSessions, setAcceptingSseSessions } from "./routes/events";
-import http from "http";
+import { startRetentionJob, stopRetentionJob } from './services/retention';
+import { startFieldReencryptionJob, stopFieldReencryptionJob } from './services/fieldReencryptionJob';
+import { applyHttpTimeouts } from "./httpServer";
+import { runShutdown } from "./shutdown";
 
 // Database initialization is now async - must be awaited
 async function start() {
   // Register the tier-divergence counter getter so the metrics endpoint can
   // expose scout_off_tier_divergence_total without a circular import (#1132).
   setTierDivergenceGetter(getTierDivergenceTotal);
+
+  // Register both circuit breakers so their states are exported as gauges
+  // and their transitions are counted (#1573).
+  registerCircuitBreaker(stellarBreaker);
+  registerCircuitBreaker(ipfsBreaker);
+  // Initialize runtime metrics monitoring (event-loop lag, GC).
+  initEventLoopMonitoring();
+  initGcMonitoring();
 
   try {
     await initDb();
@@ -66,6 +82,8 @@ async function start() {
     }
   }
 
+  startRetentionJob();
+  startFieldReencryptionJob();
   await startServer();
 }
 
@@ -74,9 +92,13 @@ async function startServer() {
     logger.info(
       `ScoutOff backend running on port ${config.port} [${config.network}]`,
     );
-
+    applyHttpTimeouts(server, config.http);
+    logger.info(
+      `HTTP timeouts: keepAlive=${config.http.keepAliveTimeoutMs}ms ` +
+      `headers=${config.http.headersTimeoutMs}ms request=${config.http.requestTimeoutMs}ms`,
+    );
     // Log startup health of critical dependencies
-    (async () => {
+    void (async () => {
       const statuses: Record<string, string> = {};
 
       try {
@@ -107,6 +129,7 @@ async function startServer() {
   // Wraps each background job so shutdown can observe whether one is running
   // and wait for it to complete before closing the DB.
   let inFlightJobs = 0;
+  let isShuttingDown = false;
 
   function withJobTracking(fn: () => Promise<void>): () => Promise<void> {
     return async () => {
@@ -119,7 +142,10 @@ async function startServer() {
     };
   }
 
-  // Poll for new contract events every 5 seconds
+  // Poll for new contract events. The interval is configurable because 5s
+  // (roughly Stellar's ledger close time) is not right for every environment:
+  // staging/testnet may want a slower poll to save RPC quota, sandboxes faster
+  // (#1568). Validated in config (1000–300000 ms).
   const poll = withJobTracking(async () => {
     try {
       await indexEvents();
@@ -128,10 +154,11 @@ async function startServer() {
     }
   });
 
-  poll();
-  const pollInterval = setInterval(poll, 5_000);
+  void poll();
+  logger.info(`Indexer poll interval: ${config.indexerPollIntervalMs}ms`);
+  const pollInterval = setInterval(poll, config.indexerPollIntervalMs);
 
-  // Poll for IPFS retries every 30 seconds
+  // Poll for IPFS retries
   const retryPins = withJobTracking(async () => {
     try {
       await retryPendingPins();
@@ -140,7 +167,11 @@ async function startServer() {
     }
   });
 
-  const retryInterval = setInterval(retryPins, 30_000);
+  // Run once at startup for consistency with the reconcile and divergence
+  // jobs, then schedule the interval. The interval is configurable via
+  // IPFS_PIN_RETRY_INTERVAL_MS (default: 30000, min: 5000).
+  void retryPins();
+  const retryInterval = setInterval(retryPins, config.ipfsPinRetryIntervalMs);
 
   // Scheduled reconciliation of pending pins against Pinata & IPFS gateways
   const reconcilePins = withJobTracking(async () => {
@@ -151,7 +182,7 @@ async function startServer() {
     }
   });
 
-  reconcilePins();
+  void reconcilePins();
   const reconcileInterval = setInterval(reconcilePins, config.ipfsReconcileIntervalMs);
 
   // Scheduled tier divergence check (#1132): compare derived (off-chain) tier
@@ -165,119 +196,115 @@ async function startServer() {
     }
   });
 
-  runDivergenceCheck();
+  void runDivergenceCheck();
   const divergenceInterval = setInterval(runDivergenceCheck, config.tierDivergence.intervalMs);
 
+  // Scheduled audit-log hash-chain verification (#1539): verifies new audit
+  // rows incrementally every AUDIT_VERIFY_INTERVAL_MS and walks the whole
+  // chain every AUDIT_FULL_VERIFY_INTERVAL_MS. Progress is checkpointed in
+  // indexer_state, so a restart resumes instead of re-walking the table.
+  const runAuditVerify = withJobTracking(async () => {
+    try {
+      await runScheduledAuditChainVerification({
+        shouldStop: () => isShuttingDown,
+      });
+    } catch (err) {
+      logger.error("Audit chain verification error:", (err as Error).message);
+    }
+  });
+
+  void runAuditVerify();
+  const auditVerifyInterval = setInterval(
+    runAuditVerify,
+    config.auditVerify.intervalMs,
+  );
+
   // ── Graceful shutdown ──────────────────────────────────────────────────────
-  // Ordered drain sequence (#1315):
-  //   1. Flip draining flag  → readiness returns 503 immediately
+  // Deadline-driven drain sequence (#1315, #1538). The implementation lives in
+  // src/shutdown.ts so it can be tested without booting the whole process:
+  //   1. Flip draining flag  → readiness returns 503 and responses carry
+  //                            `Connection: close`
   //   2. Optional pre-stop delay (SHUTDOWN_PRESTOP_DELAY_MS)
   //   3. Stop schedulers     → no new jobs start
-  //   4. Await in-flight jobs (bounded to 60 % of total timeout)
-  //   5. Drain SSE sessions  → send session_ended(server_shutdown) and end each stream
-  //   6. server.close()      → stop accepting new HTTP connections
-  //   7. Close Redis, DB, tracing
-  //   8. exit 0
+  //   4. Await in-flight jobs (bounded by SHUTDOWN_JOB_DRAIN_MS)
+  //   5. Drain SSE sessions  → send session_ended(server_shutdown)
+  //   6. server.close()      → stop accepting new connections
+  //   7. Await in-flight requests (bounded by SHUTDOWN_REQUEST_DRAIN_MS)
+  //   8. server.closeAllConnections() for anything still connected
+  //   9. Close Redis, DB, tracing within SHUTDOWN_CLEANUP_RESERVE_MS
+  //  10. exit with the provided exit code, or 1 if a cleanup step failed
 
-  const SHUTDOWN_TIMEOUT_MS = parseInt(
-    process.env.SHUTDOWN_TIMEOUT_MS ?? '10000',
-    10,
-  );
-  const SHUTDOWN_PRESTOP_DELAY_MS = parseInt(
-    process.env.SHUTDOWN_PRESTOP_DELAY_MS ?? '0',
-    10,
-  );
-  let isShuttingDown = false;
+  const SHUTDOWN_TIMEOUT_MS = config.shutdown.timeoutMs;
+  const SHUTDOWN_PRESTOP_DELAY_MS = config.shutdown.prestopDelayMs;
+  const SHUTDOWN_REQUEST_DRAIN_MS = config.shutdown.requestDrainMs ?? Math.floor(SHUTDOWN_TIMEOUT_MS * 0.5);
+  const SHUTDOWN_CLEANUP_RESERVE_MS = config.shutdown.cleanupReserveMs;
 
-  const shutdown = async (signal: string) => {
+  const shutdown = async (signal: string, exitCode = 0) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
     logger.info(`Received ${signal}, starting graceful shutdown...`);
 
-    // Step 1: flip draining flag — readiness probes return 503 immediately.
-    setDraining();
-    setAcceptingSseSessions(false);
-
-    // Step 2: optional pre-stop delay for load-balancer observation of 503.
-    if (SHUTDOWN_PRESTOP_DELAY_MS > 0) {
-      logger.info(`[shutdown] pre-stop delay ${SHUTDOWN_PRESTOP_DELAY_MS}ms`);
-      await new Promise((r) => setTimeout(r, SHUTDOWN_PRESTOP_DELAY_MS));
-    }
-
-    const forceExitTimer = setTimeout(() => {
+    // Last-resort watchdog. runShutdown() is deadline-driven and always runs
+    // the cleanup, so this should never fire; it only protects against a hang
+    // in a native dependency.
+    const watchdog = setTimeout(() => {
       logger.error(
-        `Graceful shutdown timed out after ${SHUTDOWN_TIMEOUT_MS}ms, forcing exit`,
+        `Graceful shutdown watchdog fired after ${SHUTDOWN_TIMEOUT_MS + 1_000}ms, forcing exit`,
       );
       process.exit(1);
-    }, SHUTDOWN_TIMEOUT_MS);
-    forceExitTimer.unref();
+    }, SHUTDOWN_TIMEOUT_MS + 1_000);
+    watchdog.unref();
 
-    // Step 3: stop schedulers so no new jobs start.
-    clearInterval(pollInterval);
-    clearInterval(retryInterval);
-    clearInterval(reconcileInterval);
-    clearInterval(divergenceInterval);
-
-    // Step 4: await in-flight job executions (bounded to 60 % of total timeout).
-    if (inFlightJobs > 0) {
-      logger.info(`[shutdown] waiting for ${inFlightJobs} in-flight job(s)...`);
-      const jobDrainDeadline = Date.now() + Math.floor(SHUTDOWN_TIMEOUT_MS * 0.6);
-      while (inFlightJobs > 0 && Date.now() < jobDrainDeadline) {
-        await new Promise((r) => setTimeout(r, 100));
-      }
-      if (inFlightJobs > 0) {
-        logger.warn(`[shutdown] ${inFlightJobs} job(s) still running, proceeding`);
-      }
-    }
-
-    // Step 5: drain SSE sessions — send session_ended(server_shutdown).
-    drainAllSessions();
-
-    // Step 6: close HTTP server and destroy idle keep-alive connections.
-    await new Promise<void>((resolve) => {
-      server.close((err) => {
-        if (err) {
-          logger.error("Error while closing HTTP server:", err);
-        } else {
-          logger.info("HTTP server closed");
-        }
-        resolve();
-      });
-      // closeIdleConnections() is available in Node ≥ 18.2.
-      if (
-        typeof (server as http.Server & { closeIdleConnections?: () => void })
-          .closeIdleConnections === 'function'
-      ) {
-        (server as http.Server & { closeIdleConnections: () => void }).closeIdleConnections();
-      }
+    const result = await runShutdown({
+      server,
+      timeoutMs: SHUTDOWN_TIMEOUT_MS,
+      preStopDelayMs: SHUTDOWN_PRESTOP_DELAY_MS,
+      requestDrainMs: SHUTDOWN_REQUEST_DRAIN_MS,
+      cleanupReserveMs: SHUTDOWN_CLEANUP_RESERVE_MS,
+      onDrainStart: () => {
+        setDraining();
+        setAcceptingSseSessions(false);
+      },
+      stopSchedulers: () => {
+        clearInterval(pollInterval);
+        clearInterval(retryInterval);
+        clearInterval(reconcileInterval);
+        clearInterval(divergenceInterval);
+        clearInterval(auditVerifyInterval);
+        void stopRetentionJob();
+        stopFieldReencryptionJob();
+      },
+      getInFlightJobs: () => inFlightJobs,
+      drainSse: drainAllSessions,
+      closeRedis: async () => {
+        await closeCacheInvalidationSubscriber();
+        await closeSecurityEventSubscriber();
+        await closeRedisClients();
+        logger.info("Redis connections closed");
+      },
+      closeDb: async () => {
+        await stopRetentionJob();
+        await closeDb();
+        logger.info("Database connection closed");
+      },
+      shutdownTracing: async () => {
+        await shutdownTracing();
+        logger.info("Tracing SDK shut down");
+      },
+      logger,
     });
 
-    // Step 7: close Redis, DB, tracing.
-    try {
-      await closeCacheInvalidationSubscriber();
-      await closeSecurityEventSubscriber();
-      await closeRedisClients();
-      logger.info("Redis connections closed");
-    } catch (redisErr) {
-      logger.error("Error closing Redis connections:", redisErr);
+    clearTimeout(watchdog);
+    if (result.cleanupFailures.length > 0) {
+      logger.error(
+        `Graceful shutdown finished with cleanup failure(s): ${result.cleanupFailures.join(', ')} after ${result.durationMs}ms`,
+      );
+    } else {
+      logger.info(
+        `Graceful shutdown complete in ${result.durationMs}ms`,
+      );
     }
-
-    try {
-      await closeDb();
-      logger.info("Database connection closed");
-    } catch (dbErr) {
-      logger.error("Error closing database:", dbErr);
-    }
-
-    try {
-      await shutdownTracing();
-      logger.info("Tracing SDK shut down");
-    } catch (tracingErr) {
-      logger.error("Error shutting down tracing:", tracingErr);
-    }
-
-    clearTimeout(forceExitTimer);
-    process.exit(0);
+    process.exit(Math.max(exitCode, result.exitCode));
   };
 
   process.on("SIGTERM", () => { shutdown("SIGTERM").catch(() => process.exit(1)); });
@@ -288,6 +315,7 @@ async function startServer() {
 
   process.on("unhandledRejection", (reason: unknown) => {
     unhandledRejectionsTotal += 1;
+    incUnhandledRejections();
     const err = reason instanceof Error ? reason : new Error(String(reason));
     logger.error(
       `Unhandled promise rejection (scout_off_unhandled_rejections_total=${unhandledRejectionsTotal}):`,
@@ -295,14 +323,13 @@ async function startServer() {
     );
     // Do not exit by default; set EXIT_ON_UNHANDLED_REJECTION=true to opt in.
     if (config.exitOnUnhandledRejection) {
-      shutdown("unhandledRejection");
+      void shutdown("unhandledRejection", 1);
     }
   });
 
   process.on("uncaughtException", (err: Error) => {
     logger.error("Uncaught exception, shutting down:", err.stack ?? err.message);
-    shutdown("uncaughtException");
-    process.exitCode = 1;
+    void shutdown("uncaughtException", 1);
   });
 }
 

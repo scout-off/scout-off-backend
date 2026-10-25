@@ -1,7 +1,7 @@
 import { server } from './stellar';
-import { scValToNative } from '@stellar/stellar-sdk';
+import { scValToNative, xdr } from '@stellar/stellar-sdk';
 import { createId } from '@paralleldrive/cuid2';
-import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { trace, SpanStatusCode, Span } from '@opentelemetry/api';
 import config from '../config';
 import {
   getDb,
@@ -13,13 +13,17 @@ import {
   insertOrUpdatePlayer,
   updatePlayerProgress,
   insertPendingMilestone,
-  queryEvents,
   getEventsCount,
   rollbackEventsFromLedger,
+  insertUnprocessedEvent,
+  getUnprocessedEventById,
+  deleteUnprocessedEvent,
 } from '../db';
 import { dispatchEventWebhook } from './webhooks';
 import { logger } from '../utils/logger';
+import { recordIndexerEvent, IndexerEventOutcome } from '../middleware/metrics';
 import { tierForApprovedMilestones } from './tierPromotion';
+import { CONTRACT_EVENT_TYPES } from '../types';
 import {
   normalizeAndSortEvents,
   groupCoTransactionEvents,
@@ -27,7 +31,32 @@ import {
   type NormalizedIndexerEvent,
 } from './eventOrdering';
 import { withRestoredCorrelation } from './txCorrelation';
-import { EventBroadcaster, broadcaster } from './eventBroadcaster';
+import { broadcaster } from './eventBroadcaster';
+
+/**
+ * Returns the list of contract IDs to fetch events from.
+ * This is shared between the live indexer, reindex, and replay to ensure
+ * they all process the same set of contracts.
+ *
+ * The list includes all five contract IDs with deduplication:
+ *   - contractId (legacy monolith)
+ *   - registerContractId
+ *   - progressContractId
+ *   - subscriptionContractId
+ *   - connectionContractId
+ *
+ * Empty contract IDs are filtered out.
+ */
+export function getIndexedContractIds(): string[] {
+  return [
+    config.contractId,
+    config.registerContractId,
+    config.progressContractId,
+    config.subscriptionContractId,
+    config.connectionContractId,
+    config.playerTokenContractId,
+  ].filter((id, i, arr) => Boolean(id) && arr.indexOf(id) === i);
+}
 
 const tracer = trace.getTracer('scout-off-backend');
 
@@ -36,21 +65,14 @@ function getCache() {
   return require('./cache');
 }
 
-// Track approved milestones for webhook dispatch
-const approvedMilestones: Array<{ type: string; payload: unknown }> = [];
-
 /** Current indexer lag in ledgers (latestChainLedger - lastIndexedLedger). Reset after each poll. */
 export let indexerLedgerLag = 0;
 
-/** Threshold in ledgers above which a warning is logged. Configurable via INDEXER_LAG_WARN_THRESHOLD. */
-function getLagWarnThreshold(): number {
-  return parseInt(process.env.INDEXER_LAG_WARN_THRESHOLD ?? '100', 10);
-}
+/** Epoch ms of the last successful indexEvents() run (0 = never succeeded). */
+export let indexerLastSuccessAt = 0;
 
-/** Configurable finality margin delays treating the most recent N ledgers as immutable. */
-function getFinalityMargin(): number {
-  return parseInt(process.env.INDEXER_FINALITY_MARGIN ?? '10', 10);
-}
+/** Lifetime count of poll failures (thrown errors in indexEvents()). */
+export let indexerPollFailuresTotal = 0;
 
 // ─── Payload normalisation ────────────────────────────────────────────────────
 //
@@ -101,6 +123,22 @@ export function normalizeSorobanEvent(raw: {
   const nativeValue = raw.value ? scValToNative(raw.value as never) : undefined;
   const tuple = Array.isArray(nativeValue) ? nativeValue : [];
   let payload: Record<string, unknown>;
+
+  if (['role_granted', 'role_revoked'].includes(rawType)) {
+    return { type, payload: {
+      role: nativeText(topics[1] ? scValToNative(topics[1] as never) : undefined),
+      account: nativeText(tuple[0]),
+      sender: nativeText(tuple[1]),
+    } };
+  }
+  if (rawType === 'role_admin_changed') {
+    return { type, payload: {
+      role: nativeText(topics[1] ? scValToNative(topics[1] as never) : undefined),
+      previous_admin_role: nativeText(tuple[0]),
+      admin_role: nativeText(tuple[1]),
+      sender: nativeText(tuple[2]),
+    } };
+  }
 
   if (rawType === 'player_rg') {
     const onChainPlayerId = nativeText(tuple[0]);
@@ -171,6 +209,144 @@ export function normalizeSorobanEvent(raw: {
   return { type, payload };
 }
 
+// ─── Outcome classification (#1540) ───────────────────────────────────────────
+//
+// Every RPC event is funnelled through applyOne() which classifies the outcome
+// as one of `applied`, `unknown_type` or `decode_error`. Unknown and undecodable
+// events are counted (scout_off_indexer_events_total{type,outcome}), logged with
+// ledger/tx/contract/topic context, and persisted to indexer_unprocessed_events
+// so they can be replayed once the decoder is fixed — instead of being dropped
+// silently. See docs/indexer.md.
+
+/** Set of event types the indexer knows how to apply. Derived from CONTRACT_EVENT_TYPES so the two cannot drift. */
+const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set<string>(CONTRACT_EVENT_TYPES);
+
+/** Returns true when `type` is a recognised, appliable contract event type. */
+export function isKnownEventType(type: string): boolean {
+  return KNOWN_EVENT_TYPES.has(type);
+}
+
+/**
+ * Best-effort extraction of the topic-0 type string without throwing.
+ * Used to label decode_error events (whose value may be un-decodable but whose
+ * topic may still be readable) in metrics and logs.
+ */
+function safeTopicType(raw: { topic?: unknown[] }): string {
+  try {
+    const topics = raw.topic ?? [];
+    return topics[0] ? nativeText(scValToNative(topics[0] as never)) : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Serialize an event's raw topic/value to XDR (base64) so it can be replayed
+ * later. Returns nulls when XDR encoding is not possible for a field.
+ */
+export function serializeEventForReplay(raw: {
+  topic?: unknown[];
+  value?: unknown;
+}): { topicJson: string | null; valueXdr: string | null } {
+  const toXdr = (sv: unknown): string | null => {
+    try {
+      if (sv && typeof (sv as { toXdr?: unknown }).toXdr === 'function') {
+        return (sv as { toXdr(fmt?: string): string }).toXdr('base64');
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const topicArr = raw.topic ?? [];
+  const topicXdrs = topicArr.map(toXdr);
+  const topicJson = topicArr.length > 0 ? JSON.stringify(topicXdrs) : null;
+  const valueXdr = toXdr(raw.value);
+  return { topicJson, valueXdr };
+}
+
+/**
+ * Rebuild a raw event ({ topic, value }) from the XDR persisted in
+ * indexer_unprocessed_events, so a stored event can be replayed through
+ * normalizeSorobanEvent after a decoder fix.
+ */
+export function deserializeEventFromReplay(topicJson: string | null, valueXdr: string | null): {
+  topic?: xdr.ScVal[];
+  value?: xdr.ScVal;
+} {
+  const out: { topic?: xdr.ScVal[]; value?: xdr.ScVal } = {};
+  if (topicJson) {
+    try {
+      const arr = JSON.parse(topicJson) as (string | null)[];
+      out.topic = arr
+        .filter((x): x is string => typeof x === 'string')
+        .map((x) => xdr.ScVal.fromXdr(x, 'base64'));
+    } catch {
+      /* leave topic undefined */
+    }
+  }
+  if (valueXdr) {
+    try {
+      out.value = xdr.ScVal.fromXdr(valueXdr, 'base64');
+    } catch {
+      /* leave value undefined */
+    }
+  }
+  return out;
+}
+
+/**
+ * Persist an event the indexer could not apply, with enough raw data to replay
+ * it, and emit a structured warning carrying ledger/tx/contract/topic context.
+ */
+async function recordUnappliedEvent(params: {
+  event: { ledger: number; txHash: string; eventIndex: number; contractId: string; raw: unknown };
+  type: string | null;
+  outcome: IndexerEventOutcome;
+  detail: string;
+  payload?: Record<string, unknown>;
+}): Promise<void> {
+  const { event, type, outcome, detail } = params;
+  const raw = event.raw as { topic?: unknown[]; value?: unknown };
+  const { topicJson, valueXdr } = serializeEventForReplay(raw);
+
+  logger.warn(
+    {
+      outcome,
+      type: type ?? safeTopicType(raw),
+      ledger: event.ledger,
+      tx_hash: event.txHash,
+      event_index: event.eventIndex,
+      contract_id: event.contractId,
+      topic: topicJson,
+      detail,
+    },
+    '[indexer] event not applied',
+  );
+
+  try {
+    await insertUnprocessedEvent({
+      type,
+      ledger: event.ledger,
+      tx_hash: event.txHash,
+      event_index: event.eventIndex,
+      contract_id: event.contractId,
+      topic_json: topicJson,
+      value_xdr: valueXdr,
+      reason: outcome,
+      payload: params.payload ? JSON.stringify(params.payload) : null,
+    });
+  } catch (err) {
+    // Never let the unprocessed-events write take down the batch — the metric
+    // and warning above already surfaced the problem.
+    logger.error(
+      { err, tx_hash: event.txHash, event_index: event.eventIndex },
+      '[indexer] failed to persist unprocessed event',
+    );
+  }
+}
+
 // ─── Deduplication strategy ───────────────────────────────────────────────────
 //
 // Primary deduplication: UNIQUE(tx_hash, event_index) — co-transaction events
@@ -198,13 +374,26 @@ export function normalizeEventId(
   return `${contractId}:${ledger}:${txHash}:${eventIndex}`;
 }
 
-// Stub hook — replace with real logic as needed (e.g. metrics, alerting).
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function onBeforeInsert(_eventId: string): void { /* hook */ }
-
-// Stub hook — called after a successful insert (INSERT OR IGNORE may be a no-op).
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function onAfterInsert(_eventId: string): void { /* hook */ }
+/**
+ * Indexer event hooks for test fault injection and observability.
+ *
+ * Usage (tests only):
+ *   import { __indexerHooks } from './indexer';
+ *   __indexerHooks.beforeInsert = (eventId) => {
+ *     if (shouldSimulateFailure) throw new Error('simulated crash');
+ *   };
+ *
+ * These hooks are called around every event insert to enable:
+ * - Fault injection (e.g., crash between insert and side effects)
+ * - Idempotent reprocessing verification
+ * - Metrics / alerting (future)
+ *
+ * @internal Test-only API; do not use in production.
+ */
+export const __indexerHooks = {
+  beforeInsert: (_eventId: string) => {},
+  afterInsert: (_eventId: string) => {},
+};
 
 // ─── Indexer ──────────────────────────────────────────────────────────────────
 
@@ -220,35 +409,38 @@ export async function indexEvents(): Promise<void> {
   );
 
   const lastIndexed = fetchLastIndexedLedger();
-  const margin = getFinalityMargin();
+  const margin = config.indexer.finalityMargin;
   const fromLedger = Math.max(0, lastIndexed > margin ? lastIndexed - margin : 0);
   span.setAttribute('indexer.ledger_start', fromLedger);
 
-  const contractIds = [
-    config.contractId,
-    config.registerContractId,
-    config.progressContractId,
-    config.subscriptionContractId,
-    config.connectionContractId,
-  ].filter((id, i, arr) => Boolean(id) && arr.indexOf(id) === i);
+  const contractIds = getIndexedContractIds();
 
+  // Soroban accepts at most five contract IDs per filter.
+  const indexedContracts = contractIds.length ? contractIds : [config.contractId];
+  const filters = [];
+  for (let i = 0; i < indexedContracts.length; i += 5) {
+    filters.push({ type: 'contract' as const, contractIds: indexedContracts.slice(i, i + 5) });
+  }
   const response = await server.getEvents({
     startLedger: fromLedger > 0 ? fromLedger : 1,
-    filters: [{ type: 'contract', contractIds: contractIds.length ? contractIds : [config.contractId] }],
+    filters,
   });
   span.setAttribute('indexer.ledger_end', response.latestLedger);
   span.setAttribute('indexer.events_processed', response.events.length);
 
   const lagAfterPoll = Math.max(0, response.latestLedger - (lastIndexed > 0 ? lastIndexed - 1 : response.latestLedger));
   indexerLedgerLag = lagAfterPoll;
-  const threshold = getLagWarnThreshold();
+  const threshold = config.indexer.lagWarnThreshold;
   if (lagAfterPoll > threshold) {
     logger.warn(`[indexer] ledger lag=${lagAfterPoll} exceeds threshold=${threshold}`);
   }
 
-  if (!response.events.length) return;
+  if (!response.events.length) {
+    indexerLastSuccessAt = Date.now();
+    return;
+  }
 
-  const webhookEvents: Array<{ type: string; payload: unknown; txHash: string }> = [];
+  const webhookEvents: Array<{ type: string; payload: unknown; txHash: string; ledger: number }> = [];
 
   // NOTE: this used to be (and, on main, still is) a single synchronous
   // db.transaction() wrapping the whole batch, including reorg detection.
@@ -311,11 +503,47 @@ export async function indexEvents(): Promise<void> {
   const ordered = normalizeAndSortEvents(rawEvents, config.contractId);
   const groups = groupCoTransactionEvents(ordered);
 
-  const applyOne = async (event: (typeof ordered)[number]): Promise<void> => {
+  const applyOne = async (event: (typeof ordered)[number]): Promise<IndexerEventOutcome> => {
     const raw = event.raw as any;
-    const normalized = normalizeSorobanEvent(raw);
+
+    // 1. Decode. A throw here means the value shape is unexpected (e.g. a
+    //    contract upgrade reshaped the event) — classify as decode_error,
+    //    count it, log it, and park it for replay rather than aborting the
+    //    batch.
+    let normalized: { type: string; payload: Record<string, unknown> };
+    try {
+      normalized = normalizeSorobanEvent(raw);
+    } catch (err) {
+      recordIndexerEvent(safeTopicType(raw) || 'unknown', 'decode_error');
+      await recordUnappliedEvent({
+        event,
+        type: safeTopicType(raw) || null,
+        outcome: 'decode_error',
+        detail: err instanceof Error ? err.message : String(err),
+      });
+      return 'decode_error';
+    }
+
     const type = normalized.type;
     const payload = normalized.payload;
+    const outcome: IndexerEventOutcome = isKnownEventType(type) ? 'applied' : 'unknown_type';
+
+    // 2. Recognise the type. Anything outside the CONTRACT_EVENT_TYPES
+    //    allowlist is an unknown_type: counted, logged, and parked for replay.
+    //    The raw event row is still inserted below so it is not lost.
+    if (outcome === 'unknown_type') {
+      recordIndexerEvent(type, 'unknown_type');
+      await recordUnappliedEvent({
+        event,
+        type,
+        outcome: 'unknown_type',
+        detail: `unrecognised event type '${type}'`,
+        payload,
+      });
+      // Fall through to insert the raw event row (so it is queryable) but
+      // skip type-specific side effects — we do not know how to apply it.
+    }
+
     const onChainPlayerId = payload.on_chain_player_id as string | undefined;
     if (type === 'player_registered' && onChainPlayerId && payload.wallet) {
       const existingPlayer = await getPlayerByWallet(String(payload.wallet));
@@ -333,7 +561,7 @@ export async function indexEvents(): Promise<void> {
     const createdAt = raw.ledgerClosedAt ? new Date(raw.ledgerClosedAt).getTime() : Date.now();
     const ledgerHash = raw.ledgerHash ?? raw.pagingToken ?? raw.txHash;
 
-    onBeforeInsert(eventId);
+    __indexerHooks.beforeInsert(eventId);
     const insertResult = insert.run(
       type,
       event.ledger,
@@ -346,8 +574,17 @@ export async function indexEvents(): Promise<void> {
       event.contractId,
     );
     const eventInserted = insertResult.changes > 0;
-    if (!eventInserted) return;
-    onAfterInsert(eventId);
+    if (!eventInserted) return outcome;
+    __indexerHooks.afterInsert(eventId);
+
+    // Known events are counted as applied once the raw row is persisted; the
+    // type-specific side effects run below. Unknown events were already counted
+    // as unknown_type above and skip side effects entirely.
+    if (outcome === 'applied') {
+      recordIndexerEvent(type, 'applied');
+    } else {
+      return outcome;
+    }
 
     await withRestoredCorrelation(
       event.txHash,
@@ -409,7 +646,7 @@ export async function indexEvents(): Promise<void> {
               ].filter(Boolean).join(', ')})`,
             );
           }
-          webhookEvents.push({ type, payload, txHash: event.txHash });
+          webhookEvents.push({ type, payload, txHash: event.txHash, ledger: event.ledger });
         } else if (type === 'milestone_approved') {
           const playerId = payload.player_id as string;
           if (playerId) {
@@ -423,47 +660,234 @@ export async function indexEvents(): Promise<void> {
             const cache = getCache();
             cache.invalidatePlayerCache(playerId);
           }
-          webhookEvents.push({ type, payload, txHash: event.txHash });
+          webhookEvents.push({ type, payload, txHash: event.txHash, ledger: event.ledger });
         }
       },
       span,
+      { 'stellar.ledger': event.ledger, 'scoutoff.event_type': type },
     );
+
+    return outcome;
   };
+
+  // Track the ledger of the earliest KNOWN event that failed to apply (a
+  // decode_error on a recognised type). The cursor must not advance past such
+  // an event, so the next poll retries it — see docs/indexer.md.
+  let earliestKnownFailureLedger: number | null = null;
 
   for (const group of groups) {
     // Atomic co-transaction group: apply every event in order before the next tx.
     for (const event of group) {
-      await applyOne(event);
-      // Broadcast to SSE (in-process + Redis if configured) after successful persistence
-      broadcastIndexedEvent(event);
+      let outcome: IndexerEventOutcome;
+      try {
+        outcome = await applyOne(event);
+      } catch (err) {
+        // A genuine infrastructure failure (DB down, etc.) on a known event:
+        // surface it, hold the cursor at this ledger, and rethrow so the whole
+        // batch is retried on the next poll.
+        span.recordException(err as Error);
+        logger.error(
+          { err, tx_hash: event.txHash, ledger: event.ledger },
+          '[indexer] failed to apply known event',
+        );
+        if (earliestKnownFailureLedger === null || event.ledger < earliestKnownFailureLedger) {
+          earliestKnownFailureLedger = event.ledger;
+        }
+        throw err;
+      }
+      // A decode_error on a recognised (known) type holds the cursor so the
+      // event is retried; unknown_type and decode_error on unknown types do
+      // not — they are parked in indexer_unprocessed_events for replay.
+      if (outcome === 'decode_error' && isKnownEventType(safeTopicType(event.raw as { topic?: unknown[] }) || '')) {
+        if (earliestKnownFailureLedger === null || event.ledger < earliestKnownFailureLedger) {
+          earliestKnownFailureLedger = event.ledger;
+        }
+      }
+      // Broadcast to SSE (in-process + Redis if configured) after successful
+      // persistence. Only applied events are broadcast — an unknown or
+      // undecodable event has no reliable type/payload to send, and
+      // broadcastIndexedEvent re-decodes the raw value (which would throw for
+      // a decode_error). Guard it so a broadcast failure never blocks the
+      // rest of the batch.
+      if (outcome === 'applied') {
+        try {
+          await withRestoredCorrelation(event.txHash, 'indexer.sseDispatch', async () => {
+            broadcastIndexedEvent(event);
+          }, span, { 'stellar.ledger': event.ledger, 'scoutoff.event_type': normalizeSorobanEvent(event.raw).type });
+        } catch (err) {
+          logger.warn(
+            { err, tx_hash: event.txHash },
+            '[indexer] SSE broadcast failed for applied event',
+          );
+        }
+      }
     }
   }
 
   const latest = ordered.at(-1)!;
 
   // 3. Update last indexed ledger once the batch above has been applied.
-  persistLastIndexedLedger(latest.ledger + 1);
+  //    If a recognised (known) event failed to decode, do NOT advance the
+  //    cursor past it — hold it at that ledger so the next poll retries the
+  //    event (e.g. after a decoder fix). Unknown/undecodable events on
+  //    unrecognised types do not hold the cursor; they are parked in
+  //    indexer_unprocessed_events for replay via the admin endpoint.
+  if (earliestKnownFailureLedger !== null) {
+    logger.warn(
+      { ledger: earliestKnownFailureLedger },
+      '[indexer] holding cursor at known event that failed to decode',
+    );
+    persistLastIndexedLedger(earliestKnownFailureLedger);
+  } else {
+    persistLastIndexedLedger(latest.ledger + 1);
+  }
 
   // 4. Dispatch webhooks for indexed events (milestone_submitted, milestone_approved)
-  for (const { type, payload, txHash } of webhookEvents) {
+  await Promise.all(webhookEvents.map(({ type, payload, txHash, ledger }) =>
     withRestoredCorrelation(txHash, 'indexer.webhookDispatch', async () => {
       await dispatchEventWebhook(type, payload);
-    }, span).catch((err: unknown) => {
+    }, span, { 'stellar.ledger': ledger, 'scoutoff.event_type': type }).catch((err: unknown) => {
       logger.warn(
         `[indexer] webhook dispatch failed for ${type}: ${err instanceof Error ? err.message : String(err)}`,
       );
-    });
-  }
+    }),
+  ));
 
   indexerLedgerLag = Math.max(0, response.latestLedger - latest.ledger);
+  indexerLastSuccessAt = Date.now();
   } catch (err) {
     span.recordException(err as Error);
     span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
+    indexerPollFailuresTotal += 1;
     throw err;
   } finally {
     span.end();
   }
   });
+}
+
+// ─── Replay of unprocessed events (#1540) ───────────────────────────────────
+
+/**
+ * Attempt to replay a stored unprocessed event (by id) through the normal
+ * apply path once the decoder has been fixed. Rebuilds the raw { topic, value }
+ * from persisted XDR, re-normalizes, and — if the type is now recognised —
+ * inserts the event row and runs its side effects. On success the unprocessed
+ * row is deleted; on failure it is kept (and the reason refreshed).
+ *
+ * Returns the classification so the admin endpoint can report the outcome.
+ */
+export async function replayUnprocessedEvent(
+  id: number,
+): Promise<{ status: 'applied' | 'still_failing' | 'not_found'; detail?: string }> {
+  const row = await getUnprocessedEventById(id);
+  if (!row) return { status: 'not_found' };
+
+  const rebuilt = deserializeEventFromReplay(row.topic_json, row.value_xdr);
+  const raw: { topic?: unknown[]; value?: unknown } = {
+    ...(rebuilt.topic ? { topic: rebuilt.topic } : {}),
+    ...(rebuilt.value ? { value: rebuilt.value } : {}),
+  };
+
+  let normalized: { type: string; payload: Record<string, unknown> };
+  try {
+    normalized = normalizeSorobanEvent(raw);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      { id, tx_hash: row.tx_hash, detail },
+      '[indexer] replay still fails to decode unprocessed event',
+    );
+    return { status: 'still_failing', detail };
+  }
+
+  const type = normalized.type;
+  const payload = normalized.payload;
+  if (!isKnownEventType(type)) {
+    const detail = `event type '${type}' is still not recognised`;
+    logger.warn({ id, type, tx_hash: row.tx_hash }, `[indexer] ${detail}`);
+    return { status: 'still_failing', detail };
+  }
+
+  // Resolve the player mapping the same way the live path does.
+  const onChainPlayerId = payload.on_chain_player_id as string | undefined;
+  if (type === 'player_registered' && onChainPlayerId && payload.wallet) {
+    const existingPlayer = await getPlayerByWallet(String(payload.wallet));
+    payload.player_id = existingPlayer?.player_id ?? createId();
+  } else if (onChainPlayerId) {
+    const existingPlayer = await getPlayerByOnChainId(onChainPlayerId);
+    if (existingPlayer) payload.player_id = existingPlayer.player_id;
+  }
+
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO events
+      (type, ledger, ledger_hash, tx_hash, payload, created_at,
+       tx_application_order, event_index, contract_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const createdAt = Date.now();
+  const ledgerHash = row.tx_hash;
+  const insertResult = insert.run(
+    type,
+    row.ledger ?? 0,
+    ledgerHash,
+    row.tx_hash,
+    JSON.stringify(payload),
+    createdAt,
+    0,
+    row.event_index,
+    row.contract_id ?? '',
+  );
+
+  // Run side effects for the types that have them (mirrors applyOne).
+  if (type === 'player_registered' && payload.player_id) {
+    await insertOrUpdatePlayer({
+      player_id: payload.player_id as string,
+      on_chain_player_id: onChainPlayerId,
+      wallet: payload.wallet as string,
+      position: payload.position as string | undefined,
+      region: payload.region as string | undefined,
+      metadata_uri: payload.metadata_uri as string | undefined,
+      created_at: createdAt,
+      registered_at: createdAt,
+    });
+    getCache().invalidatePlayerCache(payload.player_id as string);
+  } else if (type === 'milestone_submitted') {
+    const milestoneId = payload.milestone_id as string;
+    const playerId = payload.player_id as string;
+    const validatorWallet = payload.validator as string;
+    const milestoneType = payload.milestone_type as string;
+    const evidenceUri = payload.evidence_uri as string;
+    if (milestoneId && playerId && validatorWallet && milestoneType && evidenceUri) {
+      await insertPendingMilestone(
+        milestoneId,
+        playerId,
+        validatorWallet,
+        milestoneType,
+        evidenceUri,
+        row.ledger ?? 0,
+      );
+    }
+  } else if (type === 'milestone_approved') {
+    const playerId = payload.player_id as string;
+    if (playerId) {
+      const approvedMilestoneCount = getEventsCount('milestone_approved', {
+        payloadFilter: { player_id: playerId },
+      });
+      await updatePlayerProgress(playerId, tierForApprovedMilestones(approvedMilestoneCount));
+      getCache().invalidatePlayerCache(playerId);
+    }
+  }
+
+  // Only clear the unprocessed row once the event has been applied.
+  await deleteUnprocessedEvent(id);
+  recordIndexerEvent(type, 'applied');
+  logger.info(
+    { id, type, tx_hash: row.tx_hash, inserted: insertResult.changes > 0 },
+    '[indexer] replayed unprocessed event',
+  );
+  return { status: 'applied' };
 }
 
 // ─── SSE broadcasting for indexed events ──────────────────────────────────────

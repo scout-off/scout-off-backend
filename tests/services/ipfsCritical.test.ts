@@ -5,6 +5,11 @@ jest.mock('../../src/config', () => ({
     pinata: { apiKey: 'test-key', secret: 'test-secret', gateway: 'https://gateway.pinata.cloud' },
     logLevel: 'warn',
     nodeEnv: 'test',
+    // Circuit-breaker thresholds are injected from config (#1564).
+    circuitBreaker: {
+      default: { failureThreshold: 5, resetTimeoutMs: 30000 },
+      ipfs: { failureThreshold: 5, resetTimeoutMs: 30000 },
+    },
     pinJsonCacheTtlMs: 300000,
   },
 }));
@@ -45,7 +50,7 @@ jest.mock('../../src/utils/logger', () => ({
   },
 }));
 
-import { pinJson } from '../../src/services/ipfs';
+import { pinJson, retryPendingPins } from '../../src/services/ipfs';
 
 describe('pinJson IPFS failure handling (#346)', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -146,7 +151,6 @@ describe('pinJson dedup caching', () => {
   });
 });
 
-import { retryPendingPins } from '../../src/services/ipfs';
 
 describe('retryPendingPins background worker', () => {
   beforeEach(() => {

@@ -154,7 +154,9 @@ describe('E2E SEP-10 Authentication Flow', () => {
 
     expect(tokenRes.status).toBe(401);
     expect(tokenRes.body.success).toBe(false);
-    expect(tokenRes.body.error).toMatch(/signature/i);
+    // Clients get a generic message; the detailed reason is only logged.
+    expect(tokenRes.body.error).toBe('Invalid challenge');
+    expect(tokenRes.body.code).toBe('TOKEN_INVALID');
   });
 
   it('rejects a challenge signed by the wrong keypair', async () => {

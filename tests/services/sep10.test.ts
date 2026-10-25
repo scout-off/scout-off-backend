@@ -1,4 +1,4 @@
-import { buildChallenge, extractAccount, getServerKeypair, verifyChallenge } from '../../src/services/sep10';
+import { buildChallenge, extractAccount, getServerKeypair, verifyChallenge, Sep10Error, Sep10ErrorCode, getErrorMapping } from '../../src/services/sep10';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { Keypair, Transaction, Networks, TransactionBuilder, BASE_FEE, Operation, Account, Asset, TimeoutInfinite } from '@stellar/stellar-sdk';
@@ -609,5 +609,132 @@ describe('sep10', () => {
       // The challenge is sourced by A's server account, so B rejects it there.
       expect(() => instanceB.verifyChallenge(signedXdr)).toThrow('Challenge source account is not the server account');
     });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Sep10Error tests
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('Sep10Error', () => {
+  it('creates an error with code and message', () => {
+    const err = new Sep10Error(Sep10ErrorCode.INVALID_SIGNATURE, 'test message');
+    expect(err.code).toBe(Sep10ErrorCode.INVALID_SIGNATURE);
+    expect(err.message).toBe('test message');
+    expect(err.name).toBe('Sep10Error');
+  });
+});
+
+describe('getErrorMapping', () => {
+  it('maps CHALLENGE_EXPIRED to 401/TOKEN_EXPIRED', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.CHALLENGE_EXPIRED);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_EXPIRED');
+    expect(mapping.clientMessage).toBe('Challenge has expired');
+  });
+
+  it('maps INVALID_SIGNATURE to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.INVALID_SIGNATURE);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps WRONG_SOURCE to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.WRONG_SOURCE);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps BAD_SEQUENCE to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.BAD_SEQUENCE);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps MISSING_TIMEBOUNDS to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.MISSING_TIMEBOUNDS);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps FUTURE_MIN_TIME to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.FUTURE_MIN_TIME);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps NO_OPERATIONS to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.NO_OPERATIONS);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps WRONG_OPERATION_TYPE to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.WRONG_OPERATION_TYPE);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps WRONG_OPERATION_NAME to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.WRONG_OPERATION_NAME);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps INVALID_NONCE to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.INVALID_NONCE);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps MISSING_SOURCE_ACCOUNT to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.MISSING_SOURCE_ACCOUNT);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps NOT_SIGNED_BY_SERVER to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.NOT_SIGNED_BY_SERVER);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps CLIENT_SOURCED_OPERATION to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.CLIENT_SOURCED_OPERATION);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps ALREADY_USED to 401/TOKEN_INVALID', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.ALREADY_USED);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
+    expect(mapping.clientMessage).toBe('Invalid challenge');
+  });
+
+  it('maps MALFORMED_XDR to 400/VALIDATION_ERROR', () => {
+    const mapping = getErrorMapping(Sep10ErrorCode.MALFORMED_XDR);
+    expect(mapping.httpStatus).toBe(400);
+    expect(mapping.errorCode).toBe('VALIDATION_ERROR');
+    expect(mapping.clientMessage).toBe('Invalid transaction format');
+  });
+
+  it('returns 500 for unknown codes (fallback)', () => {
+    // TypeScript will prevent this case in practice, but we test the fallback
+    const mapping = getErrorMapping(Sep10ErrorCode.INVALID_SIGNATURE as any);
+    expect(mapping.httpStatus).toBe(401);
+    expect(mapping.errorCode).toBe('TOKEN_INVALID');
   });
 });

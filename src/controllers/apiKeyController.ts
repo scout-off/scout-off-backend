@@ -72,7 +72,7 @@ export const rotateKeySchema = z.object({
     .min(0)
     .max(MAX_ROTATION_GRACE_PERIOD_SECONDS)
     .default(DEFAULT_ROTATION_GRACE_PERIOD_SECONDS),
-}).strict().default({});
+}).strict().prefault({});
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -88,11 +88,11 @@ export const rotateKeySchema = z.object({
 export async function issueApiKey(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const parsed = issueKeySchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid body' });
+    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
     return;
   }
 
@@ -162,7 +162,7 @@ export async function issueApiKey(
 export async function listApiKeys(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const rows: ApiKeyRow[] = await listApiKeysByWallet(req.params.wallet as string);
 
@@ -196,7 +196,7 @@ export async function listApiKeys(
 export async function revokeApiKey(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
@@ -231,7 +231,7 @@ export async function revokeApiKey(
 export async function rotateApiKey(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
@@ -241,7 +241,7 @@ export async function rotateApiKey(
 
   const parsed = rotateKeySchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid body' });
+    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
     return;
   }
 
