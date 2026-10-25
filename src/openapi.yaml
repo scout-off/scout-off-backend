@@ -91,6 +91,9 @@ components:
           type: string
         code:
           type: string
+        correlationId:
+          type: string
+          description: Echo of the X-Correlation-ID request header, when present
     VersionInfo:
       type: object
       required:
@@ -2994,7 +2997,7 @@ paths:
     patch:
       tags:
         - scouts
-      summary: Rename a bookmark folder.
+      summary: Rename a bookmark folder owned by the authenticated scout.
       operationId: renameBookmarkFolderHandler
       description: Rename a bookmark folder owned by the authenticated scout.
       parameters:

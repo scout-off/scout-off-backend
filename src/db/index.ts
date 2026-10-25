@@ -74,7 +74,7 @@ export const { insertPendingAdminAction, getPendingAdminActionById, getPendingAd
 export const { getNewPlayersTimeSeries, getMilestonesApprovedTimeSeries, getContactUnlocksTimeSeries, getSubscriptionsStartedTimeSeries, getNewPlayersByRegionTimeSeries } = analytics;
 export const { insertApiKey, listApiKeysByWallet, revokeApiKeyById, getApiKeyByHash, getApiKeyById, getAllActiveApiKeys, getActiveApiKeyIds, getActiveApiKeyByLookupHash, getActiveApiKeysAwaitingLookupHash, scheduleApiKeyRevocation, setApiKeyLookupHash, touchApiKeyLastUsed } = apiKeys;
 export const { insertAuditLog, getAuditLogRowsAfterId, getAuditLogs, getAuditLogsCount, getAllAuditLogRows } = audit;
-export const { insertBookmark, deleteBookmark, getBookmarksByScout, insertBookmarkFolder, getBookmarkFoldersByScout, getBookmarkFolderById, deleteBookmarkFolder, moveBookmarksToRoot, countBookmarksInFolder, getBookmarkedPlayersWithDetails, countBookmarkedPlayers } = bookmarks;
+export const { insertBookmark, deleteBookmark, getBookmarksByScout, insertBookmarkFolder, getBookmarkFoldersByScout, getBookmarkFolderById, renameBookmarkFolder, deleteBookmarkFolder, moveBookmarksToRoot, countBookmarksInFolder, getBookmarkedPlayersWithDetails, countBookmarkedPlayers } = bookmarks;
 export const { insertContactUnlock, getContactUnlocksByScout, getContactUnlocksByPlayer, hasContactUnlock } = contacts;
 export const { listContractRoleMembers } = contractRoles;
 export const { queryEvents, getEvents, rollbackEventsFromLedger, getEventsCount, encodeEventsCursor, decodeEventsCursor, getEventsPageKeyset, countEventsFiltered, getEventsIterable, getEventsPage, insertUnprocessedEvent, listUnprocessedEvents, getUnprocessedEventById, deleteUnprocessedEvent } = events;

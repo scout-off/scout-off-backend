@@ -39,6 +39,7 @@ describe('405 Method Not Allowed', () => {
       error: 'Not Found',
       code: 'NOT_FOUND',
       path: '/api/does-not-exist',
+      correlationId: expect.any(String),
     });
   });
 
