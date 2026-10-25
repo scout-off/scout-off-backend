@@ -28,6 +28,7 @@ Meta-test: `tests/routes/mutatingRouteValidation.test.ts`.
 | POST | /scouts/:wallet/api-keys/:id/rotate | rotateKeySchema |
 | POST | /scouts/:wallet/bookmarks | addBookmarkSchema |
 | POST | /scouts/:wallet/bookmark-folders | createBookmarkFolderSchema |
+| PATCH | /scouts/:wallet/bookmark-folders/:folderId | renameBookmarkFolderSchema |
 | POST | /scouts/:wallet/saved-searches | createSavedSearchSchema |
 | PUT | /scouts/:wallet/saved-searches/:id | updateSavedSearchSchema |
 | POST | /scouts/:wallet/webhooks | registerWebhookSchema |

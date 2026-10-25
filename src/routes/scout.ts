@@ -36,8 +36,10 @@ import {
   createBookmarkFolder,
   listBookmarkFolders,
   deleteBookmarkFolderHandler,
+  renameBookmarkFolderHandler,
   addBookmarkSchema,
   createBookmarkFolderSchema,
+  renameBookmarkFolderSchema,
 } from '../controllers/scoutBookmarksController';
 import {
   createSavedSearch,
@@ -614,6 +616,18 @@ router.route('/:wallet/bookmark-folders')
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
+ * PATCH /api/scouts/:wallet/bookmark-folders/:folderId
+ * Rename a bookmark folder owned by the authenticated scout.
+ *
+ * @param wallet {string} - Scout's Stellar public key
+ * @param folderId {integer} - Bookmark folder row ID
+ * @body { name: string }
+ * @response 200 { success: true, data: { id, scout_wallet, name, created_at } }
+ * @response 400 { success: false, error: string } - Invalid folderId or name
+ * @response 404 { success: false, error: string } - Folder not found
+ * @response 409 { success: false, error: string } - Name already in use
+ * @auth Bearer (scout role required; wallet must match authenticated account)
+ *
  * DELETE /api/scouts/:wallet/bookmark-folders/:folderId
  * Delete a bookmark folder. Bookmarks move to root (folder_id set to NULL), not deleted.
  *
@@ -625,8 +639,9 @@ router.route('/:wallet/bookmark-folders')
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
 router.route('/:wallet/bookmark-folders/:folderId')
+  .patch(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:bookmarks'), validateBody(renameBookmarkFolderSchema), renameBookmarkFolderHandler)
   .delete(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:bookmarks'), deleteBookmarkFolderHandler)
-  .all(methodNotAllowed(['DELETE']));
+  .all(methodNotAllowed(['PATCH', 'DELETE']));
 
 // ─── Scout saved searches (#486) ──────────────────────────────────────────────
 

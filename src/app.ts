@@ -500,6 +500,7 @@ app.use((req, res) => {
     error: 'Not Found',
     code: ErrorCode.NOT_FOUND,
     path: req.path,
+    ...(req.correlationId !== undefined && { correlationId: req.correlationId }),
   });
 });
 

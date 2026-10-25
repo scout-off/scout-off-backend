@@ -48,6 +48,7 @@ jest.mock('../../src/db', () => ({
   insertBookmarkFolder: jest.fn(),
   getBookmarkFoldersByScout: jest.fn(),
   getBookmarkFolderById: jest.fn(),
+  renameBookmarkFolder: jest.fn(),
   deleteBookmarkFolder: jest.fn(),
   moveBookmarksToRoot: jest.fn(),
   countBookmarksInFolder: jest.fn(),
@@ -81,6 +82,7 @@ import {
   insertBookmarkFolder,
   getBookmarkFoldersByScout,
   getBookmarkFolderById,
+  renameBookmarkFolder,
   deleteBookmarkFolder,
   moveBookmarksToRoot,
   countBookmarksInFolder,
@@ -94,6 +96,7 @@ const mockGetBookmarkedPlayers = getBookmarkedPlayersWithDetails as jest.Mock;
 const mockInsertBookmarkFolder = insertBookmarkFolder as jest.Mock;
 const mockGetBookmarkFolders   = getBookmarkFoldersByScout as jest.Mock;
 const mockGetBookmarkFolderById = getBookmarkFolderById as jest.Mock;
+const mockRenameBookmarkFolder = renameBookmarkFolder as jest.Mock;
 const mockDeleteBookmarkFolder = deleteBookmarkFolder as jest.Mock;
 const mockMoveBookmarksToRoot  = moveBookmarksToRoot  as jest.Mock;
 const mockCountBookmarksInFolder = countBookmarksInFolder as jest.Mock;
@@ -544,6 +547,77 @@ describe('GET /api/scouts/:wallet/bookmark-folders', () => {
   it('returns 403 for cross-scout access', async () => {
     const res = await request(app)
       .get(`/api/scouts/${SCOUT_A}/bookmark-folders`)
+      .set('Authorization', `Bearer ${scoutBToken}`);
+
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('PATCH /api/scouts/:wallet/bookmark-folders/:folderId', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('renames a folder and returns 200', async () => {
+    mockGetBookmarkFolderById.mockReturnValueOnce({ id: 1, scout_wallet: SCOUT_A, name: 'Old', created_at: 1 });
+    mockGetBookmarkFolders.mockReturnValueOnce([
+      { id: 1, scout_wallet: SCOUT_A, name: 'Old', created_at: 1 },
+    ]);
+    mockRenameBookmarkFolder.mockReturnValueOnce({ id: 1, scout_wallet: SCOUT_A, name: 'New', created_at: 1 });
+
+    const res = await request(app)
+      .patch(`/api/scouts/${SCOUT_A}/bookmark-folders/1`)
+      .send({ name: 'New' })
+      .set('Authorization', `Bearer ${scoutAToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.name).toBe('New');
+    expect(mockRenameBookmarkFolder).toHaveBeenCalledWith(1, SCOUT_A, 'New');
+  });
+
+  it('returns 404 when folder does not exist', async () => {
+    mockGetBookmarkFolderById.mockReturnValueOnce(null);
+
+    const res = await request(app)
+      .patch(`/api/scouts/${SCOUT_A}/bookmark-folders/999`)
+      .send({ name: 'New' })
+      .set('Authorization', `Bearer ${scoutAToken}`);
+
+    expect(res.status).toBe(404);
+    expect(mockRenameBookmarkFolder).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for another scout\u2019s folder', async () => {
+    // getBookmarkFolderById scopes by wallet, so a foreign folder looks missing
+    mockGetBookmarkFolderById.mockReturnValueOnce(null);
+
+    const res = await request(app)
+      .patch(`/api/scouts/${SCOUT_B}/bookmark-folders/1`)
+      .send({ name: 'New' })
+      .set('Authorization', `Bearer ${scoutAToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 409 on a conflicting name', async () => {
+    mockGetBookmarkFolderById.mockReturnValueOnce({ id: 1, scout_wallet: SCOUT_A, name: 'Old', created_at: 1 });
+    mockGetBookmarkFolders.mockReturnValueOnce([
+      { id: 1, scout_wallet: SCOUT_A, name: 'Old', created_at: 1 },
+      { id: 2, scout_wallet: SCOUT_A, name: 'Taken', created_at: 2 },
+    ]);
+
+    const res = await request(app)
+      .patch(`/api/scouts/${SCOUT_A}/bookmark-folders/1`)
+      .send({ name: 'Taken' })
+      .set('Authorization', `Bearer ${scoutAToken}`);
+
+    expect(res.status).toBe(409);
+    expect(mockRenameBookmarkFolder).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 for cross-wallet access', async () => {
+    const res = await request(app)
+      .patch(`/api/scouts/${SCOUT_A}/bookmark-folders/1`)
+      .send({ name: 'New' })
       .set('Authorization', `Bearer ${scoutBToken}`);
 
     expect(res.status).toBe(403);

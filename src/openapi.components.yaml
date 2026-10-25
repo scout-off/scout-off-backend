@@ -100,6 +100,9 @@ components:
           type: string
         code:
           type: string
+        correlationId:
+          type: string
+          description: Echo of the X-Correlation-ID request header, when present
 
     VersionInfo:
       type: object
