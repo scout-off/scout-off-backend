@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import {
   getIdempotencyRecord,
@@ -14,6 +15,21 @@ import { logger } from '../utils/logger';
  */
 const IN_PROGRESS_WAIT_MS = 5_000;
 const MAX_IDEMPOTENCY_KEY_BYTES = 255;
+
+/**
+ * Compute namespaced storage key isolating by authenticated principal, HTTP method,
+ * route template (or path), and client-provided key (#1308).
+ * Format: sha256(account || 'anon') + ':' + method + ':' + routeTemplate + ':' + clientKey
+ */
+export function getScopedIdempotencyKey(req: Request, clientKey: string): string {
+  const principal = (req as Request & { account?: string }).account || 'anon';
+  const principalHash = crypto.createHash('sha256').update(principal).digest('hex');
+  const method = req.method ? req.method.toUpperCase() : 'POST';
+  const routePath = req.route?.path || req.baseUrl || req.path || '/';
+  const fullRoute = req.baseUrl ? `${req.baseUrl}${routePath}` : routePath;
+  return `${principalHash}:${method}:${fullRoute}:${clientKey}`;
+}
+
 /**
  * Set to `true` on responses served from the idempotency store instead of a
  * fresh handler run (Stripe convention). First executions do not carry it.
@@ -113,10 +129,20 @@ async function handleIdempotency(
     ? options.requestFingerprint(req)
     : null;
 
+  const storageKey = getScopedIdempotencyKey(req, trimmedKey);
+  const routePath = req.route?.path || req.baseUrl || req.path || '/';
+  const fullRoute = req.baseUrl ? `${req.baseUrl}${routePath}` : routePath;
+  const principal = (req as Request & { account?: string }).account || 'anon';
+  const scopeMeta = {
+    principal,
+    method: req.method ? req.method.toUpperCase() : 'POST',
+    route: fullRoute,
+  };
+
   // ── Step 1: check for an existing record ─────────────────────────────────
   let existingRecord;
   try {
-    existingRecord = await getIdempotencyRecord(trimmedKey);
+    existingRecord = await getIdempotencyRecord(storageKey);
   } catch (err) {
     // DB read failure is non-fatal; fall through and process normally.
     logger.warn(
@@ -142,14 +168,14 @@ async function handleIdempotency(
 
     // ── Case 3: pending (in-flight duplicate) ─────────────────────────────
     logger.info(`[idempotency] pending_duplicate key=${trimmedKey}`);
-    waitForCompletion(trimmedKey, res, requestFingerprint);
+    waitForCompletion(storageKey, res, requestFingerprint);
     return;
   }
 
   // ── Step 2: attempt to claim the key (atomic INSERT or lease-based re-claim) ─────
   let claimed: boolean;
   try {
-    claimed = await claimIdempotencyKey(trimmedKey, requestFingerprint);
+    claimed = await claimIdempotencyKey(storageKey, requestFingerprint, scopeMeta);
   } catch (err) {
     // DB claim failure is non-fatal; process normally without idempotency.
     logger.warn(
@@ -166,7 +192,7 @@ async function handleIdempotency(
     //   • complete (cached response available)
     //   • gone (edge case — should not happen with our claim logic, but handle gracefully)
     try {
-      existingRecord = await getIdempotencyRecord(trimmedKey);
+      existingRecord = await getIdempotencyRecord(storageKey);
     } catch (err) {
       // DB read failure is non-fatal; process normally without idempotency.
       logger.warn(
@@ -189,7 +215,7 @@ async function handleIdempotency(
 
     // The winner is still pending → treat as pending duplicate.
     logger.info(`[idempotency] lost_claim_race key=${trimmedKey}`);
-    waitForCompletion(trimmedKey, res, requestFingerprint);
+    waitForCompletion(storageKey, res, requestFingerprint);
     return;
   }
 
@@ -215,7 +241,7 @@ async function handleIdempotency(
   // Register the promise under this key so concurrent losers can await it.
   // inFlightLock.withLock() is designed for async coalescing; we prime it by
   // running a no-op fn that returns our pre-created promise.
-  void inFlightLock.withLock(trimmedKey, () => inFlightPromise);
+  void inFlightLock.withLock(storageKey, () => inFlightPromise);
 
   // Intercept res.json to persist the response and resolve the in-flight promise.
   const originalJson = res.json.bind(res);
@@ -229,7 +255,7 @@ async function handleIdempotency(
     // Promise.resolve() so this can never throw synchronously or reject
     // unhandled even if updateIdempotencyRecord doesn't return a genuine
     // Promise (e.g. an incomplete test mock).
-    Promise.resolve(updateIdempotencyRecord(trimmedKey, res.statusCode, body))
+    Promise.resolve(updateIdempotencyRecord(storageKey, res.statusCode, body))
       .then(() => logger.info(`[idempotency] cache_stored key=${trimmedKey} status=${res.statusCode}`))
       .catch((err: unknown) =>
         logger.warn(`[idempotency] cache_store_error key=${trimmedKey} err=${(err as Error).message}`),
@@ -252,7 +278,7 @@ async function handleIdempotency(
       // Release the pending claim so the key becomes reusable immediately
       // instead of waiting for the lease to expire. Wrapped in
       // Promise.resolve() for the same reason as updateIdempotencyRecord above.
-      Promise.resolve(releaseIdempotencyKey(trimmedKey))
+      Promise.resolve(releaseIdempotencyKey(storageKey))
         .then(() => logger.info(`[idempotency] claim_released key=${trimmedKey}`))
         .catch((err: unknown) =>
           logger.warn(`[idempotency] claim_release_error key=${trimmedKey} err=${(err as Error).message}`),

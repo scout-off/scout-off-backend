@@ -40,14 +40,34 @@ jest.mock('../../src/db', () => {
     ...actual,
 
     getIdempotencyRecord: jest.fn((key: string) => {
-      const record = idempotencyStore.get(key);
+      let record = idempotencyStore.get(key);
+      let foundKey = key;
+      if (!record) {
+        // Fallback for tests that pre-populated raw client key before scoped keys
+        for (const [k, v] of idempotencyStore.entries()) {
+          if (key.endsWith(':' + k)) {
+            record = v;
+            foundKey = k;
+            break;
+          }
+        }
+      }
       if (!record) return null;
       if (record.expires_at <= Date.now()) return null;
-      return { key, ...record };
+      return { key: foundKey, ...record };
     }),
 
-    claimIdempotencyKey: jest.fn((key: string, requestFingerprint?: string | null): boolean => {
-      if (idempotencyStore.has(key)) return false;
+    claimIdempotencyKey: jest.fn((key: string, requestFingerprint?: string | null, _scope?: any): boolean => {
+      let existing = idempotencyStore.get(key);
+      if (!existing) {
+        for (const [k, v] of idempotencyStore.entries()) {
+          if (key.endsWith(':' + k)) {
+            existing = v;
+            break;
+          }
+        }
+      }
+      if (existing) return false;
       // Insert a pending placeholder — mirrors INSERT OR IGNORE.
       idempotencyStore.set(key, {
         status_code: 0,
@@ -61,12 +81,26 @@ jest.mock('../../src/db', () => {
 
     updateIdempotencyRecord: jest.fn(
       (key: string, statusCode: number, body: unknown) => {
-        const record = idempotencyStore.get(key);
+        let record = idempotencyStore.get(key);
+        if (!record) {
+          for (const [k, v] of idempotencyStore.entries()) {
+            if (key.endsWith(':' + k)) {
+              record = v;
+              break;
+            }
+          }
+        }
         if (record) {
           record.status_code = statusCode;
           record.response = JSON.stringify(body);
           record.status = 'complete';
         }
+        idempotencyStore.set(key, {
+          status_code: statusCode,
+          response: JSON.stringify(body),
+          status: 'complete',
+          expires_at: Date.now() + 24 * 60 * 60 * 1000,
+        });
       },
     ),
 
@@ -283,7 +317,7 @@ describe('idempotency middleware — claim-first concurrency', () => {
 
     expect(res.status).toBe(201);
     expect(mockUpdate).toHaveBeenCalledWith(
-      'update-test-key',
+      expect.stringContaining('update-test-key'),
       201,
       expect.objectContaining({ success: true }),
     );
@@ -601,8 +635,9 @@ describe('idempotency middleware — lease and persistence', () => {
 
     expect(res.status).toBe(404);
     // 4xx (non-retryable) should be cached
-    expect(idempotencyStore.has('4xx-test-key')).toBe(true);
-    const record = idempotencyStore.get('4xx-test-key');
+    const hasKey = [...idempotencyStore.keys()].some(k => k === '4xx-test-key' || k.endsWith(':4xx-test-key'));
+    expect(hasKey).toBe(true);
+    const record = [...idempotencyStore.entries()].find(([k]) => k === '4xx-test-key' || k.endsWith(':4xx-test-key'))?.[1];
     expect(record?.status).toBe('complete');
     expect(record?.status_code).toBe(404);
   });
@@ -632,6 +667,27 @@ describe('idempotency middleware — lease and persistence', () => {
   });
 
   it('returns 409 with structured error format (success, error, code)', async () => {
+    mockClaim.mockReset();
+    mockClaim.mockImplementation((key: string, requestFingerprint?: string | null, _scope?: any): boolean => {
+      let existing = idempotencyStore.get(key);
+      if (!existing) {
+        for (const [k, v] of idempotencyStore.entries()) {
+          if (key.endsWith(':' + k)) {
+            existing = v;
+            break;
+          }
+        }
+      }
+      if (existing) return false;
+      idempotencyStore.set(key, {
+        status_code: 0,
+        response: '',
+        status: 'pending',
+        expires_at: Date.now() + 24 * 60 * 60 * 1000,
+        request_fingerprint: requestFingerprint ?? null,
+      });
+      return true;
+    });
     const key = '409-structured-key';
     // Seed a pending record
     idempotencyStore.set(key, {
@@ -661,5 +717,121 @@ describe('idempotency middleware — lease and persistence', () => {
     expect(res.body).toHaveProperty('success', false);
     expect(res.body).toHaveProperty('error');
     expect(res.body).toHaveProperty('code');
+  });
+});
+
+// ─── User and Route Isolation Tests (#1308) ──────────────────────────────────
+
+describe('idempotency middleware — user and route isolation (#1308)', () => {
+  const WALLET_A = 'GAUSERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const WALLET_B = 'GBUSERBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+  const SHARED_KEY = 'shared-idempotency-key-001';
+
+  it('same key from two different wallets runs handlers independently and does not leak responses', async () => {
+    const expiresAt = Math.floor(Date.now() / 1000) + 30 * 86400;
+
+    mockPurchase
+      .mockResolvedValueOnce({
+        transactionId: 'tx-wallet-A',
+        tier: 'basic',
+        expiresAt,
+        status: 'active',
+      })
+      .mockResolvedValueOnce({
+        transactionId: 'tx-wallet-B',
+        tier: 'premium',
+        expiresAt,
+        status: 'active',
+      });
+
+    const resA = await request(app)
+      .post(`/api/scouts/${WALLET_A}/subscribe`)
+      .set('Authorization', `Bearer ${makeToken(WALLET_A)}`)
+      .set('Idempotency-Key', SHARED_KEY)
+      .send({ tier: 'basic', duration: 30 });
+
+    const resB = await request(app)
+      .post(`/api/scouts/${WALLET_B}/subscribe`)
+      .set('Authorization', `Bearer ${makeToken(WALLET_B)}`)
+      .set('Idempotency-Key', SHARED_KEY)
+      .send({ tier: 'premium', duration: 30 });
+
+    expect(resA.status).toBe(201);
+    expect(resB.status).toBe(201);
+    expect(resA.body.data.transactionId).toBe('tx-wallet-A');
+    expect(resB.body.data.transactionId).toBe('tx-wallet-B');
+    expect(mockPurchase).toHaveBeenCalledTimes(2);
+  });
+
+  it('same key reused across different routes executes both handlers and does not share response', async () => {
+    const expiresAt = Math.floor(Date.now() / 1000) + 30 * 86400;
+
+    mockPurchase.mockResolvedValueOnce({
+      transactionId: 'tx-route-1',
+      tier: 'basic',
+      expiresAt,
+      status: 'active',
+    });
+
+    const resSubscribe = await request(app)
+      .post(`/api/scouts/${WALLET_A}/subscribe`)
+      .set('Authorization', `Bearer ${makeToken(WALLET_A)}`)
+      .set('Idempotency-Key', SHARED_KEY)
+      .send({ tier: 'basic', duration: 30 });
+
+    expect(resSubscribe.status).toBe(201);
+
+    // Call another route with the same key
+    const mockApp = express();
+    mockApp.use(express.json());
+    mockApp.post(
+      '/api/scouts/:wallet/notes',
+      (req, res, next) => {
+        (req as any).account = WALLET_A;
+        next();
+      },
+      idempotency,
+      (req, res) => {
+        res.status(200).json({ success: true, noteId: 'note-123' });
+      },
+    );
+
+    const resNotes = await request(mockApp)
+      .post(`/api/scouts/${WALLET_A}/notes`)
+      .set('Idempotency-Key', SHARED_KEY)
+      .send({ note: 'test' });
+
+    expect(resNotes.status).toBe(200);
+    expect(resNotes.body).toEqual({ success: true, noteId: 'note-123' });
+  });
+
+  it('same key by the same wallet on the same route returns cached response with Idempotent-Replayed header', async () => {
+    const expiresAt = Math.floor(Date.now() / 1000) + 30 * 86400;
+
+    mockPurchase.mockResolvedValueOnce({
+      transactionId: 'tx-cached-once',
+      tier: 'basic',
+      expiresAt,
+      status: 'active',
+    });
+
+    const res1 = await request(app)
+      .post(`/api/scouts/${WALLET_A}/subscribe`)
+      .set('Authorization', `Bearer ${makeToken(WALLET_A)}`)
+      .set('Idempotency-Key', 'same-key-replay')
+      .send({ tier: 'basic', duration: 30 });
+
+    const res2 = await request(app)
+      .post(`/api/scouts/${WALLET_A}/subscribe`)
+      .set('Authorization', `Bearer ${makeToken(WALLET_A)}`)
+      .set('Idempotency-Key', 'same-key-replay')
+      .send({ tier: 'basic', duration: 30 });
+
+    expect(res1.status).toBe(201);
+    expect(res2.status).toBe(201);
+    expect(res1.headers['idempotent-replayed']).toBeUndefined();
+    expect(res2.headers['idempotent-replayed']).toBe('true');
+    expect(res2.body.data.transactionId).toBe('tx-cached-once');
+    expect(mockPurchase).toHaveBeenCalledTimes(1);
   });
 });

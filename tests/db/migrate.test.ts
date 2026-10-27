@@ -328,6 +328,15 @@ describe('runMigrations — integration suite (#508)', () => {
     });
 
     // --- 023_idempotency_request_fingerprint.sql ---
+    describe('040_idempotency_scoped_keys.sql', () => {
+      it('adds principal, method, route columns to idempotency_keys', () => {
+        const cols = getColumns(sharedDb, 'idempotency_keys');
+        expect(cols).toContain('principal');
+        expect(cols).toContain('method');
+        expect(cols).toContain('route');
+      });
+    });
+
     describe('023_idempotency_request_fingerprint.sql', () => {
       it('adds the request_fingerprint column to idempotency_keys', () => {
         expect(getColumns(sharedDb, 'idempotency_keys')).toContain('request_fingerprint');
