@@ -7,6 +7,7 @@ import { getPendingMilestones as getPendingMilestonesFromDb, getDriver, removePe
 import { invalidateMilestoneCache } from '../services/cache';
 import { recordAudit } from '../utils/audit';
 import { isValidMetadataUri, URI_VALIDATION_ERROR } from '../utils/uriValidator';
+import { isValidPlayerId } from '../utils/playerIdValidator';
 import { checkWalletOwnership } from '../middleware/requireOwner';
 
 // Re-exported so callers/tests can import the metadata_uri validator directly
@@ -115,10 +116,28 @@ export async function downloadAndPinEvidence(url: string, budgetKey = 'unknown')
   return pinFile(buffer, filename, sniffed);
 }
 
+/**
+ * Maximum accepted length for `evidenceUri` (#1851).
+ *
+ * The progress contract stores `evidence_uri` as an unbounded Soroban `String`,
+ * so the binding limit is the Soroban host's per-value size cap (256 KiB).
+ * 512 characters stays well below that cap while covering IPFS CIDs, gateway
+ * URLs and Arweave URIs, so oversized input is rejected with a 400 before it
+ * ever reaches the contract.
+ */
+export const MAX_EVIDENCE_URI_LENGTH = 512;
+
 export const milestoneSchema = z.object({
-  playerId: z.string().min(1),
+  playerId: z
+    .string()
+    .min(1)
+    .refine(isValidPlayerId, 'playerId must be 1-128 characters of letters, numbers, underscores, or hyphens'),
   milestoneType: z.enum(['identity', 'performance', 'trial_offer']),
-  evidenceUri: z.string().min(1).refine(isValidMetadataUri, URI_VALIDATION_ERROR),
+  evidenceUri: z
+    .string()
+    .min(1)
+    .max(MAX_EVIDENCE_URI_LENGTH, `evidenceUri cannot exceed ${MAX_EVIDENCE_URI_LENGTH} characters`)
+    .refine(isValidMetadataUri, URI_VALIDATION_ERROR),
   // Optional free-text fields (#29). Accepted and persisted with the audit
   // record; not required for submission.
   notes: z.string().max(2000).optional(),

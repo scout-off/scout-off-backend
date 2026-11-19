@@ -60,6 +60,28 @@ export const registerSchema = z.union([
 
 export type RegisterPlayerRequest = z.infer<typeof registerSchema>;
 
+/**
+ * Field names that may be requested via the `fields` query parameter on
+ * `GET /api/players`. Unknown names are rejected with a 400.
+ */
+export const ALLOWED_PLAYER_FIELDS = [
+  'player_id',
+  'wallet',
+  'position',
+  'region',
+  'metadataUri',
+  'progress_level',
+  'created_at',
+  'registered_at',
+  'progress_tier_name',
+  'progressLabel',
+  'verificationBadge',
+] as const;
+
+export type AllowedPlayerField = (typeof ALLOWED_PLAYER_FIELDS)[number];
+
+const allowedPlayerFieldSet: ReadonlySet<string> = new Set(ALLOWED_PLAYER_FIELDS);
+
 export const filterSchema = z.object({
   region: z.string().optional(),
   position: z.string().optional(),
@@ -71,11 +93,27 @@ export const filterSchema = z.object({
   cursor: z.string().optional(),
   /**
    * Comma-separated list of field names to include in each player object.
-   * Unknown field names are silently ignored.
+   * Unknown field names are rejected with a 400 naming them and the allowed set.
    * When omitted, all fields are returned (backwards-compatible).
    * Example: ?fields=player_id,position,region
    */
-  fields: z.string().optional(),
+  fields: z
+    .string()
+    .optional()
+    .superRefine((value, ctx) => {
+      if (value === undefined) return;
+      const unknown = value
+        .split(',')
+        .map((f) => f.trim())
+        .filter(Boolean)
+        .filter((f) => !allowedPlayerFieldSet.has(f));
+      if (unknown.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Unknown field(s): ${unknown.join(', ')}. Allowed fields: ${ALLOWED_PLAYER_FIELDS.join(', ')}`,
+        });
+      }
+    }),
 });
 
 /** POST /api/players/register */
