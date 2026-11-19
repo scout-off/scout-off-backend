@@ -150,6 +150,20 @@ This document lists all Prometheus metrics exported by the ScoutOff backend at t
 - **Labels**: None
 - **Description**: Total number of fee withdrawal DB write failures
 
+## Retention Metrics
+
+### `scout_off_retention_rows_deleted_total`
+- **Type**: Counter
+- **Labels**: `table` (retention policy table name)
+- **Description**: Rows deleted by retention since process start, accumulated per table
+- **Notes**: Only successful sweeps add to the counter; a failed sweep records `0`.
+
+### `scout_off_retention_last_run_timestamp_seconds`
+- **Type**: Gauge
+- **Labels**: `table` (retention policy table name)
+- **Description**: Unix timestamp (seconds) of the last successful retention sweep per table
+- **Notes**: Failed sweeps leave the previous timestamp untouched; `0` means no successful sweep yet.
+
 ## Process Metrics
 
 ### `process_cpu_seconds_total`
