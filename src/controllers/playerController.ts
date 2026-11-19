@@ -60,9 +60,17 @@ export const registerSchema = z.union([
 
 export type RegisterPlayerRequest = z.infer<typeof registerSchema>;
 
+/** Max length for free-text filter values (region, position), issue #1849. */
+export const MAX_FILTER_TEXT_LENGTH = 64;
+
+const filterTextSchema = z
+  .string()
+  .max(MAX_FILTER_TEXT_LENGTH, `must be ${MAX_FILTER_TEXT_LENGTH} characters or fewer`)
+  .transform((s) => s.trim());
+
 export const filterSchema = z.object({
-  region: z.string().optional(),
-  position: z.string().optional(),
+  region: filterTextSchema.optional(),
+  position: filterTextSchema.optional(),
   minTier: z.coerce.number().int().min(0).max(3).optional(),
   sortBy: z.enum(['relevance', 'tier', 'region', 'created_at']).default('relevance'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
