@@ -91,6 +91,43 @@ export function normalizePayload(payload: Record<string, unknown>): Record<strin
   );
 }
 
+/**
+ * Typed view of a Soroban RPC event as returned by `server.getEvents()`.
+ * The SDK's own type is loose, so we narrow it once at the boundary instead of
+ * casting at every use site.
+ */
+export interface RpcIndexerEvent {
+  ledger: number;
+  txHash: string;
+  id?: string;
+  contractId?: string;
+  topic?: unknown[];
+  value?: unknown;
+  ledgerClosedAt?: string;
+  ledgerHash?: string;
+  pagingToken?: string;
+  txIndex?: number;
+  eventIndex?: number;
+}
+
+/** Runtime type guard for a single RPC event payload. */
+export function isRpcIndexerEvent(value: unknown): value is RpcIndexerEvent {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.ledger === 'number' &&
+    Number.isFinite(candidate.ledger) &&
+    typeof candidate.txHash === 'string' &&
+    candidate.txHash.length > 0
+  );
+}
+
+/** Decoded Soroban event payload: topic-0 type plus a snake_case payload map. */
+export interface DecodedSorobanEvent {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
 function jsonSafe(value: unknown): unknown {
   if (typeof value === 'bigint') return value.toString();
   if (Array.isArray(value)) return value.map(jsonSafe);
@@ -110,7 +147,7 @@ function nativeText(value: unknown): string {
 export function normalizeSorobanEvent(raw: {
   topic?: unknown[];
   value?: unknown;
-}): { type: string; payload: Record<string, unknown> } {
+}): DecodedSorobanEvent {
   const topics = raw.topic ?? [];
   const rawType = topics[0] ? nativeText(scValToNative(topics[0] as never)) : '';
   const typeAliases: Record<string, string> = {
@@ -470,9 +507,10 @@ export async function indexEvents(): Promise<void> {
   }
 
   let reorgLedger: number | null = null;
-  for (const raw of response.events) {
+  for (const raw of response.events as unknown[]) {
+    if (!isRpcIndexerEvent(raw)) continue;
     const existingHash = existingHashes.get(raw.ledger);
-    const incomingHash = (raw as any).ledgerHash ?? (raw as any).pagingToken ?? raw.txHash;
+    const incomingHash = raw.ledgerHash ?? raw.pagingToken ?? raw.txHash;
     if (existingHash && incomingHash && existingHash !== incomingHash) {
       reorgLedger = raw.ledger;
       break;
@@ -486,25 +524,55 @@ export async function indexEvents(): Promise<void> {
 
   // 2. Normalize + sort into deterministic total order, then apply as
   //    co-transaction atomic groups regardless of RPC return order.
-  const rawEvents: RawIndexerEvent[] = response.events.map((raw: any) => ({
-    ledger: raw.ledger,
-    txHash: raw.txHash,
-    id: raw.id,
-    contractId: raw.contractId ?? config.contractId,
-    topic: raw.topic,
-    value: raw.value,
-    ledgerClosedAt: raw.ledgerClosedAt,
-    ledgerHash: raw.ledgerHash,
-    pagingToken: raw.pagingToken,
-    txIndex: raw.txIndex,
-    eventIndex: raw.eventIndex,
-  }));
+  const rawEvents: RawIndexerEvent[] = [];
+  for (const candidate of response.events as unknown[]) {
+    if (!isRpcIndexerEvent(candidate)) {
+      // Malformed RPC event: log it and park it in the unprocessed-events
+      // table instead of crashing the whole poll.
+      logger.warn(
+        { event: jsonSafe(candidate) },
+        '[indexer] malformed RPC event skipped',
+      );
+      recordIndexerEvent('unknown', 'decode_error');
+      await recordUnappliedEvent({
+        event: {
+          ledger: 0,
+          txHash: '',
+          eventIndex: 0,
+          contractId: config.contractId,
+          raw: candidate,
+        },
+        type: null,
+        outcome: 'decode_error',
+        detail: 'malformed RPC event: missing ledger or txHash',
+      });
+      continue;
+    }
+    rawEvents.push({
+      ledger: candidate.ledger,
+      txHash: candidate.txHash,
+      id: candidate.id,
+      contractId: candidate.contractId ?? config.contractId,
+      topic: candidate.topic,
+      value: candidate.value,
+      ledgerClosedAt: candidate.ledgerClosedAt,
+      ledgerHash: candidate.ledgerHash,
+      pagingToken: candidate.pagingToken,
+      txIndex: candidate.txIndex,
+      eventIndex: candidate.eventIndex,
+    });
+  }
+
+  if (!rawEvents.length) {
+    indexerLastSuccessAt = Date.now();
+    return;
+  }
 
   const ordered = normalizeAndSortEvents(rawEvents, config.contractId);
   const groups = groupCoTransactionEvents(ordered);
 
   const applyOne = async (event: (typeof ordered)[number]): Promise<IndexerEventOutcome> => {
-    const raw = event.raw as any;
+    const raw: RawIndexerEvent = event.raw;
 
     // 1. Decode. A throw here means the value shape is unexpected (e.g. a
     //    contract upgrade reshaped the event) — classify as decode_error,
@@ -916,8 +984,8 @@ export async function replayUnprocessedEvent(
  *   - fees_withdrawn         (via admin webhook, not indexer)
  */
 function broadcastIndexedEvent(event: NormalizedIndexerEvent): void {
-  const raw = event.raw as any;
-  const type = raw.topic?.[0] ? (scValToNative(raw.topic[0]) as string) : '';
+  const raw: RawIndexerEvent = event.raw;
+  const type = raw.topic?.[0] ? (scValToNative(raw.topic[0] as never) as string) : '';
   const payload = normalizePayload(
     (raw.value ? (scValToNative(raw.value) as Record<string, unknown>) : {}) ?? {},
   );
