@@ -111,6 +111,19 @@ export function parseAllowlist(raw: string): string[] {
  * The client IP is extracted via `extractClientIp`, which honours the
  * `X-Forwarded-For` header and the `TRUSTED_PROXY_COUNT` configuration.
  */
+/**
+ * Marks a response as non-cacheable by any browser, proxy or CDN.
+ *
+ * Applied at the admin router level so that every admin response — success,
+ * error, and export — carries `Cache-Control: no-store` and `Pragma: no-cache`.
+ * `Pragma` is included for HTTP/1.0 intermediaries that ignore `Cache-Control`.
+ */
+export function noStoreMiddleware(_req: Request, res: Response, next: NextFunction): void {
+  res.set('Cache-Control', 'no-store');
+  res.set('Pragma', 'no-cache');
+  next();
+}
+
 export function ipAllowlistMiddleware(req: Request, res: Response, next: NextFunction): void {
   const raw = process.env.ADMIN_IP_ALLOWLIST;
 

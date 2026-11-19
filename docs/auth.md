@@ -3,6 +3,37 @@
 This document describes the backend authentication flow for ScoutOff.
 It covers SEP-10 challenge/response, JWT issuance, token claims, refresh behavior, logout, and example `curl` requests.
 
+## Auth timing, lockout and rate-limit parameters
+
+Every timing, lockout and rate-limit knob that affects authentication, with its
+environment variable, default, and what happens when the limit is exceeded.
+Values are verified against `src/services/sep10.ts`, `src/config.ts`,
+`src/middleware/authFailureLockout.ts` and `src/routes/auth.ts` — update this
+table in the same PR as any change to those constants.
+
+| Parameter | Env var | Default | Behaviour when exceeded |
+| --- | --- | --- | --- |
+| SEP-10 challenge TTL | — (constant `CHALLENGE_TTL_SECONDS` in `src/services/sep10.ts`) | 300 s (5 min) | `POST /auth/token` rejects the stale challenge with `401` (`INVALID_CHALLENGE`); the client must request a new challenge via `GET /auth/challenge` |
+| Access token TTL | `JWT_ACCESS_TTL_SECONDS` | 900 s (15 min) | Expired access tokens are rejected by `requireAuth` with `401` (`TOKEN_EXPIRED`); the client refreshes via `POST /auth/refresh` |
+| Refresh token TTL | — (constant `config.jwtRefreshTtlSeconds`) | 604800 s (7 days) | Expired refresh tokens are rejected by `POST /auth/refresh` with `401` (`TOKEN_EXPIRED`); the user must re-run the SEP-10 flow |
+| Auth rate-limit window | `AUTH_RATE_LIMIT_WINDOW_MS` | 60000 ms (1 min) | Window length for both the per-IP and per-account auth limits below |
+| Auth per-IP limit | `AUTH_RATE_LIMIT_IP_MAX` | 60 requests / window | `429` (`RATE_LIMITED`) with a `Retry-After` header (seconds until the window resets) on `GET /auth/challenge` and `POST /auth/token` |
+| Auth per-account limit | `AUTH_RATE_LIMIT_MAX` | 5 requests / window (1000 when `NODE_ENV=test`) | `429` (`RATE_LIMITED`) with a `Retry-After` header, keyed on the Stellar account in the query/transaction (or the refresh token's `sub`) |
+| Auth rate-limit store failure policy | `AUTH_RATE_LIMIT_ERROR_POLICY` | `closed` in production, `local` elsewhere | `closed`: requests fail with `503` when the shared store is unavailable; `local`: fall back to per-instance in-memory counters; `open`: allow the request |
+| Failed-exchange threshold | `AUTH_FAIL_THRESHOLD` | 5 consecutive failures | The account is locked out; further `POST /auth/token` attempts return `429` (`AUTH_LOCKED`) with a `Retry-After` header |
+| Failure counting window | `AUTH_FAIL_WINDOW_MS` | 900000 ms (15 min) | Failures older than the window no longer count toward the threshold |
+| Lockout base duration | `AUTH_LOCKOUT_BASE_MS` | 30000 ms (30 s) | First lockout lasts the base duration; each further failure doubles it |
+| Lockout maximum duration | `AUTH_LOCKOUT_MAX_MS` | 900000 ms (15 min) | Exponential backoff is capped at this value; `Retry-After` never exceeds it |
+
+Notes:
+
+- Lockouts apply only to `POST /auth/token`; existing sessions and
+  `POST /auth/refresh` are unaffected. A successful exchange resets the counter.
+- The account key comes from the unauthenticated challenge XDR, so an attacker
+  can lock an account without its private key — the short base/max durations and
+  the layered per-IP rate limit bound the blast radius (see
+  `src/middleware/authFailureLockout.ts`).
+
 ## SEP-10 Challenge / Response Flow
 
 ScoutOff uses Stellar SEP-10 for wallet-based authentication.
