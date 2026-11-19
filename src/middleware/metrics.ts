@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { retentionMetrics } from '../services/retentionMetrics';
 import { ipReputationCounters, resetIpReputationCounters } from '../services/ipReputation';
 import type { CircuitState, CircuitBreaker } from '../utils/circuitBreaker';
+import { logger } from '../utils/logger';
 import { monitorEventLoopDelay, type IntervalHistogram } from 'perf_hooks';
 
 // ── Tier divergence counter injection (#1132) ──────────────────────────────────
@@ -724,7 +725,7 @@ export function initEventLoopMonitoring(): void {
     eventLoopDelayMonitor.enable();
   } catch (err) {
     // monitorEventLoopDelayMonitor may not be available in all Node versions
-    console.warn('[metrics] Failed to initialize event-loop monitoring:', err);
+    logger.warn('Failed to initialize event-loop monitoring:', err, { component: 'metrics' });
   }
 }
 
@@ -774,7 +775,7 @@ export function initGcMonitoring(): void {
     gcObserver.observe({ entryTypes: ['gc'] });
   } catch (err) {
     // GC observation may not be available in all Node versions
-    console.warn('[metrics] Failed to initialize GC monitoring:', err);
+    logger.warn('Failed to initialize GC monitoring:', err, { component: 'metrics' });
   }
 }
 
