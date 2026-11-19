@@ -287,6 +287,7 @@ Fixes #123
 - [ ] All tests pass
 - [ ] npm audit passes
 - [ ] Manual testing completed
+- [ ] CHANGELOG updated (if user-facing)
 
 ## Type of Change
 - [ ] Bug fix
@@ -364,6 +365,8 @@ npx lint-staged
 - **Types**: Use strict TypeScript; avoid `any` types where possible
 
 - **Documentation**: Update README if your changes affect user-facing behavior
+
+- **Changelog**: Add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) for any user-facing change (new or changed endpoints, behaviour, configuration, or fixes). The file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — use the `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` and `Security` headings, and tick the "CHANGELOG updated (if user-facing)" box in the PR template. `CHANGES.md` is kept for historical implementation notes only.
 
 - **Git History**: Use atomic commits with meaningful messages
 
