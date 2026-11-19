@@ -4,6 +4,62 @@ import { parseRetentionPolicies } from './retentionPolicy';
 import { parseKeyring } from './utils/keyring';
 import envConstants from './config/env-constants.json';
 
+// Bootstrap logger: src/config.ts is evaluated before src/utils/logger.ts can
+// be imported (the logger itself imports this module), so startup messages are
+// buffered here and flushed through the real logger once it is available.
+// Until then they are written as single-line JSON with the same shape the
+// logger produces, so startup output stays structured.
+type BootstrapLevel = 'info' | 'warn';
+
+interface BootstrapEntry {
+  level: BootstrapLevel;
+  message: string;
+}
+
+const bootstrapBuffer: BootstrapEntry[] = [];
+let bootstrapFlushed = false;
+
+function writeStructured(level: BootstrapLevel, message: string): void {
+  const line = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level,
+    message: message.replace(/[\r\n]+/g, ' '),
+  });
+  if (level === 'warn') {
+    process.stderr.write(`${line}\n`);
+  } else {
+    process.stdout.write(`${line}\n`);
+  }
+}
+
+function bootstrapLog(level: BootstrapLevel, message: string): void {
+  if (bootstrapFlushed) {
+    writeStructured(level, message);
+    return;
+  }
+  bootstrapBuffer.push({ level, message });
+}
+
+/**
+ * Flushes buffered startup messages through the real logger. Called by
+ * src/utils/logger.ts once it has been initialised; safe to call repeatedly.
+ */
+export function flushBootstrapLogs(sink?: {
+  info: (message: string) => void;
+  warn: (message: string) => void;
+}): void {
+  if (bootstrapFlushed) return;
+  bootstrapFlushed = true;
+  const pending = bootstrapBuffer.splice(0, bootstrapBuffer.length);
+  for (const entry of pending) {
+    if (sink) {
+      sink[entry.level](entry.message);
+    } else {
+      writeStructured(entry.level, entry.message);
+    }
+  }
+}
+
 // In production and staging, configuration must come only from the
 // orchestrator (ConfigMap/Secrets). A stray .env baked into an image or
 // mounted volume would otherwise silently fill in unset values, possibly with
@@ -11,9 +67,9 @@ import envConstants from './config/env-constants.json';
 const dotenvEnv = process.env.NODE_ENV ?? 'development';
 if ((dotenvEnv !== 'production' && dotenvEnv !== 'staging') || process.env.DOTENV_ENABLED === 'true') {
   const result = dotenv.config();
-  if (!result.error) console.info('[config] loaded .env file');
+  if (!result.error) bootstrapLog('info', '[config] loaded .env file');
 } else {
-  console.info(`[config] skipping .env file (NODE_ENV=${dotenvEnv}; set DOTENV_ENABLED=true to load it)`);
+  bootstrapLog('info', `[config] skipping .env file (NODE_ENV=${dotenvEnv}; set DOTENV_ENABLED=true to load it)`);
 }
 
 function required(name: string): string {
@@ -135,7 +191,8 @@ function validateSecretStrength(name: string, value: string): void {
       );
     }
     if (nodeEnv === 'development') {
-      console.warn(
+      bootstrapLog(
+        'warn',
         `[config] WARNING: ${name} looks like a placeholder or default secret; set a unique value with at least 32 bytes.`,
       );
     }
@@ -152,7 +209,8 @@ function validateSecretStrength(name: string, value: string): void {
   }
 
   if (nodeEnv === 'development' && byteLength < 32) {
-    console.warn(
+    bootstrapLog(
+      'warn',
       `[config] WARNING: ${name} is shorter than 32 bytes in development; this is allowed for local testing but not recommended for production.`,
     );
   }
@@ -167,7 +225,7 @@ if (!adminWalletValue) {
     throw new Error('ADMIN_WALLET is required in production but is not set. Set the ADMIN_WALLET environment variable to the platform admin Stellar address.');
   }
   if (nodeEnv === 'staging') {
-    console.warn('[config] WARNING: ADMIN_WALLET is not set in staging. Admin-seeding will be disabled. Set ADMIN_WALLET to suppress this warning.');
+    bootstrapLog('warn', '[config] WARNING: ADMIN_WALLET is not set in staging. Admin-seeding will be disabled. Set ADMIN_WALLET to suppress this warning.');
   }
 }
 
@@ -190,7 +248,8 @@ if (!sep10ServerSecretValue) {
     );
   }
   if (nodeEnv === 'staging') {
-    console.warn(
+    bootstrapLog(
+      'warn',
       '[config] WARNING: SEP10_SERVER_SECRET is not set in staging. ' +
       'Each process will generate an ephemeral keypair, causing cross-instance ' +
       'SEP-10 verification failures under load balancing. ' +
