@@ -47,7 +47,7 @@ import { triggerReplay, replayStatusHandler, replayBodyShapeSchema } from '../co
 import { requireRole } from '../middleware/auth';
 import { auditRead } from '../middleware/auditRead';
 import { idempotency } from '../middleware/idempotency';
-import { ipAllowlistMiddleware } from '../middleware/ipAllowlist';
+import { ipAllowlistMiddleware, noStoreMiddleware } from '../middleware/ipAllowlist';
 import { methodNotAllowed } from '../middleware/methodNotAllowed';
 import { rateLimit } from '../middleware/rateLimit';
 import { createTimeout } from '../middleware/timeout';
@@ -67,6 +67,11 @@ const importRateLimit = rateLimit({
 });
 
 const router = Router();
+
+// Admin responses (including exports and errors) must never be cached by a
+// browser, proxy or CDN. Registered first so the headers are set even when a
+// later middleware (e.g. the IP allowlist) rejects the request.
+router.use(noStoreMiddleware);
 
 // Enforce IP allowlist for all admin endpoints (no-op when ADMIN_IP_ALLOWLIST is unset)
 router.use(ipAllowlistMiddleware);
