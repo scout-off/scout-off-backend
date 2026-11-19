@@ -7,6 +7,7 @@ import { getRedisClient } from '../services/redis';
 import { logger } from '../utils/logger';
 import { ErrorCode } from '../utils/errorCodes';
 import { incRateLimitRejected, incRateLimitStoreError } from './metrics';
+import { extractClientIp } from '../utils/ipExtractor';
 
 function createStore(): RateLimitStore {
   const redis = getRedisClient();
@@ -72,7 +73,7 @@ export function rateLimit(options: RateLimitOptions = {}) {
       next();
       return;
     }
-    const ip = req.ip ?? 'unknown';
+    const ip = extractClientIp(req);
 
     try {
       const key = options.keyGenerator?.(req) || `ip:${ip}`;

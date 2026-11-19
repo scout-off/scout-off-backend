@@ -8,8 +8,8 @@ import { RateLimitStore } from '../../src/middleware/rateLimitStore';
 
 // ── Unit tests for rateLimit middleware ──────────────────────────────────────
 
-function makeReqRes(ip = '127.0.0.1') {
-  const req = { ip } as unknown as Request;
+function makeReqRes(ip = '127.0.0.1', headers: Record<string, string> = {}) {
+  const req = { ip, headers, socket: { remoteAddress: ip } } as unknown as Request;
   const res = {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
@@ -99,6 +99,66 @@ describe.each(stores)('rateLimit middleware ($name)', ({ create }) => {
 
     expect(successCount).toBe(5);
     expect(blockedCount).toBe(5);
+  });
+});
+
+// ── Client IP extraction (X-Forwarded-For chains) ────────────────────────────
+// The limiter must key on the shared extractor, which honours
+// TRUSTED_PROXY_COUNT, so rate limiting, IP reputation and the admin
+// allowlist all agree on the client IP.
+describe.each(stores)('rateLimit client IP extraction ($name)', ({ create }) => {
+  let store: RateLimitStore;
+  const originalTrustedProxyCount = process.env.TRUSTED_PROXY_COUNT;
+
+  beforeEach(() => {
+    store = create();
+    process.env.TRUSTED_PROXY_COUNT = '1';
+    jest.resetModules();
+  });
+
+  afterEach(() => {
+    if (originalTrustedProxyCount === undefined) {
+      delete process.env.TRUSTED_PROXY_COUNT;
+    } else {
+      process.env.TRUSTED_PROXY_COUNT = originalTrustedProxyCount;
+    }
+  });
+
+  async function loadMiddleware() {
+    const mod = await import('../../src/middleware/rateLimit');
+    return mod.rateLimit;
+  }
+
+  it('keys on the X-Forwarded-For client, not the proxy address', async () => {
+    const mw = (await loadMiddleware())({ windowMs: 60_000, max: 1, store });
+
+    const first = makeReqRes('10.0.0.1', { 'x-forwarded-for': '203.0.113.7, 10.0.0.1' });
+    await mw(first.req, first.res, first.next);
+    expect(first.next).toHaveBeenCalledTimes(1);
+
+    // Same client IP, different proxy hop → still throttled.
+    const second = makeReqRes('10.0.0.2', { 'x-forwarded-for': '203.0.113.7, 10.0.0.2' });
+    await mw(second.req, second.res, second.next);
+    expect(second.res.status).toHaveBeenCalledWith(429);
+
+    // Different client IP behind the same proxy → allowed.
+    const third = makeReqRes('10.0.0.1', { 'x-forwarded-for': '203.0.113.8, 10.0.0.1' });
+    await mw(third.req, third.res, third.next);
+    expect(third.next).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the socket address when the XFF chain is shorter than TRUSTED_PROXY_COUNT implies', async () => {
+    const mw = (await loadMiddleware())({ windowMs: 60_000, max: 1, store });
+
+    // TRUSTED_PROXY_COUNT=1 requires at least 2 entries; a single spoofed
+    // entry must not be trusted.
+    const first = makeReqRes('198.51.100.9', { 'x-forwarded-for': '1.2.3.4' });
+    await mw(first.req, first.res, first.next);
+    expect(first.next).toHaveBeenCalledTimes(1);
+
+    const second = makeReqRes('198.51.100.9', { 'x-forwarded-for': '5.6.7.8' });
+    await mw(second.req, second.res, second.next);
+    expect(second.res.status).toHaveBeenCalledWith(429);
   });
 });
 
