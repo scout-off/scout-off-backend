@@ -6,9 +6,11 @@ import {
   Operation,
   Account,
   Transaction,
+  StrKey,
 } from '@stellar/stellar-sdk';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
-import config from '../config';
+import config, { SEP10_CLIENT_DOMAIN_PATTERN } from '../config';
+import { safeFetch, SafeFetchError, SafeFetchOptions } from '../utils/safeFetch';
 
 const tracer = trace.getTracer('scout-off-backend');
 
@@ -48,6 +50,18 @@ export enum Sep10ErrorCode {
   ALREADY_USED = 'ALREADY_USED',
   /** XDR parsing failed - malformed input */
   MALFORMED_XDR = 'MALFORMED_XDR',
+  /** client_domain is not a bare public hostname */
+  INVALID_CLIENT_DOMAIN = 'INVALID_CLIENT_DOMAIN',
+  /** client_domain is not on SEP10_CLIENT_DOMAIN_ALLOWLIST */
+  CLIENT_DOMAIN_NOT_ALLOWED = 'CLIENT_DOMAIN_NOT_ALLOWED',
+  /** SEP10_CLIENT_DOMAIN_REQUIRED is on but the challenge has no client_domain */
+  CLIENT_DOMAIN_REQUIRED = 'CLIENT_DOMAIN_REQUIRED',
+  /** The client domain's stellar.toml could not be fetched */
+  CLIENT_DOMAIN_TOML_FETCH_FAILED = 'CLIENT_DOMAIN_TOML_FETCH_FAILED',
+  /** The client domain's stellar.toml has no valid SIGNING_KEY */
+  CLIENT_DOMAIN_SIGNING_KEY_MISSING = 'CLIENT_DOMAIN_SIGNING_KEY_MISSING',
+  /** The challenge has a client_domain op but no signature from its signing key */
+  MISSING_CLIENT_DOMAIN_SIGNATURE = 'MISSING_CLIENT_DOMAIN_SIGNATURE',
 }
 
 /**
@@ -134,6 +148,100 @@ export function getServerKeypair(): Keypair {
   return SERVER_KEYPAIR;
 }
 
+// ─── client_domain (SEP-10 §client_domain, #1514) ─────────────────────────────
+
+const CLIENT_DOMAIN_OP_NAME = 'client_domain';
+const STELLAR_TOML_MAX_BYTES = 100 * 1024;
+const STELLAR_TOML_TIMEOUT_MS = 5_000;
+const SIGNING_KEY_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const signingKeyCache = new Map<string, { signingKey: string; expiresAt: number }>();
+
+/** Test hook: clear cached stellar.toml signing keys. */
+export function clearClientDomainCache(): void {
+  signingKeyCache.clear();
+}
+
+/**
+ * Normalise and validate a client_domain: a bare hostname (no scheme, port or
+ * path) that is on the allowlist when one is configured.
+ */
+export function normalizeClientDomain(raw: string): string {
+  const domain = raw.trim().toLowerCase();
+  if (!SEP10_CLIENT_DOMAIN_PATTERN.test(domain)) {
+    throw new Sep10Error(Sep10ErrorCode.INVALID_CLIENT_DOMAIN, `Invalid client_domain: ${raw}`);
+  }
+  const allowlist = config.sep10ClientDomainAllowlist;
+  if (allowlist.length > 0 && !allowlist.includes(domain)) {
+    throw new Sep10Error(Sep10ErrorCode.CLIENT_DOMAIN_NOT_ALLOWED, `client_domain ${domain} is not allowed`);
+  }
+  return domain;
+}
+
+/** Extract SIGNING_KEY from a stellar.toml document (top-level key only). */
+export function parseSigningKey(toml: string): string | null {
+  for (const line of toml.split(/\r?\n/)) {
+    if (/^\s*\[/.test(line)) break; // SIGNING_KEY must be a top-level key
+    const m = /^\s*SIGNING_KEY\s*=\s*["']([^"']+)["']\s*(#.*)?$/.exec(line);
+    if (m) return StrKey.isValidEd25519PublicKey(m[1]) ? m[1] : null;
+  }
+  return null;
+}
+
+/**
+ * Fetch (SSRF-safe, size- and time-bounded) and cache the SIGNING_KEY from
+ * https://<domain>/.well-known/stellar.toml.
+ *
+ * `fetchOptions` is injectable for tests (resolver / request).
+ */
+export async function resolveClientDomainSigningKey(
+  domain: string,
+  fetchOptions: Partial<SafeFetchOptions> = {},
+): Promise<string> {
+  const cached = signingKeyCache.get(domain);
+  if (cached && cached.expiresAt > Date.now()) return cached.signingKey;
+
+  let body: Buffer;
+  try {
+    ({ buffer: body } = await safeFetch(`https://${domain}/.well-known/stellar.toml`, {
+      maxBytes: STELLAR_TOML_MAX_BYTES,
+      timeoutMs: STELLAR_TOML_TIMEOUT_MS,
+      maxRedirects: 2,
+      ...fetchOptions,
+    }));
+  } catch (err) {
+    const reason = err instanceof SafeFetchError ? err.reason : 'network_error';
+    throw new Sep10Error(
+      Sep10ErrorCode.CLIENT_DOMAIN_TOML_FETCH_FAILED,
+      `Could not fetch stellar.toml for ${domain} (${reason})`,
+    );
+  }
+
+  const signingKey = parseSigningKey(body.toString('utf8'));
+  if (!signingKey) {
+    throw new Sep10Error(
+      Sep10ErrorCode.CLIENT_DOMAIN_SIGNING_KEY_MISSING,
+      `stellar.toml for ${domain} has no valid SIGNING_KEY`,
+    );
+  }
+  signingKeyCache.set(domain, { signingKey, expiresAt: Date.now() + SIGNING_KEY_CACHE_TTL_MS });
+  return signingKey;
+}
+
+function signedBy(tx: Transaction, publicKey: string): boolean {
+  const keypair = Keypair.fromPublicKey(publicKey);
+  return tx.signatures.some((sig) => {
+    try {
+      const sigBytes = sig.signature instanceof Uint8Array
+        ? sig.signature
+        : (sig.signature as unknown as { value: Uint8Array }).value;
+      return keypair.verify(tx.hash(), sigBytes);
+    } catch {
+      return false;
+    }
+  });
+}
+
 /**
  * Build a SEP-10 challenge transaction.
  * The client must sign it with their Stellar keypair and return the XDR.
@@ -142,7 +250,10 @@ export function getServerKeypair(): Keypair {
  * Per SEP-10, the first operation must be manageData with name 'scoutoff auth',
  * and any additional operations (like web_auth_domain) must be sourced by the server.
  */
-export function buildChallenge(accountId: string): string {
+export function buildChallenge(
+  accountId: string,
+  clientDomain?: { domain: string; signingKey: string },
+): string {
   const span = tracer.startSpan('sep10.buildChallenge', { attributes: { 'sep10.account': accountId } });
   try {
     const serverAccount = new Account(SERVER_KEYPAIR.publicKey(), '-1');
@@ -168,6 +279,18 @@ export function buildChallenge(accountId: string): string {
           name: 'web_auth_domain',
           value: Buffer.from(config.webAuthDomain),
           source: SERVER_KEYPAIR.publicKey(), // Server-sourced per SEP-10
+        })
+      );
+    }
+
+    // SEP-10 client_domain: the op's source MUST be the wallet's SIGNING_KEY,
+    // so the wallet has to co-sign the challenge with that key.
+    if (clientDomain) {
+      txBuilder.addOperation(
+        Operation.manageData({
+          name: CLIENT_DOMAIN_OP_NAME,
+          value: Buffer.from(clientDomain.domain),
+          source: clientDomain.signingKey,
         })
       );
     }
@@ -215,7 +338,7 @@ export function extractAccount(xdr: string): string | null {
  * @returns Authenticated account ID
  * @throws Sep10Error if challenge structure is invalid or signature verification fails
  */
-export function verifyChallenge(xdr: string): { account: string } {
+export function verifyChallenge(xdr: string): { account: string; clientDomain?: string } {
   const span = tracer.startSpan('sep10.verifyChallenge');
   try {
     let tx: Transaction;
@@ -310,9 +433,16 @@ export function verifyChallenge(xdr: string): { account: string } {
       throw new Sep10Error(Sep10ErrorCode.NOT_SIGNED_BY_SERVER, 'Challenge not signed by server');
     }
 
-    // 10. Verify all additional operations (beyond the first) have server as source
+    // 10. Verify all additional operations (beyond the first) have server as
+    // source — except a single client_domain op, which SEP-10 requires to be
+    // sourced by the wallet's signing key.
+    let clientDomainOp: Operation.ManageData | undefined;
     for (let i = 1; i < tx.operations.length; i++) {
-      const extraOp = tx.operations[i];
+      const extraOp = tx.operations[i] as Operation.ManageData;
+      if (extraOp.name === CLIENT_DOMAIN_OP_NAME && !clientDomainOp) {
+        clientDomainOp = extraOp;
+        continue;
+      }
       const extraOpSource = extraOp.source;
       if (extraOpSource !== SERVER_KEYPAIR.publicKey()) {
         throw new Sep10Error(
@@ -338,6 +468,23 @@ export function verifyChallenge(xdr: string): { account: string } {
       throw new Sep10Error(Sep10ErrorCode.INVALID_SIGNATURE, 'Invalid challenge signature');
     }
 
+    // 11b. client_domain: require the wallet signing key's signature.
+    let clientDomain: string | undefined;
+    if (clientDomainOp) {
+      if (!clientDomainOp.source || !clientDomainOp.value) {
+        throw new Sep10Error(Sep10ErrorCode.MISSING_SOURCE_ACCOUNT, 'client_domain operation is malformed');
+      }
+      clientDomain = normalizeClientDomain(Buffer.from(clientDomainOp.value).toString('utf8'));
+      if (!signedBy(tx, clientDomainOp.source)) {
+        throw new Sep10Error(
+          Sep10ErrorCode.MISSING_CLIENT_DOMAIN_SIGNATURE,
+          'Challenge is missing the client_domain signing key signature',
+        );
+      }
+    } else if (config.sep10ClientDomainRequired) {
+      throw new Sep10Error(Sep10ErrorCode.CLIENT_DOMAIN_REQUIRED, 'client_domain is required');
+    }
+
     // 12. Reject replay of an already-redeemed challenge
     const nowSeconds = Math.floor(Date.now() / 1000);
     pruneConsumedChallengeNonces(nowSeconds);
@@ -349,6 +496,10 @@ export function verifyChallenge(xdr: string): { account: string } {
     consumedChallengeNonces.set(nonceKey, maxTime > 0 ? maxTime : nowSeconds + CHALLENGE_TTL_SECONDS);
 
     span.setAttribute('sep10.account', clientAccountId);
+    if (clientDomain) {
+      span.setAttribute('sep10.client_domain', clientDomain);
+      return { account: clientAccountId, clientDomain };
+    }
     return { account: clientAccountId };
   } catch (err) {
     // Ensure all errors are Sep10Error instances
@@ -408,6 +559,8 @@ export function getErrorMapping(code: Sep10ErrorCode): {
     case Sep10ErrorCode.NOT_SIGNED_BY_SERVER:
     case Sep10ErrorCode.CLIENT_SOURCED_OPERATION:
     case Sep10ErrorCode.ALREADY_USED:
+    case Sep10ErrorCode.CLIENT_DOMAIN_REQUIRED:
+    case Sep10ErrorCode.MISSING_CLIENT_DOMAIN_SIGNATURE:
       // 401 with TOKEN_INVALID for authentication failures
       return {
         httpStatus: 401,
@@ -422,6 +575,18 @@ export function getErrorMapping(code: Sep10ErrorCode): {
         errorCode: 'VALIDATION_ERROR',
         clientMessage: 'Invalid transaction format',
       };
+
+    case Sep10ErrorCode.INVALID_CLIENT_DOMAIN:
+      return { httpStatus: 400, errorCode: 'VALIDATION_ERROR', clientMessage: 'Invalid client_domain' };
+
+    case Sep10ErrorCode.CLIENT_DOMAIN_NOT_ALLOWED:
+      return { httpStatus: 403, errorCode: 'FORBIDDEN', clientMessage: 'client_domain is not allowed' };
+
+    case Sep10ErrorCode.CLIENT_DOMAIN_TOML_FETCH_FAILED:
+      return { httpStatus: 502, errorCode: 'CLIENT_DOMAIN_TOML_FETCH_FAILED', clientMessage: 'Could not fetch stellar.toml for client_domain' };
+
+    case Sep10ErrorCode.CLIENT_DOMAIN_SIGNING_KEY_MISSING:
+      return { httpStatus: 502, errorCode: 'CLIENT_DOMAIN_SIGNING_KEY_MISSING', clientMessage: 'client_domain stellar.toml has no valid SIGNING_KEY' };
 
     default:
       // Fallback - this should never happen

@@ -3,7 +3,16 @@ import { z } from 'zod';
 import { Keypair, Transaction } from '@stellar/stellar-sdk';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { buildChallenge, verifyChallenge, extractAccount, Sep10Error, Sep10ErrorCode, getErrorMapping } from '../services/sep10';
+import {
+  buildChallenge,
+  verifyChallenge,
+  extractAccount,
+  Sep10Error,
+  Sep10ErrorCode,
+  getErrorMapping,
+  normalizeClientDomain,
+  resolveClientDomainSigningKey,
+} from '../services/sep10';
 import { logger } from '../utils/logger';
 import { extractClientIp } from '../utils/ipExtractor';
 import config from '../config';
@@ -25,6 +34,7 @@ const challengeSchema = z.object({
     (val) => { try { Keypair.fromPublicKey(val); return true; } catch { return false; } },
     { message: 'Invalid Stellar public key' }
   ),
+  client_domain: z.string().min(1).max(253).optional(),
 });
 
 export const tokenSchema = z.object({
@@ -92,11 +102,11 @@ export async function resolveEffectiveRole(
  * Includes a unique jti so the token can be individually revoked.
  * Always signed with the *current* JWT_SECRET (never the previous rotation key).
  */
-function issueAccessToken(account: string, role: string): { token: string; expiresAt: number } {
+function issueAccessToken(account: string, role: string, clientDomain?: string): { token: string; expiresAt: number } {
   const ttl = config.jwtAccessTtlSeconds;
   const expiresAt = Math.floor(Date.now() / 1000) + ttl;
   const token = signJwt(
-    { sub: account, role, jti: crypto.randomUUID() },
+    { sub: account, role, jti: crypto.randomUUID(), ...(clientDomain ? { client_domain: clientDomain } : {}) },
     { expiresIn: ttl },
   );
   return { token, expiresAt };
@@ -109,10 +119,10 @@ function issueAccessToken(account: string, role: string): { token: string; expir
  * The jti is stored in the revocation blocklist on rotation / logout.
  * Always signed with the *current* JWT_SECRET.
  */
-function issueRefreshToken(account: string, role: string): { token: string; jti: string } {
+function issueRefreshToken(account: string, role: string, clientDomain?: string): { token: string; jti: string } {
   const jti = crypto.randomUUID();
   const token = signJwt(
-    { sub: account, role, type: 'refresh', jti },
+    { sub: account, role, type: 'refresh', jti, ...(clientDomain ? { client_domain: clientDomain } : {}) },
     { expiresIn: config.jwtRefreshTtlSeconds },
   );
   return { token, jti };
@@ -120,8 +130,8 @@ function issueRefreshToken(account: string, role: string): { token: string; jti:
 
 // ─── GET /auth/challenge ───────────────────────────────────────────────────────
 
-/** GET /auth/challenge?account=G... */
-export function getChallenge(req: Request, res: Response, _next: NextFunction): void {
+/** GET /auth/challenge?account=G...&client_domain=wallet.example */
+export async function getChallenge(req: Request, res: Response, next: NextFunction): Promise<void> {
   const parsed = challengeSchema.safeParse(req.query);
   if (!parsed.success) {
     logger.warn('[auth] failed_challenge_request', {
@@ -133,7 +143,30 @@ export function getChallenge(req: Request, res: Response, _next: NextFunction): 
     res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request', code: ErrorCode.VALIDATION_ERROR });
     return;
   }
-  const challenge = buildChallenge(parsed.data.account);
+  let clientDomain: { domain: string; signingKey: string } | undefined;
+  try {
+    if (parsed.data.client_domain) {
+      const domain = normalizeClientDomain(parsed.data.client_domain);
+      clientDomain = { domain, signingKey: await resolveClientDomainSigningKey(domain) };
+    } else if (config.sep10ClientDomainRequired) {
+      throw new Sep10Error(Sep10ErrorCode.INVALID_CLIENT_DOMAIN, 'client_domain is required');
+    }
+  } catch (err) {
+    if (err instanceof Sep10Error) {
+      const mapping = getErrorMapping(err.code);
+      logger.warn('[auth] failed_challenge_request client_domain', {
+        correlationId: req.correlationId,
+        origin: extractClientIp(req),
+        sep10ErrorCode: err.code,
+        reason: err.message,
+      });
+      res.status(mapping.httpStatus).json({ success: false, error: mapping.clientMessage, code: mapping.errorCode as ErrorCode });
+      return;
+    }
+    next(err);
+    return;
+  }
+  const challenge = buildChallenge(parsed.data.account, clientDomain);
   const challengeTransaction = new Transaction(challenge, config.networkPassphrase);
   const expiresAt = Number(challengeTransaction.timeBounds?.maxTime);
   if (!Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
@@ -160,7 +193,7 @@ try {
     const { transaction, role } = parsed.data;
 
     // Step 1: verify signatures and get the authenticated account.
-    const { account } = verifyChallenge(transaction);
+    const { account, clientDomain } = verifyChallenge(transaction);
 
     // Step 2: determine the effective role from the cryptographically verified account.
     const isAdmin =
@@ -170,8 +203,23 @@ try {
     const effectiveRole = isAdmin ? 'admin' : (role ?? 'player');
 
     // Step 3: issue access token + refresh token pair.
-    const { token: accessToken, expiresAt } = issueAccessToken(account, effectiveRole);
-    const { token: refreshToken } = issueRefreshToken(account, effectiveRole);
+    const { token: accessToken, expiresAt } = issueAccessToken(account, effectiveRole, clientDomain);
+    const { token: refreshToken } = issueRefreshToken(account, effectiveRole, clientDomain);
+
+    // Record wallet attribution for sessions issued via SEP-10 client_domain.
+    if (clientDomain) {
+      try {
+        await insertAuditLog({
+          action: 'auth_token_issued',
+          adminWallet: account,
+          queryParams: { role: effectiveRole, clientDomain },
+          eventSource: 'postToken',
+          createdAt: new Date().toISOString(),
+        });
+      } catch {
+        // Non-fatal: audit log failure must not block token issuance
+      }
+    }
 
     // Step 4: reset any per-account failure counter on successful exchange.
     void resetAuthFailures(account);
@@ -262,6 +310,7 @@ try {
     const jti = payload.jti;
     const account = payload.sub;
     const role = payload.role as string | undefined;
+    const clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
 
     // Every refresh token we issue carries a known role; one without it is
     // malformed and must not be silently upgraded to a fresh session.
@@ -322,8 +371,8 @@ try {
     }
 
     // Issue new pair with the re-derived (potentially downgraded) role.
-    const { token: newAccessToken, expiresAt } = issueAccessToken(account, effectiveRole);
-    const { token: newRefreshToken } = issueRefreshToken(account, effectiveRole);
+    const { token: newAccessToken, expiresAt } = issueAccessToken(account, effectiveRole, clientDomain);
+    const { token: newRefreshToken } = issueRefreshToken(account, effectiveRole, clientDomain);
 
     res.json({
       success: true,

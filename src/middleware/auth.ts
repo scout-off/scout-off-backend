@@ -143,6 +143,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       req.role = payload.role;
       req.jti = payload.jti;
       req.tokenExpiresAt = payload.exp;
+      req.clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
       next();
     }).catch(() => {
       // Revocation check failed — fail open (allow request) to avoid blocking
@@ -152,6 +153,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       req.role = payload.role;
       req.jti = payload.jti;
       req.tokenExpiresAt = payload.exp;
+      req.clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
       next();
     });
   } catch (err) {
@@ -224,12 +226,14 @@ export function requireRole(...allowedRoles: string[]) {
         req.role = payload.role;
         req.jti = payload.jti;
         req.tokenExpiresAt = payload.exp;
+        req.clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
         next();
       }).catch(() => {
         req.account = payload.sub;
         req.role = payload.role;
         req.jti = payload.jti;
         req.tokenExpiresAt = payload.exp;
+        req.clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
         next();
       });
     } catch (err) {
@@ -254,6 +258,7 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction): 
       req.role = payload.role;
       req.jti = payload.jti;
       req.tokenExpiresAt = payload.exp;
+      req.clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
     } catch {
       // Invalid/expired token — treat the request as anonymous
     }
@@ -336,6 +341,7 @@ export function requireRoles(...roles: string[]) {
       req.role = payload.role;
       req.jti = payload.jti;
       req.tokenExpiresAt = payload.exp;
+      req.clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
       next();
     } catch (err) {
       incAuthFailure(err instanceof jwt.TokenExpiredError ? 'expired_token' : 'invalid_token');
