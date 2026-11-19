@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
 import app from '../../src/app';
+import { MAX_EVIDENCE_URI_LENGTH } from '../../src/controllers/validatorController';
 
 async function getValidatorToken(): Promise<string> {
   const kp = Keypair.random();
@@ -43,6 +44,37 @@ describe('POST /api/validators/milestone schema validation (#29)', () => {
       .post('/api/validators/milestone')
       .set('Authorization', `Bearer ${token}`)
       .send({ playerId: 'player1', milestoneType: 'identity' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 400 when playerId has an invalid format', async () => {
+    const res = await request(app)
+      .post('/api/validators/milestone')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ playerId: 'player 1!', milestoneType: 'identity', evidenceUri: 'ipfs://abc' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 400 when playerId exceeds 128 characters', async () => {
+    const res = await request(app)
+      .post('/api/validators/milestone')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ playerId: 'a'.repeat(129), milestoneType: 'identity', evidenceUri: 'ipfs://abc' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 400 when evidenceUri exceeds the max length', async () => {
+    const res = await request(app)
+      .post('/api/validators/milestone')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        playerId: 'player1',
+        milestoneType: 'identity',
+        evidenceUri: `ipfs://${'a'.repeat(MAX_EVIDENCE_URI_LENGTH)}`,
+      });
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });
