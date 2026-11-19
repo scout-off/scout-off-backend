@@ -611,6 +611,16 @@ const config = {
     suspendAfterFailures: parseNumericEnv('WEBHOOK_SUSPEND_AFTER_FAILURES', process.env.WEBHOOK_SUSPEND_AFTER_FAILURES, 50, { min: 1, integer: true }),
     /** Failures spanning longer than this (ms) also suspend a subscription (#1512). */
     suspendAfterMs: parseNumericEnv('WEBHOOK_SUSPEND_AFTER_MS', process.env.WEBHOOK_SUSPEND_AFTER_MS, 86400000, { min: 1000, integer: true }),
+    /**
+     * Delivery retry policy (#1859). Replaces the previously hard-coded
+     * RETRY_OPTIONS constant in src/services/webhooks.ts.
+     * - maxRetries: total delivery attempts per webhook (1 = no retry).
+     * - retryBaseDelayMs: base delay for full-jitter exponential backoff.
+     * - retryMaxDelayMs: upper bound for a single backoff delay.
+     */
+    maxRetries: parseNumericEnv('WEBHOOK_MAX_RETRIES', process.env.WEBHOOK_MAX_RETRIES, 3, { min: 1, max: 20, integer: true }),
+    retryBaseDelayMs: parseNumericEnv('WEBHOOK_RETRY_BASE_DELAY_MS', process.env.WEBHOOK_RETRY_BASE_DELAY_MS, 500, { min: 1, max: 600000, integer: true }),
+    retryMaxDelayMs: parseNumericEnv('WEBHOOK_RETRY_MAX_DELAY_MS', process.env.WEBHOOK_RETRY_MAX_DELAY_MS, 5000, { min: 1, max: 3600000, integer: true }),
   },
   /**
    * Dead-letter queue alerting (#1131).
@@ -1143,6 +1153,14 @@ if (config.shutdown.prestopDelayMs >= config.shutdown.timeoutMs) {
     `Invalid shutdown config: SHUTDOWN_PRESTOP_DELAY_MS (${config.shutdown.prestopDelayMs}) ` +
     `must be less than SHUTDOWN_TIMEOUT_MS (${config.shutdown.timeoutMs}). ` +
     `The pre-stop delay must leave time for the actual shutdown sequence.`,
+  );
+}
+
+// Validate webhook retry policy (#1859): the backoff cap must not be below the base delay
+if (config.webhook.retryMaxDelayMs < config.webhook.retryBaseDelayMs) {
+  throw new Error(
+    `Invalid webhook retry config: WEBHOOK_RETRY_MAX_DELAY_MS (${config.webhook.retryMaxDelayMs}) ` +
+    `must be greater than or equal to WEBHOOK_RETRY_BASE_DELAY_MS (${config.webhook.retryBaseDelayMs}).`,
   );
 }
 

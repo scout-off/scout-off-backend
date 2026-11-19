@@ -256,7 +256,17 @@ export async function postWebhookWithRetry(
   }
 }
 
-const RETRY_OPTIONS = { retries: 3, baseDelayMs: 500, maxDelayMs: 5000 };
+/**
+ * Delivery retry policy, configurable via WEBHOOK_MAX_RETRIES,
+ * WEBHOOK_RETRY_BASE_DELAY_MS and WEBHOOK_RETRY_MAX_DELAY_MS (#1859).
+ */
+function getRetryOptions(): Required<Pick<WebhookRetryOptions, 'retries' | 'baseDelayMs' | 'maxDelayMs'>> {
+  return {
+    retries: config.webhook.maxRetries,
+    baseDelayMs: config.webhook.retryBaseDelayMs,
+    maxDelayMs: config.webhook.retryMaxDelayMs,
+  };
+}
 
 /**
  * Dispatches an event to every registered webhook subscriber, signing each
