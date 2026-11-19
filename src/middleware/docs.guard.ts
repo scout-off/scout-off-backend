@@ -31,6 +31,15 @@ export function guardApiDocs(req: Request, res: Response, next: NextFunction): v
 }
 
 /**
+ * Returns true when the given OpenAPI path belongs to the admin surface,
+ * i.e. it is exactly `/admin` or starts with `/admin/`.
+ * Paths such as `/administrators` are NOT considered admin paths.
+ */
+export function isAdminPath(path: string): boolean {
+  return path === '/admin' || path.startsWith('/admin/');
+}
+
+/**
  * Optional middleware to filter the OpenAPI spec and remove /admin/* paths
  * when serving publicly. Applied before the spec is returned.
  *
@@ -47,11 +56,12 @@ export function filterAdminPathsFromSpec(spec: Record<string, unknown>): Record<
   // Deep clone to avoid mutating the cached spec
   const filtered = JSON.parse(JSON.stringify(spec));
 
-  // Remove /admin/* paths
+  // Remove /admin and /admin/* paths only. A bare startsWith('/admin') would
+  // also match unrelated prefixes such as /administrators.
   const paths = filtered.paths as Record<string, unknown>;
   if (paths) {
     for (const path of Object.keys(paths)) {
-      if (path.startsWith('/admin')) {
+      if (isAdminPath(path)) {
         delete paths[path];
       }
     }
