@@ -9,6 +9,8 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { logger } from '../utils/logger';
+import { ErrorCode } from '../utils/errorCodes';
 
 const router = Router();
 
@@ -40,9 +42,33 @@ function loadSpec(): Record<string, unknown> {
   } else if (fs.existsSync(SPEC_JSON_PATH)) {
     cachedSpec = JSON.parse(fs.readFileSync(SPEC_JSON_PATH, 'utf8')) as Record<string, unknown>;
   } else {
-    throw new Error('OpenAPI spec not found. Expected openapi.yaml or openapi.json in the project root.');
+    throw new Error(
+      `OpenAPI spec not found. Expected ${SPEC_YAML_PATH} or ${SPEC_JSON_PATH} ` +
+        `(resolved relative to ${path.join(__dirname, '..')}).`
+    );
   }
   return cachedSpec;
+}
+
+/**
+ * Log a spec-loading failure and send the standard error envelope.
+ * The attempted spec paths are logged (not returned) so clients get a stable message.
+ */
+function sendDocsUnavailable(req: Request, res: Response, err: unknown, what: string): void {
+  const message = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  const correlationId = req.correlationId;
+  logger.error(
+    `[docs] failed to load ${what} attemptedPaths=${SPEC_YAML_PATH},${SPEC_JSON_PATH}` +
+      `${correlationId ? ` correlationId=${correlationId}` : ''}: ${message}`,
+    ...(stack ? [stack] : [])
+  );
+  res.status(500).json({
+    success: false,
+    error: `Failed to load OpenAPI spec. Expected ${SPEC_YAML_PATH} or ${SPEC_JSON_PATH}.`,
+    code: ErrorCode.DOCS_UNAVAILABLE,
+    ...(correlationId !== undefined && { correlationId }),
+  });
 }
 
 /**
@@ -50,14 +76,14 @@ function loadSpec(): Record<string, unknown> {
  * Returns the OpenAPI 3.0 specification as JSON.
  *
  * @response 200 OpenAPI 3.0 document (application/json)
- * @response 500 { success: false, error: string } - Spec file missing or unparsable
+ * @response 500 { success: false, error: string, code: string, correlationId?: string } - Spec file missing or unparsable
  */
-router.get('/', (_req: Request, res: Response) => {
+router.get('/', (req: Request, res: Response) => {
   try {
     const spec = loadSpec();
     res.json(spec);
   } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to load OpenAPI spec' });
+    sendDocsUnavailable(req, res, err, 'OpenAPI spec');
   }
 });
 
