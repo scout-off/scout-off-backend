@@ -29,9 +29,24 @@ Closes #
 
 ## Migration Checklist (if applicable)
 
-- [ ] Migration files added for SQLite and PostgreSQL.
+- [ ] Migration files added for SQLite and PostgreSQL (Postgres twin included).
 
 ## Security Checklist
 
 - [ ] Input validation added for new fields.
 - [ ] `npm audit` run and no new high/critical issues.
+
+## Release Checklist
+
+- [ ] `CHANGES.md` updated for user-visible changes.
+- [ ] New or changed feature flags documented in [docs/feature-flags.md](../docs/feature-flags.md).
+
+<details>
+<summary>Client &amp; Contract Checklist (if applicable)</summary>
+
+- [ ] TypeScript client regenerated (`npm run generate:client`) and `npm run validate:client` passes.
+- [ ] OpenAPI JSON regenerated (`npm run build:openapi`) if routes or schemas changed.
+- [ ] Soroban contracts build and their tests pass (`npm run test:contracts`).
+- [ ] Contract WASM size budgets respected (`node scripts/check-contract-wasm-size.js`).
+
+</details>
