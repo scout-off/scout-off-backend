@@ -189,6 +189,13 @@ export const ErrorCode = {
    */
   FEATURE_DISABLED: 'FEATURE_DISABLED',
 
+  // ── Documentation ──────────────────────────────────────────────────────────
+  /**
+   * HTTP 500 — The OpenAPI spec could not be loaded or parsed.
+   * Client should: Retry later; contact support if it persists (server-side asset issue).
+   */
+  DOCS_UNAVAILABLE: 'DOCS_UNAVAILABLE',
+
   // ── Conditional requests / optimistic concurrency ─────────────────────────
   /**
    * HTTP 412 — An If-Match header was supplied but does not match the current resource version.
