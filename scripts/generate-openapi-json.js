@@ -54,6 +54,7 @@ try {
 
 const ROOT = path.join(__dirname, '..');
 const COMPONENTS_PATH = path.join(ROOT, 'src', 'openapi.components.yaml');
+const PACKAGE_JSON_PATH = path.join(ROOT, 'package.json');
 const YAML_PATH = path.join(ROOT, 'src', 'openapi.yaml');
 const JSON_PATH = path.join(ROOT, 'src', 'openapi.json');
 
@@ -254,9 +255,23 @@ function disambiguateOperationIds(paths) {
   }
 }
 
+/**
+ * The OpenAPI info.version is derived from package.json so bumping the
+ * package version can never leave the published spec behind (issue #1888).
+ */
+function readPackageVersion() {
+  const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
+  if (!pkg.version || typeof pkg.version !== 'string') {
+    throw new Error(`package.json has no valid "version" field (${PACKAGE_JSON_PATH})`);
+  }
+  return pkg.version;
+}
+
 function generateSpec() {
   const raw = fs.readFileSync(COMPONENTS_PATH, 'utf8');
   const spec = yaml.load(raw);
+  spec.info = spec.info || {};
+  spec.info.version = readPackageVersion();
   spec.paths = {};
 
   for (const entry of ROUTE_FILES) {
@@ -328,4 +343,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { generateSpec, ROUTE_FILES };
+module.exports = { generateSpec, readPackageVersion, ROUTE_FILES };

@@ -203,6 +203,22 @@ A: Set `API_DOCS_MODE=public|admin|disabled` and curl `/api/docs`
 
 ---
 
+## Contracts (Rust / Soroban)
+
+Only needed if you change anything under `contracts/`.
+
+1. **Install Rust:** `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` then `source "$HOME/.cargo/env"`.
+2. **Pinned toolchain:** `contracts/rust-toolchain.toml` pins `1.81.0` with the `wasm32-unknown-unknown` target and `rustfmt`/`clippy`; `rustup` activates it automatically inside `contracts/`. Pre-install with:
+   ```bash
+   rustup toolchain install 1.81.0 --target wasm32-unknown-unknown --component rustfmt --component clippy
+   ```
+3. **Run the tests:** `npm run test:contracts` — unit tests plus the randomized invariant suite (`PROPTEST_CASES=256`), described in [`contracts/INVARIANT_TESTS.md`](contracts/INVARIANT_TESTS.md).
+4. **WASM size check:** `cd contracts && cargo build --target wasm32-unknown-unknown --release && cd ..` then `node scripts/check-contract-wasm-size.js` (budgets in `contracts/wasm-size-budgets.json`).
+
+**macOS / ARM:** the `wasm32-unknown-unknown` target is architecture-independent, so WASM output matches x86_64. The npm scripts hardcode `--target x86_64-unknown-linux-gnu` for native test builds; on macOS/ARM run `cd contracts && cargo test --workspace --lib` and `cd contracts && PROPTEST_CASES=256 cargo test --workspace --tests -- invariants` instead. If `cargo` is missing, add `$HOME/.cargo/bin` to `PATH`.
+
+---
+
 ## Next Step
 
 Read **`QUICK_START.md`** next. It's a 5-minute read that explains everything clearly.
