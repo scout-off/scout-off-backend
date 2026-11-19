@@ -20,6 +20,8 @@ not a directory listing.
 | [trace-correlation.md](trace-correlation.md) | Contributor | End-to-end correlation lifecycle across HTTP → Soroban tx → indexer → webhook/SSE (#1113) |
 | [event-ordering.md](event-ordering.md) | Contributor | Deterministic indexer event total order and co-transaction atomicity (#1111) |
 | [indexer-unprocessed-events.md](indexer-unprocessed-events.md) | Operator & contributor | How the indexer counts, stores, and replays contract events it cannot decode or recognise, plus the admin list/retry endpoints and cursor semantics (#1540) |
+| [graphql.md](graphql.md) | Contributor & client developer | The GraphQL endpoint: schema, resolvers, loaders, persisted operations, and validation rules |
+| [mutating-route-validation.md](mutating-route-validation.md) | Contributor | The shared body-validation contract every mutating route must follow (#1145) |
 
 ## Auth & Security
 
@@ -29,6 +31,8 @@ not a directory listing.
 | [audit-log.md](audit-log.md) | Operator | Tamper-evident audit trail: schema, hash-chain construction, what actions are logged, verification procedures, and tamper detection |
 | [secrets-rotation.md](secrets-rotation.md) | Operator | Rotation policy and step-by-step procedures for every long-lived secret (JWT, Pinata, Stellar keys, webhook secrets) |
 | [ip-reputation.md](ip-reputation.md) | Operator | The IP reputation scoring model (0–100, tiers, decay, bad user-agents) and the admin whitelist/blacklist endpoints |
+| [admin-multisig.md](admin-multisig.md) | Operator | Admin multi-sig: signer sets, thresholds, pending actions, and the approval/execution flow |
+| [rate-limiting.md](rate-limiting.md) | Operator & contributor | Rate-limit tiers, keying, headers, and how limits are enforced per route group |
 
 ## Data
 
@@ -39,6 +43,8 @@ not a directory listing.
 | [data-privacy.md](data-privacy.md) | Operator | GDPR right-to-erasure: what the backend can erase, and the immutable on-chain boundary |
 | [postgres-migration.md](postgres-migration.md) | Operator | Migrating a deployment from SQLite to PostgreSQL |
 | [tier-promotion.md](tier-promotion.md) | Contributor | How a player's progress tier (0–3) is derived from approved milestones |
+| [player-onchain-registration.md](player-onchain-registration.md) | Contributor | Mapping between backend player IDs and on-chain player IDs, including backfill |
+| [reindexing.md](reindexing.md) | Operator | Reindexing the chain from a given ledger: cursors, resume behaviour, and safety checks |
 
 ## Operations
 
@@ -50,6 +56,9 @@ not a directory listing.
 | [background-jobs.md](background-jobs.md) | Operator | Every periodic in-process job (indexer, pin retry/reconcile, tier divergence, blocklist prune, IP decay, SSE sweeps, webhook DLQ): interval, config, start location, failure behaviour, and multi-replica safety |
 | [performance.md](performance.md) | Contributor | Latency budgets for key endpoints and how to run the load-test suites |
 | [soroban-sandbox-e2e.md](soroban-sandbox-e2e.md) | Contributor | Local + CI Soroban sandbox that deploys all five contracts and runs live backend E2E (#1117) |
+| [readiness-check.md](readiness-check.md) | Operator | The readiness probe, indexer-lag gating, exposed metrics, and suggested alert expressions |
+| [degradation-contracts.md](degradation-contracts.md) | Contributor | Per-route-group responses required when a dependency fails, as asserted by the chaos harness (#1116) |
+| [METRICS_REFERENCE.md](METRICS_REFERENCE.md) | Operator | Reference listing of the metrics exposed by the backend and their meaning |
 
 ## History
 
