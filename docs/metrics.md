@@ -37,9 +37,9 @@ Histograms expose the usual `_bucket{le=…}`, `_sum` and `_count` series.
 
 | Metric | Type | Labels | Description |
 | ------ | ---- | ------ | ----------- |
-| `http_requests_total` | counter | `route` | Requests served, per route |
-| `http_request_duration_seconds` | histogram | — | Request latency in seconds, across all routes |
-| `http_request_duration_ms` | histogram | — | Request latency in milliseconds, across all routes. Deprecated; emitted while `METRICS_LEGACY_MS` is not `false` |
+| `http_requests_total` | counter | `route` | Requests served, per route. Unmatched routes (404s, bot scans) are aggregated under `unmatched_route` to prevent unbounded cardinality growth |
+| `http_request_duration_seconds` | histogram | — | Request latency in seconds, across all routes. Buckets: 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 s. Replaces the deprecated `http_request_duration_ms` |
+| `http_request_duration_ms` | histogram | — | Request latency in milliseconds, across all routes. Deprecated; emitted while `METRICS_LEGACY_MS` is not `false`. Will be removed in the next release |
 | `http_errors_total` | counter | `range` (`4xx`, `5xx`) | Error responses by status class |
 
 ### Cache
@@ -55,9 +55,9 @@ Histograms expose the usual `_bucket{le=…}`, `_sum` and `_count` series.
 
 | Metric | Type | Labels | Description |
 | ------ | ---- | ------ | ----------- |
-| `ipfs_operation_duration_seconds` | histogram | `operation` | IPFS (Pinata/gateway) operation latency |
-| `db_query_duration_seconds` | histogram | `query_name` | Database query latency, for queries wrapped in `timedQuery` |
-| `soroban_rpc_duration_seconds` | histogram | `operation` | Soroban RPC call latency |
+| `ipfs_operation_duration_seconds` | histogram | `operation` (`pinJson`, `pinFile`, `checkHealth`) | IPFS (Pinata/gateway) operation latency |
+| `db_query_duration_seconds` | histogram | `query_name` (e.g. `getPlayerById`, `insertOrUpdatePlayer`) | Database query latency, for queries wrapped in `timedQuery` |
+| `soroban_rpc_duration_seconds` | histogram | `operation` (`getLatestLedger`, `queryEvents`, `getAccount`, `simulateTransaction`, `sendTransaction`, `getTransaction`, `isSubscribed`, `submitContactPayment`, `logTrialOffer`, `withdrawFees`, `purchaseSubscription`, `renewSubscription`, `cancelSubscriptionOnChain`, `unpauseContractOnChain`, `pauseContractOnChain`, `registerValidatorOnChain`, `revokeValidatorOnChain`, `updateProfile`, `getOnChainMilestones`, `stellarHealth`) | Soroban RPC call latency |
 
 ### Indexer and IPFS pins
 
@@ -69,7 +69,7 @@ Histograms expose the usual `_bucket{le=…}`, `_sum` and `_count` series.
 | `scout_off_circuit_breaker_state` | gauge | `breaker` | Circuit breaker state: 0 = closed, 1 = half-open, 2 = open |
 | `scout_off_circuit_breaker_transitions_total` | counter | `breaker`, `to` | Circuit breaker state transitions by destination state |
 | `stuck_pending_pins_count` | gauge | — | Pending IPFS pins older than the reconciliation cutoff. Updated by the pin reconciliation job |
-| `scout_off_tier_divergence_total` | counter | — | Players whose derived tier differs from stored `progress_level`, counted since process start (#1132) |
+| `scout_off_tier_divergence_total` | counter | — | Players whose derived tier differs from stored `progress_level`, counted since process start (#1132). A sustained non-zero value indicates the indexer has missed `milestone_approved` events; run a reindex to resolve (see [runbook.md](runbook.md)) |
 
 ### Webhooks
 
@@ -81,6 +81,12 @@ Histograms expose the usual `_bucket{le=…}`, `_sum` and `_count` series.
 | `scout_off_webhook_subscriptions` | gauge | `status` | Webhook subscriptions by health status (`active`, `degraded`, `suspended`) |
 | `scout_off_webhook_circuit_open_total` | counter | — | Deliveries skipped because the subscription's circuit breaker was open |
 | `scout_off_webhook_retry_success_total` | counter | — | Dead letters successfully redelivered by the automatic retry job |
+
+### Fees
+
+| Metric | Type | Labels | Description |
+| ------ | ---- | ------ | ----------- |
+| `scout_off_fee_withdrawal_db_write_failures_total` | counter | — | Fee withdrawal DB write failures since process start |
 
 ### Security and streaming
 
@@ -110,10 +116,42 @@ Histograms expose the usual `_bucket{le=…}`, `_sum` and `_count` series.
 | `process_resident_memory_bytes` | gauge | — | Resident memory size, in bytes |
 | `nodejs_heap_size_used_bytes` | gauge | — | V8 heap in use, in bytes |
 | `nodejs_heap_size_total_bytes` | gauge | — | V8 heap allocated, in bytes |
-| `nodejs_eventloop_lag_seconds` | gauge | — | Event-loop delay, 95th percentile, in seconds |
-| `nodejs_gc_duration_seconds` | histogram | — | Garbage-collection pause duration, in seconds |
-| `nodejs_active_handles_total` | gauge | — | Active libuv handles |
+| `nodejs_eventloop_lag_seconds` | gauge | — | Event-loop delay, 95th percentile, in seconds. High values mean the event loop is saturated |
+| `nodejs_gc_duration_seconds` | histogram | — | Garbage-collection pause duration, in seconds. Buckets: 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1 s |
+| `nodejs_active_handles_total` | gauge | — | Active libuv handles. High values may indicate resource leaks (unclosed connections, file handles, …) |
 | `scout_off_unhandled_rejections_total` | counter | — | Unhandled promise rejections since process start |
+
+## Configuration
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `METRICS_ENABLED` | `true` | Enable or disable metrics collection. Set to `false` to disable |
+| `METRICS_LEGACY_MS` | `true` | Export the deprecated `http_request_duration_ms` metric. Set to `false` to disable. Will be removed in the next release |
+
+## Performance
+
+The `/metrics` endpoint serializes metrics in Prometheus text exposition format.
+With realistic route cardinality (100+ routes), scraping the endpoint takes under
+50 ms as measured in testing.
+
+## Migrating off `http_request_duration_ms`
+
+`http_request_duration_ms` is deprecated in favor of
+`http_request_duration_seconds` to align with Prometheus best practices. During
+the deprecation period (one release):
+
+1. Both metrics are exported by default.
+2. Alerting rules and dashboards should be updated to use
+   `http_request_duration_seconds`.
+3. Set `METRICS_LEGACY_MS=false` to test dashboards without the legacy metric.
+4. In the next release, `http_request_duration_ms` will be removed entirely.
+
+To migrate your dashboards:
+
+- Replace `http_request_duration_ms` with `http_request_duration_seconds`.
+- Update query thresholds (e.g. `100` ms → `0.1` seconds).
+- Adjust bucket queries to use the new bucket boundaries: 0.005, 0.01, 0.025,
+  0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 seconds.
 
 ## Suggested alerts
 
