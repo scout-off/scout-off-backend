@@ -27,6 +27,29 @@ Replicas     : {{ .Values.replicaCount }} (HPA: {{ if .Values.hpa.enabled }}{{ .
 
 {{- end }}
 
+{{- /* ------------------------------------------------------------------ */}}
+{{- /* Audit retention archives must be on persistent, shared storage.     */}}
+{{- /* ------------------------------------------------------------------ */}}
+{{- if or (gt (int .Values.replicaCount) 1) (and .Values.hpa.enabled (gt (int .Values.hpa.maxReplicas) 1)) }}
+
+⚠️  WARNING: multi-replica deployment (replicaCount={{ .Values.replicaCount }}, HPA maxReplicas={{ if .Values.hpa.enabled }}{{ .Values.hpa.maxReplicas }}{{ else }}n/a{{ end }}).
+
+   RETENTION_ARCHIVE_DIR (currently {{ .Values.env.RETENTION_ARCHIVE_DIR | default "/data/audit-archives" | quote }})
+   MUST be on persistent, SHARED storage (e.g. a ReadWriteMany PVC).
+
+   Audit retention archives are the only remaining copy of pruned audit rows,
+   and audit checkpoints reference them by filename. With a per-pod emptyDir
+   (the default dataVolume) each replica writes its own archives: checkpoints
+   written by one pod cannot be verified by another, and archives are lost on
+   pod restart — permanently destroying audit evidence.
+
+   To run multiple replicas safely:
+     1. Set dataVolume.persistentVolumeClaim to a ReadWriteMany PVC.
+     2. Keep RETENTION_ARCHIVE_DIR on that volume (default /data/audit-archives).
+   See DEPLOYMENT.md and docs/audit-log.md for details.
+
+{{- end }}
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. Ensure the Kubernetes Secret exists BEFORE deploying:
 
