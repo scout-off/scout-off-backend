@@ -438,7 +438,6 @@ const ALLOWLIST: Record<string, string> = {
   "GET /validators/{wallet}/stats": "requires validator JWT + validator_stats rows",
 
   // v2
-  "GET /versioning/demo": "v2-only demo route",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
