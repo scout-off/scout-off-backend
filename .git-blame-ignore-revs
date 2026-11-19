@@ -1,0 +1,3 @@
+# Bulk-format commits (Prettier) — ignored by `git blame`.
+# Add the full 40-character SHA of each bulk-format commit below, one per line.
+# See https://git-scm.com/docs/git-config#Documentation/git-config.txt-blameignoreRevsFile
