@@ -80,7 +80,9 @@ const ROUTE_FILES = [
   // above via the shared `servers` list. Only genuinely v2-only routers
   // need a separate entry, with v2Only so they don't imply availability on
   // /api or /api/v1.
-  { file: 'src/routes/v2/versioning.ts', mount: '/versioning', tag: 'v2', v2Only: true },
+  // src/routes/v2/versioning.ts is intentionally omitted: the demo route is
+  // only mounted outside production (issue #1882), so it is not part of the
+  // published OpenAPI spec or generated client.
 ];
 
 function toOpenApiPath(mount, subPath) {

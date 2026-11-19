@@ -479,7 +479,11 @@ app.use(`${API_V2_PREFIX}/scouts`, scoutRoutesV2);
 app.use(`${API_V2_PREFIX}/validators`, validatorRoutesV2);
 app.use(`${API_V2_PREFIX}/admin`, adminRoutesV2);
 app.use(`${API_V2_PREFIX}/events`, eventsRoutesV2);
-app.use(`${API_V2_PREFIX}/versioning`, versioningDemoRoutesV2);
+// The v2-only demo route exists to exercise the parity allowlist; it must never
+// be reachable in production (issue #1882).
+if (process.env.NODE_ENV !== 'production') {
+  app.use(`${API_V2_PREFIX}/versioning`, versioningDemoRoutesV2);
+}
 
 // Header-based v2 routing: when a client sends API-Version: 2 on an unversioned
 // /api/ path, the versionRouting middleware records req.apiVersionOverride = 2 and

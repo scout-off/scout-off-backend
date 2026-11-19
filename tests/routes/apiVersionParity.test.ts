@@ -57,7 +57,7 @@ describe('API v1/v2 parity', () => {
 
   it('permits deliberate v2-only divergence (demo route)', async () => {
     const demoPath = '/versioning/demo';
-    // v2 should have it
+    // v2 should have it outside production
     const r2 = await request(app).get(`${V2_PREFIX}${demoPath}`);
     expect(r2.status).not.toBe(404);
     // v1 should either not have it or be allowlisted
@@ -65,6 +65,20 @@ describe('API v1/v2 parity', () => {
     if (r1.status !== 404) {
       // If v1 unexpectedly has it, ensure it's not on allowlist.
       expect(isAllowlisted(demoPath)).toBe(true);
+    }
+  });
+
+  it('does not expose the demo route when NODE_ENV=production', async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      jest.resetModules();
+      const prodApp = (await import('../../src/app')).default;
+      const res = await request(prodApp).get(`${V2_PREFIX}/versioning/demo`);
+      expect(res.status).toBe(404);
+    } finally {
+      process.env.NODE_ENV = previous;
+      jest.resetModules();
     }
   });
 });
