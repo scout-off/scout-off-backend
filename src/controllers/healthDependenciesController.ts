@@ -139,9 +139,12 @@ export async function probeStellarRpcDependency(): Promise<DependencyHealth> {
   const start = Date.now();
   try {
     let versionStr = 'healthy';
-    if (typeof (server as any).getNetwork === 'function') {
+    const networkProbe = server as unknown as {
+      getNetwork?: () => Promise<{ protocolVersion?: number; passphrase?: string }>;
+    };
+    if (typeof networkProbe.getNetwork === 'function') {
       try {
-        const net = await (server as any).getNetwork();
+        const net = await networkProbe.getNetwork();
         if (net?.protocolVersion !== undefined) {
           versionStr = `healthy (protocol ${net.protocolVersion})`;
         } else if (net?.passphrase) {

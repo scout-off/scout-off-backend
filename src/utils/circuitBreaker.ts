@@ -198,7 +198,7 @@ export class RetryingCircuitBreaker {
     while (attempt <= this.config.maxRetries) {
       try {
         return await fn();
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (!this.isRetryable(error) || attempt === this.config.maxRetries) {
           throw error;
         }
@@ -211,8 +211,9 @@ export class RetryingCircuitBreaker {
     throw new Error('Unreachable');
   }
 
-  private isRetryable(error: any): boolean {
-    const status = error?.response?.status;
+  private isRetryable(error: unknown): boolean {
+    const status = (error as { response?: { status?: unknown } } | null | undefined)?.response
+      ?.status;
     if (typeof status === 'number') {
       // 408 Request Timeout and 429 Too Many Requests are retryable
       if (status === 408 || status === 429) return true;

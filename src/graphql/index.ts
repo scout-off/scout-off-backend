@@ -13,9 +13,9 @@
  * The endpoint is mounted alongside the REST API (not replacing it).
  */
 
-import { createYoga, createSchema } from 'graphql-yoga';
+import { createYoga, createSchema, type Plugin } from 'graphql-yoga';
 import { useValidationRule } from '@envelop/core';
-import { Application, Request, Response, NextFunction } from 'express';
+import { Application, Request, Response, NextFunction, RequestHandler } from 'express';
 import { GraphQLError, visit } from 'graphql';
 import { optionalAuth } from '../middleware/auth';
 import { rateLimit, walletRateLimit } from '../middleware/rateLimit';
@@ -37,10 +37,9 @@ import { createPersistedOperationsPlugin } from './persisted-operations';
  * circuit execution before any resolver runs — the cleanest approach for this
  * version of graphql-yoga that doesn't require an external depth-limit package.
  */
-export function createBlockIntrospectionPlugin() {
+export function createBlockIntrospectionPlugin(): Plugin {
   return {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onExecute({ args, setResultAndStopExecution }: any) {
+    onExecute({ args, setResultAndStopExecution }) {
       const document = args?.document;
       if (!document) return;
 
@@ -134,8 +133,7 @@ export function mountGraphQL(app: Application): void {
   );
 
   // graphql-yoga returns a standard request handler compatible with Express
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  app.use('/graphql', yoga as any);
+  app.use('/graphql', yoga as unknown as RequestHandler);
 
   logger.info(
     `[graphql] endpoint mounted at /graphql (introspection=${!isProduction}, maxDepth=${MAX_DEPTH}, maxQueryCost=${MAX_QUERY_COST}, flag=${GRAPHQL_ENABLED})`,
