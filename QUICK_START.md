@@ -114,6 +114,61 @@ npm test -- tests/services/cacheStore.contract.ts
 npm run typecheck && npm test && npm run build
 ```
 
+## Contracts
+
+The Soroban contracts in `contracts/` are a separate Rust workspace. You only need this section if you touch them.
+
+### 1. Install Rust
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+### 2. Use the pinned toolchain
+
+`contracts/rust-toolchain.toml` pins the compiler, so `rustup` installs and activates it automatically the first time you run `cargo` inside `contracts/`:
+
+```toml
+[toolchain]
+channel = "1.81.0"
+targets = ["wasm32-unknown-unknown"]
+components = ["rustfmt", "clippy"]
+```
+
+To pre-install it explicitly:
+
+```bash
+rustup toolchain install 1.81.0 --target wasm32-unknown-unknown --component rustfmt --component clippy
+```
+
+### 3. Run the contract tests
+
+```bash
+npm run test:contracts
+```
+
+This runs `test:contracts:unit` (workspace `--lib` tests) followed by `test:contracts:invariants` (randomized invariant tests, `PROPTEST_CASES=256`). The invariants are documented in [`contracts/INVARIANT_TESTS.md`](contracts/INVARIANT_TESTS.md) — e.g. progress levels never decrease, milestones are approved once, unregistered validators cannot mutate state, subscription expiry flips to inactive at the stored ledger, and role changes never remove the last root admin.
+
+### 4. Check WASM size budgets
+
+```bash
+cd contracts && cargo build --target wasm32-unknown-unknown --release && cd ..
+node scripts/check-contract-wasm-size.js
+```
+
+The check compares each built `.wasm` against `contracts/wasm-size-budgets.json` and fails if a contract exceeds its budget. `scripts/report-contract-wasm-size.sh` prints the raw sizes.
+
+### macOS / ARM notes
+
+- On Apple Silicon, `rustup` installs the `aarch64-apple-darwin` host toolchain; the `wasm32-unknown-unknown` target is architecture-independent, so WASM output is identical to x86_64.
+- The npm scripts pass `--target x86_64-unknown-linux-gnu` for native test builds. On macOS/ARM run the equivalent directly:
+  ```bash
+  cd contracts && cargo test --workspace --lib
+  cd contracts && PROPTEST_CASES=256 cargo test --workspace --tests -- invariants
+  ```
+- If `cargo` is not found after install, add `$HOME/.cargo/bin` to `PATH` (or `source "$HOME/.cargo/env"` in your shell profile).
+
 ## If You Get Stuck
 
 1. **Check example files** — They show the pattern
