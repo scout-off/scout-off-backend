@@ -134,6 +134,44 @@ The `verifyAndIssueToken` function enforces the following SEP-10 requirements:
 
 Invalid challenges return `401 Unauthorized`. Malformed XDR or other protocol-level errors return `400 Bad Request`.
 
+## SEP-10 `client_domain` (wallet attribution)
+
+Wallet apps (Freighter, Lobstr, …) can prove which wallet issued a session
+using the SEP-10 `client_domain` flow (#1514):
+
+1. The client calls `GET /auth/challenge?account=G…&client_domain=wallet.example`.
+   `client_domain` must be a bare hostname (no scheme, port or path) and, when
+   `SEP10_CLIENT_DOMAIN_ALLOWLIST` is set, one of the listed domains.
+2. The backend fetches `https://<client_domain>/.well-known/stellar.toml` with
+   `src/utils/safeFetch.ts` (private/loopback IPs rejected, 100 KB cap, 5 s
+   timeout, at most 2 HTTPS redirects), reads the top-level `SIGNING_KEY` and
+   caches it for 5 minutes.
+3. The challenge gets an extra `manageData` op named `client_domain` whose value
+   is the domain and whose **source is the wallet's `SIGNING_KEY`** (as SEP-10
+   requires). It is the only operation allowed to have a non-server source.
+4. The user signs with their account key and the wallet co-signs with its
+   `SIGNING_KEY`. `POST /auth/token` rejects the challenge unless both
+   signatures are present.
+5. The verified domain is added to the access and refresh tokens as the
+   `client_domain` claim, exposed to handlers as `req.clientDomain`, preserved
+   across `POST /auth/refresh`, and recorded in an `auth_token_issued` audit-log
+   entry (`queryParams.clientDomain`).
+
+| Setting | Default | Effect |
+|---|---|---|
+| `SEP10_CLIENT_DOMAIN_REQUIRED` | `false` | When `true`, challenges without a verified `client_domain` are rejected at both `/auth/challenge` and `/auth/token`. |
+| `SEP10_CLIENT_DOMAIN_ALLOWLIST` | empty | Comma-separated hostnames. Empty means any public hostname is accepted. |
+
+Errors specific to this flow:
+
+| Condition | HTTP | `code` |
+|---|---|---|
+| Malformed `client_domain` (or missing in required mode at `/auth/challenge`) | 400 | `VALIDATION_ERROR` |
+| Domain not on the allowlist | 403 | `FORBIDDEN` |
+| `stellar.toml` fetch failed (DNS, blocked IP, timeout, too large, non-2xx) | 502 | `CLIENT_DOMAIN_TOML_FETCH_FAILED` |
+| `stellar.toml` has no valid `SIGNING_KEY` | 502 | `CLIENT_DOMAIN_SIGNING_KEY_MISSING` |
+| Missing wallet co-signature, or no `client_domain` in required mode, at `/auth/token` | 401 | `TOKEN_INVALID` (server log carries `MISSING_CLIENT_DOMAIN_SIGNATURE` / `CLIENT_DOMAIN_REQUIRED`) |
+
 ## JWT Claims Structure
 
 The backend issues JWTs with the following standard claims:
@@ -141,6 +179,7 @@ The backend issues JWTs with the following standard claims:
 - `sub`: the Stellar account that authenticated the request.
 - `role`: the assigned role for the token.
 - `exp`: token expiration timestamp.
+- `client_domain` (optional): the wallet domain verified via SEP-10 `client_domain`, when the session was issued through that flow.
 
 Example decoded payload:
 

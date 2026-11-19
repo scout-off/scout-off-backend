@@ -72,8 +72,11 @@ function refreshAccountKey(req: Request): string | undefined {
  * /auth/token.
  *
  * @query account {string} - Stellar public key (G...) to build the challenge for
+ * @query client_domain {string} - Optional SEP-10 wallet domain; adds a client_domain op sourced by its stellar.toml SIGNING_KEY
  * @response 200 { challenge: string, networkPassphrase: string, expiresAt: number }
- * @response 400 { success: false, error: string } - Missing/invalid account
+ * @response 400 { success: false, error: string } - Missing/invalid account or client_domain
+ * @response 403 { success: false, error: string } - client_domain not on SEP10_CLIENT_DOMAIN_ALLOWLIST
+ * @response 502 { success: false, error: string } - client_domain stellar.toml unreachable or has no SIGNING_KEY
  */
 router.route('/challenge')
   .get(authIpRateLimit('challenge'), authAccountRateLimit('challenge', challengeAccountKey), getChallenge)

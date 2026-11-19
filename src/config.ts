@@ -178,6 +178,9 @@ if (!adminWalletValue) {
 // to start without it.  In staging a warning is emitted.  In development/test
 // the absence is silently tolerated — a fallback is generated at the service
 // layer so tests can run without extra config.
+/** Bare DNS hostname (no scheme, port, path or trailing dot) — used for SEP-10 client_domain. */
+export const SEP10_CLIENT_DOMAIN_PATTERN = /^(?=.{1,253}$)(?!-)([a-z0-9-]{1,63}(?<!-)\.)+[a-z]{2,63}$/;
+
 const sep10ServerSecretValue = process.env.SEP10_SERVER_SECRET ?? '';
 if (!sep10ServerSecretValue) {
   if (nodeEnv === 'production') {
@@ -1076,6 +1079,32 @@ const config = {
    * See docs/auth.md for details.
    */
   webAuthDomain: process.env.WEB_AUTH_DOMAIN ?? '',
+
+  /**
+   * SEP-10 client_domain support (#1514).
+   * When true, POST /auth/token rejects challenges that were not issued with a
+   * verified `client_domain` (i.e. not co-signed by a wallet's SIGNING_KEY).
+   */
+  sep10ClientDomainRequired: (() => {
+    const raw = process.env.SEP10_CLIENT_DOMAIN_REQUIRED ?? 'false';
+    if (!['true', 'false'].includes(raw)) throw new Error('SEP10_CLIENT_DOMAIN_REQUIRED must be true or false');
+    return raw === 'true';
+  })(),
+
+  /**
+   * Optional comma-separated list of wallet domains allowed as SEP-10
+   * `client_domain`. Empty = any syntactically valid public hostname.
+   */
+  sep10ClientDomainAllowlist: (() => {
+    const domains = (process.env.SEP10_CLIENT_DOMAIN_ALLOWLIST ?? '')
+      .split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
+    for (const d of domains) {
+      if (!SEP10_CLIENT_DOMAIN_PATTERN.test(d)) {
+        throw new Error(`SEP10_CLIENT_DOMAIN_ALLOWLIST contains an invalid hostname: "${d}"`);
+      }
+    }
+    return domains;
+  })(),
 
   retention: (() => {
     const enabledRaw = process.env.RETENTION_ENABLED ?? 'false';

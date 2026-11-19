@@ -39,3 +39,33 @@ describe('postToken authentication errors', () => {
     expect(next).not.toHaveBeenCalled();
   });
 });
+
+describe('postToken client_domain (#1514)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('puts the verified client_domain in the JWT and the audit log', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const db = require('../../src/db');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { verifyJwt } = require('../../src/utils/jwt');
+    const account = 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H';
+    jest.spyOn(sep10, 'verifyChallenge').mockReturnValue({ account, clientDomain: 'wallet.example.com' });
+    const audit = jest.spyOn(db, 'insertAuditLog').mockResolvedValue(undefined);
+
+    const req = { body: { transaction: 'xdr' }, headers: {}, socket: { remoteAddress: '127.0.0.1' } } as unknown as Request;
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn().mockReturnThis() } as unknown as Response;
+
+    await postToken(req, res, jest.fn() as NextFunction);
+
+    const body = (res.json as jest.Mock).mock.calls[0][0];
+    expect(verifyJwt(body.accessToken).client_domain).toBe('wallet.example.com');
+    expect(verifyJwt(body.refreshToken).client_domain).toBe('wallet.example.com');
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'auth_token_issued',
+      adminWallet: account,
+      queryParams: expect.objectContaining({ clientDomain: 'wallet.example.com' }),
+    }));
+  });
+});

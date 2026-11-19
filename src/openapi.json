@@ -2535,6 +2535,15 @@
               "type": "string"
             },
             "description": "Stellar public key (G...) to build the challenge for"
+          },
+          {
+            "name": "client_domain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional SEP-10 wallet domain; adds a client_domain op sourced by its stellar.toml SIGNING_KEY"
           }
         ],
         "responses": {
@@ -2542,7 +2551,13 @@
             "description": "{ challenge: string, networkPassphrase: string, expiresAt: number }"
           },
           "400": {
-            "description": "{ success: false, error: string } - Missing/invalid account"
+            "description": "{ success: false, error: string } - Missing/invalid account or client_domain"
+          },
+          "403": {
+            "description": "{ success: false, error: string } - client_domain not on SEP10_CLIENT_DOMAIN_ALLOWLIST"
+          },
+          "502": {
+            "description": "{ success: false, error: string } - client_domain stellar.toml unreachable or has no SIGNING_KEY"
           }
         },
         "security": []
