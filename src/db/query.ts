@@ -25,8 +25,18 @@ import {
 } from './betterSqlite3Error';
 import { ApiKeyLimitError, MAX_API_KEYS_PER_SCOUT, MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT, WebhookSubscriptionLimitError } from '../utils/scoutResourceLimits';
 
+/**
+ * Slow-query log threshold (ms), sourced from the central config object
+ * (`config.slowQueryThresholdMs`, parsed once in src/config.ts from the
+ * SLOW_QUERY_THRESHOLD_MS env var) instead of read ad hoc here.
+ *
+ * Centralising the read gives a single validated default (50 ms), startup
+ * validation of bad values (NaN / out-of-range fail fast in src/config.ts
+ * instead of silently degrading), one place to document it, and lets tests
+ * override it through the usual config mocks rather than env-var tricks (#1828).
+ */
 function slowQueryThresholdMs(): number {
-  return parseInt(process.env.SLOW_QUERY_THRESHOLD_MS ?? '50', 10);
+  return config.slowQueryThresholdMs;
 }
 
 /**
