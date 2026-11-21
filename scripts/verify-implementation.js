@@ -26,10 +26,7 @@ const requiredFiles = [
   'tests/services/cacheStore.contract.ts',
   
   // Documentation
-  'IMPLEMENTATION_PLAN.md',
-  'CHANGES.md',
   '.env.additions.md',
-  'FILES_CREATED.md',
 ];
 
 const exampleFiles = [
@@ -37,7 +34,6 @@ const exampleFiles = [
   'src/routes/docs.example.ts',
   'src/services/safeFetch.example.ts',
   'src/services/stellar.example.ts',
-  'src/types/index.ts.patch',
 ];
 
 const rootDir = path.join(__dirname, '..');
@@ -85,12 +81,9 @@ for (const { item, cmd } of checklist) {
 }
 
 console.log('\n📖 NEXT STEPS:\n');
-console.log('  1. Read FILES_CREATED.md for complete inventory');
-console.log('  2. Read IMPLEMENTATION_PLAN.md for detailed tasks');
-console.log('  3. Read CHANGES.md for integration instructions');
-console.log('  4. Follow the integration order in FILES_CREATED.md');
-console.log('  5. Use example files as reference during integration');
-console.log('  6. Run tests after each phase\n');
+console.log('  1. See docs/history/ for past implementation summaries');
+console.log('  2. Use example files as reference during integration');
+console.log('  3. Run tests after each phase\n');
 
 if (allCorePresent) {
   console.log('✅ All core implementation files are present!\n');
