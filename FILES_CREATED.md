@@ -38,19 +38,13 @@ src/utils/withTimeout.ts
 └─ Backward-compatible fallback for older Node versions
 ```
 
-### 3. Unified Cache Store (1 file)
+### 3. Unified Cache Store
 
 ```
-src/services/inMemoryCacheStore.unified.ts
-├─ Single complete implementation (replaces 3 duplicates)
-├─ Features: LRU eviction, TTL expiry, prefix deletion, metrics
+src/services/inMemoryCacheStore.ts
+├─ Single complete implementation (LRU eviction, TTL expiry, prefix deletion, metrics)
 ├─ Configurable via CACHE_MAX_ENTRIES env var (default: 1000)
-└─ Ready to use: copy to src/services/inMemoryCacheStore.ts after deleting old file
-
-Consolidates:
-  - src/services/cacheStore.ts InMemoryCacheStore (DELETE old)
-  - src/services/inMemoryCacheStore.ts (DELETE entire file)
-  - BoundedInMemoryCacheStore in src/services/cache.ts (REPLACE with unified)
+└─ This is the live implementation — the .unified.ts variant has been removed
 ```
 
 ### 4. API Docs Visibility Control (2 files)
@@ -122,13 +116,6 @@ CHANGES.md
 ├─ Rollback plan
 └─ Read before implementing changes
 
-.env.additions.md
-├─ Environment variables to add to .env.example
-├─ Deprecated variables (to remove)
-├─ Migration guide for existing deployments
-├─ Example configurations per environment
-└─ Helm integration examples
-
 FILES_CREATED.md (this file)
 ├─ Inventory of all created files
 ├─ Quick reference for what each file does
@@ -162,17 +149,11 @@ FILES_CREATED.md (this file)
    - exportController.ts, scoutRecommendationsController.ts, adminStatsController.ts
 6. Test end-to-end (trigger timeouts, verify cleanup)
 
-### Phase 4: Cache Consolidation (requires testing)
-1. Copy `src/services/inMemoryCacheStore.unified.ts` to src/services/
-2. Copy `tests/services/cacheStore.contract.ts` to tests/services/
-3. Run tests: `npm test -- tests/services/cacheStore.contract.ts`
-4. Delete old implementations:
-   - Remove InMemoryCacheStore class from src/services/cacheStore.ts
-   - Delete src/services/inMemoryCacheStore.ts
-   - Replace BoundedInMemoryCacheStore in src/services/cache.ts
-5. Update imports across codebase
-6. Update config.ts to use CACHE_MAX_ENTRIES
-7. Update .env.example (add CACHE_MAX_ENTRIES, remove old vars)
+### Phase 4: Cache Consolidation
+1. Run contract tests: `npm test -- tests/services/cacheStore.contract.ts`
+2. The live implementation is `src/services/inMemoryCacheStore.ts`
+3. Update imports across codebase if needed
+4. CACHE_MAX_ENTRIES is already in .env.example
 8. Run full test suite: `npm test`
 
 ### Phase 5: API Docs Visibility (must be last)

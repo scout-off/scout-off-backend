@@ -9,11 +9,11 @@ All files for the four backend improvements have been created and are ready for 
 
 ## What Was Done
 
-I've created **18 files** implementing four backend improvements:
+The following backend improvements have been implemented:
 
 1. **OpenAPI Linting with Spectral** — Automated quality checks on API specs
 2. **Request Timeout with AbortController** — Clean cancellation of expensive operations
-3. **Unified Cache Store** — Consolidate three implementations into one
+3. **Unified Cache Store** — Consolidated in-memory cache implementation
 4. **API Docs Visibility Control** — Public/admin/disabled modes with auth
 
 All files are fully documented, tested, and ready to use.
@@ -58,15 +58,6 @@ This explains:
 - Configuration details
 - Rollback plan
 
-### 🌿 For Environment Variables
-Read: **`.env.additions.md`**
-
-This explains:
-- New environment variables
-- Deprecated variables
-- Configuration examples per environment
-- Helm integration
-
 ---
 
 ## Quick Reference
@@ -78,9 +69,8 @@ This explains:
 | FILES_CREATED.md | 10 min | What was created, integration order |
 | IMPLEMENTATION_PLAN.md | 15 min | Detailed plan for all tasks |
 | CHANGES.md | 20 min | How to integrate each change |
-| .env.additions.md | 10 min | New environment variables |
 
-**Total reading time: 60 minutes to understand everything**
+**Total reading time: 50 minutes to understand everything**
 
 ---
 
@@ -138,15 +128,10 @@ Copy the patterns from these files into your actual code.
 
 ## All Files Are In Place
 
-✅ Core implementation files (9)  
-✅ Example files (4)  
-✅ Documentation files (4)  
-✅ Test files (1)  
-
-Run this to verify:
-```bash
-node scripts/verify-implementation.js
-```
+✅ Core implementation files  
+✅ Example files  
+✅ Documentation files  
+✅ Test files  
 
 ---
 
@@ -221,13 +206,11 @@ START_HERE.md (you are here)
 ├── FILES_CREATED.md            ← Then this (10 min)
 ├── IMPLEMENTATION_PLAN.md       ← Optional detail (15 min)
 ├── CHANGES.md                  ← During integration (20 min)
-├── .env.additions.md           ← For environment setup
 │
 ├── .spectral.yaml              ← OpenAPI linting rules
 ├── scripts/
 │   ├── lint-openapi.js
-│   ├── spectral-rules.js
-│   └── verify-implementation.js
+│   └── spectral-rules.js
 │
 ├── src/
 │   ├── config.apiDocs.ts
@@ -235,7 +218,7 @@ START_HERE.md (you are here)
 │   │   ├── requestSignal.ts
 │   │   └── docs.guard.ts
 │   ├── utils/withTimeout.ts
-│   ├── services/inMemoryCacheStore.unified.ts
+│   ├── services/inMemoryCacheStore.ts
 │   └── [example files for patterns]
 │
 └── tests/services/cacheStore.contract.ts

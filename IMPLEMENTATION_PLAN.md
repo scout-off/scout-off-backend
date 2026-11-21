@@ -67,19 +67,12 @@ This document outlines the four tasks being implemented to improve code quality,
 
 ## Task 3: Unified Cache Store Implementation
 
-**Status:** Files created  
+**Status:** Complete  
 **Deliverables:**
-- `src/services/inMemoryCacheStore.unified.ts` — Single, complete implementation
+- `src/services/inMemoryCacheStore.ts` — Single, complete implementation (LRU eviction, TTL, metrics)
 - `tests/services/cacheStore.contract.ts` — Contract test suite
 
-**Consolidation:**
-Remove the duplicated implementations and use one:
-- ✓ Delete: `src/services/cacheStore.ts` InMemoryCacheStore (line 45)
-- ✓ Delete: `src/services/inMemoryCacheStore.ts` (line 17)
-- ✓ Replace: `BoundedInMemoryCacheStore` in `src/services/cache.ts` (line 83)
-- Keep: CacheStore interface in `src/services/cacheStore.ts`
-
-**Unified Features:**
+The `.unified.ts` draft has been removed (#1837). The live implementation is `inMemoryCacheStore.ts`.
 - LRU eviction (Map insertion order)
 - TTL-based lazy expiry
 - Configurable max entries (CACHE_MAX_ENTRIES env var)
@@ -87,18 +80,8 @@ Remove the duplicated implementations and use one:
 - Metrics hooks (eviction recording)
 
 **Configuration:**
-- Consolidate to single env var: `CACHE_MAX_ENTRIES` (default 1000)
-- Remove: CACHE_MAX_SIZE, PLAYER_CACHE_MAX_SIZE (aliases to same concept)
-
 **Testing:**
 - Contract test suite covers both InMemoryCacheStore and RedisCacheStore
-- Verify: TTL expiry, LRU eviction, prefix deletion, type preservation, concurrency
-
-**Next Steps:**
-1. Run contract tests against InMemoryCacheStore
-2. Run contract tests against RedisCacheStore
-3. Delete old implementations
-4. Update imports across codebase
 
 ---
 

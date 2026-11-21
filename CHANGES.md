@@ -117,22 +117,12 @@ await withTimeoutAndSignal(expensiveOperation(), 5000, signal);
 
 ## 3. Unified Cache Store Implementation
 
-### Files Created
-- `src/services/inMemoryCacheStore.unified.ts` — Single complete implementation
+### Implementation
+- `src/services/inMemoryCacheStore.ts` — Single complete implementation (LRU eviction, TTL, metrics)
+- The `.unified.ts` draft variant has been removed (see #1837)
 
-### Files to Delete
-- `src/services/cacheStore.ts` (InMemoryCacheStore class, line 45–57)
-- `src/services/inMemoryCacheStore.ts` (entire file)
-- Revert `BoundedInMemoryCacheStore` from `src/services/cache.ts` (use unified instead)
-
-### Files to Update
-- `src/services/cache.ts` — Replace BoundedInMemoryCacheStore with unified implementation
-- `src/config.ts` — Consolidate env vars (CACHE_MAX_ENTRIES as single source)
-- `.env.example` — Document CACHE_MAX_ENTRIES only
-
-### Configuration Consolidation
-**Before:** 3 env vars (CACHE_MAX_ENTRIES, CACHE_MAX_SIZE, PLAYER_CACHE_MAX_SIZE)  
-**After:** 1 env var (CACHE_MAX_ENTRIES)
+### Configuration
+**Single env var:** `CACHE_MAX_ENTRIES` (default: 1000) — already in .env.example
 
 Update `.env.example`:
 ```
@@ -274,16 +264,15 @@ env:
 - **timeout.ts**: Already implements AbortController logic
 - **requestSignal.ts** (new): Access signal from context
 - **withTimeout.ts** (new): Combine signal + timeout
-- **inMemoryCacheStore.unified.ts** (new): Single cache implementation
+- **inMemoryCacheStore.ts**: Single cache implementation (LRU eviction, TTL, metrics)
 - **docs.guard.ts** (new): Guard middleware for docs visibility
 - **config.apiDocs.ts** (new): Mode configuration
 - Services: Accept and propagate signals
-- Cache: Use unified implementation
 
 ### Deletions
-- Old InMemoryCacheStore in cacheStore.ts
-- Old InMemoryCacheStore in inMemoryCacheStore.ts
-- BoundedInMemoryCacheStore in cache.ts (replace with unified)
+- Removed `inMemoryCacheStore.unified.ts` (dead code, see #1837)
+- Removed `scripts/verify-implementation.js` (one-off checklist, see #1840)
+- Removed `.env.additions.md` (merged into .env.example, see #1839)
 
 ---
 
