@@ -3294,14 +3294,6 @@ paths:
           schema:
             type: string
           description: Player's unique identifier (cuid2)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties: {}
-              additionalProperties: false
       responses:
         '200':
           description: >-
@@ -4026,27 +4018,6 @@ paths:
           description: |-
             Optional. Ensures safe retries: duplicate keys return
               the cached response for 24 hours without triggering a new on-chain transaction.
-      requestBody:
-        required: true
-        description: '{ tier: ''basic'' | ''premium'', duration: number (1–365 days) }'
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                tier:
-                  type: string
-                  enum:
-                    - basic
-                    - premium
-                duration:
-                  type: integer
-                  minimum: 1
-                  maximum: 365
-              required:
-                - tier
-                - duration
-              additionalProperties: false
       responses:
         '201':
           description: '{ success: true, data: { transactionId, tier, expiresAt, status } }'
@@ -4080,27 +4051,6 @@ paths:
           schema:
             type: string
           description: Scout's Stellar public key
-      requestBody:
-        required: true
-        description: '{ tier: ''basic'' | ''premium'', duration: number (1–365 days) }'
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                tier:
-                  type: string
-                  enum:
-                    - basic
-                    - premium
-                duration:
-                  type: integer
-                  minimum: 1
-                  maximum: 365
-              required:
-                - tier
-                - duration
-              additionalProperties: false
       responses:
         '200':
           description: '{ success: true, data: { transactionId, tier, expiresAt, status } } - Renewal'
@@ -4198,25 +4148,6 @@ paths:
           schema:
             type: string
           description: Scout's Stellar public key
-      requestBody:
-        required: true
-        description: '{ playerId: string, detailsUri: string }'
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                playerId:
-                  type: string
-                  minLength: 1
-                detailsUri:
-                  type: string
-                  minLength: 1
-                  description: Additional validation is applied beyond this schema — see the route handler.
-              required:
-                - playerId
-                - detailsUri
-              additionalProperties: false
       responses:
         '201':
           description: >-
@@ -4286,25 +4217,6 @@ paths:
           schema:
             type: string
           description: Scout's Stellar public key
-      requestBody:
-        required: true
-        description: '{ playerId: string, detailsUri: string }'
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                playerId:
-                  type: string
-                  minLength: 1
-                detailsUri:
-                  type: string
-                  minLength: 1
-                  description: Additional validation is applied beyond this schema — see the route handler.
-              required:
-                - playerId
-                - detailsUri
-              additionalProperties: false
       responses:
         '201':
           description: >-
@@ -4455,6 +4367,112 @@ paths:
       x-api-key-scope: write:webhooks
       x-owner-only: true
   /scouts/{wallet}/webhooks/{id}:
+    get:
+      tags:
+        - scouts
+      summary: Fetch a single subscription.
+      operationId: getWebhook
+      description: |-
+        Fetch a single subscription. The signing secret is never returned; the
+        response includes the endpoint health fields from migration 038.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Webhook subscription row ID
+      responses:
+        '200':
+          description: >-
+            { success: true, data: { id, url, eventTypes, createdAt, status, consecutiveFailures,
+            lastFailureAt, lastSuccessAt, suspendedAt, suspendedReason } }
+        '400':
+          description: '{ success: false, error: string } - Invalid subscription id'
+        '403':
+          description: >-
+            { success: false, error: string } - Wallet mismatch or subscription belongs to another
+            scout
+        '404':
+          description: '{ success: false, error: string } - Subscription not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - read:webhooks
+      x-required-role:
+        - scout
+      x-api-key-scope: read:webhooks
+      x-owner-only: true
+    patch:
+      tags:
+        - scouts
+      summary: Update a subscription's URL and/or event filter.
+      operationId: updateWebhook
+      description: |-
+        Update a subscription's URL and/or event filter. A replacement URL is
+        re-validated (HTTPS-only in production, no private IPs); `rotateSecret: true`
+        issues a fresh signing secret, returned in plaintext once.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Webhook subscription row ID
+      requestBody:
+        required: true
+        description: '{ url?: string, eventTypes?: ContractEventType[], rotateSecret?: boolean }'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: Additional validation is applied beyond this schema — see the route handler.
+                eventTypes:
+                  type: array
+                  items:
+                    type: string
+                    enum: []
+                  minItems: 1
+                rotateSecret:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        '200':
+          description: >-
+            { success: true, data: { id, url, eventTypes, createdAt, status, consecutiveFailures,
+            lastFailureAt, lastSuccessAt, suspendedAt, suspendedReason, secret? } }
+        '400':
+          description: '{ success: false, error: string } - Invalid id, invalid body, or disallowed URL'
+        '403':
+          description: >-
+            { success: false, error: string } - Wallet mismatch or subscription belongs to another
+            scout
+        '404':
+          description: '{ success: false, error: string } - Subscription not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - write:webhooks
+      x-required-role:
+        - scout
+      x-api-key-scope: write:webhooks
+      x-owner-only: true
     delete:
       tags:
         - scouts

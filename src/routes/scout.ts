@@ -53,9 +53,12 @@ import {
 import {
   registerWebhook,
   listWebhooks,
+  getWebhook,
+  updateWebhook,
   deleteWebhook,
   testWebhook,
   registerWebhookSchema,
+  updateWebhookSchema,
   reactivateWebhook,
 } from '../controllers/webhookSubscriptionController';
 import { requireFeatureFlag } from '../middleware/requireFeatureFlag';
@@ -751,6 +754,32 @@ router.route('/:wallet/webhooks')
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
+ * GET /api/scouts/:wallet/webhooks/:id
+ * Fetch a single subscription. The signing secret is never returned; the
+ * response includes the endpoint health fields from migration 038.
+ *
+ * @param wallet {string} - Scout's Stellar public key
+ * @param id {integer} - Webhook subscription row ID
+ * @response 200 { success: true, data: { id, url, eventTypes, createdAt, status, consecutiveFailures, lastFailureAt, lastSuccessAt, suspendedAt, suspendedReason } }
+ * @response 400 { success: false, error: string } - Invalid subscription id
+ * @response 403 { success: false, error: string } - Wallet mismatch or subscription belongs to another scout
+ * @response 404 { success: false, error: string } - Subscription not found
+ * @auth Bearer (scout role required; wallet must match authenticated account)
+ *
+ * PATCH /api/scouts/:wallet/webhooks/:id
+ * Update a subscription's URL and/or event filter. A replacement URL is
+ * re-validated (HTTPS-only in production, no private IPs); `rotateSecret: true`
+ * issues a fresh signing secret, returned in plaintext once.
+ *
+ * @param wallet {string} - Scout's Stellar public key
+ * @param id {integer} - Webhook subscription row ID
+ * @body { url?: string, eventTypes?: ContractEventType[], rotateSecret?: boolean }
+ * @response 200 { success: true, data: { id, url, eventTypes, createdAt, status, consecutiveFailures, lastFailureAt, lastSuccessAt, suspendedAt, suspendedReason, secret? } }
+ * @response 400 { success: false, error: string } - Invalid id, invalid body, or disallowed URL
+ * @response 403 { success: false, error: string } - Wallet mismatch or subscription belongs to another scout
+ * @response 404 { success: false, error: string } - Subscription not found
+ * @auth Bearer (scout role required; wallet must match authenticated account)
+ *
  * DELETE /api/scouts/:wallet/webhooks/:id
  * Delete a subscription. Returns 404 when not found or owned by another scout.
  *
@@ -763,8 +792,10 @@ router.route('/:wallet/webhooks')
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
 router.route('/:wallet/webhooks/:id')
+  .get(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('read:webhooks'), getWebhook)
+  .patch(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), validateBody(updateWebhookSchema), updateWebhook)
   .delete(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), deleteWebhook)
-  .all(methodNotAllowed(['DELETE']));
+  .all(methodNotAllowed(['GET', 'HEAD', 'PATCH', 'DELETE']));
 
 /**
  * POST /api/scouts/:wallet/webhooks/:id/test
