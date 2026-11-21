@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getValidatorStats } from '../db';
+import { getValidatorStatsSummary } from '../db';
 import { getAllValidators, insertValidator, revokeValidatorRow, getValidatorByWallet } from '../services/indexer';
 import { isValidStellarAddress } from '../utils/stellarAddress';
 import { logAuditEvent } from '../services/audit';
@@ -243,7 +243,13 @@ export async function revokeValidator(req: Request, res: Response, next: NextFun
 
 /**
  * GET /api/admin/validators/:wallet/stats
- * Returns validator stats: milestones_approved and milestones_rejected.
+ *
+ * Returns stats for a registered validator wallet. Unknown wallets (never
+ * registered as a validator) return 404 `VALIDATOR_NOT_FOUND`; revoked
+ * validators still return stats with `status: 'revoked'`.
+ *
+ * Optional `from`/`to` query params (ISO 8601) restrict the approval/rejection
+ * counts, the median approval latency and `last_action_at` to the given window.
  */
 export async function getValidatorStatsEndpoint(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const wallet = req.params.wallet as string;
@@ -252,24 +258,36 @@ export async function getValidatorStatsEndpoint(req: Request, res: Response, _ne
     res.status(400).json({ success: false, error: 'Invalid validator wallet address' });
     return;
   }
-  const stats = await getValidatorStats(wallet);
-  if (stats) {
-    res.json({
-      success: true,
-      data: {
-        wallet: stats.wallet,
-        milestones_approved: stats.milestones_approved,
-        milestones_rejected: stats.milestones_rejected
-      }
+
+  // A wallet that was never registered is a typo/unknown address, not an
+  // inactive validator — surface that distinction as a 404.
+  const validator = await getValidatorByWallet(wallet);
+  if (!validator) {
+    res.status(404).json({
+      success: false,
+      error: `Validator ${wallet} is not registered`,
+      code: ErrorCode.VALIDATOR_NOT_FOUND,
     });
-  } else {
-    res.json({
-      success: true,
-      data: {
-        wallet,
-        milestones_approved: 0,
-        milestones_rejected: 0
-      }
-    });
+    return;
   }
+
+  const { from, to } = req.query as { from?: string; to?: string };
+  const summary = await getValidatorStatsSummary(wallet, {
+    fromMs: from ? Date.parse(from) : undefined,
+    toMs: to ? Date.parse(to) : undefined,
+  });
+
+  res.json({
+    success: true,
+    data: {
+      wallet,
+      status: validator.revoked_at != null ? 'revoked' : 'active',
+      milestones_approved: summary.milestones_approved,
+      milestones_rejected: summary.milestones_rejected,
+      pending_assigned: summary.pending_assigned,
+      median_approval_seconds: summary.median_approval_seconds,
+      last_action_at:
+        summary.last_action_at != null ? new Date(summary.last_action_at).toISOString() : null,
+    },
+  });
 }

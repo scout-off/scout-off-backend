@@ -253,6 +253,13 @@ export const ErrorCode = {
   VALIDATOR_REVOKED: 'VALIDATOR_REVOKED',
 
   /**
+   * HTTP 404 — No validator is registered with the given wallet address.
+   * Client should: Verify the wallet address is correct; list validators to
+   * confirm the address was ever registered.
+   */
+  VALIDATOR_NOT_FOUND: 'VALIDATOR_NOT_FOUND',
+
+  /**
    * HTTP 404 — No milestone exists with the requested id.
    * Client should: Verify the milestone id from the player's milestone list.
    */

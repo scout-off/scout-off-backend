@@ -27,14 +27,36 @@ services:
       ADMIN_WALLET: ""
 
       # ── Stellar / Soroban ─────────────────────────────────────────
-      # CONTRACT_ID is required by the app — replace with your deployed Soroban contract
-      # address. The placeholder below satisfies the startup check; the indexer will log
-      # errors on each poll until a real contract ID is supplied.
+      # Points at the `stellar` service below: a standalone Stellar network
+      # running inside this compose project, so the stack works with no
+      # hosted testnet RPC and no internet access.
+      #
+      # These four are deliberately literal rather than ${VAR:-default}
+      # interpolations. A root .env file — the normal setup for running the
+      # backend outside Docker — points NETWORK/HORIZON_URL/SOROBAN_RPC_URL at
+      # testnet, and compose interpolation would silently pull those values in
+      # and redirect this stack off the local chain (and, if the URLs used
+      # localhost, make them unreachable from inside the container).
+      #
+      # To target a hosted network instead, replace all four together — the
+      # passphrase must match the network. For testnet:
+      #   NETWORK: testnet
+      #   NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+      #   HORIZON_URL: "https://horizon-testnet.stellar.org"
+      #   SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
+      NETWORK: standalone
+      NETWORK_PASSPHRASE: "Standalone Network ; February 2017"
+      HORIZON_URL: "http://stellar:8000"
+      SOROBAN_RPC_URL: "http://stellar:8000/soroban/rpc"
+
+      # CONTRACT_ID is required by the app — run
+      # ./scripts/soroban-sandbox/deploy.sh against the local network to build,
+      # deploy and initialize the contracts, then use the printed register
+      # contract ID here (the script also writes every per-contract ID to
+      # scripts/soroban-sandbox/.env.contracts). The placeholder below satisfies
+      # the startup check; the indexer will log errors on each poll until a real
+      # contract ID is supplied.
       CONTRACT_ID: "PLACEHOLDER_REPLACE_WITH_REAL_CONTRACT_ID"
-      NETWORK: testnet
-      NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
-      HORIZON_URL: "https://horizon-testnet.stellar.org"
-      SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
 
       # ── Database ──────────────────────────────────────────────────
       # Mapped to the named volume mount point set in the Dockerfile
@@ -100,6 +122,7 @@ services:
       start_period: 15s
     depends_on:
       - redis
+      - stellar
 
   # Optional: only needed so `backend` can use the Redis-backed cache store
   # locally. The backend falls back to an in-memory cache automatically if
@@ -119,6 +142,57 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # Local Stellar network (stellar/quickstart) — the chain `backend` talks to
+  # by default, so on-chain flows can be developed without a hosted testnet RPC
+  # and without testnet resets invalidating a local environment.
+  #
+  # Runs in local network mode: standalone chain, network passphrase
+  # "Standalone Network ; February 2017", Soroban RPC on :8000/soroban/rpc,
+  # Horizon and the friendbot faucet on :8000. Data is ephemeral — quickstart
+  # only persists when a volume is mounted at /opt/stellar, and persistent mode
+  # asks for a Postgres password on stdin on first start, which does not work
+  # in a non-interactive `docker compose up`. Re-running `docker compose up`
+  # therefore starts from a fresh chain, so re-run
+  # ./scripts/soroban-sandbox/deploy.sh and refresh CONTRACT_ID afterwards.
+  #
+  # Deploy the contracts onto it with ./scripts/soroban-sandbox/deploy.sh; the
+  # full walkthrough is in docs/soroban-sandbox-e2e.md.
+  #
+  # Start without it (e.g. against testnet): `docker compose up backend redis`
+  # — the backend starts either way (STELLAR_HEALTH_CHECK is off below) and
+  # simply retries its RPC calls until the network is reachable.
+  stellar:
+    # Not pinned: quickstart's tags track upstream releases and the same
+    # `latest` tag is used by scripts/soroban-sandbox/docker-compose.yml and the
+    # nightly Soroban E2E workflow, so both stay in step.
+    image: stellar/quickstart:latest
+    container_name: scout-off-stellar
+    # The image is published for linux/amd64 only; on arm64 hosts (Apple
+    # silicon) Docker Desktop runs it through emulation.
+    platform: linux/amd64
+    restart: unless-stopped
+    # --local selects the standalone network; --enable-soroban-rpc turns on the
+    # RPC server (and, in local mode, Horizon + friendbot with it).
+    command: --local --enable-soroban-rpc
+    ports:
+      # Host port only — containers reach the network at stellar:8000.
+      - "${STELLAR_PORT:-8000}:8000"
+    healthcheck:
+      # /soroban/rpc is a JSON-RPC endpoint: it must be POSTed. A plain GET
+      # returns 405, so a `curl -f` probe would keep the container permanently
+      # unhealthy. This is the same request scripts/soroban-sandbox/wait-for-rpc.sh
+      # polls for before deploying.
+      test:
+        - CMD-SHELL
+        - >-
+          curl -sf -X POST http://localhost:8000/soroban/rpc
+          -H 'Content-Type: application/json'
+          -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
 
   # PostgreSQL service (optional, for testing the PostgreSQL driver).
   # To use PostgreSQL instead of SQLite:

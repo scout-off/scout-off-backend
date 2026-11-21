@@ -862,9 +862,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Returns a validator's lifetime milestone approval/rejection counts.
-         * @description Returns a validator's lifetime milestone approval/rejection counts.
-         *     Unknown wallets return zeroed counts rather than 404.
+         * Returns stats for a registered validator wallet.
+         * @description Returns stats for a registered validator wallet. Unknown wallets (never
+         *     registered) return 404 VALIDATOR_NOT_FOUND; revoked validators return stats
+         *     with status 'revoked'. Optional from/to query params restrict the
+         *     approval/rejection counts, median approval latency and last_action_at to the
+         *     given window.
          */
         get: operations["getValidatorStatsEndpoint"];
         put?: never;
@@ -3965,7 +3968,12 @@ export interface operations {
     };
     getValidatorStatsEndpoint: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional inclusive lower bound (ISO 8601) on event time */
+                from?: string;
+                /** @description Optional inclusive upper bound (ISO 8601) on event time (max 366-day range) */
+                to?: string;
+            };
             header?: never;
             path: {
                 /** @description Validator's Stellar public key */
@@ -3975,15 +3983,22 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description { success: true, data: { wallet, milestones_approved, milestones_rejected } } */
+            /** @description { success: true, data: { wallet, status, milestones_approved, milestones_rejected, pending_assigned, median_approval_seconds, last_action_at } } */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description { success: false, error: string } - Invalid Stellar address */
+            /** @description { success: false, error: string } - Invalid Stellar address or query parameters */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Wallet was never registered as a validator */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
