@@ -308,6 +308,25 @@ export function drainAllSessions(): void {
 }
 
 /**
+ * Terminate every open SSE session belonging to `wallet` (e.g. on revoke-all).
+ * Sends a terminal `session_ended` frame (reason `token_revoked`) to each
+ * matching stream and removes it from the active set. Safe to call more than
+ * once and safe when no sessions are open.
+ */
+export function terminateSessionsForWallet(wallet: string): void {
+  if (activeSessions.size === 0) return;
+  for (const session of [...activeSessions]) {
+    if (session.wallet === wallet) {
+      try {
+        session.terminate('token_revoked');
+      } catch (err) {
+        logger.warn(`[sse] error terminating revoke-all session wallet=${wallet}:`, err);
+      }
+    }
+  }
+}
+
+/**
  * Return `true` when the server is accepting new SSE connections.
  * Set to `false` during graceful shutdown so new connections are rejected
  * with 503 before server.close() drains keep-alive idle connections.

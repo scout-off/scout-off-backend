@@ -279,6 +279,70 @@ export async function revokeToken(jti: string, expiresAt: number): Promise<void>
 }
 
 /**
+ * Revoke many jtis at once. Writes all rows to the DB inside a single
+ * transaction and all keys to Redis in a single pipeline (#1592), then emits
+ * the in-process revocation event for each jti so this instance's SSE streams
+ * are terminated immediately.
+ *
+ * @param entries  { jti, expiresAt } pairs — expiresAt as a Unix timestamp (seconds)
+ */
+export async function revokeTokens(
+  entries: Array<{ jti: string; expiresAt: number }>,
+): Promise<void> {
+  if (entries.length === 0) return;
+  const now = Math.floor(Date.now() / 1000);
+
+  // DB first — the durable store — all rows in one transaction.
+  const driver = getDriver();
+  await driver.transaction(async (tx) => {
+    for (const { jti, expiresAt } of entries) {
+      await tx.run(
+        'INSERT INTO revoked_tokens (jti, revoked_at, expires_at) VALUES (?, ?, ?) ON CONFLICT(jti) DO NOTHING',
+        [jti, now, expiresAt],
+      );
+    }
+  });
+
+  // Redis — one pipeline, one round-trip.
+  const client = getRedisClient();
+  if (client) {
+    if (typeof client.pipeline === 'function') {
+      const pipe = client.pipeline();
+      for (const { jti, expiresAt } of entries) {
+        const ttl = expiresAt - now;
+        if (ttl > 0) pipe.setex(redisKey(jti), ttl, '1');
+      }
+      try {
+        await pipe.exec();
+      } catch (err) {
+        logger.warn('[tokenBlocklist] pipelined revokeTokens failed:', err);
+      }
+    } else {
+      for (const { jti, expiresAt } of entries) {
+        try {
+          await writeToRedis(jti, expiresAt);
+        } catch {
+          // best-effort per-key fallback
+        }
+      }
+    }
+  }
+
+  // Notify in-process subscribers (SSE connections) and publish to other instances.
+  const publisher = getRedisClient();
+  for (const { jti } of entries) {
+    revokedEmitter.emit(REVOKED_EVENT, jti);
+    if (publisher) {
+      try {
+        await publisher.publish('security:token_revoked', encodeTracedMessage({ token_hash: jti }));
+      } catch (err) {
+        logger.warn('[tokenBlocklist] Redis revocation publish failed:', err);
+      }
+    }
+  }
+}
+
+/**
  * Subscribe to in-process token revocations. The callback fires with the
  * revoked jti whenever revokeToken() runs in this process. Returns an
  * unsubscribe function.

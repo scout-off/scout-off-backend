@@ -40,6 +40,7 @@ import { importPlayers, importPlayersBodySchema } from '../controllers/adminPlay
 import { adminDeactivatePlayer, adminReactivatePlayer, deactivateBodySchema } from '../controllers/adminPlayerDeactivationController';
 import { getFeatureFlags, updateFeatureFlag, toggleFeatureFlag, updateFeatureFlagBodySchema, toggleFlagBodySchema } from '../controllers/featureFlagsController';
 import { exportEvents } from '../controllers/exportController';
+import { listWalletSessions, revokeAllWalletSessions } from '../controllers/adminWalletSessionsController';
 import { listDeadLetters, replayDeadLetter, purgeOldDeadLetters, requeueDeadLetter, purgeDeadLetter } from '../controllers/webhookAdminController';
 import { setIpReputationController, getIpReputationController, setIpReputationSchema } from '../controllers/ipReputationController';
 import { triggerReindex, reindexStatusHandler, reindexBodyShapeSchema, cancelReindexHandler } from '../controllers/reindexController';
@@ -51,7 +52,7 @@ import { ipAllowlistMiddleware } from '../middleware/ipAllowlist';
 import { methodNotAllowed } from '../middleware/methodNotAllowed';
 import { rateLimit } from '../middleware/rateLimit';
 import { createTimeout } from '../middleware/timeout';
-import { validateBody, validateJsonBodyOrPassThrough, validateQuery } from '../middleware/validate';
+import { validateBody, validateJsonBodyOrPassThrough, validateQuery, validateParams } from '../middleware/validate';
 import { validatorWalletSchema } from '../validators/admin';
 import { emptyBodySchema, ignoredBodySchema } from '../validators/emptyBody';
 import config from '../config';
@@ -450,6 +451,43 @@ router.route('/introspect')
  */
 router.route('/tokens/revoke')
   .post(requireRole('admin'), validateBody(revokeTokenSchema), revokeTokenController)
+  .all(methodNotAllowed(['POST']));
+
+/**
+ * GET /api/admin/wallets/:wallet/sessions
+ *
+ * Lists every active (not superseded, not revoked, not expired)
+ * refresh-token session for a wallet: jti, issuedAt, expiresAt,
+ * userAgent/IP hash.
+ *
+ * @param wallet {string} - Stellar public key of the wallet
+ * @response 200 { success: true, data: { wallet, sessions: SessionView[], count } }
+ * @response 400 { success: false, error: string } - Invalid wallet address
+ * @response 401 { success: false, error: string } - Missing token
+ * @response 403 { success: false, error: string } - Non-admin role
+ * @auth Bearer (admin role required)
+ *
+ * POST /api/admin/wallets/:wallet/sessions/revoke-all
+ *
+ * Revokes every active refresh-token session for a wallet: blocks every
+ * active jti in the token blocklist (Redis pipeline), sets the per-wallet
+ * `tokens_valid_after` cutoff so access tokens issued before it are rejected
+ * by requireAuth even before they expire, terminates the wallet's open SSE
+ * streams, and audit-logs the action.
+ *
+ * @param wallet {string} - Stellar public key of the wallet
+ * @response 200 { success: true, data: { wallet, revokedCount, tokensValidAfter, message } }
+ * @response 400 { success: false, error: string } - Invalid wallet address
+ * @response 401 { success: false, error: string } - Missing token
+ * @response 403 { success: false, error: string } - Non-admin role
+ * @auth Bearer (admin role required)
+ */
+router.route('/wallets/:wallet/sessions')
+  .get(requireRole('admin'), validateParams(walletAddressSchema), listWalletSessions)
+  .all(methodNotAllowed(['GET', 'HEAD']));
+
+router.route('/wallets/:wallet/sessions/revoke-all')
+  .post(requireRole('admin'), validateParams(walletAddressSchema), revokeAllWalletSessions)
   .all(methodNotAllowed(['POST']));
 
 /**

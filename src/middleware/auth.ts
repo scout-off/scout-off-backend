@@ -10,6 +10,7 @@ import { verifyJwt } from '../utils/jwt';
 import { hasApiKeyScope, ApiKeyScope } from '../utils/apiKeyScopes';
 import { ErrorCode } from '../utils/errorCodes';
 import { touchApiKeyLastUsed } from '../db';
+import { getTokensValidAfter } from '../db';
 import { incAuthFailure } from './metrics';
 
 export interface AuthPayload extends jwt.JwtPayload, Partial<JwtPayload> {}
@@ -21,6 +22,36 @@ function verifyToken(token: string): AuthPayload {
 
 function tokenErrorCode(err: unknown): ErrorCode {
   return err instanceof jwt.TokenExpiredError ? ErrorCode.TOKEN_EXPIRED : ErrorCode.TOKEN_INVALID;
+}
+
+/** Attach the verified JWT's auth state to the request and continue. */
+function attachAuthState(req: Request, payload: AuthPayload): void {
+  req.account = payload.sub;
+  req.role = payload.role;
+  req.jti = payload.jti;
+  req.tokenExpiresAt = payload.exp;
+}
+
+/**
+ * Enforce the per-wallet `tokens_valid_after` cutoff (set by admin
+ * revoke-all). Access tokens issued at or before the cutoff are rejected even
+ * before they expire. A lookup failure fails open so a temporary store
+ * outage doesn't lock out legitimate traffic. Returns `false` when the
+ * request has already been answered with 401.
+ */
+async function enforceTokensValidAfter(req: Request, res: Response, payload: AuthPayload): Promise<boolean> {
+  try {
+    const tokensValidAfter = await getTokensValidAfter(payload.sub);
+    if (tokensValidAfter !== null && (payload.iat ?? 0) <= tokensValidAfter) {
+      logger.warn({ method: req.method, path: req.path, error: 'Token issued before tokens_valid_after cutoff' });
+      incAuthFailure('revoked_token');
+      sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
+      return false;
+    }
+  } catch {
+    logger.warn({ method: req.method, path: req.path, error: 'tokens_valid_after lookup failed, allowing request' });
+  }
+  return true;
 }
 
 /**
@@ -132,26 +163,21 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const payload = verifyToken(header.slice(7));
     // isTokenRevoked is async; we must chain into a Promise to avoid blocking
     // the event loop while still sending the 401 on the same request lifecycle.
-    isTokenRevoked(payload.jti).then((revoked) => {
+    isTokenRevoked(payload.jti).then(async (revoked) => {
       if (revoked) {
         logger.warn({ method: req.method, path: req.path, error: 'Token revoked' });
         incAuthFailure('revoked_token');
         sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
         return;
       }
-      req.account = payload.sub;
-      req.role = payload.role;
-      req.jti = payload.jti;
-      req.tokenExpiresAt = payload.exp;
+      if (!(await enforceTokensValidAfter(req, res, payload))) return;
+      attachAuthState(req, payload);
       next();
     }).catch(() => {
       // Revocation check failed — fail open (allow request) to avoid blocking
       // legitimate traffic when the blocklist store is temporarily unavailable.
       logger.warn({ method: req.method, path: req.path, error: 'Revocation check failed, allowing request' });
-      req.account = payload.sub;
-      req.role = payload.role;
-      req.jti = payload.jti;
-      req.tokenExpiresAt = payload.exp;
+      attachAuthState(req, payload);
       next();
     });
   } catch (err) {
@@ -213,23 +239,18 @@ export function requireRole(...allowedRoles: string[]) {
         return;
       }
 
-      isTokenRevoked(payload.jti).then((revoked) => {
+      isTokenRevoked(payload.jti).then(async (revoked) => {
         if (revoked) {
           logger.warn({ method: req.method, path: req.path, error: 'Token revoked', requiredRole: role });
           incAuthFailure('revoked_token');
           sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
           return;
         }
-        req.account = payload.sub;
-        req.role = payload.role;
-        req.jti = payload.jti;
-        req.tokenExpiresAt = payload.exp;
+        if (!(await enforceTokensValidAfter(req, res, payload))) return;
+        attachAuthState(req, payload);
         next();
       }).catch(() => {
-        req.account = payload.sub;
-        req.role = payload.role;
-        req.jti = payload.jti;
-        req.tokenExpiresAt = payload.exp;
+        attachAuthState(req, payload);
         next();
       });
     } catch (err) {
