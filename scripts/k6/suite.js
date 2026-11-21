@@ -27,6 +27,7 @@ import playerProfileVU     from './scenarios/player-profile.js';
 import subscriptionStatusVU from './scenarios/subscription-status.js';
 import sseStreamVU         from './scenarios/sse-stream.js';
 import adminStatsVU        from './scenarios/admin-stats.js';
+import scoutWritesVU       from './scenarios/scout-writes.js';
 
 // Re-export each VU function under the name referenced by its scenario's `exec` field.
 export const authFlow          = authFlowVU;
@@ -35,6 +36,7 @@ export const playerProfile     = playerProfileVU;
 export const subscriptionStatus = subscriptionStatusVU;
 export const sseStream         = sseStreamVU;
 export const adminStats        = adminStatsVU;
+export const scoutWrites       = scoutWritesVU;
 
 // ── Scenario filter (optional) ───────────────────────────────────────────────
 
@@ -81,6 +83,12 @@ export const options = {
       'http_req_duration{scenario:admin_stats}': ['p(95)<300'],
       'http_req_failed{scenario:admin_stats}':   ['rate<0.01'],
       'admin_stats_errors': ['count<1'],
+    } : {}),
+    ...(enabled('scout_writes') ? {
+      'http_req_duration{scenario:scout_writes}': ['p(95)<300'],
+      'http_req_failed{scenario:scout_writes}':   ['rate<0.01'],
+      'scout_write_errors':   ['count<5'],
+      'scout_write_5xx_rate': ['rate<0.01'],
     } : {}),
   },
 
@@ -150,6 +158,17 @@ export const options = {
         tags: { scenario: 'admin_stats' },
       },
     } : {}),
+
+    // ── Scenario 7: Scout write paths — p95 < 300 ms ──────────────────────
+    ...(enabled('scout_writes') ? {
+      scout_writes: {
+        executor: 'constant-vus',
+        exec: 'scoutWrites',
+        vus: 20,
+        duration: '60s',
+        tags: { scenario: 'scout_writes' },
+      },
+    } : {}),
   },
 };
 
@@ -159,6 +178,7 @@ export function setup() {
   console.log(`[k6] ScoutOff load test suite starting`);
   console.log(`[k6] Target: ${__ENV.K6_BASE_URL || 'http://localhost:4000'}`);
   if (SELECTED) console.log(`[k6] Running single scenario: ${SELECTED}`);
+  console.log('[k6] Scenarios: auth_flow, player_list, player_profile, subscription_status, sse_stream, admin_stats, scout_writes');
 }
 
 export function teardown() {

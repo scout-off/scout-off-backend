@@ -66,14 +66,15 @@ The k6 suite supersedes the autocannon harness for continuous performance regres
 ```
 scripts/k6/
 ├── config.js                     # Shared env-var config (BASE_URL, tokens, …)
-├── suite.js                      # Entry-point — runs all 6 scenarios
+├── suite.js                      # Entry-point — runs all 7 scenarios
 └── scenarios/
     ├── auth-flow.js              # Scenario 1: SEP-10 challenge + token exchange
     ├── player-list.js            # Scenario 2: GET /api/players?region=…&minTier=…
     ├── player-profile.js         # Scenario 3: GET /api/players/:id
     ├── subscription-status.js    # Scenario 4: GET /api/scouts/:wallet/subscription
     ├── sse-stream.js             # Scenario 5: SSE connect + 30s keepalive hold
-    └── admin-stats.js            # Scenario 6: GET /api/admin/stats
+    ├── admin-stats.js            # Scenario 6: GET /api/admin/stats
+    └── scout-writes.js           # Scenario 7: Bookmark/note/saved-search/webhook writes
 ```
 
 ### SLO thresholds
@@ -86,6 +87,7 @@ scripts/k6/
 | Subscription status | 20 | 30 s | < 150 ms | — | < 1 % |
 | SSE stream + keepalive | 5 | 60 s | — | — | < 1 %, ≥1 keepalive/VU |
 | Admin stats | 5 | 30 s | < 300 ms | — | < 1 % |
+| **Scout write paths** | **20** | **60 s** | **< 300 ms** | — | **< 1 %, 0 5xx** |
 
 k6 exits with a **non-zero code** when any threshold is breached, making the CI step fail automatically.
 
@@ -130,7 +132,7 @@ k6 run scripts/k6/suite.js
 k6 run --env K6_SCENARIO=player_list scripts/k6/suite.js
 ```
 
-Valid scenario names: `auth_flow`, `player_list`, `player_profile`, `subscription_status`, `sse_stream`, `admin_stats`.
+Valid scenario names: `auth_flow`, `player_list`, `player_profile`, `subscription_status`, `sse_stream`, `admin_stats`, `scout_writes`.
 
 #### 4. Run against staging
 
@@ -152,6 +154,7 @@ k6 run scripts/k6/suite.js
 | `K6_PLAYER_ID` | `seed-player-001` | Player ID for profile scenario |
 | `K6_SCOUT_WALLET` | *(see config.js)* | Scout wallet for subscription scenario |
 | `K6_AUTH_XDR` | — | Pre-signed SEP-10 XDR for auth-flow scenario |
+| `K6_WEBHOOK_SINK_URL` | `http://localhost:9999/webhook-sink` | Local no-op sink URL for scout-writes webhook sub-scenario |
 
 > **Test JWTs** — Auth tokens for k6 must be pre-generated (not live SEP-10 signed) so the suite can run offline in CI. Generate them with:
 > ```bash

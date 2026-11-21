@@ -11,6 +11,8 @@ job_log.txt
 backups/
 contracts/target/
 contracts/**/test_snapshots/
+# Jest snapshot directories
+**/__snapshots__/
 coverage/
 scripts/soroban-sandbox/.env.contracts
 BUILD_COMMIT
@@ -19,14 +21,8 @@ BUILD_COMMIT
 /pr-*.md
 jest.scoutNotes.config.js
 
+# k6 results produced by CI runs
+k6-results.json
 
 # PR description files (local working notes, not for review)
 pr-*.md
-# Kiro-generated files and temporary artifacts
-k/
-
-pr-1344-1347.md
-apiKeyScopes.txt
-CHANGES-1542-1545.md
-CHANGES_SUMMARY.md
-.github/ISSUE_1517-1518-1519-1520.md

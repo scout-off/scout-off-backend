@@ -1,9 +1,33 @@
 # Operator Runbook
 
 This runbook maps common incidents to their diagnosis steps and the exact
-endpoints/commands to resolve them. It assumes you have a backend instance
-running and an admin JWT (`<ADMIN_JWT>` below — obtain one via
-`POST /auth/token` with an admin wallet, see [docs/auth.md](auth.md)).
+commands to resolve them.
+
+> **Preferred tool for operator tasks: `scout-off-admin` CLI (issue #1823)**
+>
+> The CLI is built into the runtime image. Use it instead of raw `curl` or SQL
+> wherever possible — it uses the same service layer as the HTTP controllers,
+> writes audit log entries, and refuses destructive operations in production
+> without `--yes`.
+>
+> ```bash
+> # In the running container or locally (requires DB access):
+> node dist/cli/index.js --help
+>
+> # Always pass --operator <your-name> for mutating commands:
+> node dist/cli/index.js reindex start --from 12345 --operator alice --yes
+> node dist/cli/index.js dlq list --limit 20
+> node dist/cli/index.js tokens revoke --jti <jti> --operator alice --yes
+> node dist/cli/index.js flags set GRAPHQL_ENABLED true --reason "re-enabling" --operator alice --yes
+> node dist/cli/index.js audit verify
+> node dist/cli/index.js migrate status
+> ```
+>
+> See `src/cli/index.ts` for the full command reference.
+
+An admin JWT is still needed for endpoints not covered by the CLI
+(`<ADMIN_JWT>` below — obtain one via `POST /auth/token` with an admin
+wallet, see [docs/auth.md](auth.md)).
 
 Every command below is idempotent and safe to re-run, which is exactly what you
 want during an incident. When in doubt, **observe before acting**: read the

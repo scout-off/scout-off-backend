@@ -1116,6 +1116,45 @@ const config = {
    *   READINESS_CRITICAL=db,stellar,indexer # Include indexer as critical
    *   READINESS_CRITICAL=db                 # Only db is critical
    */
+  // ── Soroban RPC startup validation (#1824) ────────────────────────────────
+  // These knobs control the passphrase-mismatch and protocol-version checks
+  // that run at startup and in /health/dependencies.
+  sorobanRpc: {
+    /**
+     * Minimum protocol version the RPC node must report (getNetwork).
+     * A node below this version may lack methods the backend depends on.
+     * Default: 20 (the protocol version at which Soroban became stable on mainnet).
+     */
+    minProtocolVersion: parseNumericEnv('SOROBAN_RPC_MIN_PROTOCOL_VERSION', process.env.SOROBAN_RPC_MIN_PROTOCOL_VERSION, 20, { min: 1, integer: true }),
+    /**
+     * When true, a protocol-version mismatch is a hard failure (not just a
+     * warning) in production. Set SOROBAN_RPC_STRICT_PROTOCOL=true to enable.
+     */
+    strictProtocolVersion: process.env.SOROBAN_RPC_STRICT_PROTOCOL === 'true',
+    /**
+     * Milliseconds without a new ledger sequence before the RPC is marked
+     * "degraded" in /health/dependencies. Default: 60 s.
+     */
+    ledgerStuckMs: parseNumericEnv('SOROBAN_RPC_LEDGER_STUCK_MS', process.env.SOROBAN_RPC_LEDGER_STUCK_MS, 60_000, { min: 1000, integer: true }),
+  },
+
+  // ── Auth failure lockout (#1830) ───────────────────────────────────────────
+  // Moved from src/middleware/authFailureLockout.ts so that bad values fail
+  // at startup (via parseNumericEnv) rather than silently falling back, and so
+  // tests can override through config mocks instead of jest.isolateModules.
+  //
+  // Relationship: baseMs <= maxMs is validated post-build below.
+  authLockout: {
+    /** Consecutive failures before the account is locked out. */
+    threshold: parseNumericEnv('AUTH_FAIL_THRESHOLD', process.env.AUTH_FAIL_THRESHOLD, 5, { min: 1, integer: true }),
+    /** Sliding window in which failures are counted (ms). */
+    windowMs: parseNumericEnv('AUTH_FAIL_WINDOW_MS', process.env.AUTH_FAIL_WINDOW_MS, 15 * 60 * 1000, { min: 1, integer: true }),
+    /** First lockout duration (ms); doubles with each additional failure. */
+    baseMs: parseNumericEnv('AUTH_LOCKOUT_BASE_MS', process.env.AUTH_LOCKOUT_BASE_MS, 30_000, { min: 1, integer: true }),
+    /** Maximum lockout duration (ms). */
+    maxMs: parseNumericEnv('AUTH_LOCKOUT_MAX_MS', process.env.AUTH_LOCKOUT_MAX_MS, 15 * 60 * 1000, { min: 1, integer: true }),
+  },
+
   readinessCriticalDependencies: (() => {
     const raw = process.env.READINESS_CRITICAL ?? 'db,stellar';
     const deps = raw.split(',').map((d) => d.trim().toLowerCase()).filter((d) => d);
@@ -1136,6 +1175,14 @@ const config = {
 };
 
 // ── Post-config validation ────────────────────────────────────────────────────
+
+// Validate auth-lockout: baseMs must be <= maxMs
+if (config.authLockout.baseMs > config.authLockout.maxMs) {
+  throw new Error(
+    `Invalid auth-lockout config: AUTH_LOCKOUT_BASE_MS (${config.authLockout.baseMs}) ` +
+    `must be less than or equal to AUTH_LOCKOUT_MAX_MS (${config.authLockout.maxMs}).`,
+  );
+}
 
 // Validate shutdown configuration: prestopDelayMs must be less than timeoutMs
 if (config.shutdown.prestopDelayMs >= config.shutdown.timeoutMs) {

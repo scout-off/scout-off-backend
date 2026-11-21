@@ -1131,6 +1131,24 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
     lines.push(`scout_off_auth_failures_total{reason="${escapeLabelValue(reason)}"} ${count}`);
   }
 
+  // Soroban RPC network / protocol gauges (#1824).
+  // Lazily imported to avoid a circular dependency on sorobanRpcCheck at module load.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const sorobanCheck = require('../services/sorobanRpcCheck') as {
+      getStellarRpcNetworkMatchGauge: () => number;
+      getStellarRpcProtocolVersionGauge: () => number;
+    };
+    lines.push('# HELP stellar_rpc_network_match Whether the Soroban RPC passphrase matches config (1=match, 0=mismatch, -1=unknown)');
+    lines.push('# TYPE stellar_rpc_network_match gauge');
+    lines.push(`stellar_rpc_network_match ${sorobanCheck.getStellarRpcNetworkMatchGauge()}`);
+    lines.push('# HELP stellar_rpc_protocol_version Soroban RPC reported protocol version (-1=unknown)');
+    lines.push('# TYPE stellar_rpc_protocol_version gauge');
+    lines.push(`stellar_rpc_protocol_version ${sorobanCheck.getStellarRpcProtocolVersionGauge()}`);
+  } catch {
+    // sorobanRpcCheck not loaded yet — omit gauges from this scrape.
+  }
+
   return lines.join('\n') + '\n';
 }
 

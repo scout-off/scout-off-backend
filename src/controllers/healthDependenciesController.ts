@@ -5,6 +5,7 @@ import { getRedisClient } from '../services/redis';
 import { server } from '../services/stellar';
 import { logger } from '../utils/logger';
 import { httpGet, httpHead, HttpClientError } from '../utils/httpClient';
+import { probeSorobanRpcCheck } from '../services/sorobanRpcCheck';
 
 export interface DependencyHealth {
   endpoint: string;
@@ -22,6 +23,7 @@ export interface HealthDependenciesResponse {
     ipfs: DependencyHealth;
     redis: DependencyHealth;
     db: DependencyHealth;
+    sorobanRpc: DependencyHealth & { checks?: { passphrase: string; protocolVersion: string; ledgerLiveness: string } };
   };
 }
 
@@ -168,6 +170,46 @@ export async function probeStellarRpcDependency(): Promise<DependencyHealth> {
 }
 
 /**
+ * Probe the Soroban RPC node: passphrase match, protocol version, ledger liveness (#1824).
+ */
+export async function probeSorobanRpcNetworkDependency(): Promise<
+  DependencyHealth & { checks?: { passphrase: string; protocolVersion: string; ledgerLiveness: string } }
+> {
+  const endpoint = config.sorobanRpcUrl;
+  if (!config.stellarHealthCheckEnabled) {
+    return { endpoint, version: null, status: 'disabled', latencyMs: null };
+  }
+  const start = Date.now();
+  try {
+    const result = await probeSorobanRpcCheck();
+    const latencyMs = Math.max(0, Date.now() - start);
+    const status = result.overall === 'ok' ? 'ok' : 'error';
+    const version = result.passphraseDetail || null;
+    return {
+      endpoint,
+      version,
+      status,
+      latencyMs,
+      ...(result.overall !== 'ok' ? { error: result.passphraseDetail || result.protocolVersionDetail || result.ledgerLivenessDetail } : {}),
+      checks: {
+        passphrase: `${result.passphrase}: ${result.passphraseDetail}`,
+        protocolVersion: `${result.protocolVersion}: ${result.protocolVersionDetail}`,
+        ledgerLiveness: `${result.ledgerLiveness}: ${result.ledgerLivenessDetail}`,
+      },
+    };
+  } catch (err) {
+    const latencyMs = Math.max(0, Date.now() - start);
+    return {
+      endpoint,
+      version: null,
+      status: 'error',
+      latencyMs,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
  * Probe Stellar Horizon reachability, version info, and round-trip latency.
  */
 export async function probeHorizonDependency(): Promise<DependencyHealth> {
@@ -221,12 +263,13 @@ export async function probeIpfsDependency(): Promise<DependencyHealth> {
  */
 export async function getHealthDependencies(_req: Request, res: Response): Promise<void> {
   try {
-    const [db, redis, stellar, horizon, ipfs] = await Promise.all([
+    const [db, redis, stellar, horizon, ipfs, sorobanRpc] = await Promise.all([
       probeDbDependency(),
       probeRedisDependency(),
       probeStellarRpcDependency(),
       probeHorizonDependency(),
       probeIpfsDependency(),
+      probeSorobanRpcNetworkDependency(),
     ]);
 
     const dependencies = {
@@ -235,6 +278,7 @@ export async function getHealthDependencies(_req: Request, res: Response): Promi
       ipfs,
       redis,
       db,
+      sorobanRpc,
     };
 
     const hasError = Object.values(dependencies).some((dep) => dep.status === 'error');
