@@ -65,6 +65,7 @@ export interface GetWebhookDeliveriesOptions {
   subscriptionId: string;
   limit?: number;
   offset?: number;
+  status?: 'success' | 'failure';
 }
 
 /** Return paginated delivery records for a given subscription (newest first). */
@@ -74,6 +75,27 @@ export function getWebhookDeliveries(
   const db = getDb();
   const limit = opts.limit ?? 20;
   const offset = opts.offset ?? 0;
+
+  if (opts.status !== undefined) {
+    const countSql =
+      'SELECT COUNT(*) AS count FROM webhook_deliveries WHERE subscription_id = ? AND status = ?';
+    const total = timedQuery(countSql, () => {
+      const row = db.prepare(countSql).get(opts.subscriptionId, opts.status) as { count: number };
+      return row.count;
+    });
+
+    const dataSql = `
+      SELECT * FROM webhook_deliveries
+      WHERE subscription_id = ? AND status = ?
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+    const data = timedQuery(dataSql, () =>
+      db.prepare(dataSql).all(opts.subscriptionId, opts.status, limit, offset) as WebhookDeliveryRow[],
+    );
+
+    return { data, total };
+  }
 
   const countSql =
     'SELECT COUNT(*) AS count FROM webhook_deliveries WHERE subscription_id = ?';

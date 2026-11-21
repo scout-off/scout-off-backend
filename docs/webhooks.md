@@ -707,6 +707,72 @@ See [docs/secrets-rotation.md](secrets-rotation.md) — once a dedicated rotatio
 document zero-downtime rotation using a dual-secret validation window (analogous to the
 `JWT_SECRET_PREVIOUS` pattern used for JWT rotation).
 
+## Scout Delivery History
+
+`GET /api/scouts/:wallet/webhooks/:id/deliveries` returns paginated delivery-attempt
+records for one of the authenticated scout's own webhook subscriptions.
+
+**Authentication**: Bearer JWT with the `scout` role; wallet must match the authenticated
+account. API key scope required: `read:webhooks`.
+
+**IDOR protection**: the subscription's `scout_wallet` is verified against `:wallet`
+before any records are returned — a scout cannot read another scout's delivery history.
+
+**No secrets, request headers, signatures, or payload content are included** in any
+response field.
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `status` | `"failed"` \| `"succeeded"` | *(all)* | Filter by delivery outcome |
+| `page` | integer ≥ 1 | `1` | 1-based page number |
+| `pageSize` | integer 1–100 | `20` | Results per page |
+
+### Response (200)
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "deliveryId": "uuid-string",
+      "eventType": "player_registered",
+      "createdAt": 1700000000000,
+      "attempts": 2,
+      "lastStatusCode": 500,
+      "lastLatencyMs": 312,
+      "lastError": "connect ECONNREFUSED [redacted]:443",
+      "nextRetryAt": null,
+      "deadLettered": false
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "pageSize": 20
+}
+```
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `deliveryId` | string | Unique delivery attempt identifier |
+| `eventType` | string | Contract event type that triggered the delivery |
+| `createdAt` | number | Unix timestamp (ms) of the first attempt |
+| `attempts` | number | Total attempt count |
+| `lastStatusCode` | number \| null | HTTP status code of the last attempt |
+| `lastLatencyMs` | number \| null | Round-trip latency of the last attempt (ms) |
+| `lastError` | string \| null | Error message, truncated to 200 chars; internal IPs and hostnames are redacted to `[redacted]` |
+| `nextRetryAt` | null | Always `null` — retry scheduling is not tracked in DB |
+| `deadLettered` | false | Always `false` — dead-letter promotion is not tracked per row |
+
+### Error responses
+
+| Status | Condition |
+|--------|-----------|
+| `400` | Non-integer `:id` or invalid `status` value |
+| `403` | Subscription exists but belongs to a different scout |
+| `404` | No subscription with that `:id` exists |
+
 ## Admin endpoints
 
 Both require a Bearer JWT with the `admin` role.

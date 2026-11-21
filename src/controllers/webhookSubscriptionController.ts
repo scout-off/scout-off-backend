@@ -19,6 +19,7 @@ import {
   getWebhookSubscriptionsByScout,
   getWebhookSubscriptionById,
   deleteWebhookSubscription,
+  getWebhookDeliveries,
 } from '../db';
 import { decryptWebhookSecret } from '../utils/webhookSecretCipher';
 import { signWebhookPayload, buildSignatureHeader } from '../services/webhooks';
@@ -368,4 +369,107 @@ export async function reactivateWebhook(req: Request, res: Response, next: NextF
  */
 export async function adminReactivateWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
   return reactivate(req, res, next, null);
+}
+
+// ─── Helpers for delivery history ─────────────────────────────────────────────
+
+/**
+ * Redact internal hostnames and IP addresses from an error message, then
+ * truncate to 200 characters. Prevents SSRF-sourced internal host/address
+ * leakage in delivery error responses.
+ */
+function redactAndTruncate(msg: string): string {
+  let result = msg
+    // IPv4 addresses
+    .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, '[redacted]')
+    // Hostnames ending in .internal, .local, or .cluster.local
+    .replace(/\b[\w.-]+\.(?:internal|local|cluster\.local)\b/gi, '[redacted]');
+  if (result.length > 200) {
+    result = result.slice(0, 200);
+  }
+  return result;
+}
+
+/**
+ * GET /api/scouts/:wallet/webhooks/:id/deliveries
+ *
+ * Paginated delivery-attempt history for a scout's own webhook subscription.
+ * No secrets, headers, or payloads are exposed.
+ *
+ * @query status  Filter by 'failed' or 'succeeded' (optional)
+ * @query page    1-based page number (default 1)
+ * @query pageSize Results per page (default 20, max 100)
+ * @response 200 { success: true, data: DeliveryItem[], total, page, pageSize }
+ * @response 400 Invalid params
+ * @response 403 Subscription belongs to another scout
+ * @response 404 Subscription not found
+ * @auth Bearer (scout role; wallet must match authenticated account)
+ */
+export async function getScoutWebhookDeliveries(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ success: false, error: 'Invalid subscription id' });
+    return;
+  }
+
+  const subscription = getWebhookSubscriptionById(id);
+  if (!subscription) {
+    res.status(404).json({ success: false, error: 'Webhook subscription not found' });
+    return;
+  }
+
+  if (subscription.scout_wallet !== (req.params.wallet as string)) {
+    sendForbidden(res, 'Forbidden: subscription belongs to another scout');
+    return;
+  }
+
+  // Map query status param to DB status value
+  let dbStatus: 'success' | 'failure' | undefined;
+  const rawStatus = req.query.status as string | undefined;
+  if (rawStatus !== undefined) {
+    if (rawStatus === 'failed') {
+      dbStatus = 'failure';
+    } else if (rawStatus === 'succeeded') {
+      dbStatus = 'success';
+    } else {
+      res.status(400).json({ success: false, error: 'status must be "failed" or "succeeded"' });
+      return;
+    }
+  }
+
+  // Parse pagination params
+  const rawPage = parseInt((req.query.page as string | undefined) ?? '1', 10);
+  const page = isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
+
+  const rawPageSize = parseInt((req.query.pageSize as string | undefined) ?? '20', 10);
+  const pageSize = isNaN(rawPageSize) || rawPageSize < 1
+    ? 20
+    : rawPageSize > 100
+      ? 100
+      : rawPageSize;
+
+  const { data: rows, total } = getWebhookDeliveries({
+    subscriptionId: String(id),
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    status: dbStatus,
+  });
+
+  const data = rows.map((row) => ({
+    deliveryId: row.delivery_id,
+    eventType: row.event_type,
+    createdAt: row.created_at,
+    attempts: row.attempt_count,
+    lastStatusCode: row.status_code ?? null,
+    lastLatencyMs: row.latency_ms ?? null,
+    lastError: row.error_message ? redactAndTruncate(row.error_message) : null,
+    nextRetryAt: null,
+    deadLettered: false,
+  }));
+
+  res.json({ success: true, data, total, page, pageSize });
 }

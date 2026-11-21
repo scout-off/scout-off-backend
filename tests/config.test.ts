@@ -941,3 +941,45 @@ describe('config.cache validation', () => {
     await expect(import('../src/config')).rejects.toThrow(name);
   });
 });
+
+describe('config.graphql.milestoneLoaderConcurrency', () => {
+  const VAR = 'MILESTONE_LOADER_CONCURRENCY';
+  let savedEnv: string | undefined;
+
+  beforeEach(() => {
+    savedEnv = process.env[VAR];
+    delete process.env[VAR];
+    process.env.JWT_SECRET = 'test-secret';
+  });
+
+  afterEach(() => {
+    if (savedEnv !== undefined) {
+      process.env[VAR] = savedEnv;
+    } else {
+      delete process.env[VAR];
+    }
+    jest.resetModules();
+  });
+
+  async function loadConfig() {
+    jest.resetModules();
+    return (await import('../src/config')).default;
+  }
+
+  it('defaults to 8 when env var is unset', async () => {
+    const cfg = await loadConfig();
+    expect(cfg.graphql.milestoneLoaderConcurrency).toBe(8);
+  });
+
+  it('reads override from MILESTONE_LOADER_CONCURRENCY', async () => {
+    process.env[VAR] = '4';
+    const cfg = await loadConfig();
+    expect(cfg.graphql.milestoneLoaderConcurrency).toBe(4);
+  });
+
+  it('throws at startup when MILESTONE_LOADER_CONCURRENCY is invalid', async () => {
+    process.env[VAR] = 'abc';
+    jest.resetModules();
+    await expect(import('../src/config')).rejects.toThrow(VAR);
+  });
+});

@@ -1062,6 +1062,21 @@ const config = {
     return nodeEnv === 'production' ? 'closed' : 'local';
   })(),
 
+  graphql: {
+    /**
+     * Maximum number of simultaneous Soroban RPC calls the MilestonesLoader
+     * may issue within a single DataLoader batch. Without a cap, a
+     * `players(pageSize: 100) { milestones }` query fires 100 concurrent RPC
+     * calls. Default: 8. Minimum: 1.
+     */
+    milestoneLoaderConcurrency: parseNumericEnv(
+      'MILESTONE_LOADER_CONCURRENCY',
+      process.env.MILESTONE_LOADER_CONCURRENCY,
+      8,
+      { min: 1, integer: true },
+    ),
+  },
+
   /** Only accept registered persisted GraphQL operations (GRAPHQL_PERSISTED_ONLY=true). */
   graphqlPersistedOnly: process.env.GRAPHQL_PERSISTED_ONLY === 'true',
 

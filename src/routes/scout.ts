@@ -57,6 +57,7 @@ import {
   testWebhook,
   registerWebhookSchema,
   reactivateWebhook,
+  getScoutWebhookDeliveries,
 } from '../controllers/webhookSubscriptionController';
 import { requireFeatureFlag } from '../middleware/requireFeatureFlag';
 import { FeatureFlags } from '../services/featureFlags';
@@ -808,6 +809,26 @@ router.route('/:wallet/webhooks/:id/test')
 router.route('/:wallet/webhooks/:id/reactivate')
   .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), webhookTestRateLimit, validateBody(emptyBodySchema), reactivateWebhook)
   .all(methodNotAllowed(['POST']));
+
+/**
+ * GET /api/scouts/:wallet/webhooks/:id/deliveries
+ * Paginated delivery history for a scout's own webhook subscription.
+ * Scoped to the owning wallet; no payload or secret data is returned.
+ *
+ * @param wallet {string} - Scout's Stellar public key
+ * @param id {integer} - Webhook subscription row ID
+ * @query status {string} - Optional. Filter by 'failed' or 'succeeded'
+ * @query page {integer} - Default 1
+ * @query pageSize {integer} - Default 20, max 100
+ * @response 200 { success: true, data: DeliveryItem[], total, page, pageSize }
+ * @response 400 { success: false, error: string } - Invalid params
+ * @response 403 { success: false, error: string } - Subscription belongs to another scout
+ * @response 404 { success: false, error: string } - Subscription not found
+ * @auth Bearer (scout role required; wallet must match authenticated account)
+ */
+router.route('/:wallet/webhooks/:id/deliveries')
+  .get(requireRole('scout'), requireApiKeyScope('read:webhooks'), requireWalletOwner(), getScoutWebhookDeliveries)
+  .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
  * GET /api/scouts/:wallet/dashboard

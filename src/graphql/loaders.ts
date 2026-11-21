@@ -14,6 +14,7 @@ import DataLoader from 'dataloader';
 import { queryEvents } from '../db';
 import { queryMilestones } from '../services/stellar';
 import { withConcurrencyLimit } from '../utils/concurrency';
+import config from '../config';
 
 export interface GqlMilestone {
   milestoneId: string | null;
@@ -72,10 +73,7 @@ async function batchLoadMilestones(
   //
   // MILESTONE_LOADER_CONCURRENCY caps the number of in-flight RPC calls.
   // Default: 8.  Configurable via the MILESTONE_LOADER_CONCURRENCY env var.
-  const concurrencyLimit = parseInt(
-    process.env.MILESTONE_LOADER_CONCURRENCY ?? '8',
-    10,
-  );
+  const concurrencyLimit = config.graphql.milestoneLoaderConcurrency;
 
   const onChainResults = await withConcurrencyLimit(
     playerIds.map((pid) => () => queryMilestones(pid)),
