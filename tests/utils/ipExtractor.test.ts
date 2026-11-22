@@ -212,3 +212,45 @@ describe('extractClientIp — proxy chain and IPv6 tests', () => {
     expect(fn(req)).toBe('203.0.113.42');
   });
 });
+
+// ─── Issue #1833: trustedProxyCount 0, 1, 2 across XFF chain lengths ────────
+//
+// config.trustedProxyCount is the single source of truth (read at call time).
+// For each count we exercise X-Forwarded-For chains that are shorter than,
+// equal to, and longer than count + 1, and assert the unchanged algorithm's
+// result: shorter → socket fallback; equal → leftmost (index 0); longer →
+// index length - 1 - count.
+
+describe('extractClientIp — trustedProxyCount 0, 1, 2 across XFF chain lengths', () => {
+  const OLD_ENV = process.env;
+  const SOCKET_ADDR = '9.9.9.9';
+
+  function loadFn(count: string): typeof import('../../src/utils/ipExtractor') {
+    process.env = { ...OLD_ENV, TRUSTED_PROXY_COUNT: count };
+    jest.resetModules();
+    return jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+  }
+
+  afterEach(() => {
+    process.env = { ...OLD_ENV };
+    jest.resetModules();
+  });
+
+  it.each<{ count: string; xff: string | undefined; expected: string; label: string }>([
+    { count: '0', xff: undefined, expected: SOCKET_ADDR, label: 'count=0 shorter (no XFF) → socket fallback' },
+    { count: '0', xff: '1.0.0.1', expected: '1.0.0.1', label: 'count=0 equal (1 entry) → rightmost entry' },
+    { count: '0', xff: '1.0.0.1, 2.0.0.2', expected: '2.0.0.2', label: 'count=0 longer (2 entries) → rightmost entry' },
+    { count: '1', xff: '1.0.0.1', expected: SOCKET_ADDR, label: 'count=1 shorter (1 entry) → socket fallback' },
+    { count: '1', xff: '1.0.0.1, 2.0.0.2', expected: '1.0.0.1', label: 'count=1 equal (2 entries) → leftmost entry' },
+    { count: '1', xff: '1.0.0.1, 2.0.0.2, 3.0.0.3', expected: '2.0.0.2', label: 'count=1 longer (3 entries) → index length-2' },
+    { count: '2', xff: '1.0.0.1, 2.0.0.2', expected: SOCKET_ADDR, label: 'count=2 shorter (2 entries) → socket fallback' },
+    { count: '2', xff: '1.0.0.1, 2.0.0.2, 3.0.0.3', expected: '1.0.0.1', label: 'count=2 equal (3 entries) → leftmost entry' },
+    { count: '2', xff: '1.0.0.1, 2.0.0.2, 3.0.0.3, 4.0.0.4', expected: '2.0.0.2', label: 'count=2 longer (4 entries) → index length-3' },
+  ])('$label', ({ count, xff, expected }) => {
+    const { extractClientIp } = loadFn(count);
+    const req = xff === undefined
+      ? makeReq({}, SOCKET_ADDR)
+      : makeReq({ 'x-forwarded-for': xff }, SOCKET_ADDR);
+    expect(extractClientIp(req)).toBe(expected);
+  });
+});
