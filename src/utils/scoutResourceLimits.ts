@@ -8,9 +8,11 @@ export class WebhookSubscriptionLimitError extends Error {
   }
 }
 
-export class ApiKeyLimitError extends Error {
+export const MAX_SAVED_SEARCHES_PER_SCOUT = 20;
+
+export class SavedSearchLimitError extends Error {
   constructor() {
-    super(`API key limit reached (${MAX_API_KEYS_PER_SCOUT} per scout)`);
-    this.name = 'ApiKeyLimitError';
+    super(`Saved search limit reached (${MAX_SAVED_SEARCHES_PER_SCOUT} per scout)`);
+    this.name = 'SavedSearchLimitError';
   }
 }

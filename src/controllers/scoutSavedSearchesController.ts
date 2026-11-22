@@ -25,6 +25,7 @@ import {
 } from '../db';
 import { logger } from '../utils/logger';
 import { MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE } from '../utils/pagination';
+import { MAX_SAVED_SEARCHES_PER_SCOUT } from '../utils/scoutResourceLimits';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -97,12 +98,12 @@ export async function createSavedSearch(
   const { name, filters } = parsed.data;
   const wallet = req.params.wallet as string;
 
-  // Enforce 20 saved searches limit
+  // Enforce saved searches limit
   const currentCount = await countSavedSearchesByScout(wallet);
-  if (currentCount >= 20) {
+  if (currentCount >= MAX_SAVED_SEARCHES_PER_SCOUT) {
     res.status(422).json({
       success: false,
-      error: 'Maximum of 20 saved searches per scout',
+      error: `Maximum of ${MAX_SAVED_SEARCHES_PER_SCOUT} saved searches per scout`,
     });
     return;
   }

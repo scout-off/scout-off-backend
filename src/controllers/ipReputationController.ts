@@ -5,8 +5,8 @@ import { setIpScore, getReputation } from '../services/ipReputation';
 import { isValidIpAddress } from '../utils/validators';
 
 export const setIpReputationSchema = z.object({
-  ip: z.string(requiredError('ip is required')).min(1, 'ip is required'),
-  score: z.number().int().min(0).max(100),
+  ip: z.string(requiredError('ip is required')).trim().min(1, 'ip is required'),
+  score: z.union([z.literal(0), z.literal(100)]),
 }).strict();
 
 /**
@@ -21,25 +21,16 @@ export const setIpReputationSchema = z.object({
  * @response 400 { success: false, error: string } - ip missing, malformed, or score out of range
  */
 export function setIpReputationController(req: Request, res: Response): void {
-  const parsed = setIpReputationSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({
-      success: false,
-      error: parsed.error.issues[0]?.message ?? 'Validation error',
-    });
-    return;
-  }
+  const { ip, score } = req.body as { ip: string; score: number };
 
-  const { ip, score } = parsed.data;
-
-  if (!isValidIpAddress(ip.trim())) {
+  if (!isValidIpAddress(ip)) {
     res.status(400).json({ success: false, error: 'ip must be a valid IPv4 or IPv6 address' });
     return;
   }
 
-  setIpScore(ip.trim(), score, true);
+  setIpScore(ip, score, true);
 
-  res.json({ success: true, data: { ip: ip.trim(), score } });
+  res.json({ success: true, data: { ip, score } });
 }
 
 /**
