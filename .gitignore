@@ -11,6 +11,8 @@ job_log.txt
 backups/
 contracts/target/
 contracts/**/test_snapshots/
+# Rust/Soroban test snapshot directories (broader coverage)
+**/test_snapshots/
 coverage/
 scripts/soroban-sandbox/.env.contracts
 BUILD_COMMIT
