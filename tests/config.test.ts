@@ -941,3 +941,58 @@ describe('config.cache validation', () => {
     await expect(import('../src/config')).rejects.toThrow(name);
   });
 });
+
+describe('config.admin.ipAllowlist validation', () => {
+  const savedAdminIpAllowlist = process.env.ADMIN_IP_ALLOWLIST;
+  const savedContractId = process.env.CONTRACT_ID;
+  const savedJwtSecret = process.env.JWT_SECRET;
+
+  beforeEach(() => {
+    process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
+    process.env.JWT_SECRET = 'test-secret';
+  });
+
+  afterEach(() => {
+    if (savedAdminIpAllowlist !== undefined) {
+      process.env.ADMIN_IP_ALLOWLIST = savedAdminIpAllowlist;
+    } else {
+      delete process.env.ADMIN_IP_ALLOWLIST;
+    }
+    process.env.CONTRACT_ID = savedContractId;
+    process.env.JWT_SECRET = savedJwtSecret;
+    jest.resetModules();
+  });
+
+  it('defaults to an empty array when ADMIN_IP_ALLOWLIST is unset', async () => {
+    delete process.env.ADMIN_IP_ALLOWLIST;
+    jest.resetModules();
+    const { default: cfg } = await import('../src/config');
+    expect(cfg.admin.ipAllowlist).toEqual([]);
+  });
+
+  it('defaults to an empty array when ADMIN_IP_ALLOWLIST is empty/whitespace', async () => {
+    process.env.ADMIN_IP_ALLOWLIST = '  ,  ';
+    jest.resetModules();
+    const { default: cfg } = await import('../src/config');
+    expect(cfg.admin.ipAllowlist).toEqual([]);
+  });
+
+  it('parses a comma-separated list of IPs and CIDRs, trimmed', async () => {
+    process.env.ADMIN_IP_ALLOWLIST = '10.0.0.1, 192.168.1.0/24 , 10.0.0.0/8';
+    jest.resetModules();
+    const { default: cfg } = await import('../src/config');
+    expect(cfg.admin.ipAllowlist).toEqual(['10.0.0.1', '192.168.1.0/24', '10.0.0.0/8']);
+  });
+
+  it.each([
+    'not-an-ip',
+    '999.999.999.999/24',
+    '10.0.0.0/33',
+    '10.0.0.0/abc',
+    'bad-entry,10.0.0.1',
+  ])('throws naming ADMIN_IP_ALLOWLIST for an invalid entry %s', async (value) => {
+    process.env.ADMIN_IP_ALLOWLIST = value;
+    jest.resetModules();
+    await expect(import('../src/config')).rejects.toThrow('ADMIN_IP_ALLOWLIST');
+  });
+});
