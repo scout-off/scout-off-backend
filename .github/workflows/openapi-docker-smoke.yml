@@ -1,0 +1,25 @@
+name: Built OpenAPI docs smoke
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'package.json'
+      - 'src/app.ts'
+      - 'src/routes/docs.ts'
+      - 'src/middleware/docs.guard.ts'
+      - 'src/openapi*'
+      - 'scripts/copy-openapi-assets.cjs'
+      - 'scripts/smoke-openapi-build.cjs'
+      - '.github/workflows/openapi-docker-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  docs-artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -t scout-off-docs-smoke .
+      - name: Serve API docs from the built image
+        run: docker run --rm --entrypoint node -e API_DOCS_MODE=public -e NODE_ENV=test scout-off-docs-smoke scripts/smoke-openapi-build.cjs
