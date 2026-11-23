@@ -365,7 +365,11 @@ impl ConnectionContract {
             .ok_or(Error::ConnectionNotFound)
     }
 
-    /// Return all connection records for a scout.
+    /// Return connection records for a scout.
+    ///
+    /// Bounded to at most the first [`MAX_PAGE_SIZE`] records so the read stays
+    /// within Soroban's budget; use [`list_connections_page`] to page through
+    /// larger result sets.
     pub fn list_connections(env: Env, scout: Address) -> Vec<ConnectionRecord> {
         let player_ids: Vec<u64> = env
             .storage()
@@ -374,7 +378,7 @@ impl ConnectionContract {
             .unwrap_or_else(|| Vec::new(&env));
 
         let mut results = Vec::new(&env);
-        let len = player_ids.len();
+        let len = player_ids.len().min(MAX_PAGE_SIZE);
         for i in 0..len {
             let pid = player_ids.get_unchecked(i);
             if let Some(record) = env
@@ -544,7 +548,11 @@ impl ConnectionContract {
         Ok(())
     }
 
-    /// Return all trial offer records for a given player.
+    /// Return trial offer records for a given player.
+    ///
+    /// Bounded to at most the first [`MAX_PAGE_SIZE`] records so the read stays
+    /// within Soroban's budget; use [`get_connections_page`] to page through
+    /// larger result sets.
     pub fn get_connections(env: Env, player_id: u64) -> Vec<TrialOfferRecord> {
         let scouts: Vec<Address> = env
             .storage()
@@ -553,7 +561,7 @@ impl ConnectionContract {
             .unwrap_or_else(|| Vec::new(&env));
 
         let mut results = Vec::new(&env);
-        let len = scouts.len();
+        let len = scouts.len().min(MAX_PAGE_SIZE);
         for i in 0..len {
             let scout = scouts.get_unchecked(i);
             let offer_key = DataKey::TrialOfferKey(scout.clone(), player_id);
@@ -573,7 +581,11 @@ impl ConnectionContract {
         results
     }
 
-    /// Return all trial offers made by a given scout.
+    /// Return trial offers made by a given scout.
+    ///
+    /// Bounded to at most the first [`MAX_PAGE_SIZE`] records so the read stays
+    /// within Soroban's budget; use [`get_trial_offers_page`] to page through
+    /// larger result sets.
     pub fn get_trial_offers(env: Env, scout: Address) -> Vec<TrialOfferRecord> {
         let player_ids: Vec<u64> = env
             .storage()
@@ -582,7 +594,7 @@ impl ConnectionContract {
             .unwrap_or_else(|| Vec::new(&env));
 
         let mut results = Vec::new(&env);
-        let len = player_ids.len();
+        let len = player_ids.len().min(MAX_PAGE_SIZE);
         for i in 0..len {
             let player_id = player_ids.get_unchecked(i);
             let offer_key = DataKey::TrialOfferKey(scout.clone(), player_id);
