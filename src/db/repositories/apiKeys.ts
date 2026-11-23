@@ -142,6 +142,35 @@ export async function revokeApiKeyById(id: number, scoutWallet: string): Promise
 }
 
 /**
+ * Update the editable metadata of an API key in place — its label and its
+ * JSON-encoded scope list — without rotating the credential (#1329). The
+ * caller must have already validated that any scope change only narrows the
+ * key's existing privileges; this function persists exactly what it is given.
+ *
+ * Only affects keys belonging to the given scout wallet and not already
+ * revoked. Returns true when a row was updated, false when not found, not
+ * owned by this wallet, or already revoked.
+ *
+ * `scopes` is the raw JSON string to persist (or NULL for the
+ * legacy/unrestricted representation).
+ */
+export async function updateApiKeyMeta(
+  id: number,
+  scoutWallet: string,
+  label: string,
+  scopes: string | null,
+): Promise<boolean> {
+  const sql = `
+    UPDATE api_keys SET label = ?, scopes = ?
+    WHERE id = ? AND scout_wallet = ? AND revoked_at IS NULL
+  `;
+  return timedQueryAsync(sql, async () => {
+    const info = await getDriver().run(sql, [label, scopes, id, scoutWallet]);
+    return info.changes > 0;
+  });
+}
+
+/**
  * SQL fragment excluding:
  *  - permanently revoked rows (revoked_at IS NOT NULL)
  *  - rows past their scheduled rotation deadline (#676)

@@ -72,7 +72,7 @@ export type * from './repositories/feeWithdrawals';
 export const { timedQuery, timedQueryAsync, initDb, getDriver, getDb, closeDb } = query;
 export const { insertPendingAdminAction, getPendingAdminActionById, getPendingAdminActionsByStatus, updatePendingAdminActionStatus, incrementActionSignatures, expireStalePendingAdminActions, insertAdminActionSignature, getAdminActionSignature, getAdminActionSignatures } = adminActions;
 export const { getNewPlayersTimeSeries, getMilestonesApprovedTimeSeries, getContactUnlocksTimeSeries, getSubscriptionsStartedTimeSeries, getNewPlayersByRegionTimeSeries } = analytics;
-export const { insertApiKey, listApiKeysByWallet, revokeApiKeyById, getApiKeyByHash, getApiKeyById, getAllActiveApiKeys, getActiveApiKeyIds, getActiveApiKeyByLookupHash, getActiveApiKeysAwaitingLookupHash, scheduleApiKeyRevocation, setApiKeyLookupHash, touchApiKeyLastUsed } = apiKeys;
+export const { insertApiKey, listApiKeysByWallet, revokeApiKeyById, getApiKeyByHash, getApiKeyById, getAllActiveApiKeys, getActiveApiKeyIds, getActiveApiKeyByLookupHash, getActiveApiKeysAwaitingLookupHash, scheduleApiKeyRevocation, updateApiKeyMeta, setApiKeyLookupHash, touchApiKeyLastUsed } = apiKeys;
 export const { insertAuditLog, getAuditLogRowsAfterId, getAuditLogs, getAuditLogsCount, getAllAuditLogRows } = audit;
 export const { insertBookmark, deleteBookmark, getBookmarksByScout, insertBookmarkFolder, getBookmarkFoldersByScout, getBookmarkFolderById, renameBookmarkFolder, deleteBookmarkFolder, moveBookmarksToRoot, countBookmarksInFolder, getBookmarkedPlayersWithDetails, countBookmarkedPlayers } = bookmarks;
 export const { insertContactUnlock, getContactUnlocksByScout, getContactUnlocksByPlayer, hasContactUnlock } = contacts;

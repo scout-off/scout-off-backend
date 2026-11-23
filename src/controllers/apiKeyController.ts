@@ -22,12 +22,14 @@ import {
   revokeApiKeyById,
   getApiKeyById,
   scheduleApiKeyRevocation,
+  updateApiKeyMeta,
   ApiKeyRow,
 } from '../db';
 import { logger } from '../utils/logger';
 import {
   parseApiKeyScopes,
   normalizeRequestedScopes,
+  API_KEY_SCOPE_VOCABULARY,
 } from '../utils/apiKeyScopes';
 import { ApiKeyLimitError } from '../utils/scoutResourceLimits';
 import { generateApiKey } from '../services/apiKeyService';
@@ -73,6 +75,24 @@ export const rotateKeySchema = z.object({
     .max(MAX_ROTATION_GRACE_PERIOD_SECONDS)
     .default(DEFAULT_ROTATION_GRACE_PERIOD_SECONDS),
 }).strict().prefault({});
+
+// ── Key metadata updates: relabel + narrow scopes (#1329) ─────────────────────
+
+/**
+ * Body schema for PATCH /api/scouts/:wallet/api-keys/:id. Both fields are
+ * optional; omitted fields are left unchanged. Unlike issuance, `scopes` may
+ * only narrow the key's existing privileges — the handler rejects any scope
+ * the key does not already hold.
+ */
+export const updateKeySchema = z.object({
+  /** New human-readable label. Omitted → keep the existing label. */
+  label: z.string().max(100).optional(),
+  /**
+   * New scope list. Omitted → keep the existing scopes. When present it must
+   * be a subset of the key's current scopes (scope changes may only narrow).
+   */
+  scopes: z.array(z.string()).optional(),
+}).strict();
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -213,6 +233,124 @@ export async function revokeApiKey(
   logger.info({ scout: req.params.wallet as string, action: 'api_key_revoked', keyId: id });
 
   res.json({ success: true, data: { id, revoked: true } });
+}
+
+/**
+ * PATCH /api/scouts/:wallet/api-keys/:id
+ *
+ * Update an API key's label and/or scopes in place, without rotating the
+ * secret. Because the credential keeps working, there is nothing to redeploy
+ * — this is what lets a scout reduce a key's privileges without rolling the
+ * key out everywhere it is consumed. Scope changes may only narrow the key's
+ * existing privileges: every scope requested must already be held by the key,
+ * and an attempt to widen access is rejected rather than silently applied
+ * (#1329).
+ */
+export async function updateApiKey(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ success: false, error: 'Invalid API key id' });
+    return;
+  }
+
+  const parsed = updateKeySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+    return;
+  }
+
+  const row = await getApiKeyById(id, req.params.wallet as string);
+  if (!row || row.revoked_at !== null) {
+    res.status(404).json({ success: false, error: 'API key not found' });
+    return;
+  }
+
+  const labelChanged = parsed.data.label !== undefined;
+  const scopesChanged = parsed.data.scopes !== undefined;
+
+  // `null` (legacy / migration-default / unparseable) means the key is
+  // unrestricted and effectively holds the whole vocabulary.
+  const currentScopes = parseApiKeyScopes(row.scopes, (message) => logger.warn(message));
+
+  const nextLabel = parsed.data.label ?? row.label;
+  let nextScopesRaw: string | null = row.scopes;
+
+  if (scopesChanged) {
+    const normalized = normalizeRequestedScopes(parsed.data.scopes);
+    if (!normalized.ok) {
+      res.status(400).json({ success: false, error: normalized.error });
+      return;
+    }
+    if (normalized.scopes.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'scopes must contain at least one scope; revoke the key with DELETE instead',
+      });
+      return;
+    }
+
+    const allowed = currentScopes ?? (API_KEY_SCOPE_VOCABULARY as readonly string[]);
+    const notGranted = normalized.scopes.filter((scope) => !allowed.includes(scope));
+    if (notGranted.length > 0) {
+      res.status(400).json({
+        success: false,
+        error: `scopes may only be narrowed; not currently granted: ${notGranted.join(', ')}`,
+      });
+      return;
+    }
+
+    const requestedRaw = JSON.stringify(normalized.scopes);
+    // The stored list must remain a restriction. The migration default is
+    // interpreted as "unrestricted" (see apiKeyScopes), so persisting it would
+    // silently widen the key — reject that round-trip case.
+    if (currentScopes !== null && parseApiKeyScopes(requestedRaw) === null) {
+      res.status(400).json({ success: false, error: 'scopes may only be narrowed' });
+      return;
+    }
+
+    nextScopesRaw = requestedRaw;
+  }
+
+  // Nothing to change — return the current metadata without writing.
+  if (!labelChanged && !scopesChanged) {
+    res.json({
+      success: true,
+      data: { id, label: row.label, scopes: currentScopes ?? [] },
+    });
+    return;
+  }
+
+  const updated = await updateApiKeyMeta(id, req.params.wallet as string, nextLabel, nextScopesRaw);
+  if (!updated) {
+    // Row was revoked between the read and the write.
+    res.status(404).json({ success: false, error: 'API key not found' });
+    return;
+  }
+
+  const resolvedScopes = parseApiKeyScopes(nextScopesRaw, (message) => logger.warn(message));
+
+  logger.info({
+    scout: req.params.wallet as string,
+    action: 'api_key_updated',
+    keyId: id,
+    labelChanged,
+    scopesChanged,
+    scopes: resolvedScopes,
+  });
+
+  res.json({
+    success: true,
+    data: {
+      id,
+      label: nextLabel,
+      // Empty array == legacy/unrestricted key.
+      scopes: resolvedScopes ?? [],
+    },
+  });
 }
 
 /**
