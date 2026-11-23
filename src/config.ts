@@ -76,6 +76,18 @@ function parseNumericEnv(
   return value;
 }
 
+/** Parse boolean config at startup, rejecting ambiguous or mistyped values. */
+function parseBooleanEnv(name: string, raw: string | undefined, defaultValue: boolean): boolean {
+  if (raw === undefined || raw.trim() === '') return defaultValue;
+  const value = raw.trim().toLowerCase();
+  if (value === 'true' || value === '1' || value === 'yes') return true;
+  if (value === 'false' || value === '0' || value === 'no') return false;
+  throw new Error(`Invalid ${name}: "${raw}". Must be true or false (also accepts 1/0 or yes/no).`);
+}
+
+type ApiDocsMode = 'public' | 'admin' | 'disabled';
+const VALID_API_DOCS_MODES: ReadonlySet<string> = new Set(envConstants.apiDocsModes);
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type NodeEnv = 'development' | 'test' | 'staging' | 'production';
 
@@ -974,6 +986,18 @@ const config = {
   /** Log queries slower than this threshold (ms). */
   slowQueryThresholdMs: parseNumericEnv('SLOW_QUERY_THRESHOLD_MS', process.env.SLOW_QUERY_THRESHOLD_MS, 50, { min: 0, integer: true }),
 
+  // ── API documentation visibility (#1834) ──────────────────────────────
+  apiDocs: {
+    mode: (() : ApiDocsMode => {
+      const raw = (process.env.API_DOCS_MODE ?? '').trim().toLowerCase();
+      if (raw && !VALID_API_DOCS_MODES.has(raw)) {
+        throw new Error(`Invalid API_DOCS_MODE: "${raw}". Must be one of: ${[...VALID_API_DOCS_MODES].join(', ')}.`);
+      }
+      return raw ? raw as ApiDocsMode :
+        (nodeEnv === 'production' || nodeEnv === 'staging' ? 'admin' : 'public');
+    })(),
+    hideAdminPaths: parseBooleanEnv('API_DOCS_HIDE_ADMIN', process.env.API_DOCS_HIDE_ADMIN, false),
+  },
   // ── Metrics endpoint protection ────────────────────────────────────────
   /**
    * Optional bearer token for /metrics endpoint protection.
@@ -981,6 +1005,10 @@ const config = {
    * Recommended in production to prevent unauthorized scraping of operational metrics.
    */
   metrics: {
+    /** Collection defaults to enabled, matching the old middleware behaviour. */
+    enabled: parseBooleanEnv('METRICS_ENABLED', process.env.METRICS_ENABLED, true),
+    /** Legacy millisecond histogram remains enabled by default. */
+    legacyMs: parseBooleanEnv('METRICS_LEGACY_MS', process.env.METRICS_LEGACY_MS, true),
     authToken: process.env.METRICS_AUTH_TOKEN ?? '',
     /**
      * Optional CIDR allowlist for /metrics endpoint.

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import config from '../config';
 import { retentionMetrics } from '../services/retentionMetrics';
 import { ipReputationCounters, resetIpReputationCounters } from '../services/ipReputation';
 import type { CircuitState, CircuitBreaker } from '../utils/circuitBreaker';
@@ -73,12 +74,12 @@ export const errorCountsStore: Record<ErrorRange, number> = { '4xx': 0, '5xx': 0
 
 /** Whether metrics collection is enabled. Controlled by METRICS_ENABLED env var. */
 export function isMetricsEnabled(): boolean {
-  return process.env.METRICS_ENABLED !== 'false';
+  return config.metrics.enabled;
 }
 
 /** Whether legacy http_request_duration_ms metric is exported. Default true for one release. */
 export function isLegacyMsMetricEnabled(): boolean {
-  return process.env.METRICS_LEGACY_MS !== 'false';
+  return config.metrics.legacyMs;
 }
 
 /**

@@ -391,3 +391,27 @@ In production and staging, if neither `METRICS_AUTH_TOKEN` nor `METRICS_ALLOWED_
 
 See [DEPLOYMENT.md](../DEPLOYMENT.md#metrics-endpoint-protection) for full deployment instructions.
 
+## Manual metrics middleware benchmark (#1842)
+
+Run `npm run bench:metrics` before and after changes to `src/middleware/metrics.ts`.
+The script generates traffic across 150 routes and measures 100 local scrapes
+of `/metrics`, reporting average, min/max, and p50/p95/p99 response times in
+milliseconds. Lower scrape latency is better; the printed 50 ms p95 line is a
+manual performance target, not a CI gate. Keep machine load and runtime
+conditions comparable when comparing runs. The benchmark is intentionally not
+scheduled in CI and starts an isolated HTTP server on port 3000.
+
+## Request cancellation in long-running exports (#1836)
+
+For streaming CSV exports, check request cancellation between database batches
+and before writing rows. The pattern is to call `checkRequestCancelled()`
+from `src/middleware/requestSignal.ts` in the loop, stop producing output
+on cancellation, and close the stream. Do not copy the removed
+`exportController.example.ts` as-is: it referenced an undefined database
+client. Use your actual repository methods and ensure failed writes are handled.
+
+For external Stellar RPC requests, a local abort or `Promise.race` only stops
+waiting unless the client supports cancellation. Do not assume the upstream RPC
+call has stopped, and avoid leaving event listeners attached after completion.
+The removed `stellar.example.ts` was illustrative only, not an implemented
+SDK cancellation integration.

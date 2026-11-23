@@ -941,3 +941,80 @@ describe('config.cache validation', () => {
     await expect(import('../src/config')).rejects.toThrow(name);
   });
 });
+
+describe('central metrics and API docs config (#1832, #1834)', () => {
+  const names = [
+    'NODE_ENV', 'METRICS_ENABLED', 'METRICS_LEGACY_MS',
+    'API_DOCS_MODE', 'API_DOCS_HIDE_ADMIN', 'JWT_SECRET',
+    'CONTRACT_ID', 'ADMIN_WALLET', 'PLATFORM_SECRET_KEY',
+    'SEP10_SERVER_SECRET', 'API_KEY_LOOKUP_SECRET',
+  ];
+  const saved = new Map<string, string | undefined>();
+
+  beforeEach(() => {
+    for (const key of names) {
+      saved.set(key, process.env[key]);
+      delete process.env[key];
+    }
+    process.env.NODE_ENV = 'test';
+    process.env.JWT_SECRET = 'test-secret';
+    process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
+  });
+  afterEach(() => {
+    for (const key of names) {
+      const original = saved.get(key);
+      if (original === undefined) delete process.env[key];
+      else process.env[key] = original;
+    }
+    jest.resetModules();
+  });
+  async function load(nodeEnv = 'test') {
+    process.env.NODE_ENV = nodeEnv;
+    if (nodeEnv === 'production' || nodeEnv === 'staging') {
+      process.env.ADMIN_WALLET = 'GADMINWALLET1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+      process.env.JWT_SECRET = 'k8Zq3vN1pW7xR4tY9bM2cF6hJ0lD5sGaQe';
+    }
+    if (nodeEnv !== 'test') {
+      process.env.PLATFORM_SECRET_KEY = 'SPLATFORMSECRETKEY1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    }
+    if (nodeEnv === 'production') {
+      process.env.SEP10_SERVER_SECRET = 'SSEP10SERVERSECRET1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+      process.env.API_KEY_LOOKUP_SECRET = 'a'.repeat(64);
+    }
+    jest.resetModules();
+    return (await import('../src/config')).default;
+  }
+  it.each([
+    ['development', 'public'], ['test', 'public'],
+    ['staging', 'admin'], ['production', 'admin'],
+  ])('defaults API docs to %s -> %s', async (env, mode) => {
+    const cfg = await load(env);
+    expect(cfg.apiDocs).toEqual({ mode, hideAdminPaths: false });
+    expect(cfg.metrics.enabled).toBe(true);
+    expect(cfg.metrics.legacyMs).toBe(true);
+  });
+  it('honours explicit boolean and docs mode overrides', async () => {
+    process.env.METRICS_ENABLED = 'false';
+    process.env.METRICS_LEGACY_MS = '0';
+    process.env.API_DOCS_MODE = ' DISABLED ';
+    process.env.API_DOCS_HIDE_ADMIN = 'yes';
+    const cfg = await load();
+    expect(cfg.metrics.enabled).toBe(false);
+    expect(cfg.metrics.legacyMs).toBe(false);
+    expect(cfg.apiDocs).toEqual({ mode: 'disabled', hideAdminPaths: true });
+  });
+  it.each(['public', 'admin', 'disabled'])('accepts API_DOCS_MODE=%s', async (mode) => {
+    process.env.API_DOCS_MODE = mode;
+    expect((await load()).apiDocs.mode).toBe(mode);
+  });
+  it.each([
+    ['METRICS_ENABLED', 'maybe'],
+    ['METRICS_LEGACY_MS', 'not-a-boolean'],
+    ['API_DOCS_HIDE_ADMIN', 'perhaps'],
+    ['API_DOCS_MODE', 'secret'],
+  ])('rejects invalid %s at startup', async (name, value) => {
+    process.env[name] = value;
+    jest.resetModules();
+    await expect(import('../src/config')).rejects.toThrow(name);
+  });
+});
