@@ -8,14 +8,45 @@ This document outlines the rotation policy, cadence, and step-by-step procedures
 
 | Secret | Cadence | Zero-Downtime? | Responsibility |
 |---|---|---|---|
-| `JWT_SECRET` | Quarterly (90 days) | Yes (via Dual-Key) | Security Administrator |
-| `PINATA_API_KEY` / `PINATA_SECRET` | Semi-Annually (180 days) | No (Requires Restart) | DevOps / IPFS Administrator |
-| `PLATFORM_SECRET_KEY` / `PLATFORM_SECRET` | Semi-Annually (180 days) | No (Requires Restart) | Key Custodian / Soroban Admin |
+| `JWT_SECRET` | Quarterly (90 days) | Yes (via dual-key; provider values refresh live) | Security Administrator |
+| `PINATA_API_KEY` / `PINATA_SECRET` | Semi-Annually (180 days) | Yes (provider values refresh live) | DevOps / IPFS Administrator |
+| `PLATFORM_SECRET_KEY` / `PLATFORM_SECRET` / `STELLAR_SECRET_KEY` | Semi-Annually (180 days) | Yes (keypair refreshes on use) | Key Custodian / Soroban Admin |
+| `SEP10_SERVER_SECRET` | Per key-custody policy | Yes (with `SEP10_SERVER_SECRET_PREVIOUS`) | Security Administrator |
 | `ADMIN_WALLET` / `ADMIN_WALLETS` | Annually (365 days) | No (Requires Restart) | Platform Owner / Multi-Sig Signers |
 | `REDIS_URL` (with password) | Annually (365 days) | No (Requires Restart) | Database / DevOps Engineer |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY` | Semi-Annually (180 days), or on suspected compromise | No (Requires Re-encryption + Restart) | Security Administrator |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY` | Semi-Annually (180 days), or on suspected compromise | Yes (with previous-key decryption; re-encrypt before removing it) | Security Administrator |
 
 ---
+
+## Secret Provider
+
+The backend defaults to `SECRETS_PROVIDER=env`, which reads secret values from
+environment variables. Set `SECRETS_PROVIDER=file` to read each supported
+secret from a file named exactly after its variable in `SECRETS_DIR`
+(`/run/secrets` by default). File mode watches the mounted directory and polls
+for projected-volume updates; secret values are never included in audit logs.
+
+For Docker Swarm, mount secrets under `/run/secrets/<SECRET_NAME>`. For
+Kubernetes, mount the Secret as a directory; do not use `subPath`, which does
+not receive projected Secret updates:
+
+```yaml
+env:
+  SECRETS_PROVIDER: file
+  SECRETS_DIR: /run/secrets
+extraVolumes:
+  - name: backend-secret-files
+    secret:
+      secretName: scout-off-secrets
+extraVolumeMounts:
+  - name: backend-secret-files
+    mountPath: /run/secrets
+    readOnly: true
+```
+
+The Secret keys must use the exact names from `src/secrets/types.ts`. The Helm
+chart supports `extraVolumes` and `extraVolumeMounts`; environment mode remains
+the default.
 
 ## 1. JWT Signer Secret (`JWT_SECRET`)
 
@@ -64,7 +95,9 @@ Used by the backend to pin player and metadata files to IPFS via Pinata's API.
 
 * **Recommended Cadence**: Semi-Annually (every 180 days), or immediately upon suspected compromise.
 * **Responsible Party**: DevOps / IPFS Administrator.
-* **Downtime Impact**: **Downtime Required (Brief).** Changing these credentials requires a restart of the backend service to load the new config.
+* **Downtime Impact**: No restart is required when the selected provider exposes
+  refreshed values. File-provider credentials are read on use and file updates
+  are detected automatically.
 
 > [!WARNING]
 > While a rolling update minimizes service interruption, any file-upload or pinning requests that occur during the environment update may fail until the new credentials take effect.
@@ -78,9 +111,7 @@ Used by the backend to pin player and metadata files to IPFS via Pinata's API.
    - Copy the newly generated **API Key** and **Secret API Key**.
 2. **Apply Configuration**:
    - Update the `PINATA_API_KEY` and `PINATA_SECRET` environment variables in your deployment hosting provider (e.g. AWS, Render, Heroku).
-3. **Service Restart**:
-   - Deploy or restart the backend application.
-4. **Verify Connectivity**:
+3. **Verify Connectivity**:
    - Check the `/ready` endpoint, which triggers an IPFS readiness check.
    - Verify that log entries do not report IPFS service connection warnings.
 5. **Revoke Old Keypair**:
@@ -94,7 +125,9 @@ Stellar secret keys used by the backend to sign transactions/messages and execut
 
 * **Recommended Cadence**: Semi-Annually (every 180 days), or immediately upon suspected compromise.
 * **Responsible Party**: Key Custodian / Soroban Admin.
-* **Downtime Impact**: **Downtime Required.** Rotating the platform keys requires service restarts.
+* **Downtime Impact**: No restart is required. `getPlatformKeypair()` rebuilds
+  its cached keypair when the provider value changes; the next signing operation
+  uses the new key.
 
 > [!IMPORTANT]
 > Because these keys submit transactions directly to the Stellar network, the newly generated key must be funded with native XLM before deployment to prevent transaction execution failures.
@@ -116,9 +149,7 @@ Stellar secret keys used by the backend to sign transactions/messages and execut
    - **Mainnet**: Manually transfer sufficient native token (XLM) to the new public key to cover gas/transaction fees.
 3. **Update Configuration**:
    - Update `PLATFORM_SECRET_KEY` and `PLATFORM_SECRET` in the environment variables with the new Stellar secret seed.
-4. **Deploy & Restart**:
-   - Perform a rolling restart of the backend service.
-5. **Verify Submissions**:
+4. **Verify Submissions**:
    - Monitor the logs for successful indexer updates and verify that on-chain contract actions succeed without throwing signature or fee errors.
 
 ---
@@ -183,9 +214,10 @@ written back to storage.
 * **Recommended Cadence**: Semi-Annually (every 180 days), or immediately upon suspected compromise
   (e.g. a database backup or read-replica leak).
 * **Responsible Party**: Security Administrator.
-* **Downtime Impact**: **Downtime Required.** Rotating this key requires re-encrypting every
-  existing `webhook_subscriptions.secret` row with the new key before the old key is discarded —
-  there is no dual-key transition support yet (see Known Gaps below).
+* **Downtime Impact**: No restart is required when rotating with
+  `WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS`. Decryption tries the current key and
+  then the previous key; encryption always uses the current key. Re-encrypt
+  existing rows with the new key before removing the previous key.
 
 ### Rotation Procedure
 
@@ -199,14 +231,19 @@ written back to storage.
    ```bash
    WEBHOOK_SECRET_ENCRYPTION_KEY=<current-key> npm run reencrypt-webhook-secrets
    ```
-3. **Decrypt-then-Re-encrypt Under the New Key**: there is no in-place re-key command yet — the
-   supported path is to decrypt every row with the old key and re-insert with the new key. The
-   simplest safe option today is **forced re-issuance**: for each subscription, generate a fresh
-   secret (`createWebhookSubscription` mints one automatically when no secret is passed) and have
-   the subscriber update their verification key out-of-band, then update `WEBHOOK_SECRET_ENCRYPTION_KEY`
-   and restart. Do this if the key is rotating due to suspected compromise.
-4. **Update Environment**: set the new `WEBHOOK_SECRET_ENCRYPTION_KEY` value and restart the
-   backend service.
+   With mounted secret files, select the file provider instead:
+   ```bash
+   SECRETS_PROVIDER=file SECRETS_DIR=/run/secrets npm run reencrypt-webhook-secrets
+   ```
+3. **Stage the New Key**: set `WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS` to the old key, then update
+   `WEBHOOK_SECRET_ENCRYPTION_KEY` to the new key in the provider. New writes use the new key;
+   existing rows remain decryptable using the previous key.
+4. **Re-encrypt Existing Rows**: re-encrypt stored values under the new key before clearing the
+   previous key. With both keys configured, run the migration with `--rotate`:
+   ```bash
+   npm run reencrypt-webhook-secrets -- --rotate
+   ```
+   For mounted secret files, use `SECRETS_PROVIDER=file` and `SECRETS_DIR` as above.
 5. **Verify**: confirm webhook deliveries continue to sign and deliver successfully (check
    `webhook_dead_letters` for a spike in new failures after the restart).
 
@@ -221,6 +258,9 @@ building the project:
 ```bash
 WEBHOOK_SECRET_ENCRYPTION_KEY=<key> npm run reencrypt-webhook-secrets
 ```
+
+For mounted secret files, use `SECRETS_PROVIDER=file` and set `SECRETS_DIR` if
+the files are not under `/run/secrets`.
 
 This is idempotent — rows already in the encrypted format are left untouched, so it's safe to run
 repeatedly (e.g. as a post-deploy health check).
@@ -240,11 +280,8 @@ rest under `WEBHOOK_SECRET_ENCRYPTION_KEY` — see § 6 above.
   re-creating the subscription. See
   [docs/webhooks.md § Secret Rotation](webhooks.md#secret-rotation) for the current workaround and
   the planned `POST /api/admin/webhooks/:id/rotate-secret` improvement.
-- There is no dual-key support for rotating `WEBHOOK_SECRET_ENCRYPTION_KEY` itself (unlike
-  `JWT_SECRET_PREVIOUS`'s zero-downtime pattern) — rotating the encryption key today requires
-  forced re-issuance of subscriber secrets (§ 6, step 3).
+- The webhook encryption-key previous slot is a transition mechanism, not a permanent keyring.
+  Re-encrypt all stored secrets before clearing `WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS`.
 
 * **Follow-up Action**: Once the rotation endpoint ships, update both this document and
-  `docs/webhooks.md` to document zero-downtime dual-secret rotation (analogous to the
-  `JWT_SECRET_PREVIOUS` pattern), and consider adding dual-key (`WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS`)
-  support for the encryption key so it can rotate without forced re-issuance.
+  `docs/webhooks.md` to document zero-downtime per-subscriber secret rotation.

@@ -1,0 +1,58 @@
+name: PR Performance Regression
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-performance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  k6-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+
+      - name: Check out main baseline
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix main
+
+      - name: Build main baseline and pull request
+        run: |
+          npm run build --prefix main
+          npm run build
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run seeded main-versus-PR performance profile
+        run: bash scripts/k6/run-ci-regression.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/main"
+
+      - name: Upload k6 summaries and server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-regression-${{ github.run_id }}
+          path: ${{ runner.temp }}/scout-k6-regression/
+          if-no-files-found: warn
+          retention-days: 30

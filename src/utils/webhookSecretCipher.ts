@@ -54,6 +54,29 @@ function resolveKey(): Buffer {
   return INSECURE_DEV_KEY;
 }
 
+function resolveDecryptionKeys(): Buffer[] {
+  const keys: Buffer[] = [];
+  const current = config.webhookSecretEncryptionKey;
+  const previous = config.webhookSecretEncryptionKeyPrevious;
+  for (const raw of [current, previous]) {
+    if (!raw) continue;
+    const key = Buffer.from(raw, 'hex');
+    if (key.length !== KEY_BYTES) {
+      throw new Error(
+        `WEBHOOK_SECRET_ENCRYPTION_KEY must be a ${KEY_BYTES * 2}-character hex string (${KEY_BYTES} bytes). Generate one with: openssl rand -hex 32`,
+      );
+    }
+    if (!keys.some((existing) => existing.equals(key))) keys.push(key);
+  }
+  if (keys.length === 0 && config.nodeEnv !== 'production') keys.push(INSECURE_DEV_KEY);
+  if (keys.length === 0) {
+    throw new Error(
+      'WEBHOOK_SECRET_ENCRYPTION_KEY is required in production to decrypt webhook signing secrets at rest. Generate one with: openssl rand -hex 32',
+    );
+  }
+  return keys;
+}
+
 /** True if `value` is already in this module's encrypted-at-rest format. */
 export function isEncryptedWebhookSecret(value: string): boolean {
   return value.startsWith(`${VERSION_PREFIX}:`);
@@ -89,9 +112,17 @@ export function decryptWebhookSecret(stored: string): string {
     throw new Error('Malformed encrypted webhook secret');
   }
 
-  const key = resolveKey();
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, Buffer.from(ivHex, 'hex'));
-  decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
-  const plaintext = Buffer.concat([decipher.update(Buffer.from(cipherHex, 'hex')), decipher.final()]);
-  return plaintext.toString('utf8');
+  let lastError: unknown;
+  for (const key of resolveDecryptionKeys()) {
+    try {
+      const decipher = crypto.createDecipheriv(ALGORITHM, key, Buffer.from(ivHex, 'hex'));
+      decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+      const plaintext = Buffer.concat([decipher.update(Buffer.from(cipherHex, 'hex')), decipher.final()]);
+      return plaintext.toString('utf8');
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (lastError instanceof Error) throw lastError;
+  throw new Error('Unable to decrypt webhook secret with configured keyring');
 }

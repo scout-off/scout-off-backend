@@ -29,22 +29,51 @@ const tracer = trace.getTracer('scout-off-backend');
  *      single-process local dev but will cause cross-instance failures under a
  *      load balancer, which is exactly the scenario SEP10_SERVER_SECRET solves.
  */
-function resolveServerKeypair(): Keypair {
-  if (config.sep10ServerSecret) {
-    try {
-      return Keypair.fromSecret(config.sep10ServerSecret);
-    } catch (err) {
-      throw new Error(
-        `SEP10_SERVER_SECRET is set but is not a valid Stellar secret key (strkey starting with 'S'). ` +
-        `Generate a valid keypair with \`stellar keys generate\`. Original error: ${(err as Error).message}`,
-      );
-    }
+function keypairFromSecret(secret: string): Keypair {
+  try {
+    return Keypair.fromSecret(secret);
+  } catch (err) {
+    throw new Error(
+      `SEP10_SERVER_SECRET is set but is not a valid Stellar secret key (strkey starting with 'S'). ` +
+      `Generate a valid keypair with \`stellar keys generate\`. Original error: ${(err as Error).message}`,
+    );
   }
-  // Ephemeral fallback for development / test only.
-  return Keypair.random();
 }
 
-const SERVER_KEYPAIR = resolveServerKeypair();
+const ephemeralServerKeypair = Keypair.random();
+let activeServerSecret: string | undefined;
+let activeServerKeypair: Keypair | undefined;
+let previousServerSecret: string | undefined;
+let previousServerKeypair: Keypair | undefined;
+
+function resolveServerKeypair(): Keypair {
+  const secret = config.sep10ServerSecret;
+  if (!secret) {
+    activeServerSecret = undefined;
+    activeServerKeypair = undefined;
+    return ephemeralServerKeypair;
+  }
+  if (secret !== activeServerSecret) {
+    activeServerKeypair = keypairFromSecret(secret);
+    activeServerSecret = secret;
+  }
+  return activeServerKeypair!;
+}
+
+function serverVerificationKeypairs(): Keypair[] {
+  const current = resolveServerKeypair();
+  const previousSecret = config.sep10ServerSecretPrevious;
+  if (!previousSecret || previousSecret === config.sep10ServerSecret) return [current];
+  if (previousSecret !== previousServerSecret) {
+    previousServerKeypair = keypairFromSecret(previousSecret);
+    previousServerSecret = previousSecret;
+  }
+  return [current, previousServerKeypair!];
+}
+
+// Keep invalid configured material as a startup error.
+if (config.sep10ServerSecret) keypairFromSecret(config.sep10ServerSecret);
+
 const CHALLENGE_TTL_SECONDS = 300; // 5 min to sign the challenge
 const TOKEN_TTL_SECONDS = 86400;   // 24 h JWT validity
 
@@ -73,7 +102,7 @@ function pruneConsumedChallengeNonces(nowSeconds: number): void {
  * Exposed for verification logic and testing.
  */
 export function getServerKeypair(): Keypair {
-  return SERVER_KEYPAIR;
+  return resolveServerKeypair();
 }
 
 /**
@@ -83,7 +112,8 @@ export function getServerKeypair(): Keypair {
 export function buildChallenge(accountId: string): string {
   const span = tracer.startSpan('sep10.buildChallenge', { attributes: { 'sep10.account': accountId } });
   try {
-  const serverAccount = new Account(SERVER_KEYPAIR.publicKey(), '-1');
+  const serverKeypair = getServerKeypair();
+  const serverAccount = new Account(serverKeypair.publicKey(), '-1');
   const tx = new TransactionBuilder(serverAccount, {
     fee: BASE_FEE,
     networkPassphrase:
@@ -99,7 +129,7 @@ export function buildChallenge(accountId: string): string {
     .setTimeout(CHALLENGE_TTL_SECONDS)
     .build();
 
-  tx.sign(SERVER_KEYPAIR);
+  tx.sign(serverKeypair);
   return tx.toXdr();
   } catch (err) {
     // Normalise to a plain Error before re-throwing. The SDK can throw
@@ -199,18 +229,20 @@ export function verifyAndIssueToken(xdr: string, role?: string): { token: string
 
   // 5. Verify the server signed the challenge (proves it was built by this server)
   // Per SEP-10, the challenge must originate from the server keypair
-  const serverSigned = tx.signatures.some((sig) => {
-    try {
-      // In @stellar/stellar-sdk v16+, sig.signature is a Signature object
-      // with a .value (Uint8Array) property rather than a callable function.
-      const sigBytes = sig.signature instanceof Uint8Array
-        ? sig.signature
-        : (sig.signature as unknown as { value: Uint8Array }).value;
-      return SERVER_KEYPAIR.verify(tx.hash(), sigBytes);
-    } catch {
-      return false;
-    }
-  });
+  const serverSigned = serverVerificationKeypairs().some((serverKeypair) =>
+    tx.signatures.some((sig) => {
+      try {
+        // In @stellar/stellar-sdk v16+, sig.signature is a Signature object
+        // with a .value (Uint8Array) property rather than a callable function.
+        const sigBytes = sig.signature instanceof Uint8Array
+          ? sig.signature
+          : (sig.signature as unknown as { value: Uint8Array }).value;
+        return serverKeypair.verify(tx.hash(), sigBytes);
+      } catch {
+        return false;
+      }
+    }),
+  );
   if (!serverSigned) throw new Error('Challenge not signed by server');
 
   // 6. Cryptographically verify the client signed the transaction

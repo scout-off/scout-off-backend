@@ -1,8 +1,9 @@
 import dotenv from 'dotenv';
+import { getSecret } from './secrets/provider';
 dotenv.config();
 
 function required(name: string): string {
-  const value = process.env[name];
+  const value = getSecret(name);
   if (!value) {
     throw new Error(`${name} is required`);
   }
@@ -71,6 +72,13 @@ if (!VALID_ENVS.has(rawNodeEnv)) {
   throw new Error(`Invalid NODE_ENV: "${rawNodeEnv}". Must be one of: ${[...VALID_ENVS].join(', ')}`);
 }
 const nodeEnv = rawNodeEnv as NodeEnv;
+required('JWT_SECRET');
+
+const platformSecretKeyAtStartup =
+  getSecret('PLATFORM_SECRET_KEY') ?? getSecret('STELLAR_SECRET_KEY') ?? '';
+if (!platformSecretKeyAtStartup && nodeEnv !== 'test') {
+  throw new Error('PLATFORM_SECRET_KEY is required in non-test environments');
+}
 
 // Validate ADMIN_WALLET based on environment:
 // - production: throw immediately so the process never starts without it
@@ -92,7 +100,7 @@ if (!adminWalletValue) {
 // to start without it.  In staging a warning is emitted.  In development/test
 // the absence is silently tolerated — a fallback is generated at the service
 // layer so tests can run without extra config.
-const sep10ServerSecretValue = process.env.SEP10_SERVER_SECRET ?? '';
+const sep10ServerSecretValue = getSecret('SEP10_SERVER_SECRET') ?? '';
 if (!sep10ServerSecretValue) {
   if (nodeEnv === 'production') {
     throw new Error(
@@ -123,7 +131,7 @@ if (!sep10ServerSecretValue) {
 // docs/auth.md).  Production refuses to start without it; staging warns;
 // development/test falls back to a fixed, insecure value at the derivation
 // layer so the test suite runs without extra config.
-const apiKeyLookupSecretValue = process.env.API_KEY_LOOKUP_SECRET ?? '';
+const apiKeyLookupSecretValue = getSecret('API_KEY_LOOKUP_SECRET') ?? '';
 if (!apiKeyLookupSecretValue) {
   if (nodeEnv === 'production') {
     throw new Error(
@@ -182,6 +190,7 @@ const corsAllowedOrigins =
 const config = {
   nodeEnv,
   port: parseNumericEnv('PORT', process.env.PORT, 4000, { min: 0, max: 65535, integer: true }),
+  indexerEnabled: process.env.INDEXER_ENABLED !== 'false',
   network: (process.env.NETWORK ?? 'testnet') as 'testnet' | 'mainnet',
   networkPassphrase:
     process.env.NETWORK_PASSPHRASE ?? 'Test SDF Network ; September 2015',
@@ -216,13 +225,20 @@ const config = {
 
   /** Address of the deployed `connection` Soroban contract. */
   connectionContractId: process.env.CONNECTION_CONTRACT_ID ?? process.env.CONTRACT_ID ?? '',
-  jwtSecret: required('JWT_SECRET'),
+  get jwtSecret() {
+    return required('JWT_SECRET');
+  },
   /**
    * SEP-10 server signing keypair secret (Stellar strkey starting with 'S').
    * Must be identical on every backend instance.  See docs/auth.md for
    * configuration details and key-rotation guidance.
    */
-  sep10ServerSecret: sep10ServerSecretValue,
+  get sep10ServerSecret() {
+    return getSecret('SEP10_SERVER_SECRET') ?? '';
+  },
+  get sep10ServerSecretPrevious() {
+    return getSecret('SEP10_SERVER_SECRET_PREVIOUS') ?? '';
+  },
   /**
    * Server-side pepper (32-byte hex, e.g. `openssl rand -hex 32`) used to
    * derive `api_keys.lookup_hash`, the indexed deterministic value that lets
@@ -230,11 +246,19 @@ const config = {
    * (#1033).  Must be identical on every backend instance.  See
    * src/utils/apiKeyLookup.ts and docs/auth.md.
    */
+  // Lookup hashes persisted in the database are derived with this pepper, so
+  // changing it requires a coordinated data migration and process restart.
   apiKeyLookupSecret: apiKeyLookupSecretValue,
-  platformSecret: process.env.PLATFORM_SECRET ?? '',
+  get platformSecret() {
+    return getSecret('PLATFORM_SECRET') ?? getSecret('STELLAR_SECRET_KEY') ?? '';
+  },
   pinata: {
-    apiKey: process.env.PINATA_API_KEY ?? '',
-    secret: process.env.PINATA_SECRET ?? '',
+    get apiKey() {
+      return getSecret('PINATA_API_KEY') ?? '';
+    },
+    get secret() {
+      return getSecret('PINATA_SECRET') ?? '';
+    },
     gateway: process.env.PINATA_GATEWAY ?? 'https://gateway.pinata.cloud',
     gateways: process.env.IPFS_GATEWAYS
       ? process.env.IPFS_GATEWAYS.split(',').map(g => g.trim()).filter(Boolean)
@@ -245,7 +269,9 @@ const config = {
       ],
   },
   platformFeeBps: parseNumericEnv('PLATFORM_FEE_BPS', process.env.PLATFORM_FEE_BPS, 500, { min: 0, max: 10000, integer: true }),
-  jwtSecretPrevious: process.env.JWT_SECRET_PREVIOUS ?? '',
+  get jwtSecretPrevious() {
+    return getSecret('JWT_SECRET_PREVIOUS') ?? '';
+  },
   /**
    * Absolute end of the previous-secret grace window (epoch milliseconds).
    * Parsed from `JWT_SECRET_PREVIOUS_UNTIL` (Unix seconds or ISO-8601).
@@ -268,14 +294,9 @@ const config = {
     }
     return parsed;
   })(),
-  platformSecretKey: (() => {
-    const isTest = (process.env.NODE_ENV ?? 'development') === 'test';
-    const val = process.env.PLATFORM_SECRET_KEY ?? '';
-    if (!val && !isTest) {
-      throw new Error('PLATFORM_SECRET_KEY is required in non-test environments');
-    }
-    return val;
-  })(),
+  get platformSecretKey() {
+    return getSecret('PLATFORM_SECRET_KEY') ?? getSecret('STELLAR_SECRET_KEY') ?? '';
+  },
   dbDriver: (() => {
     const raw = process.env.DB_DRIVER ?? 'sqlite';
     const valid = ['sqlite', 'postgres'] as const;
@@ -288,7 +309,9 @@ const config = {
     return raw as 'sqlite' | 'postgres';
   })(),
   dbPath: process.env.DB_PATH ?? 'scout-off.db',
-  databaseUrl: process.env.DATABASE_URL ?? '',
+  get databaseUrl() {
+    return getSecret('DATABASE_URL') ?? '';
+  },
   /**
    * Enable SSL/TLS for the PostgreSQL connection.
    *
@@ -335,7 +358,9 @@ const config = {
     // HMAC secret for the legacy single-subscriber webhook (WEBHOOK_URL). Used to seed a
     // row in `webhook_subscriptions` on startup for backward compatibility. Real
     // multi-subscriber deployments should manage subscriptions in the DB instead.
-    secret: process.env.WEBHOOK_SECRET ?? '',
+    get secret() {
+      return getSecret('WEBHOOK_SECRET') ?? '';
+    },
     /**
      * Per-attempt timeout (ms) for outbound webhook delivery requests (#691).
      * An unresponsive subscriber is aborted after this window and the attempt
@@ -375,7 +400,15 @@ const config = {
   // Symmetric key (32-byte hex, e.g. `openssl rand -hex 32`) used to encrypt
   // webhook_subscriptions.secret at rest (#686). Required in production —
   // see src/utils/webhookSecretCipher.ts and docs/secrets-rotation.md.
-  webhookSecretEncryptionKey: process.env.WEBHOOK_SECRET_ENCRYPTION_KEY ?? '',
+  get webhookSecretEncryptionKey() {
+    return getSecret('WEBHOOK_SECRET_ENCRYPTION_KEY') ?? '';
+  },
+  get webhookSecretEncryptionKeyPrevious() {
+    return getSecret('WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS') ?? '';
+  },
+  get scoutoffWebhookSecret() {
+    return getSecret('SCOUTOFF_WEBHOOK_SECRET') ?? '';
+  },
   rateLimit: {
     enabled: process.env.RATE_LIMIT_ENABLED !== 'false',
     windowMs: parseNumericEnv('RATE_LIMIT_WINDOW_MS', process.env.RATE_LIMIT_WINDOW_MS, 60000, { min: 1, integer: true }),
@@ -496,7 +529,9 @@ const config = {
   // When set, the search cache (src/services/cache.ts) uses Redis so cache
   // state is shared across multiple backend instances. When unset (default),
   // it falls back to an in-memory Map — no setup required for local dev/CI.
-  redisUrl: process.env.REDIS_URL || '',
+  get redisUrl() {
+    return getSecret('REDIS_URL') ?? '';
+  },
 
   /** In-memory search cache max entries; LRU eviction applies after TTL expiry (default: 1000). */
   searchCacheMaxEntries: parseNumericEnv('SEARCH_CACHE_MAX_ENTRIES', process.env.SEARCH_CACHE_MAX_ENTRIES, 1000, { min: 1, integer: true }),

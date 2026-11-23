@@ -27,6 +27,19 @@ describe('JWT dual-key verification (src/utils/jwt.ts)', () => {
     expect(decoded.sub).toBe('G1');
   });
 
+  it('uses a rotated current secret without reloading the module', () => {
+    const { signJwt } = load();
+    const rotatedSecret = 'rotated-test-secret';
+    process.env.JWT_SECRET = rotatedSecret;
+
+    try {
+      const token = signJwt({ sub: 'G1' }, { expiresIn: '1h' });
+      expect(jwt.verify(token, rotatedSecret)).toMatchObject({ sub: 'G1' });
+    } finally {
+      process.env.JWT_SECRET = CURRENT_SECRET;
+    }
+  });
+
   // ── Default single-secret mode ─────────────────────────────────────────────
 
   it('verifyJwt accepts a token signed with the current secret', () => {

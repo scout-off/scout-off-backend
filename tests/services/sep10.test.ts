@@ -313,6 +313,12 @@ describe('sep10', () => {
     // A real Stellar secret key used as the shared SEP10_SERVER_SECRET.
     // Generated fresh per test run — safe to use in tests only.
     const SHARED_SERVER_SECRET = Keypair.random().secret();
+    const originalServerSecret = process.env.SEP10_SERVER_SECRET;
+
+    afterEach(() => {
+      if (originalServerSecret === undefined) delete process.env.SEP10_SERVER_SECRET;
+      else process.env.SEP10_SERVER_SECRET = originalServerSecret;
+    });
 
     function loadSep10WithSharedSecret(): Promise<{
       buildChallenge: (account: string) => string;
@@ -343,6 +349,7 @@ describe('sep10', () => {
       const instanceB = await loadSep10WithSharedSecret();
 
       // Instance A builds the challenge.
+      process.env.SEP10_SERVER_SECRET = SHARED_SERVER_SECRET;
       const challengeXdr = instanceA.buildChallenge(clientKeypair.publicKey());
 
       // The client signs the challenge (as it would in a real auth flow).
@@ -352,7 +359,9 @@ describe('sep10', () => {
 
       // Instance B verifies the signed challenge — must succeed despite being a
       // completely separate module instance (i.e. a different "process").
+      process.env.SEP10_SERVER_SECRET = SHARED_SERVER_SECRET;
       const { token, account } = instanceB.verifyAndIssueToken(signedXdr);
+      delete process.env.SEP10_SERVER_SECRET;
       expect(typeof token).toBe('string');
       expect(account).toBe(clientKeypair.publicKey());
     });
@@ -380,6 +389,7 @@ describe('sep10', () => {
       });
 
       // Instance A builds a challenge signed with its configured keypair.
+      process.env.SEP10_SERVER_SECRET = SHARED_SERVER_SECRET;
       const challengeXdr = instanceA.buildChallenge(clientKeypair.publicKey());
       const tx = new Transaction(challengeXdr, Networks.TESTNET);
       tx.sign(clientKeypair);
@@ -387,6 +397,7 @@ describe('sep10', () => {
 
       // Instance B (different random keypair) must reject it — proving that
       // sharing the secret is the only way to make cross-instance auth work.
+      delete process.env.SEP10_SERVER_SECRET;
       expect(() => instanceB.verifyAndIssueToken(signedXdr)).toThrow('Challenge not signed by server');
     });
   });

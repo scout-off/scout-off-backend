@@ -93,7 +93,8 @@ async function startServer() {
     })();
   });
 
-  // Poll for new contract events every 5 seconds
+  // Poll for new contract events every 5 seconds unless explicitly disabled
+  // (for example, in local performance tests that use a fixed seeded DB).
   const poll = async () => {
     try {
       await indexEvents();
@@ -102,8 +103,11 @@ async function startServer() {
     }
   };
 
-  poll();
-  const pollInterval = setInterval(poll, 5_000);
+  let pollInterval: NodeJS.Timeout | undefined;
+  if (config.indexerEnabled) {
+    poll();
+    pollInterval = setInterval(poll, 5_000);
+  }
 
   // Poll for IPFS retries every 30 seconds
   const retryPins = async () => {
@@ -158,7 +162,7 @@ async function startServer() {
     }, SHUTDOWN_TIMEOUT_MS);
     forceExitTimer.unref();
 
-    clearInterval(pollInterval);
+    if (pollInterval) clearInterval(pollInterval);
     clearInterval(retryInterval);
     clearInterval(reconcileInterval);
     clearInterval(divergenceInterval);

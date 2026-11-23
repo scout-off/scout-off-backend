@@ -11,11 +11,12 @@ jest.mock('../../src/services/ipfs', () => ({
 jest.mock('../../src/db', () => ({
   queryEvents: jest.fn(),
   getPendingMilestones: jest.fn(),
-  // approveBulkMilestones (validatorController.ts) reads pending_milestones
-  // rows via getDriver() directly rather than a dedicated db/index.ts
-  // helper — default to "not found" so bulk-approve tests must opt in via
-  // mockResolvedValueOnce when they need a matching row.
-  getDriver: jest.fn().mockReturnValue({ get: jest.fn().mockResolvedValue(undefined) }),
+  getDriver: jest.fn().mockReturnValue({
+    all: jest.fn().mockResolvedValue([]),
+    transaction: jest.fn(async (callback: (tx: { run: jest.Mock }) => Promise<unknown>) =>
+      callback({ run: jest.fn().mockResolvedValue({ changes: 1 }) }),
+    ),
+  }),
   removePendingMilestone: jest.fn(),
   incrementValidatorApproved: jest.fn(),
   updatePlayerProgress: jest.fn(),
@@ -44,11 +45,10 @@ jest.mock('../../src/services/cache', () => ({
   invalidateMilestoneCache: jest.fn(),
 }));
 
-import { queryEvents, getPendingMilestones, getDriver, removePendingMilestone, incrementValidatorApproved, updatePlayerProgress } from '../../src/db';
+import { queryEvents, getPendingMilestones, getDriver, incrementValidatorApproved, updatePlayerProgress } from '../../src/db';
 const mockGetEvents = queryEvents as jest.Mock;
 const mockGetPendingMilestones = getPendingMilestones as jest.Mock;
 const mockGetDriver = getDriver as jest.Mock;
-const mockRemovePendingMilestone = removePendingMilestone as jest.Mock;
 const mockIncrementValidatorApproved = incrementValidatorApproved as jest.Mock;
 const mockUpdatePlayerProgress = updatePlayerProgress as jest.Mock;
 
@@ -66,8 +66,12 @@ beforeEach(() => {
   mockGetPendingMilestones.mockReset();
   mockGetPendingMilestones.mockReturnValue({ data: [], total: 0 });
   mockGetDriver.mockReset();
-  mockGetDriver.mockReturnValue({ get: jest.fn().mockResolvedValue(undefined) });
-  mockRemovePendingMilestone.mockReset();
+  mockGetDriver.mockReturnValue({
+    all: jest.fn().mockResolvedValue([]),
+    transaction: jest.fn(async (callback: (tx: { run: jest.Mock }) => Promise<unknown>) =>
+      callback({ run: jest.fn().mockResolvedValue({ changes: 1 }) }),
+    ),
+  });
   mockIncrementValidatorApproved.mockReset();
   mockUpdatePlayerProgress.mockReset();
 });
@@ -294,20 +298,18 @@ describe('POST /api/validators/milestones/approve-bulk', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 200 and processes valid, invalid, and unauthorized IDs', async () => {
+  it('batch-reads IDs and reports per-item outcomes', async () => {
     const validatorToken = makeToken(VALIDATOR_WALLET, 'validator');
 
-    const mockGet = jest.fn().mockImplementation((_sql: string, params?: unknown[]) => {
-      const id = params?.[0];
-      if (id === 'm1') {
-        return Promise.resolve({ milestone_id: 'm1', player_id: 'player-1', validator_wallet: VALIDATOR_WALLET });
-      }
-      if (id === 'm2') {
-        return Promise.resolve({ milestone_id: 'm2', player_id: 'player-2', validator_wallet: 'OTHER_VALIDATOR' });
-      }
-      return Promise.resolve(undefined); // m3 is not found
-    });
-    mockGetDriver.mockReturnValue({ get: mockGet });
+    const mockAll = jest.fn().mockResolvedValue([
+      { milestone_id: 'm1', player_id: 'player-1', validator_wallet: VALIDATOR_WALLET },
+      { milestone_id: 'm2', player_id: 'player-2', validator_wallet: 'OTHER_VALIDATOR' },
+    ]);
+    const mockTxRun = jest.fn().mockResolvedValue({ changes: 1 });
+    const mockTransaction = jest.fn(async (callback: (tx: { run: jest.Mock }) => Promise<unknown>) =>
+      callback({ run: mockTxRun }),
+    );
+    mockGetDriver.mockReturnValue({ all: mockAll, transaction: mockTransaction });
     mockGetEvents.mockReturnValue([]);
 
     const res = await request(app)
@@ -317,8 +319,9 @@ describe('POST /api/validators/milestones/approve-bulk', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(res.body.partialFailure).toBe(false);
     expect(res.body.data).toHaveLength(3);
-    
+
     const m1Result = res.body.data.find((r: any) => r.milestoneId === 'm1');
     expect(m1Result.status).toBe('approved');
 
@@ -328,9 +331,54 @@ describe('POST /api/validators/milestones/approve-bulk', () => {
     const m3Result = res.body.data.find((r: any) => r.milestoneId === 'm3');
     expect(m3Result.status).toBe('invalid');
 
-    expect(mockRemovePendingMilestone).toHaveBeenCalledWith('m1');
-    expect(mockIncrementValidatorApproved).toHaveBeenCalledWith(VALIDATOR_WALLET);
-    expect(mockUpdatePlayerProgress).toHaveBeenCalledWith('player-1', expect.any(Number));
+    expect(mockAll).toHaveBeenCalledTimes(1);
+    expect(mockAll.mock.calls[0][0]).toContain('milestone_id IN (?, ?, ?)');
+    expect(mockAll.mock.calls[0][1]).toEqual(['m1', 'm2', 'm3']);
+    expect(mockTransaction).toHaveBeenCalledTimes(1);
+    expect(mockTxRun).toHaveBeenCalledTimes(3);
+    expect(mockTxRun.mock.calls[0][0]).toContain('DELETE FROM pending_milestones');
+    expect(mockTxRun.mock.calls[1][0]).toContain('INSERT INTO validator_stats');
+    expect(mockTxRun.mock.calls[2][0]).toContain('UPDATE players');
+    expect(mockIncrementValidatorApproved).not.toHaveBeenCalled();
+    expect(mockUpdatePlayerProgress).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed IDs and batches above the maximum before querying the DB', async () => {
+    const validatorToken = makeToken(VALIDATOR_WALLET, 'validator');
+    const malformed = await request(app)
+      .post('/api/validators/milestones/approve-bulk')
+      .set('Authorization', `Bearer ${validatorToken}`)
+      .send({ milestoneIds: ['bad id'] });
+    const tooMany = await request(app)
+      .post('/api/validators/milestones/approve-bulk')
+      .set('Authorization', `Bearer ${validatorToken}`)
+      .send({ milestoneIds: Array.from({ length: 51 }, (_, index) => `m${index}`) });
+
+    expect(malformed.status).toBe(400);
+    expect(tooMany.status).toBe(400);
+    expect(mockGetDriver().all).not.toHaveBeenCalled();
+  });
+
+  it('reports a concurrent/replayed approval as already processed without repeating writes', async () => {
+    const validatorToken = makeToken(VALIDATOR_WALLET, 'validator');
+    mockGetEvents.mockReturnValue([]);
+    const mockAll = jest.fn().mockResolvedValue([
+      { milestone_id: 'm1', player_id: 'player-1', validator_wallet: VALIDATOR_WALLET },
+    ]);
+    const mockTxRun = jest.fn().mockResolvedValueOnce({ changes: 0 });
+    const mockTransaction = jest.fn(async (callback: (tx: { run: jest.Mock }) => Promise<unknown>) =>
+      callback({ run: mockTxRun }),
+    );
+    mockGetDriver.mockReturnValue({ all: mockAll, transaction: mockTransaction });
+
+    const res = await request(app)
+      .post('/api/validators/milestones/approve-bulk')
+      .set('Authorization', `Bearer ${validatorToken}`)
+      .send({ milestoneIds: ['m1'] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([{ milestoneId: 'm1', status: 'already_processed' }]);
+    expect(mockTxRun).toHaveBeenCalledTimes(1);
   });
 });
 

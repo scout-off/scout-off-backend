@@ -4,7 +4,7 @@ import { z } from 'zod';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { pinJson, pinFile } from '../services/ipfs';
-import { getPendingMilestones as getPendingMilestonesFromDb, getDriver, removePendingMilestone, incrementValidatorApproved, queryEvents, updatePlayerProgress, getValidatorStats } from '../db';
+import { getPendingMilestones as getPendingMilestonesFromDb, getDriver, queryEvents, getValidatorStats } from '../db';
 import { invalidateMilestoneCache } from '../services/cache';
 import { recordAudit } from '../utils/audit';
 import { isValidMetadataUri, URI_VALIDATION_ERROR } from '../utils/uriValidator';
@@ -233,62 +233,124 @@ export async function getPendingMilestones(req: Request, res: Response, next: Ne
 }
 
 export const bulkApproveSchema = z.object({
-  milestoneIds: z.array(z.string()).min(1),
+  milestoneIds: z.array(
+    z.string()
+      .min(1)
+      .max(200)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+  ).min(1).max(50),
 }).strict();
 
 export async function approveBulkMilestones(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
+  try {
     const { milestoneIds } = bulkApproveSchema.parse(req.body);
     const validatorWallet = req.account ?? 'unknown';
     const correlationId = getCorrelationId(req);
-    
-    const results = [];
-    const driver = getDriver();
 
+    const driver = getDriver();
     const uniqueIds = Array.from(new Set(milestoneIds));
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = await driver.all<{
+      milestone_id: string;
+      player_id: string;
+      validator_wallet: string;
+    }>(
+      `SELECT milestone_id, player_id, validator_wallet
+       FROM pending_milestones
+       WHERE milestone_id IN (${placeholders})`,
+      uniqueIds,
+    );
+    const pendingById = new Map(rows.map((row) => [row.milestone_id, row]));
+    const approvedCountsByPlayer = new Map<string, number>();
+    for (const event of queryEvents('milestone_approved')) {
+      if (event.payload.player_id) {
+        const playerId = String(event.payload.player_id);
+        approvedCountsByPlayer.set(playerId, (approvedCountsByPlayer.get(playerId) ?? 0) + 1);
+      }
+    }
+    const results: Array<{
+      milestoneId: string;
+      status: 'approved' | 'invalid' | 'unauthorized' | 'already_processed' | 'error';
+      error?: string;
+      warning?: string;
+    }> = [];
 
     for (const milestoneId of uniqueIds) {
+      const row = pendingById.get(milestoneId);
+      if (!row) {
+        results.push({ milestoneId, status: 'invalid', error: 'Milestone not found' });
+        continue;
+      }
+
+      if (row.validator_wallet !== validatorWallet) {
+        results.push({ milestoneId, status: 'unauthorized', error: 'Not assigned to this validator' });
+        continue;
+      }
+
       try {
-        const row = await driver.get<any>('SELECT * FROM pending_milestones WHERE milestone_id = ?', [milestoneId]);
-        if (!row) {
-          results.push({ milestoneId, status: 'invalid', error: 'Not found or already processed' });
+        const onChainApprovedCount = approvedCountsByPlayer.get(row.player_id) ?? 0;
+        const newProgressLevel = tierForApprovedMilestones(onChainApprovedCount + 1);
+        const result = await driver.transaction(async (tx) => {
+          const deletion = await tx.run(
+            'DELETE FROM pending_milestones WHERE milestone_id = ? AND validator_wallet = ?',
+            [milestoneId, validatorWallet],
+          );
+          if (deletion.changes === 0) return false;
+
+          await tx.run(
+            `INSERT INTO validator_stats (wallet, milestones_approved, milestones_rejected)
+             VALUES (?, 1, 0)
+             ON CONFLICT(wallet) DO UPDATE SET milestones_approved = milestones_approved + 1`,
+            [validatorWallet],
+          );
+          await tx.run(
+            'UPDATE players SET progress_level = ? WHERE player_id = ?',
+            [newProgressLevel, row.player_id],
+          );
+          return true;
+        });
+
+        if (!result) {
+          results.push({ milestoneId, status: 'already_processed' });
           continue;
         }
 
-        if (row.validator_wallet !== validatorWallet) {
-          results.push({ milestoneId, status: 'unauthorized', error: 'Not assigned to this validator' });
-          continue;
+        const approvalResult: (typeof results)[number] = { milestoneId, status: 'approved' };
+        try {
+          await invalidateMilestoneCache(row.player_id);
+          await recordAudit(
+            validatorWallet,
+            'milestone_approved',
+            { milestoneId, playerId: row.player_id, bulk: true },
+            `correlationId=${correlationId}`,
+          );
+        } catch (err) {
+          const warning = 'Approval committed, but cache invalidation or audit recording failed';
+          logger.error(`[validator] post-approval processing failed for ${milestoneId}:`, err);
+          approvalResult.warning = warning;
         }
-
-        const playerId = row.player_id;
-
-        await removePendingMilestone(milestoneId);
-        await incrementValidatorApproved(validatorWallet);
-
-        const onChainApprovedCount = queryEvents('milestone_approved').filter(
-          (e) => e.payload.player_id === playerId
-        ).length;
-
-        // Count this new off-chain approval + existing ones
-        await updatePlayerProgress(playerId, tierForApprovedMilestones(onChainApprovedCount + 1));
-
-        await invalidateMilestoneCache(playerId);
-
-        await recordAudit(
-          validatorWallet,
-          'milestone_approved',
-          { milestoneId, playerId, bulk: true },
-          `correlationId=${correlationId}`
-        );
-        
-        results.push({ milestoneId, status: 'approved' });
+        results.push(approvalResult);
       } catch (err) {
         logger.error(`[validator] error approving milestone ${milestoneId}:`, err);
-        results.push({ milestoneId, status: 'error', error: String(err) });
+        results.push({ milestoneId, status: 'error', error: 'Approval could not be completed' });
       }
     }
 
-    res.json({ success: true, data: results });
+    const summary = {
+      approved: results.filter((result) => result.status === 'approved').length,
+      invalid: results.filter((result) => result.status === 'invalid').length,
+      unauthorized: results.filter((result) => result.status === 'unauthorized').length,
+      alreadyProcessed: results.filter((result) => result.status === 'already_processed').length,
+      errors: results.filter((result) => result.status === 'error').length,
+      warnings: results.filter((result) => result.warning !== undefined).length,
+    };
+    const hasFailures = summary.errors > 0 || summary.warnings > 0;
+    res.json({
+      success: !hasFailures,
+      partialFailure: hasFailures && summary.approved > 0,
+      summary,
+      data: results,
+    });
   } catch (err) {
     next(err);
   }

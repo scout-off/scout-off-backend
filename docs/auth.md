@@ -42,13 +42,21 @@ stellar keys generate sep10-server --network testnet
 
 ### Key rotation
 
-Rotating the SEP-10 server keypair invalidates any outstanding challenge transactions that have not yet been exchanged for a JWT.  Challenges have a 5-minute TTL, so the impact window is short.  Follow this procedure to minimise disruption:
+Rotating the SEP-10 server keypair can preserve outstanding challenges with the
+previous-key slot. New challenges are signed with `SEP10_SERVER_SECRET`;
+verification accepts both it and `SEP10_SERVER_SECRET_PREVIOUS`.
 
-1. **Generate a new keypair** — `stellar keys generate sep10-server-new --network mainnet`
-2. **Deploy with both keys in parallel** is not required because challenges expire in 5 minutes — a brief auth interruption is acceptable during the rollout window.
-3. **Update the secret** — replace `SEP10_SERVER_SECRET` in your secrets manager / Kubernetes Secret.
-4. **Rolling-restart all instances** — each pod picks up the new key on startup.  Pods with the old key will reject challenges built after the restart; pods with the new key will reject challenges built before.  The 5-minute window means at most one failed auth attempt per affected client during the rollout.
-5. **Verify** — run a full SEP-10 auth flow end-to-end against the updated deployment before closing the change.
+1. **Generate a new keypair** — `stellar keys generate sep10-server-new --network mainnet`.
+2. **Stage the previous key** — set `SEP10_SERVER_SECRET_PREVIOUS` to the current
+   key and wait for mounted secret files to be observed.
+3. **Rotate the current key** — set `SEP10_SERVER_SECRET` to the new key. With
+   `SECRETS_PROVIDER=file`, the provider detects the update without a restart.
+   Environment-based deployments should use their normal rollout to update
+   process environments.
+4. **Finish the grace period** — after at least the 5-minute challenge TTL and
+   secret-projection propagation window, remove `SEP10_SERVER_SECRET_PREVIOUS`.
+   The previous slot has no automatic expiry.
+5. **Verify** — run a full SEP-10 auth flow end-to-end against the updated deployment.
 
 > ⚠️ **Security note**: `SEP10_SERVER_SECRET` is a Stellar secret key — treat it with the same care as `JWT_SECRET`.  Never commit it to source control.  Store it in a secrets manager (AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault, Kubernetes Secrets) and inject it as an environment variable at runtime.  See [docs/secrets-rotation.md](secrets-rotation.md) for the general rotation policy.
 

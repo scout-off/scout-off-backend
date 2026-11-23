@@ -212,6 +212,10 @@ secretName: scout-off-secrets
 # -----------------------------------------------------------------------------
 env:
   NODE_ENV: production
+  # env reads environment variables (default); file reads same-named files
+  # from /run/secrets, mounted via extraVolumes / extraVolumeMounts.
+  SECRETS_PROVIDER: env
+  SECRETS_DIR: /run/secrets
   PORT: "4000"
   NETWORK: mainnet
   # Stellar network passphrase matching the NETWORK above.

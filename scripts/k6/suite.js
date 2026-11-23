@@ -38,51 +38,56 @@ export const adminStats        = adminStatsVU;
 
 // ── Scenario filter (optional) ───────────────────────────────────────────────
 
-const SELECTED = __ENV.K6_SCENARIO || null;
+const SELECTED = (__ENV.K6_SCENARIO || '').split(',').map((name) => name.trim()).filter(Boolean);
+const CI_PROFILE = __ENV.K6_PROFILE === 'ci';
 function enabled(name) {
-  return !SELECTED || SELECTED === name;
+  return SELECTED.length === 0 || SELECTED.includes(name);
 }
 
 // ── Suite options ─────────────────────────────────────────────────────────────
 
-export const options = {
+const THRESHOLDS = {
   // Aggregate thresholds across all scenarios.
-  thresholds: {
-    // Global catch-all: no more than 1 % of all HTTP requests fail.
-    http_req_failed: ['rate<0.01'],
+  http_req_failed: ['rate<0.01'],
 
-    // Per-scenario SLO thresholds using k6's tagged metric syntax.
-    // Format: 'metric_name{scenario:scenario_name}'
-    ...(enabled('auth_flow') ? {
-      'http_req_duration{scenario:auth_flow}': ['p(95)<500'],
-      'http_req_failed{scenario:auth_flow}':   ['rate<0.01'],
-      'auth_errors': ['count<1'],
-    } : {}),
-    ...(enabled('player_list') ? {
-      'http_req_duration{scenario:player_list}': ['p(95)<200'],
-      'http_req_failed{scenario:player_list}':   ['rate<0.01'],
-      'player_list_errors': ['count<1'],
-    } : {}),
-    ...(enabled('player_profile') ? {
-      'http_req_duration{scenario:player_profile}': ['p(99)<100'],
-      'http_req_failed{scenario:player_profile}':   ['rate<0.01'],
-      'player_profile_errors': ['count<1'],
-    } : {}),
-    ...(enabled('subscription_status') ? {
-      'http_req_duration{scenario:subscription_status}': ['p(95)<150'],
-      'http_req_failed{scenario:subscription_status}':   ['rate<0.01'],
-      'subscription_errors': ['count<1'],
-    } : {}),
-    ...(enabled('sse_stream') ? {
-      'sse_connect_errors':     ['count<1'],
-      'sse_keepalive_received': ['count>0'],
-    } : {}),
-    ...(enabled('admin_stats') ? {
-      'http_req_duration{scenario:admin_stats}': ['p(95)<300'],
-      'http_req_failed{scenario:admin_stats}':   ['rate<0.01'],
-      'admin_stats_errors': ['count<1'],
-    } : {}),
-  },
+  // Per-scenario SLO thresholds using k6's tagged metric syntax.
+  // Format: 'metric_name{scenario:scenario_name}'
+  ...(enabled('auth_flow') ? {
+    'http_req_duration{scenario:auth_flow}': ['p(95)<500'],
+    'http_req_failed{scenario:auth_flow}':   ['rate<0.01'],
+    'auth_errors': ['count<1'],
+  } : {}),
+  ...(enabled('player_list') ? {
+    'http_req_duration{scenario:player_list}': ['p(95)<200'],
+    'http_req_failed{scenario:player_list}':   ['rate<0.01'],
+    'player_list_errors': ['count<1'],
+  } : {}),
+  ...(enabled('player_profile') ? {
+    'http_req_duration{scenario:player_profile}': ['p(99)<100'],
+    'http_req_failed{scenario:player_profile}':   ['rate<0.01'],
+    'player_profile_errors': ['count<1'],
+  } : {}),
+  ...(enabled('subscription_status') ? {
+    'http_req_duration{scenario:subscription_status}': ['p(95)<150'],
+    'http_req_failed{scenario:subscription_status}':   ['rate<0.01'],
+    'subscription_errors': ['count<1'],
+  } : {}),
+  ...(enabled('sse_stream') ? {
+    'sse_connect_errors':     ['count<1'],
+    'sse_keepalive_received': ['count>0'],
+  } : {}),
+  ...(enabled('admin_stats') ? {
+    'http_req_duration{scenario:admin_stats}': ['p(95)<300'],
+    'http_req_failed{scenario:admin_stats}':   ['rate<0.01'],
+    'admin_stats_errors': ['count<1'],
+  } : {}),
+};
+
+const defaultVus = (regular, ci) => CI_PROFILE ? ci : regular;
+const defaultDuration = (regular) => CI_PROFILE ? '10s' : regular;
+
+export const options = {
+  thresholds: CI_PROFILE ? {} : THRESHOLDS,
 
   scenarios: {
     // ── Scenario 1: Auth flow — p95 < 500 ms ─────────────────────────────
@@ -90,8 +95,8 @@ export const options = {
       auth_flow: {
         executor: 'constant-vus',
         exec: 'authFlow',
-        vus: 10,
-        duration: '30s',
+        vus: defaultVus(10, 2),
+        duration: defaultDuration('30s'),
         tags: { scenario: 'auth_flow' },
       },
     } : {}),
@@ -101,8 +106,8 @@ export const options = {
       player_list: {
         executor: 'constant-vus',
         exec: 'playerList',
-        vus: 50,
-        duration: '30s',
+        vus: defaultVus(50, 5),
+        duration: defaultDuration('30s'),
         tags: { scenario: 'player_list' },
       },
     } : {}),
@@ -112,8 +117,8 @@ export const options = {
       player_profile: {
         executor: 'constant-vus',
         exec: 'playerProfile',
-        vus: 20,
-        duration: '30s',
+        vus: defaultVus(20, 3),
+        duration: defaultDuration('30s'),
         tags: { scenario: 'player_profile' },
       },
     } : {}),
@@ -123,8 +128,8 @@ export const options = {
       subscription_status: {
         executor: 'constant-vus',
         exec: 'subscriptionStatus',
-        vus: 20,
-        duration: '30s',
+        vus: defaultVus(20, 3),
+        duration: defaultDuration('30s'),
         tags: { scenario: 'subscription_status' },
       },
     } : {}),
@@ -134,8 +139,8 @@ export const options = {
       sse_stream: {
         executor: 'constant-vus',
         exec: 'sseStream',
-        vus: 5,
-        duration: '60s',
+        vus: defaultVus(5, 2),
+        duration: CI_PROFILE ? '40s' : '60s',
         tags: { scenario: 'sse_stream' },
       },
     } : {}),
@@ -145,8 +150,8 @@ export const options = {
       admin_stats: {
         executor: 'constant-vus',
         exec: 'adminStats',
-        vus: 5,
-        duration: '30s',
+        vus: defaultVus(5, 2),
+        duration: defaultDuration('30s'),
         tags: { scenario: 'admin_stats' },
       },
     } : {}),
@@ -158,7 +163,8 @@ export const options = {
 export function setup() {
   console.log(`[k6] ScoutOff load test suite starting`);
   console.log(`[k6] Target: ${__ENV.K6_BASE_URL || 'http://localhost:4000'}`);
-  if (SELECTED) console.log(`[k6] Running single scenario: ${SELECTED}`);
+  if (SELECTED.length > 0) console.log(`[k6] Running scenarios: ${SELECTED.join(', ')}`);
+  if (CI_PROFILE) console.log('[k6] Short CI profile enabled');
 }
 
 export function teardown() {
