@@ -21,6 +21,7 @@ import { revokeToken, isTokenRevoked } from '../services/tokenBlocklist';
 import { signJwt, verifyJwt } from '../utils/jwt';
 import { getValidatorByWallet } from '../services/indexer';
 import { insertAuditLog } from '../db';
+import { trackTokenSession, markSuperseded } from '../services/walletTokenSessions';
 import { recordAuthFailure, resetAuthFailures } from '../middleware/authFailureLockout';
 import { incAuthFailure } from '../middleware/metrics';
 
@@ -203,8 +204,19 @@ try {
     const effectiveRole = isAdmin ? 'admin' : (role ?? 'player');
 
     // Step 3: issue access token + refresh token pair.
+    const now = Math.floor(Date.now() / 1000);
     const { token: accessToken, expiresAt } = issueAccessToken(account, effectiveRole, clientDomain);
-    const { token: refreshToken } = issueRefreshToken(account, effectiveRole, clientDomain);
+    const { token: refreshToken, jti: refreshJti } = issueRefreshToken(account, effectiveRole, clientDomain);
+
+    // Persist the refresh-token session so an admin can enumerate/revoke it later.
+    void trackTokenSession({
+      jti: refreshJti,
+      wallet: account,
+      issuedAt: now,
+      expiresAt: now + config.jwtRefreshTtlSeconds,
+      userAgent: req.headers['user-agent'] ?? null,
+      ipHash: crypto.createHash('sha256').update(extractClientIp(req)).digest('hex'),
+    });
 
     // Record wallet attribution for sessions issued via SEP-10 client_domain.
     if (clientDomain) {
@@ -339,9 +351,10 @@ try {
       return;
     }
 
-    // Rotate: revoke old refresh token jti immediately.
+    // Rotate: revoke old refresh token jti immediately and mark it superseded.
     const expiresAtSeconds = payload.exp ?? Math.floor(Date.now() / 1000) + config.jwtRefreshTtlSeconds;
     await revokeToken(jti, expiresAtSeconds);
+    await markSuperseded(jti);
 
     // Re-derive role from authoritative state (config for admin, DB for validator).
     // This ensures a demoted admin or revoked validator cannot perpetuate
@@ -371,8 +384,19 @@ try {
     }
 
     // Issue new pair with the re-derived (potentially downgraded) role.
+    const now = Math.floor(Date.now() / 1000);
     const { token: newAccessToken, expiresAt } = issueAccessToken(account, effectiveRole, clientDomain);
-    const { token: newRefreshToken } = issueRefreshToken(account, effectiveRole, clientDomain);
+    const { token: newRefreshToken, jti: newRefreshJti } = issueRefreshToken(account, effectiveRole, clientDomain);
+
+    // Persist the rotated refresh-token session.
+    void trackTokenSession({
+      jti: newRefreshJti,
+      wallet: account,
+      issuedAt: now,
+      expiresAt: now + config.jwtRefreshTtlSeconds,
+      userAgent: req.headers['user-agent'] ?? null,
+      ipHash: crypto.createHash('sha256').update(extractClientIp(req)).digest('hex'),
+    });
 
     res.json({
       success: true,
