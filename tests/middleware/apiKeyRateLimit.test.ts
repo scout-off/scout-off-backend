@@ -22,10 +22,7 @@ jest.mock('../../src/utils/logger', () => ({
   logger: { warn: jest.fn(), error: jest.fn(), info: jest.fn(), debug: jest.fn() },
 }));
 
-import {
-  apiKeyRateLimit,
-  _clearApiKeyRateLimitCache,
-} from '../../src/middleware/apiKeyRateLimit';
+import { apiKeyRateLimit, _clearApiKeyRateLimitCache } from '../../src/middleware/apiKeyRateLimit';
 
 /** Minimal fake exposing incr/expire/get with call tracking. */
 function makeFakeRedis() {

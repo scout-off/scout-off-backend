@@ -1,6 +1,13 @@
 import {
-  context, propagation, trace, isSpanContextValid, ROOT_CONTEXT,
-  SpanKind, SpanStatusCode, type Attributes, type SpanContext,
+  context,
+  propagation,
+  trace,
+  isSpanContextValid,
+  ROOT_CONTEXT,
+  SpanKind,
+  SpanStatusCode,
+  type Attributes,
+  type SpanContext,
 } from '@opentelemetry/api';
 
 export type TraceCarrier = Record<string, string>;
@@ -48,17 +55,24 @@ export async function consumeTracedMessage<T>(
   if (!origin) return fn(data);
   // Use the extracted parent for sampling, and a link for the async boundary.
   const parent = trace.setSpanContext(ROOT_CONTEXT, origin);
-  return trace.getTracer('scout-off-backend').startActiveSpan(name, {
-    kind: SpanKind.CONSUMER, links: [{ context: origin }], attributes,
-  }, parent, async (span) => {
-    try {
-      return await fn(data);
-    } catch (err) {
-      span.recordException(err as Error);
-      span.setStatus({ code: SpanStatusCode.ERROR });
-      throw err;
-    } finally {
-      span.end();
-    }
-  });
+  return trace.getTracer('scout-off-backend').startActiveSpan(
+    name,
+    {
+      kind: SpanKind.CONSUMER,
+      links: [{ context: origin }],
+      attributes,
+    },
+    parent,
+    async (span) => {
+      try {
+        return await fn(data);
+      } catch (err) {
+        span.recordException(err as Error);
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        throw err;
+      } finally {
+        span.end();
+      }
+    },
+  );
 }

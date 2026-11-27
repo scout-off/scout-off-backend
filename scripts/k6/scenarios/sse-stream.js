@@ -21,9 +21,9 @@ import { check, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 import { BASE_URL, SCOUT_TOKEN } from '../config.js';
 
-const sseConnectErrors  = new Counter('sse_connect_errors');
+const sseConnectErrors = new Counter('sse_connect_errors');
 const sseKeepaliveCount = new Counter('sse_keepalive_received');
-const sseConnectRtt     = new Trend('sse_connect_rtt_ms', true);
+const sseConnectRtt = new Trend('sse_connect_rtt_ms', true);
 
 export const sseStreamOptions = {
   vus: 5,

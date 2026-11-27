@@ -149,11 +149,7 @@ export async function triggerReplay(
  * }
  * @auth Bearer (admin role required)
  */
-export function replayStatusHandler(
-  req: Request,
-  res: Response,
-  _next: NextFunction,
-): void {
+export function replayStatusHandler(req: Request, res: Response, _next: NextFunction): void {
   const s = getReplayStatus();
   res.json({
     success: true,

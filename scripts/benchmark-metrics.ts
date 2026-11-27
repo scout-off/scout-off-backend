@@ -6,11 +6,7 @@
 
 import express from 'express';
 import http from 'http';
-import {
-  metricsMiddleware,
-  createMetricsHandler,
-  resetMetrics,
-} from '../src/middleware/metrics';
+import { metricsMiddleware, createMetricsHandler, resetMetrics } from '../src/middleware/metrics';
 
 const PORT = 3000;
 
@@ -26,7 +22,10 @@ async function main() {
     });
   }
 
-  app.get('/metrics', createMetricsHandler(() => 7));
+  app.get(
+    '/metrics',
+    createMetricsHandler(() => 7),
+  );
 
   const server = http.createServer(app);
   server.listen(PORT, () => {

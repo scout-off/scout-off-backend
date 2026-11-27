@@ -10,24 +10,24 @@ request and which data is permanently retained due to on-chain immutability.
 The backend controls the following off-chain stores and can scrub identifying
 information when a player invokes `POST /api/players/:playerId/anonymize`:
 
-| Store | PII fields | Action | Legal basis |
-|-------|------------|--------|-------------|
-| `players` | wallet, position, region, metadata_uri | Nullify / placeholder wallet; deactivate | GDPR Art. 17 — erasure |
-| `player_profile_history` | metadata_uri, tx_hash | Delete all rows for player | Erasure |
-| `pending_milestones` | evidence_uri, validator_wallet | Delete rows | Erasure |
-| `profile_views` | scout→player linkage | Delete rows | Erasure (behavioral) |
-| `contact_unlocks` | player reference | Delete rows | Erasure |
-| `trial_offers` | offer details referencing player | Delete rows | Erasure |
-| `trial_offer_events` | details_uri, scout_wallet linkage | Delete rows | Erasure |
-| `scout_bookmarks` | player reference | Delete rows | Erasure |
-| `scout_player_notes` / `scout_player_notes_v2` | note_text / content (encrypted at rest under `NOTES_ENCRYPTION_KEY`) | Delete rows | Erasure |
-| `events` | payload JSON (wallet, metadata_uri, region, evidence_uri, free text) | Redact PII fields in-place; keep type/ledger/tx_hash/player_id structure | Legitimate interest — immutable indexer log with PII minimized |
-| `webhook_dead_letters` | payload JSON referencing player | Redact payload fields | Erasure / minimization |
-| `webhook_deliveries` | error_message may echo player data | Replace with `[anonymized]` when matched | Minimization |
-| `idempotency_keys` | cached HTTP response bodies | Delete rows whose `response` references player | Erasure |
-| `saved_search_notifications` | player_id | Delete rows | Erasure |
-| `audit_log_pii` | optional side-table JSON linked to hash-chained `audit_log` | Delete rows referencing player (does **not** mutate `audit_log`) | Erasure without breaking audit chain |
-| IPFS pins (Pinata) | metadata / evidence CIDs | Unpin (best-effort) | Erasure |
+| Store                                          | PII fields                                                           | Action                                                                   | Legal basis                                                    |
+| ---------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `players`                                      | wallet, position, region, metadata_uri                               | Nullify / placeholder wallet; deactivate                                 | GDPR Art. 17 — erasure                                         |
+| `player_profile_history`                       | metadata_uri, tx_hash                                                | Delete all rows for player                                               | Erasure                                                        |
+| `pending_milestones`                           | evidence_uri, validator_wallet                                       | Delete rows                                                              | Erasure                                                        |
+| `profile_views`                                | scout→player linkage                                                 | Delete rows                                                              | Erasure (behavioral)                                           |
+| `contact_unlocks`                              | player reference                                                     | Delete rows                                                              | Erasure                                                        |
+| `trial_offers`                                 | offer details referencing player                                     | Delete rows                                                              | Erasure                                                        |
+| `trial_offer_events`                           | details_uri, scout_wallet linkage                                    | Delete rows                                                              | Erasure                                                        |
+| `scout_bookmarks`                              | player reference                                                     | Delete rows                                                              | Erasure                                                        |
+| `scout_player_notes` / `scout_player_notes_v2` | note_text / content (encrypted at rest under `NOTES_ENCRYPTION_KEY`) | Delete rows                                                              | Erasure                                                        |
+| `events`                                       | payload JSON (wallet, metadata_uri, region, evidence_uri, free text) | Redact PII fields in-place; keep type/ledger/tx_hash/player_id structure | Legitimate interest — immutable indexer log with PII minimized |
+| `webhook_dead_letters`                         | payload JSON referencing player                                      | Redact payload fields                                                    | Erasure / minimization                                         |
+| `webhook_deliveries`                           | error_message may echo player data                                   | Replace with `[anonymized]` when matched                                 | Minimization                                                   |
+| `idempotency_keys`                             | cached HTTP response bodies                                          | Delete rows whose `response` references player                           | Erasure                                                        |
+| `saved_search_notifications`                   | player_id                                                            | Delete rows                                                              | Erasure                                                        |
+| `audit_log_pii`                                | optional side-table JSON linked to hash-chained `audit_log`          | Delete rows referencing player (does **not** mutate `audit_log`)         | Erasure without breaking audit chain                           |
+| IPFS pins (Pinata)                             | metadata / evidence CIDs                                             | Unpin (best-effort)                                                      | Erasure                                                        |
 
 ### Scout notes encryption (#1328)
 
@@ -53,11 +53,11 @@ count, progress_level distribution) remain valid.
 ScoutOff records player registration and milestone events on the **Soroban
 smart contract** (Stellar network). This data is architecturally immutable:
 
-| Data | Why it cannot be erased |
-|------|------------------------|
+| Data                                                               | Why it cannot be erased                                                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | `player_registered` event (wallet, metadata_uri, position, region) | Soroban ledger entries are append-only; the contract has no `delete` or `update_player` function |
-| Milestone approval/rejection events (player_id, evidence_uri) | Same — on-chain events are permanent |
-| Transaction hashes referencing the player | Stellar ledger is immutable |
+| Milestone approval/rejection events (player_id, evidence_uri)      | Same — on-chain events are permanent                                                             |
+| Transaction hashes referencing the player                          | Stellar ledger is immutable                                                                      |
 
 **This is by design.** The platform's value proposition is tamper-proof,
 verifiable scouting data. On-chain immutability is explicitly documented here

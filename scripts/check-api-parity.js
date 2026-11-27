@@ -30,7 +30,7 @@ function normalize(p) {
 }
 
 function isAllowlisted(path, allowlist) {
-  return allowlist.some(a => a === path || a.startsWith(path + '/') || path.startsWith(a + '/'));
+  return allowlist.some((a) => a === path || a.startsWith(path + '/') || path.startsWith(a + '/'));
 }
 
 /**
@@ -47,14 +47,14 @@ function checkApiParity(app, allowlist = []) {
     const pref = normalize(prefix);
     // For simplicity, consider paths that include the prefix at start
     return mountPaths
-      .filter(p => {
+      .filter((p) => {
         if (p === pref) return true;
         if (!p.startsWith(pref + '/')) return false;
         // Treat '/api' as an alias for v1: exclude any /api/v2/* subpaths
         if (pref === '/api' && p.startsWith('/api/v2/')) return false;
         return true;
       })
-      .map(p => {
+      .map((p) => {
         if (pref === '/api') {
           if (p === '/api') return '/';
           if (p.startsWith('/api/v1/')) return p.slice('/api/v1'.length) || '/';
@@ -91,8 +91,10 @@ function main() {
   process.env.NODE_ENV = process.env.NODE_ENV || 'test';
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
   process.env.DB_PATH = process.env.DB_PATH || ':memory:';
-  process.env.ADMIN_WALLET = process.env.ADMIN_WALLET || 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
-  process.env.WEBHOOK_SECRET_ENCRYPTION_KEY = process.env.WEBHOOK_SECRET_ENCRYPTION_KEY || '0'.repeat(63) + '1';
+  process.env.ADMIN_WALLET =
+    process.env.ADMIN_WALLET || 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
+  process.env.WEBHOOK_SECRET_ENCRYPTION_KEY =
+    process.env.WEBHOOK_SECRET_ENCRYPTION_KEY || '0'.repeat(63) + '1';
 
   require('ts-node/register');
   const app = require('../src/app').default;

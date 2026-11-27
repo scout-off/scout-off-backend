@@ -15,7 +15,7 @@ export function getParam(req: Request, key: string): string | undefined {
  */
 export function getParams<T extends Record<string, string>>(
   req: Request,
-  keys: (keyof T)[]
+  keys: (keyof T)[],
 ): Partial<T> {
   const result: Partial<T> = {};
   for (const key of keys) {

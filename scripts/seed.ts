@@ -93,7 +93,7 @@ const PLAYERS = [
 
 /** Scout wallet addresses */
 const SCOUT_ALPHA = 'GFAZQXNK3BFMN7XRVGBAEZI3BYWDXHZVJBDG5AXBLYMN6VJXVHAJBGZE';
-const SCOUT_BETA  = 'GHAJBGZFAZQXNK3BFMN7XRVGBAEZI3BYWDXHZVJBDG5AXBLYMN6VJXVB';
+const SCOUT_BETA = 'GHAJBGZFAZQXNK3BFMN7XRVGBAEZI3BYWDXHZVJBDG5AXBLYMN6VJXVB';
 
 /**
  * Events seeded into the `events` table.
@@ -266,7 +266,7 @@ const EVENTS: Array<{
 
 /** All recognised seed-type names. */
 const VALID_TYPES = ['players', 'events', 'milestones', 'subscriptions', 'contacts'] as const;
-type SeedType = typeof VALID_TYPES[number];
+type SeedType = (typeof VALID_TYPES)[number];
 
 /**
  * Parse the --only flag from process.argv.
@@ -291,7 +291,9 @@ function parseOnly(): Set<SeedType> | null {
     if ((VALID_TYPES as readonly string[]).includes(token)) {
       requested.add(token as SeedType);
     } else {
-      console.warn(`⚠️  Unknown seed type "${token}" — skipped. Valid types: ${VALID_TYPES.join(', ')}`);
+      console.warn(
+        `⚠️  Unknown seed type "${token}" — skipped. Valid types: ${VALID_TYPES.join(', ')}`,
+      );
     }
   }
   return requested;
@@ -312,11 +314,11 @@ async function seed(): Promise<void> {
   // When --only lists "milestones", "subscriptions", or "contacts" those map
   // to specific event types within the events table.  Requesting them does NOT
   // implicitly seed players — only an explicit "players" entry does that.
-  const seedPlayers      = only === null || only.has('players');
-  const seedEvents       = only === null || only.has('events');
-  const seedMilestones   = only === null || only.has('milestones');
+  const seedPlayers = only === null || only.has('players');
+  const seedEvents = only === null || only.has('events');
+  const seedMilestones = only === null || only.has('milestones');
   const seedSubscriptions = only === null || only.has('subscriptions');
-  const seedContacts     = only === null || only.has('contacts');
+  const seedContacts = only === null || only.has('contacts');
 
   // Derive which event types to insert
   const allowedEventTypes = new Set<string>();
@@ -324,12 +326,12 @@ async function seed(): Promise<void> {
     // "events" flag means all event sub-types
     for (const ev of EVENTS) allowedEventTypes.add(ev.type);
   } else {
-    if (seedMilestones)    allowedEventTypes.add('milestone_approved');
+    if (seedMilestones) allowedEventTypes.add('milestone_approved');
     if (seedSubscriptions) allowedEventTypes.add('scout_subscribed');
-    if (seedContacts)      allowedEventTypes.add('contact_unlocked');
+    if (seedContacts) allowedEventTypes.add('contact_unlocked');
     // Always include player_registered events when players are being seeded so
     // the events table stays consistent with the players table.
-    if (seedPlayers)       allowedEventTypes.add('player_registered');
+    if (seedPlayers) allowedEventTypes.add('player_registered');
   }
 
   console.log('🌱  ScoutOff seed starting…\n');
@@ -343,7 +345,9 @@ async function seed(): Promise<void> {
     const skippedPlayers: string[] = [];
 
     for (const p of PLAYERS) {
-      const existing = db.prepare('SELECT player_id FROM players WHERE player_id = ?').get(p.player_id);
+      const existing = db
+        .prepare('SELECT player_id FROM players WHERE player_id = ?')
+        .get(p.player_id);
       if (existing) {
         skippedPlayers.push(p.player_id);
         continue;
@@ -389,13 +393,23 @@ async function seed(): Promise<void> {
   // ── Summary ────────────────────────────────────────────────────────────────
   const counts = {
     players: (db.prepare('SELECT COUNT(*) AS n FROM players').get() as { n: number }).n,
-    events:  (db.prepare('SELECT COUNT(*) AS n FROM events').get() as { n: number }).n,
-    milestones: (db.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'milestone_approved'").get() as { n: number }).n,
-    subscriptions: (db.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'scout_subscribed'").get() as { n: number }).n,
+    events: (db.prepare('SELECT COUNT(*) AS n FROM events').get() as { n: number }).n,
+    milestones: (
+      db.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'milestone_approved'").get() as {
+        n: number;
+      }
+    ).n,
+    subscriptions: (
+      db.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'scout_subscribed'").get() as {
+        n: number;
+      }
+    ).n,
   };
 
   console.log('\n✅  Seed complete');
-  console.log(`  DB totals — players: ${counts.players}  events: ${counts.events}  milestones: ${counts.milestones}  subscriptions: ${counts.subscriptions}`);
+  console.log(
+    `  DB totals — players: ${counts.players}  events: ${counts.events}  milestones: ${counts.milestones}  subscriptions: ${counts.subscriptions}`,
+  );
   console.log('\n  Scout wallets for manual API testing:');
   console.log(`    Scout Alpha (premium): ${SCOUT_ALPHA}`);
   console.log(`    Scout Beta  (basic):   ${SCOUT_BETA}`);

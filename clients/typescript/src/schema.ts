@@ -878,6 +878,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/wallets/{wallet}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lists every active (not superseded, not revoked, not expired) refresh-token session for a wallet: jti, issuedAt, expiresAt, userAgent/IP ...
+         * @description Lists every active (not superseded, not revoked, not expired)
+         *     refresh-token session for a wallet: jti, issuedAt, expiresAt,
+         *     userAgent/IP hash.
+         */
+        get: operations["listWalletSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/wallets/{wallet}/sessions/revoke-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revokes every active refresh-token session for a wallet: blocks every active jti in the token blocklist (Redis pipeline), sets the per-wa...
+         * @description Revokes every active refresh-token session for a wallet: blocks every
+         *     active jti in the token blocklist (Redis pipeline), sets the per-wallet
+         *     `tokens_valid_after` cutoff so access tokens issued before it are rejected
+         *     by requireAuth even before they expire, terminates the wallet's open SSE
+         *     streams, and audit-logs the action.
+         */
+        post: operations["revokeAllWalletSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/webhooks/dead-letters": {
         parameters: {
             query?: never;
@@ -1147,10 +1193,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Serves the Swagger UI JavaScript bundle from swagger-ui-dist for the /ui page.
-         * @description Serves the Swagger UI JavaScript bundle from swagger-ui-dist for the /ui page.
+         * Serves the bundled Swagger UI script.
+         * @description Serves the bundled Swagger UI script.
          */
-        get: operations["getDocsSwagger-ui-bundle.js"];
+        get: operations["getDocsSwaggerUiBundleJs"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1167,10 +1213,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Serves the Swagger UI stylesheet from swagger-ui-dist for the /ui page.
-         * @description Serves the Swagger UI stylesheet from swagger-ui-dist for the /ui page.
+         * Serves the bundled Swagger UI stylesheet.
+         * @description Serves the bundled Swagger UI stylesheet.
          */
-        get: operations["getDocsSwagger-ui.css"];
+        get: operations["getDocsSwaggerUiCss"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1187,10 +1233,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Serves embedded Swagger UI.
-         * @description Serves embedded Swagger UI.
-         *     Requires `swagger-ui-dist` to be installed:
-         *       npm install swagger-ui-dist
+         * Serves the Swagger UI page for the OpenAPI specification.
+         * @description Serves the Swagger UI page for the OpenAPI specification.
          */
         get: operations["getDocsUi"];
         put?: never;
@@ -1209,8 +1253,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Returns the raw OpenAPI YAML source.
-         * @description Returns the raw OpenAPI YAML source.
+         * Returns the visible OpenAPI specification as YAML.
+         * @description Returns the visible OpenAPI specification as YAML.
          */
         get: operations["getDocsYaml"];
         put?: never;
@@ -1229,59 +1273,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Server-Sent Events endpoint.
-         * @description Server-Sent Events endpoint. Opens a long-lived HTTP connection and pushes
-         *     relevant contract events to the authenticated client as they are indexed.
-         *
-         *     Authentication: Bearer JWT (same as all other protected routes).
-         *
-         *     Query parameters (all optional, combinable):
-         *       - eventType  One or more event type names to subscribe to, comma-separated
-         *                    (e.g. "milestone_approved" or
-         *                    "milestone_approved,scout_subscribed"). When omitted the
-         *                    client receives all event types that pass the
-         *                    wallet-relevance filter. Unknown values are rejected with 400.
-         *       - playerId   Only deliver events whose payload contains this player identifier.
-         *                    When omitted no additional player-level filtering is applied.
-         *
-         *     Filtering: only events relevant to the authenticated wallet are sent (wallet
-         *     isolation is always enforced regardless of query params). Player events are
-         *     matched through the authenticated wallet's player record, since their payload
-         *     carries a player ID rather than a wallet address. Optional query params add
-         *     further narrowing on top.
-         *
-         *     SSE event types sent:
-         *       - milestone_approved  (player: their own milestone approvals)
-         *       - scout_subscribed    (scout: their own subscription changes)
-         *       - contact_unlocked    (scout: their own contact unlocks)
-         *       - trial_offer_logged  (scout/player: trial offers involving them)
-         *       - player_registered   (player: their own registration)
-         *       - milestone_submitted (player/validator)
-         *       - fees_withdrawn      (admin)
-         *
-         *     Live authorization enforcement (#1019):
-         *       - If the authenticated JWT is revoked (via POST /auth/logout or admin
-         *         token revocation) while the stream is open, the connection emits a
-         *         terminal `session_ended` event (reason "token_revoked") and closes;
-         *         no further protected events are delivered.
-         *       - If the wallet is blocklisted while the stream is open, the same
-         *         termination happens with reason "wallet_blocklisted".
-         *       - When the access JWT expires, the stream closes with reason "token_expired".
-         *       - Detection bound: immediate for revocations/blocklists processed in
-         *         this process; ≤ SSE_AUTH_SWEEP_INTERVAL_MS (default 30 s) for changes
-         *         persisted by another instance (one sweep query per process, never a
-         *         DB query per keep-alive tick).
-         *       - Blocklisted wallets cannot open a new connection (403).
-         *       - Concurrent streams are limited per wallet by
-         *         SSE_MAX_CONNECTIONS_PER_WALLET (default 5; 0 = unlimited).
-         *
-         *     Reconnection: initial `retry:` hint is sent on connect (configured via
-         *     SSE_RETRY_MS, default 5000 ms + up to 20% random jitter) to prevent reconnect storms.
-         *
-         *     Keep-alive: a `: ping` comment is sent every SSE_KEEPALIVE_INTERVAL_MS ms
-         *     (default 15 s) to prevent idle-connection timeouts.
+         * Server-Sent Events stream of wallet-relevant contract events (see streamHandler above).
+         * @description Server-Sent Events stream of wallet-relevant contract events (see streamHandler above).
          */
-        get: operations["getEventsStream"];
+        get: operations["streamHandler"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2258,7 +2253,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Fetch a single subscription.
+         * @description Fetch a single subscription. The signing secret is never returned; the
+         *     response includes the endpoint health fields from migration 038.
+         */
+        get: operations["getWebhook"];
         put?: never;
         post?: never;
         /**
@@ -2266,6 +2266,33 @@ export interface paths {
          * @description Delete a subscription. Returns 404 when not found or owned by another scout.
          */
         delete: operations["deleteWebhook"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a subscription's URL and/or event filter.
+         * @description Update a subscription's URL and/or event filter. A replacement URL is
+         *     re-validated (HTTPS-only in production, no private IPs); `rotateSecret: true`
+         *     issues a fresh signing secret, returned in plaintext once.
+         */
+        patch: operations["updateWebhook"];
+        trace?: never;
+    };
+    "/scouts/{wallet}/webhooks/{id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paginated delivery history for a scout's own webhook subscription.
+         * @description Paginated delivery history for a scout's own webhook subscription.
+         *     Scoped to the owning wallet; no payload or secret data is returned.
+         */
+        get: operations["getScoutWebhookDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2356,8 +2383,14 @@ export interface paths {
         /**
          * Approve a batch of milestones assigned to the authenticated validator in one call.
          * @description Approve a batch of milestones assigned to the authenticated validator in
-         *     one call. Each ID is processed independently — a failure on one does not
-         *     abort the batch; per-ID outcomes are returned in `data`.
+         *     one call. Up to 50 unique IDs are accepted; IDs use a bounded, URL-safe
+         *     opaque format. Each item commits independently, so a failed item does not
+         *     roll back successful approvals. A repeated approval is reported as
+         *     `already_processed` and does not repeat its database side effects. Supplying
+         *     an Idempotency-Key also replays the original response for safe HTTP retries.
+         *     `success` is false for operational errors or post-commit warnings;
+         *     `partialFailure` is true when at least one approval committed alongside one
+         *     of those failures. Missing and unauthorized IDs remain item-level outcomes.
          */
         post: operations["approveBulkMilestones"];
         delete?: never;
@@ -2423,28 +2456,6 @@ export interface paths {
          *     Counts are derived from indexed milestone events — no separate write path.
          */
         get: operations["getValidatorDashboardStats"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/versioning/demo": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Deliberate v2-only example endpoint used to demonstrate intentional divergence and exercise the parity allowlist/test.
-         * @description Deliberate v2-only example endpoint used to demonstrate intentional
-         *     divergence and exercise the parity allowlist/test. Not mounted under
-         *     /api or /api/v1.
-         */
-        get: operations["getVersioningDemo"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3426,7 +3437,7 @@ export interface operations {
             content: {
                 "application/json": {
                     ip: string;
-                    score: number;
+                    score: 0 | 100;
                 };
             };
         };
@@ -4012,6 +4023,94 @@ export interface operations {
             };
         };
     };
+    listWalletSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stellar public key of the wallet */
+                wallet: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description { success: true, data: { wallet, sessions: SessionView[], count } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Invalid wallet address */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Non-admin role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revokeAllWalletSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stellar public key of the wallet */
+                wallet: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description { success: true, data: { wallet, revokedCount, tokensValidAfter, message } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Invalid wallet address */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Non-admin role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     listDeadLetters: {
         parameters: {
             query?: never;
@@ -4458,7 +4557,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description { success: false, error: string } - Spec file missing or unparsable */
+            /** @description { success: false, error: string, code: string, correlationId?: string } - Spec file missing or unparsable */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -4467,7 +4566,7 @@ export interface operations {
             };
         };
     };
-    "getDocsSwagger-ui-bundle.js": {
+    getDocsSwaggerUiBundleJs: {
         parameters: {
             query?: never;
             header?: never;
@@ -4476,7 +4575,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Swagger UI JavaScript bundle (text/javascript) */
+            /** @description Swagger UI script (application/javascript) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4485,7 +4584,7 @@ export interface operations {
             };
         };
     };
-    "getDocsSwagger-ui.css": {
+    getDocsSwaggerUiCss: {
         parameters: {
             query?: never;
             header?: never;
@@ -4519,13 +4618,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description { success: false, error: string } - swagger-ui-dist not installed */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
         };
     };
     getDocsYaml: {
@@ -4537,14 +4629,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Raw OpenAPI YAML (text/yaml) */
+            /** @description OpenAPI 3.0 document (application/yaml) */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description { success: false, error: string } - Spec file missing */
+            /** @description { success: false, error: string } - Spec file missing or unparsable */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -4553,7 +4645,7 @@ export interface operations {
             };
         };
     };
-    getEventsStream: {
+    streamHandler: {
         parameters: {
             query?: never;
             header?: never;
@@ -4590,6 +4682,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description { success: false, error: string } — unsupported method */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description { success: false, error: string } — per-wallet connection limit reached */
             429: {
                 headers: {
@@ -4597,7 +4696,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description { success: false, error: string, code: 'SSE_CAPACITY' } — global connection limit reached (sets Retry-After) */
+            /** @description { success: false, error: string, code: 'SSE_CAPACITY' } — global connection limit reached */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -5826,11 +5925,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description { success: true, data: { alreadyUnlocked?: true, transactionId?, status?, ...ContactDetails } } */
             200: {
@@ -6480,16 +6575,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description { tier: 'basic' | 'premium', duration: number (1–365 days) } */
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    tier: "basic" | "premium";
-                    duration: number;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description { success: true, data: { transactionId, tier, expiresAt, status } } - Renewal */
             200: {
@@ -6544,16 +6630,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description { tier: 'basic' | 'premium', duration: number (1–365 days) } */
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    tier: "basic" | "premium";
-                    duration: number;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description { success: true, data: { transactionId, tier, expiresAt, status } } */
             201: {
@@ -6658,16 +6735,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description { playerId: string, detailsUri: string } */
-        requestBody: {
-            content: {
-                "application/json": {
-                    playerId: string;
-                    /** @description Additional validation is applied beyond this schema — see the route handler. */
-                    detailsUri: string;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description { success: true, data: { offerId, transactionId, scout, playerId, detailsUri, createdAt, tierPromoted: true, newTier: 3 } } */
             201: {
@@ -6751,16 +6819,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description { playerId: string, detailsUri: string } */
-        requestBody: {
-            content: {
-                "application/json": {
-                    playerId: string;
-                    /** @description Additional validation is applied beyond this schema — see the route handler. */
-                    detailsUri: string;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description { success: true, data: { offerId, transactionId, scout, playerId, detailsUri, createdAt, tierPromoted: true, newTier: 3 } } */
             201: {
@@ -6925,6 +6984,50 @@ export interface operations {
             };
         };
     };
+    getWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scout's Stellar public key */
+                wallet: string;
+                /** @description Webhook subscription row ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description { success: true, data: { id, url, eventTypes, createdAt, status, consecutiveFailures, lastFailureAt, lastSuccessAt, suspendedAt, suspendedReason } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Invalid subscription id */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Wallet mismatch or subscription belongs to another scout */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     deleteWebhook: {
         parameters: {
             query?: never;
@@ -6954,6 +7057,114 @@ export interface operations {
                 content?: never;
             };
             /** @description { success: false, error: string } - Wallet mismatch */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scout's Stellar public key */
+                wallet: string;
+                /** @description Webhook subscription row ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description { url?: string, eventTypes?: ContractEventType[], rotateSecret?: boolean } */
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uri
+                     * @description Additional validation is applied beyond this schema — see the route handler.
+                     */
+                    url?: string;
+                    eventTypes?: never[];
+                    rotateSecret?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description { success: true, data: { id, url, eventTypes, createdAt, status, consecutiveFailures, lastFailureAt, lastSuccessAt, suspendedAt, suspendedReason, secret? } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Invalid id, invalid body, or disallowed URL */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Wallet mismatch or subscription belongs to another scout */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getScoutWebhookDeliveries: {
+        parameters: {
+            query?: {
+                /** @description Optional. Filter by 'failed' or 'succeeded' */
+                status?: string;
+                /** @description Default 1 */
+                page?: number;
+                /** @description Default 20, max 100 */
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Scout's Stellar public key */
+                wallet: string;
+                /** @description Webhook subscription row ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description { success: true, data: DeliveryItem[], total, page, pageSize } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Subscription belongs to another scout */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7090,6 +7301,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Additional validation is applied beyond this schema — see the route handler. */
                     playerId: string;
                     /** @enum {string} */
                     milestoneType: "identity" | "performance" | "trial_offer";
@@ -7141,11 +7353,14 @@ export interface operations {
     approveBulkMilestones: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional. Replays the original response for retries */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
-        /** @description { milestoneIds: string[] } - At least one ID required */
+        /** @description { milestoneIds: string[] } - 1–50 IDs, each 1–200 characters */
         requestBody: {
             content: {
                 "application/json": {
@@ -7154,15 +7369,22 @@ export interface operations {
             };
         };
         responses: {
-            /** @description { success: true, data: Array<{ milestoneId, status: 'approved'|'invalid'|'unauthorized'|'error', error? }> } */
+            /** @description { success, partialFailure, summary, data: Array<{ milestoneId, status: 'approved'|'invalid'|'unauthorized'|'already_processed'|'error', error?, warning? }> } */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description { success: false, error: string } - Empty milestoneIds */
+            /** @description { success: false, error: string } - Invalid IDs or batch size */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Idempotency key reused for a different request */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7260,24 +7482,6 @@ export interface operations {
             };
             /** @description { success: false, error: string } - Insufficient permissions or wallet mismatch */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    getVersioningDemo: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description { version: 2, demo: true } */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };

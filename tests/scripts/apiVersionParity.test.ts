@@ -29,7 +29,7 @@ function normalize(p: string): string {
 }
 
 function isAllowlisted(path: string): boolean {
-  return allowlist.some(a => a === path || a.startsWith(path + '/') || path.startsWith(a + '/'));
+  return allowlist.some((a) => a === path || a.startsWith(path + '/') || path.startsWith(a + '/'));
 }
 
 test('api v1/v2 parity (router introspection)', () => {
@@ -38,13 +38,13 @@ test('api v1/v2 parity (router introspection)', () => {
   const findMountedUnder = (prefix: string) => {
     const pref = normalize(prefix);
     return mountPaths
-      .filter(p => {
+      .filter((p) => {
         if (p === pref) return true;
         if (!p.startsWith(pref + '/')) return false;
         if (pref === '/api' && p.startsWith('/api/v2/')) return false;
         return true;
       })
-      .map(p => {
+      .map((p) => {
         if (pref === '/api') {
           if (p === '/api') return '/';
           if (p.startsWith('/api/v1/')) return p.slice('/api/v1'.length) || '/';

@@ -115,7 +115,9 @@ export async function runReplay(
     timestamp: _state.startedAt!,
   }).catch(() => {});
 
-  logger.info(`[replay] started fromLedger=${fromLedger} toLedger=${toLedger} admin=${adminWallet}`);
+  logger.info(
+    `[replay] started fromLedger=${fromLedger} toLedger=${toLedger} admin=${adminWallet}`,
+  );
 
   const onProgress = (progress: BatchProcessorProgress) => {
     _state = {

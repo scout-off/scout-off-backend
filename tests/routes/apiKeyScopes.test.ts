@@ -67,12 +67,19 @@ jest.mock('../../src/db', () => ({
 jest.mock('../../src/services/stellar', () => ({
   isSubscribed: jest.fn().mockResolvedValue({ active: false, expiresAt: null }),
   submitContactPayment: jest.fn(),
-  purchaseSubscription: jest.fn().mockResolvedValue({ transactionId: 'tx-1', expiresAt: 9999999999 }),
+  purchaseSubscription: jest
+    .fn()
+    .mockResolvedValue({ transactionId: 'tx-1', expiresAt: 9999999999 }),
   renewSubscription: jest.fn().mockResolvedValue({ transactionId: 'tx-2', expiresAt: 9999999999 }),
   cancelSubscriptionOnChain: jest.fn().mockResolvedValue({ transactionId: 'tx-3' }),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -180,9 +187,7 @@ describe('API-key scopes — legacy/unrestricted keys', () => {
     expect(res.status).toBe(201);
 
     mockRevokeApiKey.mockReturnValue(true);
-    res = await request(app)
-      .delete(`/api/scouts/${SCOUT}/api-keys/9`)
-      .set('X-API-Key', f.key);
+    res = await request(app).delete(`/api/scouts/${SCOUT}/api-keys/9`).set('X-API-Key', f.key);
     expect(res.status).toBe(200);
     expect(mockRevokeApiKey).toHaveBeenCalledWith(9, SCOUT);
   });
@@ -235,9 +240,7 @@ describe('API-key scopes — restricted keys denied on missing scope', () => {
   ])('403 on GET %s without %s', async (path, requiredScope) => {
     const f = seedKey(['read:players']);
 
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT}${path}`)
-      .set('X-API-Key', f.key);
+    const res = await request(app).get(`/api/scouts/${SCOUT}${path}`).set('X-API-Key', f.key);
 
     expect(res.status).toBe(403);
     expect(res.body.reason?.requiredScope).toBe(requiredScope);
@@ -311,9 +314,7 @@ describe('API-key scopes — restricted keys denied on missing scope', () => {
   it('403 on subscription read without read:subscription', async () => {
     const f = seedKey(['read:milestones']);
 
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT}/subscription`)
-      .set('X-API-Key', f.key);
+    const res = await request(app).get(`/api/scouts/${SCOUT}/subscription`).set('X-API-Key', f.key);
 
     expect(res.status).toBe(403);
     expect(res.body.reason?.requiredScope).toBe('read:subscription');
@@ -337,9 +338,7 @@ describe('API-key scopes — restricted keys allowed when scope matches', () => 
   it('allows private note reads with read:notes', async () => {
     const f = seedKey(['read:notes']);
 
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT}/notes`)
-      .set('X-API-Key', f.key);
+    const res = await request(app).get(`/api/scouts/${SCOUT}/notes`).set('X-API-Key', f.key);
 
     expect(res.status).toBe(200);
   });
@@ -375,9 +374,7 @@ describe('API-key scopes — restricted keys allowed when scope matches', () => 
     const f = seedKey(['read:subscription']);
     mockGetLatestSubscription.mockReturnValue(null);
 
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT}/subscription`)
-      .set('X-API-Key', f.key);
+    const res = await request(app).get(`/api/scouts/${SCOUT}/subscription`).set('X-API-Key', f.key);
 
     expect(res.status).toBe(200);
   });

@@ -70,12 +70,8 @@ export const reindexBodySchema = reindexBodyShapeSchema
  * @response 422 { success: false, error: string } - range > 10 000 or fromLedger ≥ toLedger
  * @auth Bearer (admin role required)
  */
-export function triggerReindex(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
-try {
+export function triggerReindex(req: Request, res: Response, next: NextFunction): void {
+  try {
     const parsed = reindexBodySchema.safeParse(req.body);
     if (!parsed.success) {
       const firstError = parsed.error.issues[0];
@@ -140,11 +136,7 @@ try {
  * }
  * @auth Bearer (admin role required)
  */
-export function reindexStatusHandler(
-  req: Request,
-  res: Response,
-  _next: NextFunction,
-): void {
+export function reindexStatusHandler(req: Request, res: Response, _next: NextFunction): void {
   const s = getReindexStatus();
   res.json({
     success: true,
@@ -178,11 +170,7 @@ export function reindexStatusHandler(
  * @response 409 { success: false, error: string } - no job is running
  * @auth Bearer (admin role required)
  */
-export function cancelReindexHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
+export function cancelReindexHandler(req: Request, res: Response, next: NextFunction): void {
   try {
     const adminWallet = req.account ?? 'unknown';
     const wasCancelled = cancelReindex(adminWallet);
@@ -202,8 +190,7 @@ export function cancelReindexHandler(
       success: true,
       data: {
         status: 'cancel_requested',
-        message:
-          'Cancellation requested. The job will stop after the current batch completes.',
+        message: 'Cancellation requested. The job will stop after the current batch completes.',
       },
     });
   } catch (err) {

@@ -46,7 +46,12 @@ async function getServices() {
   // imports that run before the args are parsed.
   const [
     { startReindex, getReindexStatus, cancelReindex },
-    { listWebhookDeadLetters, markWebhookDeadLetterReplayed, purgeOldWebhookDeadLetters, getWebhookDeadLetterById },
+    {
+      listWebhookDeadLetters,
+      markWebhookDeadLetterReplayed,
+      purgeOldWebhookDeadLetters,
+      getWebhookDeadLetterById,
+    },
     { revokeToken, getActiveRevokedJtis },
     { isFeatureEnabled, setFeatureFlag },
     { insertAuditLog },
@@ -116,7 +121,7 @@ function requireYes(yes: boolean): void {
   if ((env === 'production' || env === 'staging') && !yes) {
     err(
       `Mutating commands require --yes in ${env}. ` +
-      'Pass --yes to confirm you intend to modify production data.',
+        'Pass --yes to confirm you intend to modify production data.',
     );
     process.exit(1);
   }
@@ -169,14 +174,24 @@ async function cmdReindex(
     }
     case 'status': {
       const status = getReindexStatus();
-      out(jsonMode ? status : `Status: ${status.status}  ledger: ${status.ledgersProcessed}/${status.ledgersTotal}  mode: ${status.mode}`);
+      out(
+        jsonMode
+          ? status
+          : `Status: ${status.status}  ledger: ${status.ledgersProcessed}/${status.ledgersTotal}  mode: ${status.mode}`,
+      );
       break;
     }
     case 'cancel': {
       requireYes(yes);
       const cancelled = cancelReindex(operator);
       await writeAudit(insertAuditLog, operator, 'cli_reindex_cancel', {});
-      out(jsonMode ? { ok: cancelled } : (cancelled ? 'Reindex cancelled.' : 'No running reindex to cancel.'));
+      out(
+        jsonMode
+          ? { ok: cancelled }
+          : cancelled
+            ? 'Reindex cancelled.'
+            : 'No running reindex to cancel.',
+      );
       break;
     }
     default:
@@ -207,7 +222,13 @@ async function cmdDlq(
     case 'list': {
       const limit = typeof flags['limit'] === 'string' ? parseInt(flags['limit'], 10) : 50;
       const rows = await listWebhookDeadLetters(limit, 0);
-      out(jsonMode ? rows : rows.map((r) => `${r.id}  ${r.event_type}  ${r.created_at}  status=${r.status}`).join('\n') || '(empty)');
+      out(
+        jsonMode
+          ? rows
+          : rows
+              .map((r) => `${r.id}  ${r.event_type}  ${r.created_at}  status=${r.status}`)
+              .join('\n') || '(empty)',
+      );
       break;
     }
     case 'requeue': {
@@ -236,8 +257,13 @@ async function cmdDlq(
       }
       requireYes(yes);
       const deleted = await purgeOldWebhookDeadLetters(days);
-      await writeAudit(insertAuditLog, operator, 'cli_dlq_purge', { olderThan: olderThanRaw, deleted });
-      out(jsonMode ? { ok: true, deleted } : `Purged ${deleted} entries older than ${olderThanRaw}.`);
+      await writeAudit(insertAuditLog, operator, 'cli_dlq_purge', {
+        olderThan: olderThanRaw,
+        deleted,
+      });
+      out(
+        jsonMode ? { ok: true, deleted } : `Purged ${deleted} entries older than ${olderThanRaw}.`,
+      );
       break;
     }
     default:
@@ -298,7 +324,11 @@ async function cmdTokens(
         }
       }
       await writeAudit(insertAuditLog, operator, 'cli_token_revoke_wallet', { wallet, count });
-      out(jsonMode ? { ok: true, wallet, revokedKeys: count } : `Revoked ${count} API key(s) for wallet ${wallet}.`);
+      out(
+        jsonMode
+          ? { ok: true, wallet, revokedKeys: count }
+          : `Revoked ${count} API key(s) for wallet ${wallet}.`,
+      );
       break;
     }
     default:
@@ -326,7 +356,13 @@ async function cmdFlags(
       for (const name of Object.values(FeatureFlags)) {
         results[name] = await isFeatureEnabled(name);
       }
-      out(jsonMode ? results : Object.entries(results).map(([k, v]) => `${k}: ${v}`).join('\n'));
+      out(
+        jsonMode
+          ? results
+          : Object.entries(results)
+              .map(([k, v]) => `${k}: ${v}`)
+              .join('\n'),
+      );
       break;
     }
     case 'set': {
@@ -340,7 +376,11 @@ async function cmdFlags(
       requireYes(yes);
       await setFeatureFlag(name, value === 'true', operator);
       await writeAudit(insertAuditLog, operator, 'cli_flag_set', { name, value, reason });
-      out(jsonMode ? { ok: true, name, value } : `Flag "${name}" set to ${value}.${reason ? ` Reason: ${reason}` : ''}`);
+      out(
+        jsonMode
+          ? { ok: true, name, value }
+          : `Flag "${name}" set to ${value}.${reason ? ` Reason: ${reason}` : ''}`,
+      );
       break;
     }
     default:
@@ -367,8 +407,13 @@ async function cmdMigrate(
   yes: boolean,
 ): Promise<void> {
   const {
-    initDb, getDriver, runMigrations,
-    discoverMigrationFiles, getAppliedMigrations, generateStatusReport, formatStatusReport,
+    initDb,
+    getDriver,
+    runMigrations,
+    discoverMigrationFiles,
+    getAppliedMigrations,
+    generateStatusReport,
+    formatStatusReport,
     insertAuditLog,
   } = await getServices();
 
@@ -443,12 +488,12 @@ async function main(): Promise<void> {
     strict: false,
     options: {
       operator: { type: 'string' },
-      yes:      { type: 'boolean', default: false },
-      json:     { type: 'boolean', default: false },
-      from:     { type: 'string' },
-      jti:      { type: 'string' },
-      reason:   { type: 'string' },
-      limit:    { type: 'string' },
+      yes: { type: 'boolean', default: false },
+      json: { type: 'boolean', default: false },
+      from: { type: 'string' },
+      jti: { type: 'string' },
+      reason: { type: 'string' },
+      limit: { type: 'string' },
       'older-than': { type: 'string' },
     },
   });
@@ -466,7 +511,13 @@ async function main(): Promise<void> {
   const yes = values.yes === true;
 
   // Mutating commands require --operator.
-  const readOnly = new Set(['reindex status', 'dlq list', 'flags list', 'migrate status', 'audit verify']);
+  const readOnly = new Set([
+    'reindex status',
+    'dlq list',
+    'flags list',
+    'migrate status',
+    'audit verify',
+  ]);
   const cmdKey = `${command} ${sub ?? ''}`.trim();
   if (!readOnly.has(cmdKey) && !operator) {
     err('--operator <name> is required for mutating commands.');

@@ -21,13 +21,15 @@ import { paymentErrorStatus, gracePeriodSeconds } from './helpers';
 
 // ─── Validation schemas ────────────────────────────────────────────────────────
 
-export const trialOfferSchema = z.object({
-  playerId: z.string().min(1),
-  detailsUri: z
-    .string()
-    .min(1)
-    .refine(isValidIpfsOrHttpsUri, 'detailsUri must be a valid IPFS (ipfs://) or HTTPS URI'),
-}).strict();
+export const trialOfferSchema = z
+  .object({
+    playerId: z.string().min(1),
+    detailsUri: z
+      .string()
+      .min(1)
+      .refine(isValidIpfsOrHttpsUri, 'detailsUri must be a valid IPFS (ipfs://) or HTTPS URI'),
+  })
+  .strict();
 
 // ─── Access helpers ────────────────────────────────────────────────────────────
 
@@ -62,8 +64,12 @@ async function scoutHasPlayerAccess(scoutWallet: string, playerId: string): Prom
 // ─── GET/POST /api/scouts/:wallet/trial-offers (#285) ──────────────────────────
 
 /** GET /api/scouts/:wallet/trial-offers — on-chain trial offer event history */
-export async function listTrialOffers(req: Request, res: Response, _next: NextFunction): Promise<void> {
-  const {wallet} = req.params as {wallet: string};
+export async function listTrialOffers(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const { wallet } = req.params as { wallet: string };
   res.json({ success: true, data: await getTrialOffers(wallet) });
 }
 
@@ -75,25 +81,34 @@ export async function listTrialOffers(req: Request, res: Response, _next: NextFu
  * so both routes share one code path — validation, on-chain submission,
  * `trial_offer_events` + `trial_offers` persistence, Elite Tier promotion and SSE broadcast.
  */
-export async function createTrialOffer(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
-    const {wallet} = req.params as {wallet: string};
+export async function createTrialOffer(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { wallet } = req.params as { wallet: string };
 
     const parsed = trialOfferSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request body' });
+      res
+        .status(400)
+        .json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request body' });
       return;
     }
     const { playerId, detailsUri } = parsed.data;
 
     // Verify player exists
-    const playerExists = queryEvents('player_registered', {
-      payloadFilter: { player_id: playerId },
-      limit: 1,
-      offset: 0,
-    }).length > 0;
+    const playerExists =
+      queryEvents('player_registered', {
+        payloadFilter: { player_id: playerId },
+        limit: 1,
+        offset: 0,
+      }).length > 0;
     if (!playerExists) {
-      res.status(404).json({ success: false, error: 'Player not found', code: ErrorCode.PLAYER_NOT_FOUND });
+      res
+        .status(404)
+        .json({ success: false, error: 'Player not found', code: ErrorCode.PLAYER_NOT_FOUND });
       return;
     }
 
@@ -108,7 +123,9 @@ try {
       return;
     }
 
-    logger.info(`[scout] action=create_trial_offer scout=${wallet} playerId=${playerId} detailsUri=${detailsUri}`);
+    logger.info(
+      `[scout] action=create_trial_offer scout=${wallet} playerId=${playerId} detailsUri=${detailsUri}`,
+    );
 
     // Submit on-chain via Soroban
     const result = await stellarLogTrialOffer(wallet, playerId, detailsUri);
@@ -169,7 +186,9 @@ try {
     });
   } catch (err) {
     if (err instanceof PaymentError) {
-      res.status(paymentErrorStatus(err.code)).json({ success: false, error: err.message, code: err.code });
+      res
+        .status(paymentErrorStatus(err.code))
+        .json({ success: false, error: err.message, code: err.code });
       return;
     }
     next(err);

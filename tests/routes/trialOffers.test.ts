@@ -83,7 +83,13 @@ describe('#285 trial_offers', () => {
 
     it('returns offer list for authenticated scout', async () => {
       // Pre-seed an offer
-      await insertTrialOffer(SCOUT_WALLET, 'player-3', 'ipfs://QmGet', 'tx-get-test', Math.floor(Date.now() / 1000));
+      await insertTrialOffer(
+        SCOUT_WALLET,
+        'player-3',
+        'ipfs://QmGet',
+        'tx-get-test',
+        Math.floor(Date.now() / 1000),
+      );
 
       const token = await getScoutToken();
       const res = await request(app)
@@ -149,7 +155,7 @@ describe('#285 trial_offers', () => {
 
       // Verify persisted
       const stored = (await getTrialOffers(SCOUT_WALLET)).find(
-        (o) => o.tx_hash === 'mock-tx-hash-trial-offer-test'
+        (o) => o.tx_hash === 'mock-tx-hash-trial-offer-test',
       );
       expect(stored).toBeDefined();
       expect(stored!.player_id).toBe('player-99');

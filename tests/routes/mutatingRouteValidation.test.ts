@@ -84,9 +84,7 @@ function collectMissing(stack: Layer[] | undefined, prefix: string[], missing: s
       }
     } else if (layer.name === 'router' && layer.handle?.stack) {
       const mountParts =
-        typeof layer.path === 'string'
-          ? splitPath(layer.path)
-          : splitPath(layer.regexp);
+        typeof layer.path === 'string' ? splitPath(layer.path) : splitPath(layer.regexp);
       collectMissing(layer.handle.stack, [...prefix, ...mountParts], missing);
     }
   }

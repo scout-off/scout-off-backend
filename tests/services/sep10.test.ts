@@ -1,7 +1,25 @@
-import { buildChallenge, extractAccount, getServerKeypair, verifyChallenge, Sep10Error, Sep10ErrorCode, getErrorMapping } from '../../src/services/sep10';
+import {
+  buildChallenge,
+  extractAccount,
+  getServerKeypair,
+  verifyChallenge,
+  Sep10Error,
+  Sep10ErrorCode,
+  getErrorMapping,
+} from '../../src/services/sep10';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { Keypair, Transaction, Networks, TransactionBuilder, BASE_FEE, Operation, Account, Asset, TimeoutInfinite } from '@stellar/stellar-sdk';
+import {
+  Keypair,
+  Transaction,
+  Networks,
+  TransactionBuilder,
+  BASE_FEE,
+  Operation,
+  Account,
+  Asset,
+  TimeoutInfinite,
+} from '@stellar/stellar-sdk';
 
 const clientKeypair = Keypair.random();
 
@@ -62,7 +80,7 @@ describe('sep10', () => {
           name: 'scoutoff auth',
           value: crypto.randomBytes(48).toString('base64'),
           source: clientKeypair.publicKey(),
-        })
+        }),
       )
       .setTimeout(300)
       .build();
@@ -90,7 +108,7 @@ describe('sep10', () => {
             name: 'scoutoff auth',
             value: crypto.randomBytes(48).toString('base64'),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -101,7 +119,9 @@ describe('sep10', () => {
       const xdr = tx.toXdr();
 
       // Should reject because source account is not the server
-      expect(() => verifyChallenge(xdr)).toThrow('Challenge source account is not the server account');
+      expect(() => verifyChallenge(xdr)).toThrow(
+        'Challenge source account is not the server account',
+      );
     });
 
     it('throws when challenge sequence number is not 0', () => {
@@ -117,7 +137,7 @@ describe('sep10', () => {
             name: 'scoutoff auth',
             value: crypto.randomBytes(48).toString('base64'),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -137,14 +157,13 @@ describe('sep10', () => {
       const txBuilder = new TransactionBuilder(serverAccount, {
         fee: BASE_FEE,
         networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(
-          Operation.manageData({
-            name: 'scoutoff auth',
-            value: crypto.randomBytes(48).toString('base64'),
-            source: clientKeypair.publicKey(),
-          })
-        );
+      }).addOperation(
+        Operation.manageData({
+          name: 'scoutoff auth',
+          value: crypto.randomBytes(48).toString('base64'),
+          source: clientKeypair.publicKey(),
+        }),
+      );
 
       // TimeoutInfinite yields timeBounds of 0/0, which the verifier treats as missing
       const tx = txBuilder.setTimeout(TimeoutInfinite).build();
@@ -172,7 +191,7 @@ describe('sep10', () => {
             name: 'scoutoff auth',
             value: crypto.randomBytes(48).toString('base64'),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -201,7 +220,7 @@ describe('sep10', () => {
             name: 'scoutoff auth',
             value: crypto.randomBytes(48).toString('base64'),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         // Add an extra manageData operation from the client account
         .addOperation(
@@ -209,7 +228,7 @@ describe('sep10', () => {
             name: 'malicious data',
             value: Buffer.from('hacked'),
             source: clientKeypair.publicKey(), // Client-sourced - should be rejected
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -218,7 +237,9 @@ describe('sep10', () => {
       tx.sign(clientKeypair);
       const xdr = tx.toXdr();
 
-      expect(() => verifyChallenge(xdr)).toThrow('Operation 1 must be sourced by the server account');
+      expect(() => verifyChallenge(xdr)).toThrow(
+        'Operation 1 must be sourced by the server account',
+      );
     });
 
     it('accepts valid challenge with server-sourced extra operation', () => {
@@ -233,7 +254,7 @@ describe('sep10', () => {
             name: 'scoutoff auth',
             value: crypto.randomBytes(48).toString('base64'),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         // Add an extra manageData operation from the server account (allowed)
         .addOperation(
@@ -241,7 +262,7 @@ describe('sep10', () => {
             name: 'web_auth_domain',
             value: Buffer.from('example.com'),
             source: serverKeypair.publicKey(), // Server-sourced - allowed
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -283,7 +304,7 @@ describe('sep10', () => {
             amount: '1',
             asset: new Asset('TESTCOIN', serverKeypair.publicKey()),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -292,7 +313,9 @@ describe('sep10', () => {
       tx.sign(clientKeypair);
       const xdr = tx.toXdr();
 
-      expect(() => verifyChallenge(xdr)).toThrow('Invalid challenge: operation 0 must be manageData');
+      expect(() => verifyChallenge(xdr)).toThrow(
+        'Invalid challenge: operation 0 must be manageData',
+      );
     });
 
     it('throws when operation name does not match "scoutoff auth"', () => {
@@ -307,7 +330,7 @@ describe('sep10', () => {
             name: 'wrong name',
             value: Buffer.from(Keypair.random().rawPublicKey()).toString('base64'),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -331,7 +354,7 @@ describe('sep10', () => {
             name: 'scoutoff auth',
             value: null, // Explicitly no nonce
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -355,7 +378,7 @@ describe('sep10', () => {
             name: 'scoutoff auth',
             value: Buffer.from('too-short'), // 9 bytes instead of 64
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -364,7 +387,9 @@ describe('sep10', () => {
       tx.sign(clientKeypair);
       const xdr = tx.toXdr();
 
-      expect(() => verifyChallenge(xdr)).toThrow('Invalid challenge: nonce must be exactly 64 bytes');
+      expect(() => verifyChallenge(xdr)).toThrow(
+        'Invalid challenge: nonce must be exactly 64 bytes',
+      );
     });
 
     it('throws when operation source is missing', () => {
@@ -379,7 +404,7 @@ describe('sep10', () => {
             name: 'scoutoff auth',
             value: crypto.randomBytes(48).toString('base64'),
             // No source specified - defaults to undefined
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -449,7 +474,7 @@ describe('sep10', () => {
             amount: '1',
             asset: new Asset('TESTCOIN', serverKeypair.publicKey()),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
@@ -458,7 +483,9 @@ describe('sep10', () => {
       tx.sign(clientKeypair);
       const xdr = tx.toXdr();
 
-      expect(() => verifyChallenge(xdr)).toThrow('Invalid challenge: operation 0 must be manageData');
+      expect(() => verifyChallenge(xdr)).toThrow(
+        'Invalid challenge: operation 0 must be manageData',
+      );
     });
   });
 
@@ -607,7 +634,9 @@ describe('sep10', () => {
       // Instance B (different random keypair) must reject it — proving that
       // sharing the secret is the only way to make cross-instance auth work.
       // The challenge is sourced by A's server account, so B rejects it there.
-      expect(() => instanceB.verifyChallenge(signedXdr)).toThrow('Challenge source account is not the server account');
+      expect(() => instanceB.verifyChallenge(signedXdr)).toThrow(
+        'Challenge source account is not the server account',
+      );
     });
   });
 });

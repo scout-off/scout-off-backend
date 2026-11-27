@@ -12,8 +12,9 @@ import { getDb, timedQuery } from '../query';
 
 export function fetchLastIndexedLedger(): number {
   const sql = 'SELECT value FROM indexer_state WHERE key = ?';
-  const row = timedQuery(sql, () =>
-    getDb().prepare(sql).get('last_ledger') as { value: string } | undefined
+  const row = timedQuery(
+    sql,
+    () => getDb().prepare(sql).get('last_ledger') as { value: string } | undefined,
   );
   return row ? parseInt(row.value, 10) : 0;
 }
@@ -22,7 +23,8 @@ export function fetchLastIndexedLedger(): number {
 export const getLastLedger = fetchLastIndexedLedger;
 
 export function persistLastIndexedLedger(ledger: number): void {
-  const sql = 'INSERT INTO indexer_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value';
+  const sql =
+    'INSERT INTO indexer_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value';
   timedQuery(sql, () => getDb().prepare(sql).run('last_ledger', String(ledger)));
 }
 

@@ -1,8 +1,17 @@
 import fetch from 'node-fetch';
 import crypto from 'crypto';
-import { listWebhookSubscriptions, insertWebhookDeadLetter, insertWebhookDelivery, WebhookSubscription } from '../db';
+import {
+  listWebhookSubscriptions,
+  insertWebhookDeadLetter,
+  insertWebhookDelivery,
+  WebhookSubscription,
+} from '../db';
 import { logger } from '../utils/logger';
-import { recordWebhookDelivery, incrementWebhookDeadLettersTotal, incrementWebhookCircuitOpenTotal } from '../middleware/metrics';
+import {
+  recordWebhookDelivery,
+  incrementWebhookDeadLettersTotal,
+  incrementWebhookCircuitOpenTotal,
+} from '../middleware/metrics';
 import { context, propagation, trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
 import { getCorrelationId } from '../utils/requestContext';
@@ -85,26 +94,20 @@ export function buildSignatureHeader(
   const currentSig = computeHmac(rawBody, currentSecret, timestamp);
 
   // Compute previous signature if rotation is active
-  const previousSig = previousSecret
-    ? computeHmac(rawBody, previousSecret, timestamp)
-    : null;
+  const previousSig = previousSecret ? computeHmac(rawBody, previousSecret, timestamp) : null;
 
   // Build versioned header
   let versioned = `t=${timestamp},v1=${currentSig}`;
   if (previousSig) {
     // Check if previous secret is still valid
-    const isExpired = previousSecretExpiresAt
-      ? Date.now() > previousSecretExpiresAt
-      : false;
+    const isExpired = previousSecretExpiresAt ? Date.now() > previousSecretExpiresAt : false;
     if (!isExpired) {
       versioned += `,v1=${previousSig}`;
     }
   }
 
   // Build legacy header for backward compatibility
-  const legacy = config.webhook?.enableLegacySignature !== false
-    ? `sha256=${currentSig}`
-    : null;
+  const legacy = config.webhook?.enableLegacySignature !== false ? `sha256=${currentSig}` : null;
 
   return { versioned, legacy };
 }
@@ -118,10 +121,7 @@ export function buildSignatureHeader(
  * @returns Hex-encoded HMAC digest
  */
 function computeHmac(rawBody: string, secret: string, timestamp: string): string {
-  return crypto
-    .createHmac('sha256', secret)
-    .update(`${timestamp}.${rawBody}`)
-    .digest('hex');
+  return crypto.createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
 }
 
 /**
@@ -149,9 +149,7 @@ function parseRetryAfter(response: Awaited<ReturnType<typeof fetch>>): number | 
   }
 
   const retryAt = Date.parse(value);
-  return Number.isNaN(retryAt)
-    ? null
-    : Math.min(Math.max(0, retryAt - Date.now()), 2_147_483_647);
+  return Number.isNaN(retryAt) ? null : Math.min(Math.max(0, retryAt - Date.now()), 2_147_483_647);
 }
 
 /**
@@ -166,7 +164,7 @@ function parseRetryAfter(response: Awaited<ReturnType<typeof fetch>>): number | 
 export async function postWebhookWithRetry(
   url: string,
   payload: unknown,
-  options: WebhookRetryOptions = {}
+  options: WebhookRetryOptions = {},
 ): Promise<void> {
   const span = tracer.startSpan('webhooks.postWithRetry', { attributes: { 'webhook.url': url } });
   try {
@@ -207,7 +205,9 @@ export async function postWebhookWithRetry(
             options.secret,
             timestamp,
             subscription?.previous_secret ?? null,
-            subscription?.previous_secret_expires_at ? Number(subscription.previous_secret_expires_at) : null,
+            subscription?.previous_secret_expires_at
+              ? Number(subscription.previous_secret_expires_at)
+              : null,
           );
           requestHeaders['X-Webhook-Signature'] = legacy ?? '';
           requestHeaders['X-Webhook-Signature-V1'] = versioned;
@@ -240,8 +240,7 @@ export async function postWebhookWithRetry(
 
       if (attempt < retries) {
         const backoffCapMs = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
-        const delayMs =
-          retryAfterMs ?? Math.floor(Math.random() * (backoffCapMs + 1));
+        const delayMs = retryAfterMs ?? Math.floor(Math.random() * (backoffCapMs + 1));
         await sleep(delayMs);
       }
     }
@@ -260,7 +259,9 @@ export async function postWebhookWithRetry(
  * Delivery retry policy, configurable via WEBHOOK_MAX_RETRIES,
  * WEBHOOK_RETRY_BASE_DELAY_MS and WEBHOOK_RETRY_MAX_DELAY_MS (#1859).
  */
-function getRetryOptions(): Required<Pick<WebhookRetryOptions, 'retries' | 'baseDelayMs' | 'maxDelayMs'>> {
+function getRetryOptions(): Required<
+  Pick<WebhookRetryOptions, 'retries' | 'baseDelayMs' | 'maxDelayMs'>
+> {
   return {
     retries: config.webhook.maxRetries,
     baseDelayMs: config.webhook.retryBaseDelayMs,
@@ -294,8 +295,8 @@ export async function dispatchEventWebhook(eventType: string, payload: unknown):
 
   await Promise.all(
     subscriptions.map((subscription: WebhookSubscription) =>
-      deliverToSubscription(subscription, eventType, body, deliveryId)
-    )
+      deliverToSubscription(subscription, eventType, body, deliveryId),
+    ),
   );
 }
 
@@ -333,6 +334,19 @@ function recordDeliveryHistory(
   }
 }
 
+/**
+ * Deliver one event to one subscription (used by the bounded indexer webhook
+ * queue). Never rejects: failures are dead-lettered like dispatchEventWebhook.
+ */
+export async function dispatchWebhookToSubscription(
+  subscription: WebhookSubscription,
+  eventType: string,
+  body: unknown,
+  deliveryId: string,
+): Promise<void> {
+  await deliverToSubscription(subscription, eventType, body, deliveryId);
+}
+
 async function deliverToSubscription(
   subscription: WebhookSubscription,
   eventType: string,
@@ -340,6 +354,7 @@ async function deliverToSubscription(
   deliveryId: string,
 ): Promise<void> {
   const startedAt = Date.now();
+  const RETRY_OPTIONS = getRetryOptions();
   try {
     await getWebhookBreaker(subscription.id).execute(() =>
       postWebhookWithRetry(subscription.url, body, {
@@ -360,11 +375,15 @@ async function deliverToSubscription(
     // Open circuit: no HTTP call was made, so dead-letter immediately without
     // burning retries or counting another failure against the endpoint (#1512).
     const circuitOpen = err instanceof CircuitBreakerOpenError;
-    const failureReason = circuitOpen ? CIRCUIT_OPEN_REASON : err instanceof Error ? err.message : String(err);
+    const failureReason = circuitOpen
+      ? CIRCUIT_OPEN_REASON
+      : err instanceof Error
+        ? err.message
+        : String(err);
     if (circuitOpen) incrementWebhookCircuitOpenTotal();
     else await recordDeliveryFailure(subscription);
     logger.warn(
-      `[webhooks] delivery exhausted retries — subscriptionId=${subscription.id} url=${subscription.url} eventType=${eventType} reason=${failureReason} delivery_id=${deliveryId}`
+      `[webhooks] delivery exhausted retries — subscriptionId=${subscription.id} url=${subscription.url} eventType=${eventType} reason=${failureReason} delivery_id=${deliveryId}`,
     );
     insertWebhookDeadLetter({
       subscriptionId: subscription.id,

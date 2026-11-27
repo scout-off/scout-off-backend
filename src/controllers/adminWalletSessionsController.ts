@@ -11,8 +11,12 @@ import { logAuditEvent } from '../services/audit';
  * Lists every active (not superseded, not revoked, not expired) refresh-token
  * session for a wallet: jti, issuedAt, expiresAt, userAgent/IP hash.
  */
-export async function listWalletSessions(req: Request, res: Response, _next: NextFunction): Promise<void> {
-  const wallet = req.params.wallet;
+export async function listWalletSessions(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const wallet = String(req.params.wallet);
   const sessions = await listActiveSessions(wallet);
   res.json({
     success: true,
@@ -40,8 +44,12 @@ export async function listWalletSessions(req: Request, res: Response, _next: Nex
  * by requireAuth even before they expire, terminates the wallet's open SSE
  * streams, and audit-logs the action.
  */
-export async function revokeAllWalletSessions(req: Request, res: Response, _next: NextFunction): Promise<void> {
-  const wallet = req.params.wallet;
+export async function revokeAllWalletSessions(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const wallet = String(req.params.wallet);
 
   const { revokedCount, tokensValidAfter } = await revokeAllSessions(wallet);
 

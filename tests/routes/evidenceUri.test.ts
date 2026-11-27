@@ -4,8 +4,8 @@ import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
 import { isValidMetadataUri as isValidEvidenceUri } from '../../src/controllers/validatorController';
 
 // Real-world CID fixtures
-const VALID_CID_V0  = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG';
-const VALID_CID_V1  = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+const VALID_CID_V0 = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG';
+const VALID_CID_V1 = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
 
 async function getValidatorToken(): Promise<string> {
   const kp = Keypair.random();
@@ -65,10 +65,16 @@ describe('POST /api/validators/milestone — evidenceUri validation', () => {
     const res = await request(app)
       .post('/api/validators/milestone')
       .set('Authorization', `Bearer ${token}`)
-      .send({ playerId: 'player-1', milestoneType: 'identity', evidenceUri: 'http://example.com/evidence' });
+      .send({
+        playerId: 'player-1',
+        milestoneType: 'identity',
+        evidenceUri: 'http://example.com/evidence',
+      });
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.details?.[0]?.message).toBe('metadata_uri must be a valid IPFS CID (v0 or v1) or an HTTPS URL');
+    expect(res.body.details?.[0]?.message).toBe(
+      'metadata_uri must be a valid IPFS CID (v0 or v1) or an HTTPS URL',
+    );
   });
 
   it('returns 400 for a plain string URI', async () => {
@@ -96,10 +102,16 @@ describe('POST /api/validators/milestone — evidenceUri validation', () => {
     const res = await request(app)
       .post('/api/validators/milestone')
       .set('Authorization', `Bearer ${token}`)
-      .send({ playerId: 'player-1', milestoneType: 'identity', evidenceUri: `ipfs://${VALID_CID_V0}` });
+      .send({
+        playerId: 'player-1',
+        milestoneType: 'identity',
+        evidenceUri: `ipfs://${VALID_CID_V0}`,
+      });
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.details?.[0]?.message).toBe('metadata_uri must be a valid IPFS CID (v0 or v1) or an HTTPS URL');
+    expect(res.body.details?.[0]?.message).toBe(
+      'metadata_uri must be a valid IPFS CID (v0 or v1) or an HTTPS URL',
+    );
   });
 
   it('accepts a bare CIDv0 as evidenceUri', async () => {
@@ -127,7 +139,11 @@ describe('POST /api/validators/milestone — evidenceUri validation', () => {
     const res = await request(app)
       .post('/api/validators/milestone')
       .set('Authorization', `Bearer ${token}`)
-      .send({ playerId: 'player-1', milestoneType: 'identity', evidenceUri: 'https://evidence.example.com/doc.json' });
+      .send({
+        playerId: 'player-1',
+        milestoneType: 'identity',
+        evidenceUri: 'https://evidence.example.com/doc.json',
+      });
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
   });

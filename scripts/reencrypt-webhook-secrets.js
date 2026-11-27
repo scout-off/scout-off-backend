@@ -19,8 +19,9 @@
 
 require('dotenv').config();
 
-if (!process.env.CONTRACT_ID) process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
-if (!process.env.JWT_SECRET)   process.env.JWT_SECRET  = 'reencrypt-webhook-secrets-script';
+if (!process.env.CONTRACT_ID)
+  process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
+if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'reencrypt-webhook-secrets-script';
 
 const { getSecret } = require('../dist/secrets/provider');
 
@@ -37,29 +38,36 @@ const {
   isEncryptedWebhookSecret,
 } = require('../dist/utils/webhookSecretCipher');
 
-initDb();
-const db = getDb();
-const rows = db.prepare('SELECT id, secret FROM webhook_subscriptions').all();
-const rotate = process.argv.includes('--rotate');
+async function main() {
+  await initDb();
+  const db = getDb();
+  const rows = db.prepare('SELECT id, secret FROM webhook_subscriptions').all();
+  const rotate = process.argv.includes('--rotate');
 
-if (rows.length === 0) {
-  console.log('No webhook_subscriptions rows found. Nothing to migrate.');
-  process.exit(0);
-}
-
-const update = db.prepare('UPDATE webhook_subscriptions SET secret = ? WHERE id = ?');
-
-let migrated = 0;
-let alreadyEncrypted = 0;
-
-for (const row of rows) {
-  if (isEncryptedWebhookSecret(row.secret) && !rotate) {
-    alreadyEncrypted += 1;
-    continue;
+  if (rows.length === 0) {
+    console.log('No webhook_subscriptions rows found. Nothing to migrate.');
+    return;
   }
-  update.run(encryptWebhookSecret(decryptWebhookSecret(row.secret)), row.id);
-  migrated += 1;
+
+  const update = db.prepare('UPDATE webhook_subscriptions SET secret = ? WHERE id = ?');
+
+  let migrated = 0;
+  let alreadyEncrypted = 0;
+
+  for (const row of rows) {
+    if (isEncryptedWebhookSecret(row.secret) && !rotate) {
+      alreadyEncrypted += 1;
+      continue;
+    }
+    update.run(encryptWebhookSecret(decryptWebhookSecret(row.secret)), row.id);
+    migrated += 1;
+  }
+
+  console.log(`Re-encrypted ${migrated} webhook subscription secret(s).`);
+  console.log(`${alreadyEncrypted} row(s) were already encrypted and left unchanged.`);
 }
 
-console.log(`Re-encrypted ${migrated} webhook subscription secret(s).`);
-console.log(`${alreadyEncrypted} row(s) were already encrypted and left unchanged.`);
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+});

@@ -36,12 +36,13 @@ export interface AuditChainReport {
 const BATCH_SIZE = 1000;
 
 async function auditSnapshot(): Promise<{ rows: AuditLogRow[]; initialHash: string }> {
-  return getDriver().transaction(async tx => {
+  return getDriver().transaction(async (tx) => {
     await tx.lockForWrite('audit_log');
     const checkpoint = await latestAuditCheckpoint(tx);
     if (checkpoint) await verifyCheckpointArchive(checkpoint);
     const rows = await tx.all<AuditLogRow>('SELECT * FROM audit_log ORDER BY id ASC');
-    if (checkpoint && rows.some(row => Number(row.id) <= checkpoint.last_id)) throw new Error('Live audit rows overlap the signed checkpoint');
+    if (checkpoint && rows.some((row) => Number(row.id) <= checkpoint.last_id))
+      throw new Error('Live audit rows overlap the signed checkpoint');
     return { rows, initialHash: checkpoint?.last_hash ?? GENESIS_HASH };
   });
 }
@@ -65,12 +66,24 @@ export async function verifyAuditChainFull(deadlineMs?: number): Promise<AuditCh
   const deadline = deadlineMs ?? Date.now() + config.requestTimeoutMs - 500;
 
   let snapshot: Awaited<ReturnType<typeof auditSnapshot>>;
-  try { snapshot = await auditSnapshot(); }
-  catch (err) {
+  try {
+    snapshot = await auditSnapshot();
+  } catch (err) {
     logger.error({ err }, 'Audit checkpoint verification failed');
-    return { status: 'tampered', chain_length: 0, rows_checked: 0, violations: [{
-      id: 0, expected_hash: 'valid signed checkpoint and archive', stored_hash: 'invalid', audit_event_type: 'checkpoint', created_at: '',
-    }] };
+    return {
+      status: 'tampered',
+      chain_length: 0,
+      rows_checked: 0,
+      violations: [
+        {
+          id: 0,
+          expected_hash: 'valid signed checkpoint and archive',
+          stored_hash: 'invalid',
+          audit_event_type: 'checkpoint',
+          created_at: '',
+        },
+      ],
+    };
   }
   const allRows = snapshot.rows;
   const totalRows = allRows.length;
@@ -149,9 +162,15 @@ export async function verifyAuditChainFull(deadlineMs?: number): Promise<AuditCh
  */
 export async function verifyAuditChain(): Promise<AuditChainVerification> {
   let snapshot: Awaited<ReturnType<typeof auditSnapshot>>;
-  try { snapshot = await auditSnapshot(); }
-  catch (err) {
-    return { valid: false, brokenAtId: null, reason: `Audit checkpoint verification failed: ${(err as Error).message}`, rowsChecked: 0 };
+  try {
+    snapshot = await auditSnapshot();
+  } catch (err) {
+    return {
+      valid: false,
+      brokenAtId: null,
+      reason: `Audit checkpoint verification failed: ${(err as Error).message}`,
+      rowsChecked: 0,
+    };
   }
   const rows = snapshot.rows;
   let expectedPrevHash = snapshot.initialHash;

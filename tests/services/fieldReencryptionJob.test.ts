@@ -7,7 +7,8 @@ import { getEncryptionStatus, reencryptBatch } from '../../src/services/fieldRee
 
 const b64 = () => crypto.randomBytes(32).toString('base64');
 const RING = { a: b64(), b: b64(), c: b64() };
-const ringString = (...ids: Array<keyof typeof RING>) => ids.map((i) => `${i}:${RING[i]}`).join(',');
+const ringString = (...ids: Array<keyof typeof RING>) =>
+  ids.map((i) => `${i}:${RING[i]}`).join(',');
 
 function useRing(ids: Array<keyof typeof RING>, active: keyof typeof RING) {
   config.notesEncryptionKeys = ringString(...ids);
@@ -53,13 +54,19 @@ describe('field encryption keyring (#1513)', () => {
 
     config.webhookSecretEncryptionKeys = ringString('a');
     config.webhookSecretEncryptionActiveKeyId = 'a';
-    expect(() => decryptField(blob, { purpose: 'webhook' })).toThrow(/key id "b" is not in the configured keyring/);
+    expect(() => decryptField(blob, { purpose: 'webhook' })).toThrow(
+      /key id "b" is not in the configured keyring/,
+    );
   });
 
   it('fails startup validation when the active key id is not in the keyring', () => {
-    expect(() => parseKeyring(ringString('a'), 'zzz', 'K', 'ACTIVE')).toThrow(/"zzz" is not present in K/);
+    expect(() => parseKeyring(ringString('a'), 'zzz', 'K', 'ACTIVE')).toThrow(
+      /"zzz" is not present in K/,
+    );
     expect(() => parseKeyring(ringString('a'), '', 'K', 'ACTIVE')).toThrow(/ACTIVE is required/);
-    expect(() => parseKeyring(`${ringString('a')},${ringString('a')}`, 'a', 'K', 'ACTIVE')).toThrow(/duplicate/);
+    expect(() => parseKeyring(`${ringString('a')},${ringString('a')}`, 'a', 'K', 'ACTIVE')).toThrow(
+      /duplicate/,
+    );
     expect(() => parseKeyring('a:c2hvcnQ=', 'a', 'K', 'ACTIVE')).toThrow(/32 bytes/);
     expect(parseKeyring('', '', 'K', 'ACTIVE')).toBeNull();
   });
@@ -91,8 +98,10 @@ describe('online re-encryption job (#1513)', () => {
   }
 
   const readRaw = async (id: number) =>
-    (await getDriver().get<{ content: string }>('SELECT content FROM scout_player_notes_v2 WHERE id = ?', [id]))!
-      .content;
+    (await getDriver().get<{ content: string }>(
+      'SELECT content FROM scout_player_notes_v2 WHERE id = ?',
+      [id],
+    ))!.content;
 
   it('moves every row to the active key and reports per-key counts', async () => {
     const idV1 = await seed(null, 'legacy row');
@@ -101,7 +110,9 @@ describe('online re-encryption job (#1513)', () => {
 
     useRing(['a', 'b'], 'b');
     const before = await getEncryptionStatus();
-    const beforeCounts = before.notes.targets.find((t) => t.table === 'scout_player_notes_v2')!.byKeyId;
+    const beforeCounts = before.notes.targets.find(
+      (t) => t.table === 'scout_player_notes_v2',
+    )!.byKeyId;
     expect(beforeCounts.v1).toBeGreaterThanOrEqual(1);
     expect(beforeCounts.a).toBeGreaterThanOrEqual(1);
 

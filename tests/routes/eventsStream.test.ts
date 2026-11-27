@@ -35,11 +35,9 @@ const WALLET_A = 'GAWALLETAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const WALLET_B = 'GAWALLETBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 
 function makeToken(wallet: string, expiresIn: string): string {
-  return jwt.sign(
-    { sub: wallet, role: 'player', jti: `sse-test-${wallet}` },
-    config.jwtSecret,
-    { expiresIn },
-  );
+  return jwt.sign({ sub: wallet, role: 'player', jti: `sse-test-${wallet}` }, config.jwtSecret, {
+    expiresIn,
+  });
 }
 
 async function waitForSubscriberCount(count: number): Promise<void> {
@@ -122,23 +120,22 @@ describe('GET /api/events/stream — 405 Method Not Allowed for unsupported meth
     (p: string) => request(app).patch(p),
   ];
 
-  it.each([
-    '/api/events/stream',
-    '/api/v1/events/stream',
-    '/api/v2/events/stream',
-  ])('returns 405 JSON with Allow: GET for non-GET methods on %s', async (path) => {
-    for (const send of unsupportedMethods) {
-      const res = await send(path);
-      expect(res.status).toBe(405);
-      expect(res.headers['allow']).toBe('GET');
-      // The 405 must be JSON, not an SSE text/event-stream response.
-      expect(res.headers['content-type']).toMatch(/application\/json/);
-      expect(res.body).toEqual({
-        success: false,
-        error: 'Method Not Allowed',
-        code: 'METHOD_NOT_ALLOWED',
-        allowedMethods: ['GET'],
-      });
-    }
-  });
+  it.each(['/api/events/stream', '/api/v1/events/stream', '/api/v2/events/stream'])(
+    'returns 405 JSON with Allow: GET for non-GET methods on %s',
+    async (path) => {
+      for (const send of unsupportedMethods) {
+        const res = await send(path);
+        expect(res.status).toBe(405);
+        expect(res.headers['allow']).toBe('GET');
+        // The 405 must be JSON, not an SSE text/event-stream response.
+        expect(res.headers['content-type']).toMatch(/application\/json/);
+        expect(res.body).toEqual({
+          success: false,
+          error: 'Method Not Allowed',
+          code: 'METHOD_NOT_ALLOWED',
+          allowedMethods: ['GET'],
+        });
+      }
+    },
+  );
 });

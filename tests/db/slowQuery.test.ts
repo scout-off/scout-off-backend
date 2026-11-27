@@ -126,7 +126,9 @@ describe('timedQuery slow query detection with a deliberately slow operation', (
     // loadable extension availability.
     timedQuery('SELECT /* slow */ 1', () => {
       const deadline = Date.now() + 100;
-      while (Date.now() < deadline) { /* busy wait */ }
+      while (Date.now() < deadline) {
+        /* busy wait */
+      }
       return [{ value: 1 }];
     });
 
@@ -150,7 +152,9 @@ describe('timedQuery slow query detection with a deliberately slow operation', (
     const rows = timedQuery('SELECT * FROM players', () => {
       // Artificially delay past the threshold while still executing a real query.
       const deadline = Date.now() + 100;
-      while (Date.now() < deadline) { /* busy wait */ }
+      while (Date.now() < deadline) {
+        /* busy wait */
+      }
       return db.prepare('SELECT * FROM players').all();
     });
 

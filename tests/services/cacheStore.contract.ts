@@ -17,7 +17,7 @@ function sleep(ms: number): Promise<void> {
  */
 export function runCacheStoreContractTests(
   name: string,
-  storeFactory: () => CacheStore | Promise<CacheStore>
+  storeFactory: () => CacheStore | Promise<CacheStore>,
 ): void {
   describe(`CacheStore contract: ${name}`, () => {
     let store: CacheStore;

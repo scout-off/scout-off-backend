@@ -7,7 +7,12 @@
  * Driver status: fully on `getDriver()` (async) — works on both SQLite and PostgreSQL.
  */
 import { getDriver, timedQueryAsync } from '../query';
-import { ApiKeyLimitError, MAX_API_KEYS_PER_SCOUT, MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT, WebhookSubscriptionLimitError } from '../../utils/scoutResourceLimits';
+import {
+  ApiKeyLimitError,
+  MAX_API_KEYS_PER_SCOUT,
+  MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT,
+  WebhookSubscriptionLimitError,
+} from '../../utils/scoutResourceLimits';
 
 // ─── API key helpers (#490) ───────────────────────────────────────────────────
 
@@ -111,9 +116,7 @@ export async function listApiKeysByWallet(scoutWallet: string): Promise<ApiKeyRo
     WHERE scout_wallet = ?
     ORDER BY created_at DESC
   `;
-  return timedQueryAsync(sql, () =>
-    getDriver().all<ApiKeyRow>(sql, [scoutWallet]),
-  );
+  return timedQueryAsync(sql, () => getDriver().all<ApiKeyRow>(sql, [scoutWallet]));
 }
 
 /**
@@ -193,8 +196,9 @@ export async function getApiKeyByHash(keyHash: string): Promise<ApiKeyRow | null
   const now = Math.floor(Date.now() / 1000);
   // sql-injection-check-ignore: ACTIVE_KEY_SQL is a hardcoded fragment; values are bound via params.
   const sql = `SELECT * FROM api_keys WHERE key_hash = ? AND ${ACTIVE_KEY_SQL} LIMIT 1`;
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<ApiKeyRow>(sql, [keyHash, now, now])) ?? null,
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<ApiKeyRow>(sql, [keyHash, now, now])) ?? null,
   );
 }
 
@@ -206,8 +210,9 @@ export async function getApiKeyByHash(keyHash: string): Promise<ApiKeyRow | null
  */
 export async function getApiKeyById(id: number, scoutWallet: string): Promise<ApiKeyRow | null> {
   const sql = `SELECT * FROM api_keys WHERE id = ? AND scout_wallet = ? LIMIT 1`;
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<ApiKeyRow>(sql, [id, scoutWallet])) ?? null,
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<ApiKeyRow>(sql, [id, scoutWallet])) ?? null,
   );
 }
 
@@ -241,8 +246,9 @@ export async function getActiveApiKeyByLookupHash(lookupHash: string): Promise<A
   const now = Math.floor(Date.now() / 1000);
   // sql-injection-check-ignore: ACTIVE_KEY_SQL is a hardcoded fragment; values are bound via params.
   const sql = `SELECT * FROM api_keys WHERE lookup_hash = ? AND ${ACTIVE_KEY_SQL} LIMIT 1`;
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<ApiKeyRow>(sql, [lookupHash, now, now])) ?? null,
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<ApiKeyRow>(sql, [lookupHash, now, now])) ?? null,
   );
 }
 
@@ -304,7 +310,6 @@ export async function touchApiKeyLastUsed(id: number): Promise<void> {
   await timedQueryAsync(sql, () => getDriver().run(sql, [now, id]));
 }
 
-
 /**
  * Get all active API key IDs (not revoked, not past expiry).
  * Used by the SSE authorization sweep to check if a session's API key is still valid.
@@ -317,8 +322,6 @@ export async function getActiveApiKeyIds(): Promise<number[]> {
       AND (revoke_after IS NULL OR revoke_after > ?)
       AND (expires_at IS NULL OR expires_at > ?)
   `;
-  const rows = await timedQueryAsync(sql, () =>
-    getDriver().all<{ id: number }>(sql, [now, now]),
-  );
+  const rows = await timedQueryAsync(sql, () => getDriver().all<{ id: number }>(sql, [now, now]));
   return rows.map((r) => r.id);
 }

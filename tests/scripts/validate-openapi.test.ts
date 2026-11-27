@@ -114,9 +114,8 @@ describe('validate-openapi specsAreEqual (issue #1036 regression)', () => {
       },
     };
     const withoutDescription = JSON.parse(JSON.stringify(withDescription));
-    delete withoutDescription.paths['/auth/token'].post.requestBody.content[
-      'application/json'
-    ].schema.properties.transaction.description;
+    delete withoutDescription.paths['/auth/token'].post.requestBody.content['application/json']
+      .schema.properties.transaction.description;
     expect(specsAreEqual(withDescription, withoutDescription)).toBe(false);
   });
 

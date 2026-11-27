@@ -50,15 +50,19 @@ export function loadPersistedOperationsFromFile(filePath: string): boolean {
       logger.info(`[persisted-ops] File not found: ${filePath}, starting with empty store`);
       return true;
     }
-    
+
     const content = fs.readFileSync(filePath, 'utf8');
     const ops = JSON.parse(content) as Record<string, string>;
-    
+
     persistedOperations = new Map(Object.entries(ops));
-    logger.info(`[persisted-ops] Loaded ${persistedOperations.size} persisted operation(s) from ${filePath}`);
+    logger.info(
+      `[persisted-ops] Loaded ${persistedOperations.size} persisted operation(s) from ${filePath}`,
+    );
     return true;
   } catch (err) {
-    logger.error(`[persisted-ops] Failed to load persisted operations: ${err instanceof Error ? err.message : String(err)}`);
+    logger.error(
+      `[persisted-ops] Failed to load persisted operations: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return false;
   }
 }
@@ -71,7 +75,7 @@ export function getOperationDocument(hash: string): string | undefined {
   if (config.graphqlPersistedOnly) {
     return persistedOperations.get(hash);
   }
-  
+
   // In development, check both stores
   return persistedOperations.get(hash) || developmentOperations.get(hash);
 }
@@ -111,7 +115,7 @@ export function createPersistedOperationsPlugin(): Plugin {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onExecute({ args, setResult }: any) {
       const document = args?.document;
-      
+
       if (!document) {
         setResult({
           errors: [
@@ -122,37 +126,40 @@ export function createPersistedOperationsPlugin(): Plugin {
         });
         return;
       }
-      
+
       // Extract hash from extensions if present
-      const hash = args?.extensions?.persistedQuery?.version 
-        ? args.extensions.persistedQuery.sha256Hash 
+      const hash = args?.extensions?.persistedQuery?.version
+        ? args.extensions.persistedQuery.sha256Hash
         : undefined;
-      
+
       // In production, we require a valid hash
       if (config.graphqlPersistedOnly) {
         if (!hash) {
           setResult({
             errors: [
-              new GraphQLError('Persisted query required in production. Register your operation or use GRAPHQL_PERSISTED_ONLY=false for development.', {
-                extensions: { code: 'PERSISTED_QUERY_REQUIRED' },
-              }),
+              new GraphQLError(
+                'Persisted query required in production. Register your operation or use GRAPHQL_PERSISTED_ONLY=false for development.',
+                {
+                  extensions: { code: 'PERSISTED_QUERY_REQUIRED' },
+                },
+              ),
             ],
           });
           return;
         }
-        
+
         const documentForHash = persistedOperations.get(hash);
         if (!documentForHash) {
           setResult({
             errors: [
-            new GraphQLError(`Unknown persisted query hash: ${hash}`, {
+              new GraphQLError(`Unknown persisted query hash: ${hash}`, {
                 extensions: { code: 'PERSISTED_QUERY_NOT_FOUND', hash },
               }),
             ],
           });
           return;
         }
-        
+
         // Validate that the provided document matches the stored hash
         // This prevents hash collision attacks
         if (document !== documentForHash) {
@@ -165,14 +172,14 @@ export function createPersistedOperationsPlugin(): Plugin {
           });
           return;
         }
-        
+
         // Store the validated document for execution
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (args as any).document = documentForHash;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return { onExecuteDone: ({ result }: any) => logOperationResult(args.document, result) };
       }
-      
+
       // In development mode, allow arbitrary documents
       // If a hash is provided and we have it, use it; otherwise use provided document
       if (hash) {

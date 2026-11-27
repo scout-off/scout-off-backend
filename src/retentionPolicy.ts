@@ -28,18 +28,27 @@ export const defaultRetentionPolicies: RetentionPolicy[] = [
 
 /** Identifiers and strategies are allowlisted; configuration never supplies SQL. */
 export function parseRetentionPolicies(raw?: string): RetentionPolicy[] {
-  const input: unknown = raw === undefined || raw.trim() === '' ? defaultRetentionPolicies : JSON.parse(raw);
+  const input: unknown =
+    raw === undefined || raw.trim() === '' ? defaultRetentionPolicies : JSON.parse(raw);
   if (!Array.isArray(input)) throw new Error('RETENTION_POLICIES must be a JSON array');
   const seen = new Set<string>();
   return input.map((item: unknown) => {
     if (!item || typeof item !== 'object') throw new Error('Invalid retention policy');
     const p = item as RetentionPolicy;
-    if (!Object.prototype.hasOwnProperty.call(retentionTargets, p.table)) throw new Error(`Unsupported retention table: ${p.table}`);
+    if (!Object.prototype.hasOwnProperty.call(retentionTargets, p.table))
+      throw new Error(`Unsupported retention table: ${p.table}`);
     const target = retentionTargets[p.table];
-    if (p.column !== target.column || p.strategy !== target.strategy || !Number.isSafeInteger(p.days) || p.days < 0 || p.days > 36500) {
+    if (
+      p.column !== target.column ||
+      p.strategy !== target.strategy ||
+      !Number.isSafeInteger(p.days) ||
+      p.days < 0 ||
+      p.days > 36500
+    ) {
       throw new Error(`Invalid retention column, strategy or days for ${p.table}`);
     }
-    if ((p.table === 'profile_views' || p.table === 'audit_log') && p.days < 1) throw new Error(`${p.table} retention must be at least one day`);
+    if ((p.table === 'profile_views' || p.table === 'audit_log') && p.days < 1)
+      throw new Error(`${p.table} retention must be at least one day`);
     if (seen.has(p.table)) throw new Error(`Duplicate retention table: ${p.table}`);
     seen.add(p.table);
     return { table: p.table, column: p.column, days: p.days, strategy: p.strategy };

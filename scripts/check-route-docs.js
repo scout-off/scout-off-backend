@@ -120,23 +120,27 @@ function main() {
   if (gaps.length > 0) {
     console.error(`[check-route-docs] ${gaps.length} route(s) missing documentation:\n`);
     for (const gap of gaps) {
-      console.error(`  ${gap.method.padEnd(6)} ${gap.path.padEnd(45)} missing: ${gap.missing.join(', ')}  (${gap.file})`);
+      console.error(
+        `  ${gap.method.padEnd(6)} ${gap.path.padEnd(45)} missing: ${gap.missing.join(', ')}  (${gap.file})`,
+      );
     }
     console.error(
       '\nAdd a leading JSDoc comment above the route with at least @summary ' +
-      '(or a descriptive first sentence) and one @response tag. ' +
-      'See docs/API_DOCUMENTATION.md for the format.',
+        '(or a descriptive first sentence) and one @response tag. ' +
+        'See docs/API_DOCUMENTATION.md for the format.',
     );
   }
 
   if (manifestGaps.length > 0) {
-    console.error(`\n[check-route-docs] ${manifestGaps.length} router(s) mounted in src/app.ts but missing from ROUTE_FILES:\n`);
+    console.error(
+      `\n[check-route-docs] ${manifestGaps.length} router(s) mounted in src/app.ts but missing from ROUTE_FILES:\n`,
+    );
     for (const file of manifestGaps) {
       console.error(`  ${file}`);
     }
     console.error(
       '\nAdd an entry to ROUTE_FILES in scripts/generate-openapi-json.js so its ' +
-      'routes are included in the generated spec.',
+        'routes are included in the generated spec.',
     );
   }
 

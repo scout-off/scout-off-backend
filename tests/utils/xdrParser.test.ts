@@ -1,5 +1,10 @@
 import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
-import { parseBoolean, parseU128, parseMilestones, parseSubscription } from '../../src/utils/xdrParser';
+import {
+  parseBoolean,
+  parseU128,
+  parseMilestones,
+  parseSubscription,
+} from '../../src/utils/xdrParser';
 
 describe('parseBoolean', () => {
   it('returns true for scvBool true', () => {
@@ -100,7 +105,7 @@ describe('parseMilestones', () => {
           ledger: 12345,
         },
       ],
-      { type: 'array' }
+      { type: 'array' },
     );
     const result = parseMilestones(val);
     expect(result).toEqual([
@@ -127,7 +132,7 @@ describe('parseMilestones', () => {
           approved: false,
         },
       ],
-      { type: 'array' }
+      { type: 'array' },
     );
     const result = parseMilestones(val);
     expect(result[0].approvedBy).toBeNull();
@@ -137,10 +142,7 @@ describe('parseMilestones', () => {
 
 describe('parseSubscription', () => {
   it('parses active subscription', () => {
-    const val = nativeToScVal(
-      { active: true, expires_at: '1000000' },
-      { type: 'map' }
-    );
+    const val = nativeToScVal({ active: true, expires_at: '1000000' }, { type: 'map' });
     const result = parseSubscription(val);
     expect(result.active).toBe(true);
     expect(result.expiresAt).toBe('1000000');

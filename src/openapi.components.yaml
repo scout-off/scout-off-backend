@@ -1,10 +1,10 @@
-openapi: "3.0.3"
+openapi: '3.0.3'
 info:
   title: ScoutOff API
   description: >
     Backend API for ScoutOff — a decentralised football scouting platform
     built on the Stellar blockchain (Soroban smart contracts).
-  version: "1.0.0"
+  version: '1.0.0'
   contact:
     name: ScoutOff Engineering
 servers:
@@ -164,7 +164,7 @@ components:
           description: Unix timestamp (seconds) of the on-chain registration, when known
         progress_tier_name:
           type: string
-          enum: [Unverified, "Verified Identity", "Performance Milestones", "Elite Tier"]
+          enum: [Unverified, 'Verified Identity', 'Performance Milestones', 'Elite Tier']
         tierName:
           type: string
         tierDescription:
@@ -181,7 +181,7 @@ components:
 
     PlayerDetail:
       allOf:
-        - $ref: "#/components/schemas/PlayerSummary"
+        - $ref: '#/components/schemas/PlayerSummary'
         - type: object
           required: [offerCount]
           properties:
@@ -192,14 +192,14 @@ components:
 
     PlayerList:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           required: [data, total, page, pageSize, pages, nextCursor]
           properties:
             data:
               type: array
               items:
-                $ref: "#/components/schemas/PlayerSummary"
+                $ref: '#/components/schemas/PlayerSummary'
             total:
               type: integer
             page:
@@ -288,29 +288,29 @@ components:
       schema:
         type: string
         enum:
-          - "true"
+          - 'true'
   responses:
     Unauthorized:
       description: Missing or invalid JWT
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
     Forbidden:
       description: Insufficient role or wallet mismatch
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
     NotFound:
       description: Resource not found
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'
     BadRequest:
       description: Validation error
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
+            $ref: '#/components/schemas/ErrorEnvelope'

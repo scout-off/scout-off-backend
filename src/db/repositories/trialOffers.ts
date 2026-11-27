@@ -28,8 +28,9 @@ export interface TrialOfferRow {
 
 export async function getTrialOfferById(offerId: string): Promise<TrialOfferRow | null> {
   const sql = 'SELECT * FROM trial_offers WHERE offer_id = ?';
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<TrialOfferRow>(sql, [offerId])) ?? null
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<TrialOfferRow>(sql, [offerId])) ?? null,
   );
 }
 
@@ -43,7 +44,14 @@ export async function insertTrialOffer(p: {
 }): Promise<void> {
   const sql = `INSERT INTO trial_offers (offer_id, scout_wallet, player_id, details_uri, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (offer_id) DO NOTHING`;
   await timedQueryAsync(sql, () =>
-    getDriver().run(sql, [p.offer_id, p.scout_wallet, p.player_id, p.details_uri, p.created_at, p.expires_at ?? null])
+    getDriver().run(sql, [
+      p.offer_id,
+      p.scout_wallet,
+      p.player_id,
+      p.details_uri,
+      p.created_at,
+      p.expires_at ?? null,
+    ]),
   );
 }
 
@@ -55,7 +63,7 @@ export async function respondToTrialOffer(p: {
 }): Promise<void> {
   const sql = `UPDATE trial_offers SET status = ?, reject_reason = ?, responded_at = ? WHERE offer_id = ?`;
   await timedQueryAsync(sql, () =>
-    getDriver().run(sql, [p.status, p.reject_reason ?? null, p.responded_at, p.offer_id])
+    getDriver().run(sql, [p.status, p.reject_reason ?? null, p.responded_at, p.offer_id]),
   );
 }
 

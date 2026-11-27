@@ -27,7 +27,7 @@ function writeSpec(root: string, version: string): void {
   fs.mkdirSync(path.join(root, 'src'), { recursive: true });
   fs.writeFileSync(
     path.join(root, 'src', 'openapi.yaml'),
-    `openapi: 3.0.0\ninfo:\n  title: Fixture\n  version: ${version}\npaths: {}\n`
+    `openapi: 3.0.0\ninfo:\n  title: Fixture\n  version: ${version}\npaths: {}\n`,
   );
 }
 

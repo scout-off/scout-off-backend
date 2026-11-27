@@ -6,26 +6,26 @@ This document outlines the rotation policy, cadence, and step-by-step procedures
 
 ## Documented Secrets Summary
 
-| Secret | Cadence | Zero-Downtime? | Responsibility |
-|---|---|---|---|
-| `JWT_SECRET` | Quarterly (90 days) | Yes (via Dual-Key) | Security Administrator |
-| `PINATA_API_KEY` / `PINATA_SECRET` | Semi-Annually (180 days) | No (Requires Restart) | DevOps / IPFS Administrator |
-| `PLATFORM_SECRET_KEY` / `PLATFORM_SECRET` | Semi-Annually (180 days) | No (Requires Restart) | Key Custodian / Soroban Admin |
-| `ADMIN_WALLET` / `ADMIN_WALLETS` | Annually (365 days) | No (Requires Restart) | Platform Owner / Multi-Sig Signers |
-| `REDIS_URL` (with password) | Annually (365 days) | No (Requires Restart) | Database / DevOps Engineer |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY` | Semi-Annually (180 days), or on suspected compromise | Dual-key decrypt; re-encrypt script | Security Administrator |
-| `NOTES_ENCRYPTION_KEY` | Semi-Annually (180 days), or on suspected compromise | Dual-key decrypt; re-encrypt script | Security Administrator |
-| `webhook_subscriptions.secret` (per-subscriber) | Semi-Annually (180 days), or on suspected compromise | Yes (via Dual-Key) | Platform Owner / Security Administrator |
+| Secret                                          | Cadence                                              | Zero-Downtime?                      | Responsibility                          |
+| ----------------------------------------------- | ---------------------------------------------------- | ----------------------------------- | --------------------------------------- |
+| `JWT_SECRET`                                    | Quarterly (90 days)                                  | Yes (via Dual-Key)                  | Security Administrator                  |
+| `PINATA_API_KEY` / `PINATA_SECRET`              | Semi-Annually (180 days)                             | No (Requires Restart)               | DevOps / IPFS Administrator             |
+| `PLATFORM_SECRET_KEY` / `PLATFORM_SECRET`       | Semi-Annually (180 days)                             | No (Requires Restart)               | Key Custodian / Soroban Admin           |
+| `ADMIN_WALLET` / `ADMIN_WALLETS`                | Annually (365 days)                                  | No (Requires Restart)               | Platform Owner / Multi-Sig Signers      |
+| `REDIS_URL` (with password)                     | Annually (365 days)                                  | No (Requires Restart)               | Database / DevOps Engineer              |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY`                 | Semi-Annually (180 days), or on suspected compromise | Dual-key decrypt; re-encrypt script | Security Administrator                  |
+| `NOTES_ENCRYPTION_KEY`                          | Semi-Annually (180 days), or on suspected compromise | Dual-key decrypt; re-encrypt script | Security Administrator                  |
+| `webhook_subscriptions.secret` (per-subscriber) | Semi-Annually (180 days), or on suspected compromise | Yes (via Dual-Key)                  | Platform Owner / Security Administrator |
 
 ---
 
 ## 1. JWT Signer Secret (`JWT_SECRET`)
 
-The backend issues JSON Web Tokens (JWTs) to authenticate players, scouts, validators, and administrators. 
+The backend issues JSON Web Tokens (JWTs) to authenticate players, scouts, validators, and administrators.
 
-* **Recommended Cadence**: Quarterly (every 90 days), or immediately upon suspected compromise.
-* **Responsible Party**: Security Administrator.
-* **Downtime Impact**: **Zero-Downtime Supported.** A dual-key mechanism is supported natively by the authentication middleware to transition active sessions.
+- **Recommended Cadence**: Quarterly (every 90 days), or immediately upon suspected compromise.
+- **Responsible Party**: Security Administrator.
+- **Downtime Impact**: **Zero-Downtime Supported.** A dual-key mechanism is supported natively by the authentication middleware to transition active sessions.
 
 ### Rotation Procedure
 
@@ -64,9 +64,9 @@ See also the Kubernetes runbook in [DEPLOYMENT.md](../DEPLOYMENT.md#jwt-secret-r
 
 Used by the backend to pin player and metadata files to IPFS via Pinata's API.
 
-* **Recommended Cadence**: Semi-Annually (every 180 days), or immediately upon suspected compromise.
-* **Responsible Party**: DevOps / IPFS Administrator.
-* **Downtime Impact**: **Downtime Required (Brief).** Changing these credentials requires a restart of the backend service to load the new config.
+- **Recommended Cadence**: Semi-Annually (every 180 days), or immediately upon suspected compromise.
+- **Responsible Party**: DevOps / IPFS Administrator.
+- **Downtime Impact**: **Downtime Required (Brief).** Changing these credentials requires a restart of the backend service to load the new config.
 
 > [!WARNING]
 > While a rolling update minimizes service interruption, any file-upload or pinning requests that occur during the environment update may fail until the new credentials take effect.
@@ -94,9 +94,9 @@ Used by the backend to pin player and metadata files to IPFS via Pinata's API.
 
 Stellar secret keys used by the backend to sign transactions/messages and execute Soroban contract invocations (such as subscription cancellations or contract pausing).
 
-* **Recommended Cadence**: Semi-Annually (every 180 days), or immediately upon suspected compromise.
-* **Responsible Party**: Key Custodian / Soroban Admin.
-* **Downtime Impact**: **Downtime Required.** Rotating the platform keys requires service restarts.
+- **Recommended Cadence**: Semi-Annually (every 180 days), or immediately upon suspected compromise.
+- **Responsible Party**: Key Custodian / Soroban Admin.
+- **Downtime Impact**: **Downtime Required.** Rotating the platform keys requires service restarts.
 
 > [!IMPORTANT]
 > Because these keys submit transactions directly to the Stellar network, the newly generated key must be funded with native XLM before deployment to prevent transaction execution failures.
@@ -108,7 +108,7 @@ Stellar secret keys used by the backend to sign transactions/messages and execut
      ```bash
      stellar keys generate --network testnet platform-new
      ```
-     *(Or use standard BIP-39 generators for mainnet).*
+     _(Or use standard BIP-39 generators for mainnet)._
    - Note the public key (starts with `G`) and secret seed (starts with `S`).
 2. **Fund the Account**:
    - **Testnet**: Fund the public key via Friendbot:
@@ -129,9 +129,9 @@ Stellar secret keys used by the backend to sign transactions/messages and execut
 
 Stellar public addresses configured on the backend to authorize high-value administrative commands (e.g., fee withdrawals or pausing the contract). Note that the backend only holds the public addresses; the corresponding private keys remain secure on the administrators' personal devices.
 
-* **Recommended Cadence**: Annually (365 days), or immediately if any admin key is suspected to be compromised.
-* **Responsible Party**: Platform Owner / Multi-Sig Signers.
-* **Downtime Impact**: **Downtime Required.** A service restart is required to load the updated admin list.
+- **Recommended Cadence**: Annually (365 days), or immediately if any admin key is suspected to be compromised.
+- **Responsible Party**: Platform Owner / Multi-Sig Signers.
+- **Downtime Impact**: **Downtime Required.** A service restart is required to load the updated admin list.
 
 ### Rotation Procedure
 
@@ -152,9 +152,9 @@ Stellar public addresses configured on the backend to authorize high-value admin
 
 The connection string for the optional Redis cache, which may contain sensitive credentials (e.g., `redis://:password@host:port`).
 
-* **Recommended Cadence**: Annually (365 days), or immediately upon suspected compromise.
-* **Responsible Party**: Database / DevOps Engineer.
-* **Downtime Impact**: **Downtime Required (Brief).** A server restart is required to update the connection pool config.
+- **Recommended Cadence**: Annually (365 days), or immediately upon suspected compromise.
+- **Responsible Party**: Database / DevOps Engineer.
+- **Downtime Impact**: **Downtime Required (Brief).** A server restart is required to update the connection pool config.
 
 ### Rotation Procedure
 
@@ -182,10 +182,10 @@ with AES-256-GCM using this key — held only in the environment, never in the d
 a delivery (`src/db/index.ts`'s `listWebhookSubscriptions`) and the decrypted value is never
 written back to storage.
 
-* **Recommended Cadence**: Semi-Annually (every 180 days), or immediately upon suspected compromise
+- **Recommended Cadence**: Semi-Annually (every 180 days), or immediately upon suspected compromise
   (e.g. a database backup or read-replica leak).
-* **Responsible Party**: Security Administrator.
-* **Downtime Impact**: **Downtime Required.** Rotating this key requires re-encrypting every
+- **Responsible Party**: Security Administrator.
+- **Downtime Impact**: **Downtime Required.** Rotating this key requires re-encrypting every
   existing `webhook_subscriptions.secret` row with the new key before the old key is discarded —
   there is no dual-key transition support yet (see Known Gaps below).
 
@@ -197,7 +197,7 @@ written back to storage.
    ```
 2. **Re-encrypt Existing Rows Under the Old Key First**: if you're rotating (not setting the key
    for the first time), every existing row must already be in the encrypted `v1:...` format. Run
-   the migration script once under the *current* key if you haven't already:
+   the migration script once under the _current_ key if you haven't already:
    ```bash
    WEBHOOK_SECRET_ENCRYPTION_KEY=<current-key> npm run reencrypt-webhook-secrets
    ```
@@ -267,10 +267,10 @@ Notes and webhook signing secrets can use a keyring of N keys instead of the
 single key + `_PREVIOUS` pair. New ciphertexts are written as
 `v2:<keyId>:<iv>:<tag>:<ciphertext>`; legacy `v1:` values keep decrypting.
 
-| Purpose | Keyring | Active key id |
-| ------- | ------- | ------------- |
-| Scout notes | `NOTES_ENCRYPTION_KEYS='k2026a:<base64>,k2025b:<base64>'` | `NOTES_ENCRYPTION_ACTIVE_KEY_ID=k2026a` |
-| Webhook secrets | `WEBHOOK_SECRET_ENCRYPTION_KEYS='...'` | `WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID=...` |
+| Purpose         | Keyring                                                   | Active key id                                 |
+| --------------- | --------------------------------------------------------- | --------------------------------------------- |
+| Scout notes     | `NOTES_ENCRYPTION_KEYS='k2026a:<base64>,k2025b:<base64>'` | `NOTES_ENCRYPTION_ACTIVE_KEY_ID=k2026a`       |
+| Webhook secrets | `WEBHOOK_SECRET_ENCRYPTION_KEYS='...'`                    | `WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID=...` |
 
 Keys are 32 bytes, base64 (`openssl rand -base64 32`); key ids match
 `[A-Za-z0-9-]{1,32}` and must be unique. Startup fails with a clear message if
@@ -302,20 +302,23 @@ path and therefore also targets the active key; the online job is preferred.
 ## Known Gaps and Limitations
 
 ### Webhook Signing Secrets
+
 The backend's webhook dispatcher signs outgoing payloads with an HMAC-SHA256 signature
 sent in the `X-Webhook-Signature` (legacy) and `X-Webhook-Signature-V1` (versioned) headers.  
-Each subscription row in `webhook_subscriptions` holds its own per-subscriber secret generated 
-at creation, and (since #686) that secret is encrypted at rest under `WEBHOOK_SECRET_ENCRYPTION_KEY` 
+Each subscription row in `webhook_subscriptions` holds its own per-subscriber secret generated
+at creation, and (since #686) that secret is encrypted at rest under `WEBHOOK_SECRET_ENCRYPTION_KEY`
 — see § 6 above.
 
 ### Zero-Downtime Rotation with Dual-Key Support
 
 Webhook subscriptions now support a dual-key rotation pattern that allows seamless secret rotation
-without downtime. The backend signs deliveries with both the current and previous secrets during 
+without downtime. The backend signs deliveries with both the current and previous secrets during
 the rotation window, enabling receivers to verify using either secret.
 
 #### Database Schema
+
 The `webhook_subscriptions` table includes two additional columns:
+
 - `previous_secret` — The old HMAC secret, encrypted at rest
 - `previous_secret_expires_at` — Expiry timestamp (ISO 8601 or Unix seconds) for the previous secret
 
@@ -343,7 +346,7 @@ Until then, use direct database updates:
 ```sql
 -- Start rotation (set previous secret to expire in 48 hours)
 UPDATE webhook_subscriptions
-SET 
+SET
   previous_secret = '<encrypted-old-secret>',
   previous_secret_expires_at = datetime('now', '+48 hours')
 WHERE id = ?;
@@ -355,11 +358,13 @@ WHERE id = ?;
 ```
 
 **Current limitations**:
+
 - No dedicated API endpoint yet — use direct database updates or the planned rotation endpoint
 - Receivers must be updated to support the versioned signature format (`X-Webhook-Signature-V1`)
 - See [docs/webhooks.md](webhooks.md) for receiver verification code (Node.js and Python)
 
 ### Dual-Key Decrypt (WEBHOOK_SECRET_ENCRYPTION_KEY / NOTES_ENCRYPTION_KEY)
+
 Dual-key decrypt is supported for `WEBHOOK_SECRET_ENCRYPTION_KEY` / `NOTES_ENCRYPTION_KEY`
 via `*_PREVIOUS` env vars (`src/utils/fieldCipher.ts`). Re-encryption tooling is still
 manual (`npm run reencrypt-webhook-secrets`, `npm run reencrypt-notes`).

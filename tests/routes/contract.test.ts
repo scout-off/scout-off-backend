@@ -134,23 +134,36 @@ jest.mock('../../src/services/stellar', () => ({
   }),
   stellarHealth: jest.fn().mockResolvedValue(true),
   pauseContractOnChain: jest.fn().mockResolvedValue({ transactionId: 'real-pause-txid-abc123' }),
-  unpauseContractOnChain: jest.fn().mockResolvedValue({ transactionId: 'real-unpause-txid-abc123' }),
-  registerValidatorOnChain: jest.fn().mockResolvedValue({ transactionId: 'real-register-txid-abc123' }),
+  unpauseContractOnChain: jest
+    .fn()
+    .mockResolvedValue({ transactionId: 'real-unpause-txid-abc123' }),
+  registerValidatorOnChain: jest
+    .fn()
+    .mockResolvedValue({ transactionId: 'real-register-txid-abc123' }),
   revokeValidatorOnChain: jest.fn().mockResolvedValue({ transactionId: 'real-revoke-txid-abc123' }),
   ContractActionError: class ContractActionError extends Error {
-    constructor(message: string, public readonly code: string) {
+    constructor(
+      message: string,
+      public readonly code: string,
+    ) {
       super(message);
       this.name = 'ContractActionError';
     }
   },
   ValidatorActionError: class ValidatorActionError extends Error {
-    constructor(message: string, public readonly code: string) {
+    constructor(
+      message: string,
+      public readonly code: string,
+    ) {
       super(message);
       this.name = 'ValidatorActionError';
     }
   },
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) {
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
       super(message);
       this.name = 'PaymentError';
     }
@@ -357,7 +370,11 @@ describe('POST /api/validators/milestone — envelope shape', () => {
     const res = await request(app)
       .post('/api/validators/milestone')
       .set('Authorization', `Bearer ${validatorToken}`)
-      .send({ playerId: 'player-1', milestoneType: 'identity', evidenceUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG' });
+      .send({
+        playerId: 'player-1',
+        milestoneType: 'identity',
+        evidenceUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+      });
     expect(res.status).toBe(201);
     assertSuccessEnvelope(res.body);
   });
@@ -560,7 +577,9 @@ describe('POST /api/admin/validators/register — envelope shape', () => {
   });
 
   it('returns 503 and does not insert the local row when the chain call fails', async () => {
-    const { registerValidatorOnChain, ValidatorActionError } = jest.requireMock('../../src/services/stellar') as {
+    const { registerValidatorOnChain, ValidatorActionError } = jest.requireMock(
+      '../../src/services/stellar',
+    ) as {
       registerValidatorOnChain: jest.Mock;
       ValidatorActionError: new (msg: string, code: string) => Error & { code: string };
     };
@@ -616,7 +635,9 @@ describe('POST /api/admin/validators/revoke — envelope shape', () => {
   });
 
   it('returns 503 and does not update the local row when the chain call fails', async () => {
-    const { revokeValidatorOnChain, ValidatorActionError } = jest.requireMock('../../src/services/stellar') as {
+    const { revokeValidatorOnChain, ValidatorActionError } = jest.requireMock(
+      '../../src/services/stellar',
+    ) as {
       revokeValidatorOnChain: jest.Mock;
       ValidatorActionError: new (msg: string, code: string) => Error & { code: string };
     };
@@ -655,7 +676,9 @@ describe('POST /api/admin/contract/pause — envelope shape', () => {
   });
 
   it('returns 409 when contract is already paused', async () => {
-    const { pauseContractOnChain, ContractActionError } = jest.requireMock('../../src/services/stellar') as {
+    const { pauseContractOnChain, ContractActionError } = jest.requireMock(
+      '../../src/services/stellar',
+    ) as {
       pauseContractOnChain: jest.Mock;
       ContractActionError: new (msg: string, code: string) => Error & { code: string };
     };
@@ -686,7 +709,9 @@ describe('POST /api/admin/contract/unpause — envelope shape', () => {
   });
 
   it('returns 409 when contract is not currently paused', async () => {
-    const { unpauseContractOnChain, ContractActionError } = jest.requireMock('../../src/services/stellar') as {
+    const { unpauseContractOnChain, ContractActionError } = jest.requireMock(
+      '../../src/services/stellar',
+    ) as {
       unpauseContractOnChain: jest.Mock;
       ContractActionError: new (msg: string, code: string) => Error & { code: string };
     };

@@ -1,4 +1,11 @@
-import { getDb, getDriver, insertAuditLog, getAuditLogs, getAuditLogsCount, getAllAuditLogRows } from '../../src/db';
+import {
+  getDb,
+  getDriver,
+  insertAuditLog,
+  getAuditLogs,
+  getAuditLogsCount,
+  getAllAuditLogRows,
+} from '../../src/db';
 import { GENESIS_HASH } from '../../src/utils/hashChain';
 import config from '../../src/config';
 
@@ -40,15 +47,35 @@ describe('audit_log — persistence and hash chain (#464)', () => {
   });
 
   it('chains the first row onto the genesis hash', async () => {
-    const row = await insertAuditLog({ action: 'a', adminWallet: 'G1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
+    const row = await insertAuditLog({
+      action: 'a',
+      adminWallet: 'G1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
     expect(row.prev_hash).toBe(GENESIS_HASH);
     expect(row.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('chains each subsequent row onto the previous row\'s hash', async () => {
-    const r1 = await insertAuditLog({ action: 'a', adminWallet: 'G1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
-    const r2 = await insertAuditLog({ action: 'b', adminWallet: 'G2', queryParams: {}, createdAt: '2025-01-02T00:00:00.000Z' });
-    const r3 = await insertAuditLog({ action: 'c', adminWallet: 'G3', queryParams: {}, createdAt: '2025-01-03T00:00:00.000Z' });
+  it("chains each subsequent row onto the previous row's hash", async () => {
+    const r1 = await insertAuditLog({
+      action: 'a',
+      adminWallet: 'G1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
+    const r2 = await insertAuditLog({
+      action: 'b',
+      adminWallet: 'G2',
+      queryParams: {},
+      createdAt: '2025-01-02T00:00:00.000Z',
+    });
+    const r3 = await insertAuditLog({
+      action: 'c',
+      adminWallet: 'G3',
+      queryParams: {},
+      createdAt: '2025-01-03T00:00:00.000Z',
+    });
 
     expect(r2.prev_hash).toBe(r1.hash);
     expect(r3.prev_hash).toBe(r2.hash);
@@ -57,7 +84,12 @@ describe('audit_log — persistence and hash chain (#464)', () => {
   });
 
   it('defaults event_source to admin_action when not specified', async () => {
-    const row = await insertAuditLog({ action: 'a', adminWallet: 'G1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
+    const row = await insertAuditLog({
+      action: 'a',
+      adminWallet: 'G1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
     expect(row.event_source).toBe('admin_action');
   });
 
@@ -74,7 +106,12 @@ describe('audit_log — persistence and hash chain (#464)', () => {
 
   it('getAllAuditLogRows returns every row in id ASC (chain) order, unpaginated', async () => {
     for (let i = 0; i < 5; i++) {
-      await insertAuditLog({ action: `a${i}`, adminWallet: 'G1', queryParams: {}, createdAt: `2025-01-0${i + 1}T00:00:00.000Z` });
+      await insertAuditLog({
+        action: `a${i}`,
+        adminWallet: 'G1',
+        queryParams: {},
+        createdAt: `2025-01-0${i + 1}T00:00:00.000Z`,
+      });
     }
     const rows = await getAllAuditLogRows();
     expect(rows).toHaveLength(5);
@@ -82,8 +119,19 @@ describe('audit_log — persistence and hash chain (#464)', () => {
   });
 
   it('getAllAuditLogRows filters by eventSource', async () => {
-    await insertAuditLog({ action: 'admin1', adminWallet: 'G1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
-    await insertAuditLog({ action: 'app1', adminWallet: 'G2', queryParams: {}, createdAt: '2025-01-02T00:00:00.000Z', eventSource: 'app_event' });
+    await insertAuditLog({
+      action: 'admin1',
+      adminWallet: 'G1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
+    await insertAuditLog({
+      action: 'app1',
+      adminWallet: 'G2',
+      queryParams: {},
+      createdAt: '2025-01-02T00:00:00.000Z',
+      eventSource: 'app_event',
+    });
 
     expect(await getAllAuditLogRows({ eventSource: 'app_event' })).toHaveLength(1);
     expect(await getAllAuditLogRows({ eventSource: 'admin_action' })).toHaveLength(1);

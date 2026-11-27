@@ -1,4 +1,12 @@
-import { rpc, Contract, Address, nativeToScVal, scValToNative, Keypair, Account } from '@stellar/stellar-sdk';
+import {
+  rpc,
+  Contract,
+  Address,
+  nativeToScVal,
+  scValToNative,
+  Keypair,
+  Account,
+} from '@stellar/stellar-sdk';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
 import {
@@ -19,11 +27,7 @@ export interface FeeWithdrawalResult {
 }
 
 export type FeeWithdrawalErrorCode =
-  | 'NO_FEES'
-  | 'INVALID_RECIPIENT'
-  | 'NETWORK_ERROR'
-  | 'CONTRACT_PAUSED'
-  | 'INSUFFICIENT_FEES';
+  'NO_FEES' | 'INVALID_RECIPIENT' | 'NETWORK_ERROR' | 'CONTRACT_PAUSED' | 'INSUFFICIENT_FEES';
 
 /** Non-retryable codes — the caller should not retry without corrective action. */
 const NON_RETRYABLE_CODES: ReadonlySet<FeeWithdrawalErrorCode> = new Set([
@@ -72,7 +76,10 @@ export class FeeWithdrawalError extends Error {
  * rejects the amount, and (..., 'NETWORK_ERROR') for any RPC/transport
  * failure.
  */
-export async function withdrawFees(recipient: string, amountStroops?: string): Promise<FeeWithdrawalResult> {
+export async function withdrawFees(
+  recipient: string,
+  amountStroops?: string,
+): Promise<FeeWithdrawalResult> {
   return tracer.startActiveSpan('stellar.withdrawFees', async (span) => {
     span.setAttribute('stellar.contract_function', 'withdraw_fees');
     try {
@@ -127,13 +134,19 @@ export async function withdrawFees(recipient: string, amountStroops?: string): P
       try {
         simResult = await server.simulateTransaction(tx);
       } catch (err) {
-        throw new FeeWithdrawalError(`Simulation request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        throw new FeeWithdrawalError(
+          `Simulation request failed: ${(err as Error).message}`,
+          'NETWORK_ERROR',
+        );
       }
 
       if (rpc.Api.isSimulationError(simResult)) {
         const errMsg = simResult.error ?? '';
         if (isContractPausedError(errMsg)) {
-          throw new FeeWithdrawalError('Contract is paused; withdrawal not available', 'CONTRACT_PAUSED');
+          throw new FeeWithdrawalError(
+            'Contract is paused; withdrawal not available',
+            'CONTRACT_PAUSED',
+          );
         }
         if (isInsufficientFeeError(errMsg)) {
           throw new FeeWithdrawalError(
@@ -151,12 +164,18 @@ export async function withdrawFees(recipient: string, amountStroops?: string): P
       try {
         sendResult = await sendTransactionWithCorrelation(preparedTx);
       } catch (err) {
-        throw new FeeWithdrawalError(`Submit request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        throw new FeeWithdrawalError(
+          `Submit request failed: ${(err as Error).message}`,
+          'NETWORK_ERROR',
+        );
       }
       if (sendResult.status === 'ERROR') {
         const errMsg = String(sendResult.errorResult ?? '');
         if (isContractPausedError(errMsg)) {
-          throw new FeeWithdrawalError('Contract is paused; withdrawal not available', 'CONTRACT_PAUSED');
+          throw new FeeWithdrawalError(
+            'Contract is paused; withdrawal not available',
+            'CONTRACT_PAUSED',
+          );
         }
         if (isInsufficientFeeError(errMsg)) {
           throw new FeeWithdrawalError(
@@ -182,9 +201,12 @@ export async function withdrawFees(recipient: string, amountStroops?: string): P
       }
 
       if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
-        const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
+        const resultMeta = (getResult as unknown as { resultMetaXdr?: string }).resultMetaXdr ?? '';
         if (isContractPausedError(resultMeta)) {
-          throw new FeeWithdrawalError('Contract is paused; withdrawal not available', 'CONTRACT_PAUSED');
+          throw new FeeWithdrawalError(
+            'Contract is paused; withdrawal not available',
+            'CONTRACT_PAUSED',
+          );
         }
         if (isInsufficientFeeError(resultMeta)) {
           throw new FeeWithdrawalError(
@@ -196,9 +218,7 @@ export async function withdrawFees(recipient: string, amountStroops?: string): P
       }
 
       const success = getResult as rpc.Api.GetSuccessfulTransactionResponse;
-      const amount = success.returnValue
-        ? (scValToNative(success.returnValue) as bigint)
-        : 0n;
+      const amount = success.returnValue ? (scValToNative(success.returnValue) as bigint) : 0n;
       span.setAttribute('stellar.fee_amount', amount.toString());
 
       if (amount === 0n) {
@@ -221,7 +241,6 @@ export async function withdrawFees(recipient: string, amountStroops?: string): P
     }
   });
 }
-
 
 export class FeeBalanceError extends Error {
   constructor(

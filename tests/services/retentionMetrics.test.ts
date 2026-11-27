@@ -96,6 +96,9 @@ describe('retentionMetrics', () => {
     const lines = metrics.retentionMetrics();
 
     expect(lines).toContain(`${ROWS_DELETED}{table="weird\\"table\\\\name\\nx"} 1`);
-    expect(lines).toContain(`${LAST_RUN}{table="weird\\"table\\\\name\\nx"} `);
+    // The gauge value is a timestamp, so match the escaped label prefix only.
+    expect(lines.some((l) => l.startsWith(`${LAST_RUN}{table="weird\\"table\\\\name\\nx"} `))).toBe(
+      true,
+    );
   });
 });

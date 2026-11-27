@@ -37,11 +37,7 @@ function parseApiVersionHeader(req: Request): number | null {
   return null;
 }
 
-export function versionRouting(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
+export function versionRouting(req: Request, res: Response, next: NextFunction): void {
   // ── Header-based version override ─────────────────────────────────────────
   const headerVersion = parseApiVersionHeader(req);
   if (headerVersion !== null) {

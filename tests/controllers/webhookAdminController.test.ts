@@ -99,7 +99,11 @@ describe('replayDeadLetter', () => {
       subscriptionId: sub.id,
       url,
       eventType: 'player_registered',
-      payload: JSON.stringify({ deliveryId: 'del-replay-test-001', eventType: 'player_registered', payload: { wallet: 'GABC' } }),
+      payload: JSON.stringify({
+        deliveryId: 'del-replay-test-001',
+        eventType: 'player_registered',
+        payload: { wallet: 'GABC' },
+      }),
       deliveryId: 'del-replay-test-001',
       failureReason: 'Webhook dispatch failed with status 500',
       attempts: 3,
@@ -113,7 +117,7 @@ describe('replayDeadLetter', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true, data: { id: deadLetter.id, status: 'replayed' } })
+      expect.objectContaining({ success: true, data: { id: deadLetter.id, status: 'replayed' } }),
     );
 
     const stored = getWebhookDeadLetterById(deadLetter.id);
@@ -129,46 +133,46 @@ describe('replayDeadLetter', () => {
     expect(headers['X-Webhook-Signature']).toMatch(/^sha256=[0-9a-f]{64}$/);
   });
 
-  it(
-    'returns 502 and keeps the delivery dead-lettered when the replay also fails',
-    async () => {
-      mockedFetch.mockRejectedValue(new Error('still unreachable'));
+  it('returns 502 and keeps the delivery dead-lettered when the replay also fails', async () => {
+    mockedFetch.mockRejectedValue(new Error('still unreachable'));
 
-      const url = uniqueUrl('replay-failure');
-      const sub = createWebhookSubscription(url, 'replay-secret-2');
-      const deadLetter = insertWebhookDeadLetter({
-        subscriptionId: sub.id,
-        url,
-        eventType: 'fees_withdrawn',
-        payload: JSON.stringify({ deliveryId: 'del-replay-fail-001', eventType: 'fees_withdrawn', payload: {} }),
+    const url = uniqueUrl('replay-failure');
+    const sub = createWebhookSubscription(url, 'replay-secret-2');
+    const deadLetter = insertWebhookDeadLetter({
+      subscriptionId: sub.id,
+      url,
+      eventType: 'fees_withdrawn',
+      payload: JSON.stringify({
         deliveryId: 'del-replay-fail-001',
-        failureReason: 'original failure',
-        attempts: 3,
-      });
+        eventType: 'fees_withdrawn',
+        payload: {},
+      }),
+      deliveryId: 'del-replay-fail-001',
+      failureReason: 'original failure',
+      attempts: 3,
+    });
 
-      const req = { params: { id: String(deadLetter.id) } } as unknown as Request;
-      const res = mockRes();
-      const next = jest.fn() as NextFunction;
+    const req = { params: { id: String(deadLetter.id) } } as unknown as Request;
+    const res = mockRes();
+    const next = jest.fn() as NextFunction;
 
-      await replayDeadLetter(req, res, next);
+    await replayDeadLetter(req, res, next);
 
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(502);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const body = res.json.mock.calls[0][0] as any;
-      expect(body.success).toBe(false);
-      expect(body.data.status).toBe('pending');
-      // The response body's data.retryCount mirrors the DB's `attempts` column
-      // (see requeueDeadLetter()'s error branch, which sends `retryCount: attempts`).
-      expect(body.data.retryCount).toBe(6); // 3 original + 3 replay attempts
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(502);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = res.json.mock.calls[0][0] as any;
+    expect(body.success).toBe(false);
+    expect(body.data.status).toBe('pending');
+    // The response body's data.retryCount mirrors the DB's `attempts` column
+    // (see requeueDeadLetter()'s error branch, which sends `retryCount: attempts`).
+    expect(body.data.retryCount).toBe(6); // 3 original + 3 replay attempts
 
-      const stored = getWebhookDeadLetterById(deadLetter.id);
-      expect(stored!.status).toBe('pending');
-      expect(stored!.attempts).toBe(6);
-      expect(stored!.failure_reason).toContain('still unreachable');
-    },
-    15000
-  );
+    const stored = getWebhookDeadLetterById(deadLetter.id);
+    expect(stored!.status).toBe('pending');
+    expect(stored!.attempts).toBe(6);
+    expect(stored!.failure_reason).toContain('still unreachable');
+  }, 15000);
 
   it('returns 404 for an id that does not exist', async () => {
     const req = { params: { id: '999999999' } } as unknown as Request;
@@ -198,7 +202,11 @@ describe('replayDeadLetter', () => {
       subscriptionId: sub.id,
       url,
       eventType: 'contact_unlocked',
-      payload: JSON.stringify({ deliveryId: 'del-already-replayed-001', eventType: 'contact_unlocked', payload: {} }),
+      payload: JSON.stringify({
+        deliveryId: 'del-already-replayed-001',
+        eventType: 'contact_unlocked',
+        payload: {},
+      }),
       deliveryId: 'del-already-replayed-001',
       failureReason: 'original failure',
       attempts: 3,

@@ -41,7 +41,9 @@ function sortKeysDeep(value: unknown): unknown {
  * first row in the chain.
  */
 export function computeChainHash(content: unknown, prevHash: string): string {
-  return createHash('sha256').update(canonicalJSON(content) + prevHash).digest('hex');
+  return createHash('sha256')
+    .update(canonicalJSON(content) + prevHash)
+    .digest('hex');
 }
 
 /**

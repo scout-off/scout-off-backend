@@ -40,9 +40,7 @@ export interface IdempotencyRecord {
  */
 export async function releaseIdempotencyKey(key: string): Promise<void> {
   const sql = 'DELETE FROM idempotency_keys WHERE key = ? AND status = ?';
-  await timedQueryAsync(sql, () =>
-    getDriver().run(sql, [key, 'pending'])
-  );
+  await timedQueryAsync(sql, () => getDriver().run(sql, [key, 'pending']));
 }
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -55,8 +53,9 @@ const IDEMPOTENCY_LEASE_MS = config.idempotencyLeaseMs; // Lease expiry (ms)
 export async function getIdempotencyRecord(key: string): Promise<IdempotencyRecord | null> {
   const sql = 'SELECT * FROM idempotency_keys WHERE key = ? AND expires_at > ?';
   const now = Date.now();
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<IdempotencyRecord>(sql, [key, now])) ?? null
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<IdempotencyRecord>(sql, [key, now])) ?? null,
   );
 }
 
@@ -107,7 +106,14 @@ export async function claimIdempotencyKey(
 
   // Attempt reclaim first (SQLite: no RETURNING, so we check changes)
   const reclaimResult = await timedQueryAsync(reclaimSql, () =>
-    getDriver().run(reclaimSql, [now, lockedUntil, expiresAt, requestFingerprint ?? null, key, now])
+    getDriver().run(reclaimSql, [
+      now,
+      lockedUntil,
+      expiresAt,
+      requestFingerprint ?? null,
+      key,
+      now,
+    ]),
   );
 
   if (reclaimResult.changes === 1) {
@@ -116,7 +122,7 @@ export async function claimIdempotencyKey(
 
   // Reclaim didn't succeed; try a fresh insert
   const insertResult = await timedQueryAsync(insertSql, () =>
-    getDriver().run(insertSql, [key, now, expiresAt, lockedUntil, requestFingerprint ?? null])
+    getDriver().run(insertSql, [key, now, expiresAt, lockedUntil, requestFingerprint ?? null]),
   );
 
   return insertResult.changes === 1;
@@ -148,16 +154,12 @@ export async function updateIdempotencyRecord(
       SET status_code = ?, response = ?, status = 'complete'
       WHERE key = ?
     `;
-    await timedQueryAsync(sql, () =>
-      getDriver().run(sql, [statusCode, JSON.stringify(body), key])
-    );
+    await timedQueryAsync(sql, () => getDriver().run(sql, [statusCode, JSON.stringify(body), key]));
   } else {
     // For transient failures (5xx) and retryable client errors (408/409/423/429),
     // delete the pending record so the client can retry with the same key.
     const sql = 'DELETE FROM idempotency_keys WHERE key = ? AND status = ?';
-    await timedQueryAsync(sql, () =>
-      getDriver().run(sql, [key, 'pending'])
-    );
+    await timedQueryAsync(sql, () => getDriver().run(sql, [key, 'pending']));
   }
 }
 
@@ -203,7 +205,14 @@ export async function saveIdempotencyRecord(
     ON CONFLICT(key) DO NOTHING
   `;
   await timedQueryAsync(sql, () =>
-    getDriver().run(sql, [key, statusCode, JSON.stringify(body), now, now + IDEMPOTENCY_TTL_MS, null])
+    getDriver().run(sql, [
+      key,
+      statusCode,
+      JSON.stringify(body),
+      now,
+      now + IDEMPOTENCY_TTL_MS,
+      null,
+    ]),
   );
 }
 
@@ -212,10 +221,14 @@ export async function saveIdempotencyRecord(
  * scheduler calls this with its transaction and sweep cutoff.
  */
 export async function purgeExpiredIdempotencyKeys(
-  before = Date.now(), limit = config.retention.batchSize, tx?: DbTxHandle,
+  before = Date.now(),
+  limit = config.retention.batchSize,
+  tx?: DbTxHandle,
 ): Promise<number> {
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid idempotency purge batch size');
-  const sql = 'DELETE FROM idempotency_keys WHERE key IN (SELECT key FROM idempotency_keys WHERE expires_at < ? ORDER BY expires_at LIMIT ?) AND expires_at < ?';
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+    throw new Error('Invalid idempotency purge batch size');
+  const sql =
+    'DELETE FROM idempotency_keys WHERE key IN (SELECT key FROM idempotency_keys WHERE expires_at < ? ORDER BY expires_at LIMIT ?) AND expires_at < ?';
   return timedQueryAsync(sql, async () => {
     const info = await (tx ?? getDriver()).run(sql, [before, limit, before]);
     return info.changes;

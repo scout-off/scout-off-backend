@@ -11,13 +11,13 @@ Before this pipeline existed, the API had three independently-maintained documen
 **The canonical source is the route source code itself** — `src/routes/*.ts` and `src/routes/v2/*.ts` — specifically:
 
 - **Path, method, and path parameters** come from the actual `router.route(path)` / `router.<verb>(path, ...)` registrations.
-- **Auth requirements** (`security` in the generated spec) come from the *real* middleware chain — `requireRole(...)`, `optionalAuth`, `requireApiKeyScope(...)`, `requireOwner`/`requireWalletOwner(...)` — never from a comment. This is deliberate: a hand-written "requires admin role" note can silently go stale the moment someone changes the middleware; a requirement computed from the middleware itself cannot.
+- **Auth requirements** (`security` in the generated spec) come from the _real_ middleware chain — `requireRole(...)`, `optionalAuth`, `requireApiKeyScope(...)`, `requireOwner`/`requireWalletOwner(...)` — never from a comment. This is deliberate: a hand-written "requires admin role" note can silently go stale the moment someone changes the middleware; a requirement computed from the middleware itself cannot.
 - **Request body and query schemas** come from the actual Zod schema passed to `validateBody()` / `validateQuery()`, resolved by statically reading the schema's `z.object({...})` definition (following imports across files as needed) and converting it to JSON Schema. This is the real runtime validator, not a hand-typed approximation of it.
-- **Summary, description, and response shapes** come from a JSDoc comment directly above the route registration — this is the one part of an operation that has no runtime signal to derive from (nothing in the code says what a `409` *means*), so it stays human-authored.
+- **Summary, description, and response shapes** come from a JSDoc comment directly above the route registration — this is the one part of an operation that has no runtime signal to derive from (nothing in the code says what a `409` _means_), so it stays human-authored.
 
 All of this is assembled by `scripts/generate-openapi-json.js` into `src/openapi.yaml` and `src/openapi.json`. Nothing here executes application code, boots the app, or touches the database — it's pure TypeScript AST analysis (`scripts/lib/docgen/`), so it's fast and has no runtime dependencies.
 
-The only hand-maintained file is `src/openapi.components.yaml` — generic, cross-cutting infrastructure (security schemes, common path parameters, reusable envelope schemas, `info`/`servers`/`tags`). That content doesn't carry per-route drift risk, so it's fine to hand-maintain; anything that describes a *specific route* must not be added there.
+The only hand-maintained file is `src/openapi.components.yaml` — generic, cross-cutting infrastructure (security schemes, common path parameters, reusable envelope schemas, `info`/`servers`/`tags`). That content doesn't carry per-route drift risk, so it's fine to hand-maintain; anything that describes a _specific route_ must not be added there.
 
 `BACKEND_API_DOCS.md` no longer maintains its own per-endpoint reference table. It links to the generated spec (served live at `GET /api/docs`, `GET /api/docs/yaml`, and browsable at `GET /api/docs/ui`) as the single source for endpoint-level detail, and keeps only genuinely conceptual documentation (versioning, auth flow, error format, SSE, rate limits) that isn't a per-route listing.
 
@@ -38,25 +38,26 @@ Add a JSDoc comment directly above the `router.route(...)` / `router.<verb>(...)
  * @response 404 { success: false, error } — player not found
  * @auth Bearer (admin role required)
  */
-router.route('/:playerId/deactivate')
+router
+  .route('/:playerId/deactivate')
   .post(requireRole('admin'), adminDeactivatePlayer)
   .all(methodNotAllowed(['POST']));
 ```
 
 Tags:
 
-| Tag | Required | Meaning |
-| --- | --- | --- |
-| (free text) | Yes* | The paragraph before any tag becomes the operation description; its first sentence becomes the summary. |
-| `@summary` | No | Explicit one-line summary, overriding the derived one. Use this when the natural first sentence doesn't stand alone (e.g. it's a fragment of a longer paragraph). |
-| `@param <name> {<type>} - <description>` | No | Describes a path parameter. The parameter's *existence* is always derived from the route path (`:name`); this tag only supplies its type/description. |
-| `@query <name> {<type>} - <description>` | No | Describes a query parameter, for routes that read `req.query` without a Zod schema. When `validateQuery(...)` is present, query parameters are derived from that schema instead and this tag is unnecessary. |
-| `@header <name> {<type>} - <description>` | No | Describes a request header the route reads (e.g. `Idempotency-Key`). |
-| `@body <description>` | No | Free-text description shown alongside the mechanically-derived request body schema (or on its own, for routes with no Zod body schema — e.g. raw CSV uploads). |
-| `@response <status> <description>` | **Yes, at least one** | One per status code the route can return. |
-| `@auth <note>` | No | Supplementary human context only — e.g. "admin or profile owner" for a route with bespoke inline authorization logic a middleware name alone can't express. **Never used to compute the generated spec's actual `security` field** — that's always derived from the real middleware. |
-| `@deprecated <reason>` | No | Marks the operation deprecated in the generated spec. |
-| `@tag <name>` | No | Overrides the default tag (normally derived from which router file the route lives in). |
+| Tag                                       | Required              | Meaning                                                                                                                                                                                                                                                                              |
+| ----------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| (free text)                               | Yes*                  | The paragraph before any tag becomes the operation description; its first sentence becomes the summary.                                                                                                                                                                              |
+| `@summary`                                | No                    | Explicit one-line summary, overriding the derived one. Use this when the natural first sentence doesn't stand alone (e.g. it's a fragment of a longer paragraph).                                                                                                                    |
+| `@param <name> {<type>} - <description>`  | No                    | Describes a path parameter. The parameter's _existence_ is always derived from the route path (`:name`); this tag only supplies its type/description.                                                                                                                                |
+| `@query <name> {<type>} - <description>`  | No                    | Describes a query parameter, for routes that read `req.query` without a Zod schema. When `validateQuery(...)` is present, query parameters are derived from that schema instead and this tag is unnecessary.                                                                         |
+| `@header <name> {<type>} - <description>` | No                    | Describes a request header the route reads (e.g. `Idempotency-Key`).                                                                                                                                                                                                                 |
+| `@body <description>`                     | No                    | Free-text description shown alongside the mechanically-derived request body schema (or on its own, for routes with no Zod body schema — e.g. raw CSV uploads).                                                                                                                       |
+| `@response <status> <description>`        | **Yes, at least one** | One per status code the route can return.                                                                                                                                                                                                                                            |
+| `@auth <note>`                            | No                    | Supplementary human context only — e.g. "admin or profile owner" for a route with bespoke inline authorization logic a middleware name alone can't express. **Never used to compute the generated spec's actual `security` field** — that's always derived from the real middleware. |
+| `@deprecated <reason>`                    | No                    | Marks the operation deprecated in the generated spec.                                                                                                                                                                                                                                |
+| `@tag <name>`                             | No                    | Overrides the default tag (normally derived from which router file the route lives in).                                                                                                                                                                                              |
 
 \* A route with no comment at all, or a comment with no derivable summary and no `@response` tag, fails `npm run docs:check` (see below).
 

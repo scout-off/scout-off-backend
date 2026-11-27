@@ -41,13 +41,17 @@ function validateOptionalConfigEnv(env) {
   const rawMode = (env.API_DOCS_MODE ?? '').trim().toLowerCase();
   const allowedModes = envConstants.apiDocsModes;
   if (rawMode && !allowedModes.includes(rawMode)) {
-    errors.push(`API_DOCS_MODE="${env.API_DOCS_MODE}" is invalid. Must be one of: ${allowedModes.join(', ')}.`);
+    errors.push(
+      `API_DOCS_MODE="${env.API_DOCS_MODE}" is invalid. Must be one of: ${allowedModes.join(', ')}.`,
+    );
   }
   for (const key of ['METRICS_ENABLED', 'METRICS_LEGACY_MS', 'API_DOCS_HIDE_ADMIN']) {
     const raw = env[key];
     if (raw === undefined || raw.trim() === '') continue;
     if (!['true', 'false', '1', '0', 'yes', 'no'].includes(raw.trim().toLowerCase())) {
-      errors.push(`${key}="${raw}" is invalid. Must be true or false (also accepts 1/0 or yes/no).`);
+      errors.push(
+        `${key}="${raw}" is invalid. Must be true or false (also accepts 1/0 or yes/no).`,
+      );
     }
   }
   return errors;
@@ -81,7 +85,7 @@ function validateRuntimeEnv(env = process.env) {
     if (!VALID_DB_DRIVERS.includes(env.DB_DRIVER)) {
       errors.push(
         `DB_DRIVER="${env.DB_DRIVER}" is invalid. Must be one of: ${VALID_DB_DRIVERS.join(', ')}. ` +
-        `Check for typos — an unrecognised value does NOT fall back to SQLite; it fails fast instead.`
+          `Check for typos — an unrecognised value does NOT fall back to SQLite; it fails fast instead.`,
       );
     }
   }
@@ -112,7 +116,9 @@ function validateRuntimeEnv(env = process.env) {
         if (!origin) {
           errors.push('CORS_ALLOWED_ORIGINS contains empty origin entry');
         } else if (origin !== '*' && !/^https?:\/\//i.test(origin)) {
-          errors.push(`Invalid CORS origin format: "${origin}". Origins must be "*" or start with http:// or https://`);
+          errors.push(
+            `Invalid CORS origin format: "${origin}". Origins must be "*" or start with http:// or https://`,
+          );
         }
       }
     }
@@ -164,7 +170,7 @@ if (require.main === module) {
     const errors = validateRuntimeEnv();
 
     if (errors.length) {
-      errors.forEach(e => console.error(`[env] ERROR: ${e}`));
+      errors.forEach((e) => console.error(`[env] ERROR: ${e}`));
       process.exit(1);
     }
 
@@ -179,7 +185,7 @@ if (require.main === module) {
       .readFileSync(examplePath, 'utf8')
       .split('\n')
       .filter((l) => l && !l.startsWith('#'))
-      .map((l) => l.split('=')[0].trim())
+      .map((l) => l.split('=')[0].trim()),
   );
 
   const srcDir = path.resolve(__dirname, '../src');
@@ -212,9 +218,13 @@ if (require.main === module) {
   // ── Reverse check: .env.example → src/ (warning only) ────────────────────
   const staleKeys = findStaleExampleKeys(examplePath, srcFiles);
   if (staleKeys.length) {
-    console.warn('Warning: the following .env.example entries have no matching process.env reference in src/:');
+    console.warn(
+      'Warning: the following .env.example entries have no matching process.env reference in src/:',
+    );
     staleKeys.forEach((k) => console.warn(`  ${k}`));
-    console.warn('These may be stale or read via a dynamic pattern not detected by static analysis.');
+    console.warn(
+      'These may be stale or read via a dynamic pattern not detected by static analysis.',
+    );
   }
 
   const optionalErrors = validateOptionalConfigEnv(process.env);

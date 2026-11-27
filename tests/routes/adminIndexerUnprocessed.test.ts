@@ -153,7 +153,7 @@ describe('POST /api/admin/indexer/unprocessed/:id/retry', () => {
   });
 
   it('reports still_failing with the failure detail', async () => {
-    mockReplay.mockResolvedValue({ status: 'still_failing', detail: "type still unknown" });
+    mockReplay.mockResolvedValue({ status: 'still_failing', detail: 'type still unknown' });
 
     const res = await request(app)
       .post('/api/admin/indexer/unprocessed/7/retry')

@@ -135,27 +135,23 @@ describe('backfill event idempotency (#884)', () => {
     const db = getDb();
     const insert = db.prepare(
       `INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload)
-       VALUES (?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?)`,
     );
-    const insertMany = db.transaction(
-      (start: number, end: number) => {
-        for (let ledger = start; ledger <= end; ledger++) {
-          insert.run(
-            'player_registered',
-            ledger,
-            `tx-${ledger}-backfill-test`,
-            JSON.stringify({ player_id: `p-${ledger}` })
-          );
-        }
+    const insertMany = db.transaction((start: number, end: number) => {
+      for (let ledger = start; ledger <= end; ledger++) {
+        insert.run(
+          'player_registered',
+          ledger,
+          `tx-${ledger}-backfill-test`,
+          JSON.stringify({ player_id: `p-${ledger}` }),
+        );
       }
-    );
+    });
     insertMany(startLedger, endLedger);
   }
 
   function countEvents(): number {
-    const row = getDb()
-      .prepare('SELECT COUNT(*) AS n FROM events')
-      .get() as { n: number };
+    const row = getDb().prepare('SELECT COUNT(*) AS n FROM events').get() as { n: number };
     return row.n;
   }
 

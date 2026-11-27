@@ -54,9 +54,7 @@ describe('Error Response Consistency — application/json invariant', () => {
     });
 
     it('returns application/json for POST /api/nonexistent', async () => {
-      const res = await request(app)
-        .post('/api/nonexistent')
-        .send({ data: 'test' });
+      const res = await request(app).post('/api/nonexistent').send({ data: 'test' });
       expect(res.status).toBe(404);
       expect(res.type).toBe('application/json');
       expectValidErrorResponse(res.body);
@@ -79,9 +77,7 @@ describe('Error Response Consistency — application/json invariant', () => {
     });
 
     it('echoes the X-Correlation-ID header as correlationId', async () => {
-      const res = await request(app)
-        .get('/nonexistent')
-        .set('X-Correlation-ID', 'corr-404-test');
+      const res = await request(app).get('/nonexistent').set('X-Correlation-ID', 'corr-404-test');
       expect(res.status).toBe(404);
       expectValidErrorResponse(res.body);
       expect(res.body.correlationId).toBe('corr-404-test');
@@ -103,9 +99,7 @@ describe('Error Response Consistency — application/json invariant', () => {
     });
 
     it('returns application/json for PATCH /api/players/register (POST-only)', async () => {
-      const res = await request(app)
-        .patch('/api/players/register')
-        .send({});
+      const res = await request(app).patch('/api/players/register').send({});
       expect(res.status).toBe(405);
       expect(res.type).toBe('application/json');
       expectValidErrorResponse(res.body);
@@ -122,9 +116,7 @@ describe('Error Response Consistency — application/json invariant', () => {
       // POST /auth/token with an empty body triggers validateBody's Zod schema.
       // This route has no auth guard ahead of validateBody, so the request
       // actually reaches the validation layer (unlike the role-gated routes).
-      const res = await request(app)
-        .post('/auth/token')
-        .send({});
+      const res = await request(app).post('/auth/token').send({});
       // Missing required fields → ZodError → 400
       expect(res.status).toBe(400);
       expect(res.type).toBe('application/json');

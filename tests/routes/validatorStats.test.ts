@@ -61,11 +61,7 @@ jest.mock('../../src/services/cache', () => ({
   invalidateMilestoneCache: jest.fn(),
 }));
 
-import {
-  queryEvents,
-  getPendingMilestones,
-  getValidatorStats,
-} from '../../src/db';
+import { queryEvents, getPendingMilestones, getValidatorStats } from '../../src/db';
 
 const mockQueryEvents = queryEvents as jest.Mock;
 const mockGetPendingMilestones = getPendingMilestones as jest.Mock;
@@ -82,8 +78,8 @@ function makeToken(wallet: string, role: string): string {
 // Real (checksum-valid) Stellar public keys — the :wallet route param is
 // validated by requireWalletOwner() → isValidStellarAddress().
 const VALIDATOR_WALLET = 'GA24WUMSI52FC5TNLQ2OX5T2C23S36YRSIS52ZOGHSYFA4SJS6PNP5GV';
-const OTHER_VALIDATOR  = 'GDDB5UXFFEKI4BEHPBAYD5E45L5ZJOF2ULPBK7F72ONHB33ZAVSDKLXK';
-const ADMIN_WALLET     = 'GAWZFQBR2WTCZLVSU7HEY5ZPWSVDBUJCEFYOHNBELRFNENORNQSZOK5G';
+const OTHER_VALIDATOR = 'GDDB5UXFFEKI4BEHPBAYD5E45L5ZJOF2ULPBK7F72ONHB33ZAVSDKLXK';
+const ADMIN_WALLET = 'GAWZFQBR2WTCZLVSU7HEY5ZPWSVDBUJCEFYOHNBELRFNENORNQSZOK5G';
 
 const nowSeconds = Math.floor(Date.now() / 1000);
 
@@ -245,7 +241,11 @@ describe('GET /api/validators/:wallet/stats — response shape', () => {
     // Generate 25 approved events for the validator
     const manyEvents = Array.from({ length: 25 }, (_, i) => ({
       type: 'milestone_approved',
-      payload: { validator_wallet: VALIDATOR_WALLET, player_id: `player-${i}`, milestone_id: `ms-${i}` },
+      payload: {
+        validator_wallet: VALIDATOR_WALLET,
+        player_id: `player-${i}`,
+        milestone_id: `ms-${i}`,
+      },
       created_at: nowSeconds - i * 100,
       source: 'contract',
       contractAddress: 'contract',
@@ -264,9 +264,7 @@ describe('GET /api/validators/:wallet/stats — response shape', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.recent).toHaveLength(20);
     // First item should be newest (smallest offset from now)
-    expect(res.body.data.recent[0].createdAt).toBeGreaterThan(
-      res.body.data.recent[1].createdAt,
-    );
+    expect(res.body.data.recent[0].createdAt).toBeGreaterThan(res.body.data.recent[1].createdAt);
   });
 
   it('includes submitted and approved events in recent activity', async () => {

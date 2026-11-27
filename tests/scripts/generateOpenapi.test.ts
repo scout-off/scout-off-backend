@@ -10,7 +10,10 @@
 
 /* eslint-disable @typescript-eslint/no-var-requires */
 const { generateSpec, ROUTE_FILES } = require('../../scripts/generate-openapi-json');
-const { checkRouteDocs, checkRouteFileManifestCoverage } = require('../../scripts/check-route-docs');
+const {
+  checkRouteDocs,
+  checkRouteFileManifestCoverage,
+} = require('../../scripts/check-route-docs');
 const { parseRouteFile } = require('../../scripts/lib/docgen/parseRoutes');
 /* eslint-enable @typescript-eslint/no-var-requires */
 import path from 'path';

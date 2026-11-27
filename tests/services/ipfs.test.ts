@@ -33,20 +33,31 @@ jest.mock('../../src/services/webhooks', () => ({
 // writes a hash-chained audit_log row via recordAudit() → insertAuditLog()) ───────────
 jest.mock('../../src/db', () => ({
   insertOrUpdatePlayer: jest.fn(),
-  insertAuditLog: jest.fn((p: { action: string; adminWallet?: string; queryParams?: Record<string, unknown>; createdAt: string; eventSource?: string }) => ({
-    id: 1,
-    action: p.action,
-    admin_wallet: p.adminWallet ?? '',
-    query_params: JSON.stringify(p.queryParams ?? {}),
-    created_at: p.createdAt,
-    prev_hash: null,
-    hash: 'test-hash',
-    event_source: p.eventSource ?? 'admin_action',
-  })),
+  insertAuditLog: jest.fn(
+    (p: {
+      action: string;
+      adminWallet?: string;
+      queryParams?: Record<string, unknown>;
+      createdAt: string;
+      eventSource?: string;
+    }) => ({
+      id: 1,
+      action: p.action,
+      admin_wallet: p.adminWallet ?? '',
+      query_params: JSON.stringify(p.queryParams ?? {}),
+      created_at: p.createdAt,
+      prev_hash: null,
+      hash: 'test-hash',
+      event_source: p.eventSource ?? 'admin_action',
+    }),
+  ),
 }));
 
 import { registerPlayer } from '../../src/controllers/playerController';
-import { submitMilestoneEvidence, downloadAndPinEvidence } from '../../src/controllers/validatorController';
+import {
+  submitMilestoneEvidence,
+  downloadAndPinEvidence,
+} from '../../src/controllers/validatorController';
 import { invalidatePlayerCache, invalidateMilestoneCache } from '../../src/services/cache';
 import config from '../../src/config';
 
@@ -93,7 +104,7 @@ describe('registerPlayer – IPFS pinning', () => {
     // 'striker' is normalized to the canonical position 'forward' by
     // normalizePositionOrFallback() before the metadata is pinned.
     expect(mockPinJson).toHaveBeenCalledWith(
-      expect.objectContaining({ wallet: 'G'.repeat(56), position: 'forward', region: 'africa' })
+      expect.objectContaining({ wallet: 'G'.repeat(56), position: 'forward', region: 'africa' }),
     );
     expect(res.status).toHaveBeenCalledWith(201);
     const body = (res.json as jest.Mock).mock.calls[0][0];
@@ -205,7 +216,7 @@ describe('submitMilestoneEvidence – IPFS pinning', () => {
 
       try {
         await expect(
-          downloadAndPinEvidence('https://evidence.example.com/report.pdf')
+          downloadAndPinEvidence('https://evidence.example.com/report.pdf'),
         ).rejects.toThrow('PINATA_API_KEY and PINATA_SECRET must be set in staging and production');
         expect(mockPinJson).not.toHaveBeenCalled();
         expect(mockPinFile).not.toHaveBeenCalled();
@@ -231,7 +242,7 @@ describe('submitMilestoneEvidence – IPFS pinning', () => {
     await submitMilestoneEvidence(req, res, next);
 
     expect(mockPinJson).toHaveBeenCalledWith(
-      expect.objectContaining({ playerId: 'player-1', milestoneType: 'performance' })
+      expect.objectContaining({ playerId: 'player-1', milestoneType: 'performance' }),
     );
     expect(res.status).toHaveBeenCalledWith(201);
     const body = (res.json as jest.Mock).mock.calls[0][0];

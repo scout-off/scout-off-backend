@@ -14,11 +14,7 @@
  * See tests/helpers/redisFailureHarness.ts for design rationale.
  */
 
-import {
-  FakeRedisStore,
-  RedisConnectionError,
-  withTimeout,
-} from '../helpers/redisFailureHarness';
+import { FakeRedisStore, RedisConnectionError, withTimeout } from '../helpers/redisFailureHarness';
 import { RedisCacheStore } from '../../src/services/redisCacheStore';
 
 // ─────────────────────────────────────────────────────────────────────────────

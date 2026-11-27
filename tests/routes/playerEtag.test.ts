@@ -176,7 +176,12 @@ describe('PUT /api/players/:playerId — optimistic concurrency (#1151)', () => 
     // Simulate the version bump the insert would cause and confirm GET now
     // serves a different ETag (no silent clobber on the next round).
     mockGetPlayerProfileHistory.mockReturnValue([
-      { id: 1, metadata_uri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG', changed_at: 3000, tx_hash: 'tx-1' },
+      {
+        id: 1,
+        metadata_uri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+        changed_at: 3000,
+        tx_hash: 'tx-1',
+      },
     ]);
     const get2 = await request(app).get(`/api/players/${PLAYER.player_id}`);
     expect(get2.status).toBe(200);

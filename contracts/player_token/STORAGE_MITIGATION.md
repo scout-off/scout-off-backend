@@ -86,4 +86,4 @@ Notes
 - This change intentionally shifts storage cost from a single instance blob to per-player persistent keys. That is the only practical way to prevent the instance entry from growing unbounded and affecting unrelated calls.
 - If your deployment environment values short-lived data with TTL-like semantics, you can layer expiration by storing timestamps/epochs in pages and providing an admin archival workflow to prune old pages when safe.
 
-**_ End of document _**
+**\_ End of document _**

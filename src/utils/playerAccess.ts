@@ -31,10 +31,7 @@ export interface PlayerAccessRow {
 }
 
 /** Return true when the caller may view the player's profile/milestones. */
-export function canAccessPlayer(
-  player: PlayerAccessRow,
-  ctx: PlayerAccessContext,
-): boolean {
+export function canAccessPlayer(player: PlayerAccessRow, ctx: PlayerAccessContext): boolean {
   if (player.is_active === undefined || player.is_active === null || player.is_active !== 0) {
     return true; // active (or unknown state) — public
   }

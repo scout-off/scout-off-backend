@@ -4,61 +4,18 @@ import net from 'net';
 import { parseRetentionPolicies } from './retentionPolicy';
 import { parseKeyring } from './utils/keyring';
 import envConstants from './config/env-constants.json';
+import { apiDocsConfig } from './config.apiDocs';
+import { readSecret } from './secrets/provider';
 
 // Bootstrap logger: src/config.ts is evaluated before src/utils/logger.ts can
-// be imported (the logger itself imports this module), so startup messages are
-// buffered here and flushed through the real logger once it is available.
-// Until then they are written as single-line JSON with the same shape the
-// logger produces, so startup output stays structured.
+// be imported (the logger itself imports this module), so startup messages go
+// straight to the console. (A buffered variant from #1855 was never flushed by
+// the logger, which silently dropped startup security warnings.)
 type BootstrapLevel = 'info' | 'warn';
 
-interface BootstrapEntry {
-  level: BootstrapLevel;
-  message: string;
-}
-
-const bootstrapBuffer: BootstrapEntry[] = [];
-let bootstrapFlushed = false;
-
-function writeStructured(level: BootstrapLevel, message: string): void {
-  const line = JSON.stringify({
-    timestamp: new Date().toISOString(),
-    level,
-    message: message.replace(/[\r\n]+/g, ' '),
-  });
-  if (level === 'warn') {
-    process.stderr.write(`${line}\n`);
-  } else {
-    process.stdout.write(`${line}\n`);
-  }
-}
-
 function bootstrapLog(level: BootstrapLevel, message: string): void {
-  if (bootstrapFlushed) {
-    writeStructured(level, message);
-    return;
-  }
-  bootstrapBuffer.push({ level, message });
-}
-
-/**
- * Flushes buffered startup messages through the real logger. Called by
- * src/utils/logger.ts once it has been initialised; safe to call repeatedly.
- */
-export function flushBootstrapLogs(sink?: {
-  info: (message: string) => void;
-  warn: (message: string) => void;
-}): void {
-  if (bootstrapFlushed) return;
-  bootstrapFlushed = true;
-  const pending = bootstrapBuffer.splice(0, bootstrapBuffer.length);
-  for (const entry of pending) {
-    if (sink) {
-      sink[entry.level](entry.message);
-    } else {
-      writeStructured(entry.level, entry.message);
-    }
-  }
+  if (level === 'warn') console.warn(message);
+  else console.info(message);
 }
 
 // In production and staging, configuration must come only from the
@@ -66,15 +23,24 @@ export function flushBootstrapLogs(sink?: {
 // mounted volume would otherwise silently fill in unset values, possibly with
 // development secrets. Set DOTENV_ENABLED=true to opt back in explicitly.
 const dotenvEnv = process.env.NODE_ENV ?? 'development';
-if ((dotenvEnv !== 'production' && dotenvEnv !== 'staging') || process.env.DOTENV_ENABLED === 'true') {
+if (
+  (dotenvEnv !== 'production' && dotenvEnv !== 'staging') ||
+  process.env.DOTENV_ENABLED === 'true'
+) {
   const result = dotenv.config();
   if (!result.error) bootstrapLog('info', '[config] loaded .env file');
 } else {
-  bootstrapLog('info', `[config] skipping .env file (NODE_ENV=${dotenvEnv}; set DOTENV_ENABLED=true to load it)`);
+  bootstrapLog(
+    'info',
+    `[config] skipping .env file (NODE_ENV=${dotenvEnv}; set DOTENV_ENABLED=true to load it)`,
+  );
 }
 
+// Secrets are read through the pluggable secrets provider (env by default,
+// mounted files with SECRETS_PROVIDER=file) so rotated values are picked up
+// without a restart. readSecret() does not emit a per-read audit event.
 function required(name: string): string {
-  const value = process.env[name];
+  const value = readSecret(name);
   if (!value) {
     throw new Error(`${name} is required`);
   }
@@ -114,20 +80,16 @@ function parseNumericEnv(
     const typeLabel = integer ? 'integer' : 'number';
     throw new Error(
       `Invalid ${name}: "${raw}" is not a valid ${typeLabel}. ` +
-      `Set ${name} to a valid numeric value or remove it to use the default (${defaultValue}).`,
+        `Set ${name} to a valid numeric value or remove it to use the default (${defaultValue}).`,
     );
   }
 
   if (min !== undefined && value < min) {
-    throw new Error(
-      `Invalid ${name}: ${value} is below the minimum allowed value of ${min}.`,
-    );
+    throw new Error(`Invalid ${name}: ${value} is below the minimum allowed value of ${min}.`);
   }
 
   if (max !== undefined && value > max) {
-    throw new Error(
-      `Invalid ${name}: ${value} exceeds the maximum allowed value of ${max}.`,
-    );
+    throw new Error(`Invalid ${name}: ${value} exceeds the maximum allowed value of ${max}.`);
   }
 
   return value;
@@ -157,7 +119,7 @@ function parseIpAllowlist(name: string, raw: string | undefined, defaultValue: s
     if (!isValidIpOrCidr(entry)) {
       throw new Error(
         `Invalid ${name}: "${entry}" is not a valid IPv4 address or CIDR range. ` +
-        `Remove it or correct it to a valid IPv4/CIDR value.`,
+          `Remove it or correct it to a valid IPv4/CIDR value.`,
       );
     }
     entries.push(entry);
@@ -185,9 +147,6 @@ function parseBooleanEnv(name: string, raw: string | undefined, defaultValue: bo
   throw new Error(`Invalid ${name}: "${raw}". Must be true or false (also accepts 1/0 or yes/no).`);
 }
 
-type ApiDocsMode = 'public' | 'admin' | 'disabled';
-const VALID_API_DOCS_MODES: ReadonlySet<string> = new Set(envConstants.apiDocsModes);
-
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type NodeEnv = 'development' | 'test' | 'staging' | 'production';
 
@@ -200,9 +159,20 @@ export const VALID_ENVS: ReadonlySet<string> = new Set(envConstants.nodeEnvs);
 
 const rawNodeEnv = process.env.NODE_ENV ?? 'development';
 if (!VALID_ENVS.has(rawNodeEnv)) {
-  throw new Error(`Invalid NODE_ENV: "${rawNodeEnv}". Must be one of: ${[...VALID_ENVS].join(', ')}`);
+  throw new Error(
+    `Invalid NODE_ENV: "${rawNodeEnv}". Must be one of: ${[...VALID_ENVS].join(', ')}`,
+  );
 }
 const nodeEnv = rawNodeEnv as NodeEnv;
+
+// Fail fast on a malformed API_DOCS_HIDE_ADMIN; config.apiDocs itself is lenient.
+parseBooleanEnv('API_DOCS_HIDE_ADMIN', process.env.API_DOCS_HIDE_ADMIN, false);
+// config.metrics.legacyMs is read live; still reject a malformed value at startup.
+parseBooleanEnv('METRICS_LEGACY_MS', process.env.METRICS_LEGACY_MS, true);
+parseNumericEnv('MILESTONE_LOADER_CONCURRENCY', process.env.MILESTONE_LOADER_CONCURRENCY, 8, {
+  min: 1,
+  integer: true,
+});
 
 function isLikelyPlaceholderSecret(secret: string): boolean {
   const normalized = secret.trim().toLowerCase();
@@ -278,10 +248,15 @@ function validateSecretStrength(name: string, value: string): void {
 const adminWalletValue = process.env.ADMIN_WALLET ?? '';
 if (!adminWalletValue) {
   if (nodeEnv === 'production') {
-    throw new Error('ADMIN_WALLET is required in production but is not set. Set the ADMIN_WALLET environment variable to the platform admin Stellar address.');
+    throw new Error(
+      'ADMIN_WALLET is required in production but is not set. Set the ADMIN_WALLET environment variable to the platform admin Stellar address.',
+    );
   }
   if (nodeEnv === 'staging') {
-    bootstrapLog('warn', '[config] WARNING: ADMIN_WALLET is not set in staging. Admin-seeding will be disabled. Set ADMIN_WALLET to suppress this warning.');
+    bootstrapLog(
+      'warn',
+      '[config] WARNING: ADMIN_WALLET is not set in staging. Admin-seeding will be disabled. Set ADMIN_WALLET to suppress this warning.',
+    );
   }
 }
 
@@ -293,26 +268,27 @@ if (!adminWalletValue) {
 // the absence is silently tolerated — a fallback is generated at the service
 // layer so tests can run without extra config.
 /** Bare DNS hostname (no scheme, port, path or trailing dot) — used for SEP-10 client_domain. */
-export const SEP10_CLIENT_DOMAIN_PATTERN = /^(?=.{1,253}$)(?!-)([a-z0-9-]{1,63}(?<!-)\.)+[a-z]{2,63}$/;
+export const SEP10_CLIENT_DOMAIN_PATTERN =
+  /^(?=.{1,253}$)(?!-)([a-z0-9-]{1,63}(?<!-)\.)+[a-z]{2,63}$/;
 
-const sep10ServerSecretValue = process.env.SEP10_SERVER_SECRET ?? '';
+const sep10ServerSecretValue = readSecret('SEP10_SERVER_SECRET') ?? '';
 if (!sep10ServerSecretValue) {
   if (nodeEnv === 'production') {
     throw new Error(
       'SEP10_SERVER_SECRET is required in production but is not set. ' +
-      'Generate a Stellar keypair secret with `stellar keys generate` and set this variable. ' +
-      'All backend instances must share the same value for challenge verification to work ' +
-      'across a horizontally-scaled deployment; otherwise each process generates its own ' +
-      'ephemeral keypair, causing cross-instance SEP-10 verification failures under load balancing.',
+        'Generate a Stellar keypair secret with `stellar keys generate` and set this variable. ' +
+        'All backend instances must share the same value for challenge verification to work ' +
+        'across a horizontally-scaled deployment; otherwise each process generates its own ' +
+        'ephemeral keypair, causing cross-instance SEP-10 verification failures under load balancing.',
     );
   }
   if (nodeEnv === 'staging') {
     bootstrapLog(
       'warn',
       '[config] WARNING: SEP10_SERVER_SECRET is not set in staging. ' +
-      'Each process will generate an ephemeral keypair, causing cross-instance ' +
-      'SEP-10 verification failures under load balancing. ' +
-      'Set SEP10_SERVER_SECRET to suppress this warning.',
+        'Each process will generate an ephemeral keypair, causing cross-instance ' +
+        'SEP-10 verification failures under load balancing. ' +
+        'Set SEP10_SERVER_SECRET to suppress this warning.',
     );
   }
 }
@@ -327,22 +303,22 @@ if (!sep10ServerSecretValue) {
 // docs/auth.md).  Production refuses to start without it; staging warns;
 // development/test falls back to a fixed, insecure value at the derivation
 // layer so the test suite runs without extra config.
-const apiKeyLookupSecretValue = process.env.API_KEY_LOOKUP_SECRET ?? '';
+const apiKeyLookupSecretValue = readSecret('API_KEY_LOOKUP_SECRET') ?? '';
 if (!apiKeyLookupSecretValue) {
   if (nodeEnv === 'production') {
     throw new Error(
       'API_KEY_LOOKUP_SECRET is required in production but is not set. ' +
-      'Generate one with `openssl rand -hex 32` and set this variable. ' +
-      'All backend instances must share the same value, otherwise X-API-Key ' +
-      'authentication will fail behind a load balancer. ' +
-      'See docs/auth.md for rotation guidance.',
+        'Generate one with `openssl rand -hex 32` and set this variable. ' +
+        'All backend instances must share the same value, otherwise X-API-Key ' +
+        'authentication will fail behind a load balancer. ' +
+        'See docs/auth.md for rotation guidance.',
     );
   }
   if (nodeEnv === 'staging') {
     console.warn(
       '[config] WARNING: API_KEY_LOOKUP_SECRET is not set in staging. ' +
-      'A fixed, insecure development-only pepper will be used to derive ' +
-      'api_keys.lookup_hash. Set API_KEY_LOOKUP_SECRET to suppress this warning.',
+        'A fixed, insecure development-only pepper will be used to derive ' +
+        'api_keys.lookup_hash. Set API_KEY_LOOKUP_SECRET to suppress this warning.',
     );
   }
 }
@@ -368,8 +344,8 @@ if (!notesEncryptionKeyValue && !(process.env.NOTES_ENCRYPTION_KEYS ?? '').trim(
   if (nodeEnv === 'production') {
     throw new Error(
       'NOTES_ENCRYPTION_KEY is required in production but is not set. ' +
-      'Generate one with `openssl rand -hex 32` and set this variable. ' +
-      'See docs/secrets-rotation.md for rotation guidance.',
+        'Generate one with `openssl rand -hex 32` and set this variable. ' +
+        'See docs/secrets-rotation.md for rotation guidance.',
     );
   }
 }
@@ -407,7 +383,10 @@ const DEFAULT_CORS_ORIGINS: Record<NodeEnv, string[]> = {
 const rawCorsOrigins = process.env.CORS_ALLOWED_ORIGINS ?? process.env.ALLOWED_ORIGINS;
 const corsAllowedOrigins =
   rawCorsOrigins !== undefined && rawCorsOrigins.trim() !== ''
-    ? rawCorsOrigins.split(',').map((o) => o.trim()).filter(Boolean)
+    ? rawCorsOrigins
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
     : DEFAULT_CORS_ORIGINS[nodeEnv];
 
 /**
@@ -427,7 +406,7 @@ function compileCorsPattern(pattern: string): RegExp | null {
   if (!match) {
     console.warn(
       `[cors] WARNING: "${pattern}" is not a supported wildcard pattern and will be ignored. ` +
-      'Use "https://*.yourdomain.com" format.',
+        'Use "https://*.yourdomain.com" format.',
     );
     return null;
   }
@@ -438,7 +417,7 @@ function compileCorsPattern(pattern: string): RegExp | null {
   if (scheme !== 'https://') {
     console.warn(
       `[cors] WARNING: Wildcard CORS pattern "${pattern}" uses an insecure scheme. ` +
-      'Only https:// is allowed for wildcard patterns.',
+        'Only https:// is allowed for wildcard patterns.',
     );
     return null;
   }
@@ -451,7 +430,7 @@ function compileCorsPattern(pattern: string): RegExp | null {
   if (labels.length < 2) {
     console.warn(
       `[cors] WARNING: Wildcard CORS pattern "${pattern}" is too broad (fewer than 2 ` +
-      'literal labels after the wildcard). Pattern rejected.',
+        'literal labels after the wildcard). Pattern rejected.',
     );
     return null;
   }
@@ -480,7 +459,7 @@ const corsWildcardPatterns: RegExp[] = corsAllowedOrigins
 if ((nodeEnv === 'production' || nodeEnv === 'staging') && corsAllowedOrigins.includes('*')) {
   console.error(
     '[cors] ERROR: CORS_ALLOWED_ORIGINS includes "*" in production/staging. ' +
-    'This disables credentials and is a security risk. Use explicit origins.',
+      'This disables credentials and is a security risk. Use explicit origins.',
   );
 }
 
@@ -493,7 +472,7 @@ const rawNetwork = process.env.NETWORK ?? 'testnet';
 if (!VALID_NETWORKS.has(rawNetwork)) {
   throw new Error(
     `Invalid NETWORK: "${rawNetwork}". Must be one of: ${[...VALID_NETWORKS].join(', ')}. ` +
-    `Set NETWORK to a valid value or remove it to use the default (testnet).`,
+      `Set NETWORK to a valid value or remove it to use the default (testnet).`,
   );
 }
 const network = rawNetwork as 'testnet' | 'mainnet' | 'futurenet' | 'standalone';
@@ -522,7 +501,7 @@ if (!rawNetworkPassphrase && network === 'standalone') {
   // For standalone, always require explicit passphrase to avoid misconfiguration
   throw new Error(
     'NETWORK_PASSPHRASE must be set when NETWORK=standalone. ' +
-    'For the local Soroban sandbox, set: NETWORK_PASSPHRASE="Standalone Network ; February 2017"',
+      'For the local Soroban sandbox, set: NETWORK_PASSPHRASE="Standalone Network ; February 2017"',
   );
 }
 
@@ -531,9 +510,23 @@ if (!rawNetworkPassphrase && network === 'standalone') {
 if (nodeEnv === 'production' && network !== 'mainnet') {
   console.warn(
     `[config] WARNING: Production deployment using ${network}. ` +
-    `This is not recommended for production. Set NETWORK=mainnet to suppress this warning.`,
+      `This is not recommended for production. Set NETWORK=mainnet to suppress this warning.`,
   );
 }
+
+// Secrets exposed as live getters are validated once here, at startup.
+validateSecretStrength('JWT_SECRET', required('JWT_SECRET'));
+{
+  const previous = readSecret('JWT_SECRET_PREVIOUS');
+  if (previous) validateSecretStrength('JWT_SECRET_PREVIOUS', previous);
+}
+if (!readSecret('PLATFORM_SECRET_KEY') && nodeEnv !== 'test') {
+  throw new Error('PLATFORM_SECRET_KEY is required in non-test environments');
+}
+
+// Live (getter-backed) config values can still be assigned at runtime, e.g. by
+// tests or an admin toggle; an assigned value takes precedence over the source.
+const configOverrides: Record<string, unknown> = {};
 
 const config = {
   nodeEnv,
@@ -545,7 +538,9 @@ const config = {
     (network === 'mainnet' ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org'),
   sorobanRpcUrl:
     process.env.SOROBAN_RPC_URL ??
-    (network === 'mainnet' ? 'https://sorobanrpc.stellar.org' : 'https://soroban-testnet.stellar.org'),
+    (network === 'mainnet'
+      ? 'https://sorobanrpc.stellar.org'
+      : 'https://soroban-testnet.stellar.org'),
   /**
    * Legacy single-contract ID — kept for backward compatibility with any code
    * that has not yet been migrated to the per-contract IDs below.
@@ -575,11 +570,14 @@ const config = {
   connectionContractId: process.env.CONNECTION_CONTRACT_ID ?? process.env.CONTRACT_ID ?? '',
   /** Optional fifth contract, indexed for token and role events when deployed. */
   playerTokenContractId: process.env.PLAYER_TOKEN_CONTRACT_ID ?? '',
-  jwtSecret: (() => {
-    const value = required('JWT_SECRET');
-    validateSecretStrength('JWT_SECRET', value);
-    return value;
-  })(),
+  /** Live: a rotated JWT_SECRET is used without a restart (strength checked at startup). */
+  get jwtSecret(): string {
+    if ('jwtSecret' in configOverrides) return configOverrides['jwtSecret'] as string;
+    return required('JWT_SECRET');
+  },
+  set jwtSecret(value: string) {
+    configOverrides['jwtSecret'] = value;
+  },
   /**
    * SEP-10 server signing keypair secret (Stellar strkey starting with 'S').
    * Must be identical on every backend instance.  See docs/auth.md for
@@ -594,25 +592,49 @@ const config = {
    * src/utils/apiKeyLookup.ts and docs/auth.md.
    */
   apiKeyLookupSecret: apiKeyLookupSecretValue,
-  platformSecret: process.env.PLATFORM_SECRET ?? '',
+  get platformSecret(): string {
+    if ('platformSecret' in configOverrides) return configOverrides['platformSecret'] as string;
+    return readSecret('PLATFORM_SECRET') ?? '';
+  },
+  set platformSecret(value: string) {
+    configOverrides['platformSecret'] = value;
+  },
   pinata: {
-    apiKey: process.env.PINATA_API_KEY ?? '',
-    secret: process.env.PINATA_SECRET ?? '',
+    get apiKey(): string {
+      if ('pinata.apiKey' in configOverrides) return configOverrides['pinata.apiKey'] as string;
+      return readSecret('PINATA_API_KEY') ?? '';
+    },
+    set apiKey(value: string) {
+      configOverrides['pinata.apiKey'] = value;
+    },
+    get secret(): string {
+      if ('pinata.secret' in configOverrides) return configOverrides['pinata.secret'] as string;
+      return readSecret('PINATA_SECRET') ?? '';
+    },
+    set secret(value: string) {
+      configOverrides['pinata.secret'] = value;
+    },
     gateway: process.env.PINATA_GATEWAY ?? 'https://gateway.pinata.cloud',
     gateways: process.env.IPFS_GATEWAYS
-      ? process.env.IPFS_GATEWAYS.split(',').map(g => g.trim()).filter(Boolean)
-      : [
-        'https://gateway.pinata.cloud',
-        'https://cloudflare-ipfs.com',
-        'https://ipfs.io',
-      ],
+      ? process.env.IPFS_GATEWAYS.split(',')
+          .map((g) => g.trim())
+          .filter(Boolean)
+      : ['https://gateway.pinata.cloud', 'https://cloudflare-ipfs.com', 'https://ipfs.io'],
   },
-  platformFeeBps: parseNumericEnv('PLATFORM_FEE_BPS', process.env.PLATFORM_FEE_BPS, 500, { min: 0, max: 10000, integer: true }),
-  jwtSecretPrevious: (() => {
-    const value = process.env.JWT_SECRET_PREVIOUS ?? '';
-    if (value) validateSecretStrength('JWT_SECRET_PREVIOUS', value);
-    return value;
-  })(),
+  platformFeeBps: parseNumericEnv('PLATFORM_FEE_BPS', process.env.PLATFORM_FEE_BPS, 500, {
+    min: 0,
+    max: 10000,
+    integer: true,
+  }),
+  /** Live, like jwtSecret (strength checked at startup). */
+  get jwtSecretPrevious(): string {
+    if ('jwtSecretPrevious' in configOverrides)
+      return configOverrides['jwtSecretPrevious'] as string;
+    return readSecret('JWT_SECRET_PREVIOUS') ?? '';
+  },
+  set jwtSecretPrevious(value: string) {
+    configOverrides['jwtSecretPrevious'] = value;
+  },
   /**
    * Absolute end of the previous-secret grace window (epoch milliseconds).
    * Parsed from `JWT_SECRET_PREVIOUS_UNTIL` (Unix seconds or ISO-8601).
@@ -635,27 +657,45 @@ const config = {
     }
     return parsed;
   })(),
-  platformSecretKey: (() => {
-    const isTest = (process.env.NODE_ENV ?? 'development') === 'test';
-    const val = process.env.PLATFORM_SECRET_KEY ?? '';
-    if (!val && !isTest) {
-      throw new Error('PLATFORM_SECRET_KEY is required in non-test environments');
-    }
-    return val;
-  })(),
+  /** Live: src/utils/signer.ts rebuilds its keypair when this rotates. */
+  get platformSecretKey(): string {
+    if ('platformSecretKey' in configOverrides)
+      return configOverrides['platformSecretKey'] as string;
+    return readSecret('PLATFORM_SECRET_KEY') ?? '';
+  },
+  set platformSecretKey(value: string) {
+    configOverrides['platformSecretKey'] = value;
+  },
   dbDriver: (() => {
     const raw = process.env.DB_DRIVER ?? 'sqlite';
     const valid = envConstants.dbDrivers as readonly string[];
     if (!(valid as readonly string[]).includes(raw)) {
       throw new Error(
         `DB_DRIVER="${raw}" is invalid. Must be one of: ${valid.join(', ')}. ` +
-        `Check for typos — an unrecognised value does NOT fall back to SQLite; the server will not start.`
+          `Check for typos — an unrecognised value does NOT fall back to SQLite; the server will not start.`,
       );
     }
     return raw as 'sqlite' | 'postgres';
   })(),
   dbPath: process.env.DB_PATH ?? 'scout-off.db',
-  databaseUrl: process.env.DATABASE_URL ?? '',
+  databaseUrl: readSecret('DATABASE_URL') ?? '',
+  /** Optional comma-separated PostgreSQL read-replica URLs (DATABASE_READ_URLS). */
+  databaseReadUrls: (process.env.DATABASE_READ_URLS ?? '')
+    .split(',')
+    .map((u) => u.trim())
+    .filter((u) => u.length > 0),
+  /** Max replica lag in seconds before a replica is considered unhealthy. */
+  databaseReplicaMaxLagSeconds: (() => {
+    const raw = process.env.DATABASE_REPLICA_MAX_LAG_SECONDS;
+    if (raw === undefined || raw.trim() === '') return 5;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new Error(
+        `Invalid DATABASE_REPLICA_MAX_LAG_SECONDS: "${raw}". Must be a non-negative number.`,
+      );
+    }
+    return n;
+  })(),
   /**
    * Enable SSL/TLS for the PostgreSQL connection.
    *
@@ -681,15 +721,45 @@ const config = {
    * PostgresDriver's concurrency ceiling — requests beyond this queue for a
    * free connection rather than failing. Ignored when DB_DRIVER=sqlite.
    */
-  databasePoolSize: parseNumericEnv('DATABASE_POOL_SIZE', process.env.DATABASE_POOL_SIZE, 10, { min: 1, max: 100, integer: true }),
-  sqliteBusyTimeoutMs: parseNumericEnv('SQLITE_BUSY_TIMEOUT_MS', process.env.SQLITE_BUSY_TIMEOUT_MS, 5000, { min: 1, integer: true }),
-  databaseStatementTimeoutMs: parseNumericEnv('DB_STATEMENT_TIMEOUT_MS', process.env.DB_STATEMENT_TIMEOUT_MS, 25000, { min: 1, integer: true }),
-  databaseQueryTimeoutMs: parseNumericEnv('DB_QUERY_TIMEOUT_MS', process.env.DB_QUERY_TIMEOUT_MS, 30000, { min: 1, integer: true }),
-  databaseIdleTransactionTimeoutMs: parseNumericEnv('DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS', process.env.DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS, 60000, { min: 1, integer: true }),
+  databasePoolSize: parseNumericEnv('DATABASE_POOL_SIZE', process.env.DATABASE_POOL_SIZE, 10, {
+    min: 1,
+    max: 100,
+    integer: true,
+  }),
+  sqliteBusyTimeoutMs: parseNumericEnv(
+    'SQLITE_BUSY_TIMEOUT_MS',
+    process.env.SQLITE_BUSY_TIMEOUT_MS,
+    5000,
+    { min: 1, integer: true },
+  ),
+  databaseStatementTimeoutMs: parseNumericEnv(
+    'DB_STATEMENT_TIMEOUT_MS',
+    process.env.DB_STATEMENT_TIMEOUT_MS,
+    25000,
+    { min: 1, integer: true },
+  ),
+  databaseQueryTimeoutMs: parseNumericEnv(
+    'DB_QUERY_TIMEOUT_MS',
+    process.env.DB_QUERY_TIMEOUT_MS,
+    30000,
+    { min: 1, integer: true },
+  ),
+  databaseIdleTransactionTimeoutMs: parseNumericEnv(
+    'DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS',
+    process.env.DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS,
+    60000,
+    { min: 1, integer: true },
+  ),
   stellarHealthCheckEnabled: process.env.STELLAR_HEALTH_CHECK !== 'false',
   adminWallet: process.env.ADMIN_WALLET ?? '',
-  adminWallets: (process.env.ADMIN_WALLETS ?? process.env.ADMIN_WALLET ?? '').split(',').map(w => w.trim()).filter(w => w.length > 0),
-  adminThreshold: parseNumericEnv('ADMIN_THRESHOLD', process.env.ADMIN_THRESHOLD, 1, { min: 1, integer: true }),
+  adminWallets: (process.env.ADMIN_WALLETS ?? process.env.ADMIN_WALLET ?? '')
+    .split(',')
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0),
+  adminThreshold: parseNumericEnv('ADMIN_THRESHOLD', process.env.ADMIN_THRESHOLD, 1, {
+    min: 1,
+    integer: true,
+  }),
 
   // ── Admin IP allowlist ─────────────────────────────────────────────────
   /**
@@ -711,7 +781,8 @@ const config = {
     /** Content-Security-Policy value. Override via SECURITY_CSP env var. */
     csp: process.env.SECURITY_CSP ?? "default-src 'none'; frame-ancestors 'none'",
     /** Permissions-Policy value. Override via SECURITY_PERMISSIONS_POLICY env var. */
-    permissionsPolicy: process.env.SECURITY_PERMISSIONS_POLICY ?? 'camera=(), microphone=(), geolocation=()',
+    permissionsPolicy:
+      process.env.SECURITY_PERMISSIONS_POLICY ?? 'camera=(), microphone=(), geolocation=()',
   },
   webhook: {
     enabled: process.env.WEBHOOK_ENABLED === 'true',
@@ -737,11 +808,24 @@ const config = {
      * per the existing postWebhookWithRetry logic, rather than hanging
      * indefinitely.
      */
-    timeoutMs: parseNumericEnv('WEBHOOK_TIMEOUT_MS', process.env.WEBHOOK_TIMEOUT_MS, 10000, { min: 1, integer: true }),
+    timeoutMs: parseNumericEnv('WEBHOOK_TIMEOUT_MS', process.env.WEBHOOK_TIMEOUT_MS, 10000, {
+      min: 1,
+      integer: true,
+    }),
     /** Consecutive failed deliveries before a subscription is suspended (#1512). */
-    suspendAfterFailures: parseNumericEnv('WEBHOOK_SUSPEND_AFTER_FAILURES', process.env.WEBHOOK_SUSPEND_AFTER_FAILURES, 50, { min: 1, integer: true }),
+    suspendAfterFailures: parseNumericEnv(
+      'WEBHOOK_SUSPEND_AFTER_FAILURES',
+      process.env.WEBHOOK_SUSPEND_AFTER_FAILURES,
+      50,
+      { min: 1, integer: true },
+    ),
     /** Failures spanning longer than this (ms) also suspend a subscription (#1512). */
-    suspendAfterMs: parseNumericEnv('WEBHOOK_SUSPEND_AFTER_MS', process.env.WEBHOOK_SUSPEND_AFTER_MS, 86400000, { min: 1000, integer: true }),
+    suspendAfterMs: parseNumericEnv(
+      'WEBHOOK_SUSPEND_AFTER_MS',
+      process.env.WEBHOOK_SUSPEND_AFTER_MS,
+      86400000,
+      { min: 1000, integer: true },
+    ),
     /**
      * Delivery retry policy (#1859). Replaces the previously hard-coded
      * RETRY_OPTIONS constant in src/services/webhooks.ts.
@@ -749,9 +833,37 @@ const config = {
      * - retryBaseDelayMs: base delay for full-jitter exponential backoff.
      * - retryMaxDelayMs: upper bound for a single backoff delay.
      */
-    maxRetries: parseNumericEnv('WEBHOOK_MAX_RETRIES', process.env.WEBHOOK_MAX_RETRIES, 3, { min: 1, max: 20, integer: true }),
-    retryBaseDelayMs: parseNumericEnv('WEBHOOK_RETRY_BASE_DELAY_MS', process.env.WEBHOOK_RETRY_BASE_DELAY_MS, 500, { min: 1, max: 600000, integer: true }),
-    retryMaxDelayMs: parseNumericEnv('WEBHOOK_RETRY_MAX_DELAY_MS', process.env.WEBHOOK_RETRY_MAX_DELAY_MS, 5000, { min: 1, max: 3600000, integer: true }),
+    maxRetries: parseNumericEnv('WEBHOOK_MAX_RETRIES', process.env.WEBHOOK_MAX_RETRIES, 3, {
+      min: 1,
+      max: 20,
+      integer: true,
+    }),
+    retryBaseDelayMs: parseNumericEnv(
+      'WEBHOOK_RETRY_BASE_DELAY_MS',
+      process.env.WEBHOOK_RETRY_BASE_DELAY_MS,
+      500,
+      { min: 1, max: 600000, integer: true },
+    ),
+    retryMaxDelayMs: parseNumericEnv(
+      'WEBHOOK_RETRY_MAX_DELAY_MS',
+      process.env.WEBHOOK_RETRY_MAX_DELAY_MS,
+      5000,
+      { min: 1, max: 3600000, integer: true },
+    ),
+    /** Max concurrent indexer webhook deliveries per process (WEBHOOK_DISPATCH_CONCURRENCY). */
+    dispatchConcurrency: parseNumericEnv(
+      'WEBHOOK_DISPATCH_CONCURRENCY',
+      process.env.WEBHOOK_DISPATCH_CONCURRENCY,
+      10,
+      { min: 1, max: 1000, integer: true },
+    ),
+    /** Max pending indexer webhook deliveries, excluding running ones (WEBHOOK_DISPATCH_MAX_QUEUE). */
+    dispatchMaxQueue: parseNumericEnv(
+      'WEBHOOK_DISPATCH_MAX_QUEUE',
+      process.env.WEBHOOK_DISPATCH_MAX_QUEUE,
+      1000,
+      { min: 1, max: 1000000, integer: true },
+    ),
   },
   /**
    * Dead-letter queue alerting (#1131).
@@ -794,12 +906,30 @@ const config = {
   webhookSecretEncryptionKeys: process.env.WEBHOOK_SECRET_ENCRYPTION_KEYS ?? '',
   webhookSecretEncryptionActiveKeyId: process.env.WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID ?? '',
   // Online re-encryption job (#1513): rows per batch and pause between batches.
-  encryptionReencryptBatchSize: parseNumericEnv('ENCRYPTION_REENCRYPT_BATCH_SIZE', process.env.ENCRYPTION_REENCRYPT_BATCH_SIZE, 100, { min: 1, max: 5000, integer: true }),
-  encryptionReencryptIntervalMs: parseNumericEnv('ENCRYPTION_REENCRYPT_INTERVAL_MS', process.env.ENCRYPTION_REENCRYPT_INTERVAL_MS, 1000, { min: 10, max: 3600000, integer: true }),
+  encryptionReencryptBatchSize: parseNumericEnv(
+    'ENCRYPTION_REENCRYPT_BATCH_SIZE',
+    process.env.ENCRYPTION_REENCRYPT_BATCH_SIZE,
+    100,
+    { min: 1, max: 5000, integer: true },
+  ),
+  encryptionReencryptIntervalMs: parseNumericEnv(
+    'ENCRYPTION_REENCRYPT_INTERVAL_MS',
+    process.env.ENCRYPTION_REENCRYPT_INTERVAL_MS,
+    1000,
+    { min: 10, max: 3600000, integer: true },
+  ),
   rateLimit: {
     enabled: process.env.RATE_LIMIT_ENABLED !== 'false',
-    windowMs: parseNumericEnv('RATE_LIMIT_WINDOW_MS', process.env.RATE_LIMIT_WINDOW_MS, 60000, { min: 1, integer: true }),
-    max: parseNumericEnv('RATE_LIMIT_MAX', process.env.RATE_LIMIT_MAX, process.env.NODE_ENV === 'test' ? 1000 : 60, { min: 1, integer: true }),
+    windowMs: parseNumericEnv('RATE_LIMIT_WINDOW_MS', process.env.RATE_LIMIT_WINDOW_MS, 60000, {
+      min: 1,
+      integer: true,
+    }),
+    max: parseNumericEnv(
+      'RATE_LIMIT_MAX',
+      process.env.RATE_LIMIT_MAX,
+      process.env.NODE_ENV === 'test' ? 1000 : 60,
+      { min: 1, integer: true },
+    ),
   },
   ipReputation: {
     // Disabled by default in tests: supertest sends every request from the
@@ -807,33 +937,77 @@ const config = {
     // single test file exercises would otherwise accumulate enough
     // AUTH_FAILURE/ERROR_4XX points within one process to trip the
     // 'blocked' tier and 429 unrelated, later requests in the same file.
-    enabled: process.env.IP_REPUTATION_ENABLED !== undefined
-      ? process.env.IP_REPUTATION_ENABLED !== 'false'
-      : process.env.NODE_ENV !== 'test',
+    enabled:
+      process.env.IP_REPUTATION_ENABLED !== undefined
+        ? process.env.IP_REPUTATION_ENABLED !== 'false'
+        : process.env.NODE_ENV !== 'test',
   },
   authRateLimit: {
-    windowMs: parseNumericEnv('AUTH_RATE_LIMIT_WINDOW_MS', process.env.AUTH_RATE_LIMIT_WINDOW_MS, 60000, { min: 1, integer: true }),
-    ipMax: parseNumericEnv('AUTH_RATE_LIMIT_IP_MAX', process.env.AUTH_RATE_LIMIT_IP_MAX, 60, { min: 1, integer: true }),
-    max: parseNumericEnv('AUTH_RATE_LIMIT_MAX', process.env.AUTH_RATE_LIMIT_MAX, process.env.NODE_ENV === 'test' ? 1000 : 5, { min: 1, integer: true }),
+    windowMs: parseNumericEnv(
+      'AUTH_RATE_LIMIT_WINDOW_MS',
+      process.env.AUTH_RATE_LIMIT_WINDOW_MS,
+      60000,
+      { min: 1, integer: true },
+    ),
+    ipMax: parseNumericEnv('AUTH_RATE_LIMIT_IP_MAX', process.env.AUTH_RATE_LIMIT_IP_MAX, 60, {
+      min: 1,
+      integer: true,
+    }),
+    max: parseNumericEnv(
+      'AUTH_RATE_LIMIT_MAX',
+      process.env.AUTH_RATE_LIMIT_MAX,
+      process.env.NODE_ENV === 'test' ? 1000 : 5,
+      { min: 1, integer: true },
+    ),
   },
   playerImportRateLimit: {
-    windowMs: parseNumericEnv('PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS', process.env.PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS, 60000, { min: 1, integer: true }),
-    max: parseNumericEnv('PLAYER_IMPORT_RATE_LIMIT_MAX', process.env.PLAYER_IMPORT_RATE_LIMIT_MAX, process.env.NODE_ENV === 'test' ? 1000 : 5, { min: 1, integer: true }),
+    windowMs: parseNumericEnv(
+      'PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS',
+      process.env.PLAYER_IMPORT_RATE_LIMIT_WINDOW_MS,
+      60000,
+      { min: 1, integer: true },
+    ),
+    max: parseNumericEnv(
+      'PLAYER_IMPORT_RATE_LIMIT_MAX',
+      process.env.PLAYER_IMPORT_RATE_LIMIT_MAX,
+      process.env.NODE_ENV === 'test' ? 1000 : 5,
+      { min: 1, integer: true },
+    ),
   },
   // Stricter than the default walletRateLimit() pool (#1037): this endpoint's
   // entire purpose is to make the backend issue an outbound HTTP request to a
   // caller-supplied URL, so its per-wallet cost is much higher than a normal
   // write. Tuned to the same 5/min ceiling as admin bulk-import.
   webhookTestRateLimit: {
-    windowMs: parseNumericEnv('WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS', process.env.WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS, 60000, { min: 1, integer: true }),
-    max: parseNumericEnv('WEBHOOK_TEST_RATE_LIMIT_MAX', process.env.WEBHOOK_TEST_RATE_LIMIT_MAX, process.env.NODE_ENV === 'test' ? 1000 : 5, { min: 1, integer: true }),
+    windowMs: parseNumericEnv(
+      'WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS',
+      process.env.WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS,
+      60000,
+      { min: 1, integer: true },
+    ),
+    max: parseNumericEnv(
+      'WEBHOOK_TEST_RATE_LIMIT_MAX',
+      process.env.WEBHOOK_TEST_RATE_LIMIT_MAX,
+      process.env.NODE_ENV === 'test' ? 1000 : 5,
+      { min: 1, integer: true },
+    ),
   },
   // Per-player milestone submission rate limit (#1137): guards against a
   // validator (or compromised key) flooding a single player's milestone history.
   // Default: 10 submissions per player per hour.
   milestonePlayerRateLimit: {
-    windowMs: parseNumericEnv('MILESTONE_PLAYER_RATE_WINDOW_MS', process.env.MILESTONE_PLAYER_RATE_WINDOW_MS, 3_600_000, { min: 1, integer: true }),
-    max: parseNumericEnv('MILESTONE_PLAYER_RATE_MAX', process.env.MILESTONE_PLAYER_RATE_MAX, process.env.NODE_ENV === 'test' ? 1000 : 10, { min: 1, integer: true }),
+    windowMs: parseNumericEnv(
+      'MILESTONE_PLAYER_RATE_WINDOW_MS',
+      process.env.MILESTONE_PLAYER_RATE_WINDOW_MS,
+      3_600_000,
+      { min: 1, integer: true },
+    ),
+    max: parseNumericEnv(
+      'MILESTONE_PLAYER_RATE_MAX',
+      process.env.MILESTONE_PLAYER_RATE_MAX,
+      process.env.NODE_ENV === 'test' ? 1000 : 10,
+      { min: 1, integer: true },
+    ),
   },
   bodyLimit: {
     // Maximum JSON payload size (default: 1MB)
@@ -850,12 +1024,23 @@ const config = {
   showErrorDetails: nodeEnv === 'development' || nodeEnv === 'test',
   useMockServices: nodeEnv === 'development' || nodeEnv === 'test',
   backfillFromLedger: process.env.INDEXER_BACKFILL_FROM_LEDGER
-    ? parseNumericEnv('INDEXER_BACKFILL_FROM_LEDGER', process.env.INDEXER_BACKFILL_FROM_LEDGER, 0, { min: 0, integer: true })
+    ? parseNumericEnv('INDEXER_BACKFILL_FROM_LEDGER', process.env.INDEXER_BACKFILL_FROM_LEDGER, 0, {
+        min: 0,
+        integer: true,
+      })
     : null,
   /** Subscription grace period in hours after expiry during which access is still granted. */
-  subscriptionGracePeriodHours: parseNumericEnv('SUBSCRIPTION_GRACE_PERIOD_HOURS', process.env.SUBSCRIPTION_GRACE_PERIOD_HOURS, 24, { min: 0, integer: true }),
+  subscriptionGracePeriodHours: parseNumericEnv(
+    'SUBSCRIPTION_GRACE_PERIOD_HOURS',
+    process.env.SUBSCRIPTION_GRACE_PERIOD_HOURS,
+    24,
+    { min: 0, integer: true },
+  ),
   /** Global request timeout in milliseconds before the server responds with 503. */
-  requestTimeoutMs: parseNumericEnv('REQUEST_TIMEOUT_MS', process.env.REQUEST_TIMEOUT_MS, 30000, { min: 1, integer: true }),
+  requestTimeoutMs: parseNumericEnv('REQUEST_TIMEOUT_MS', process.env.REQUEST_TIMEOUT_MS, 30000, {
+    min: 1,
+    integer: true,
+  }),
   /**
    * HTTP server socket timeouts (#1593). keepAliveTimeoutMs must be shorter
    * than the load balancer's idle timeout to avoid 502s on reused sockets,
@@ -864,30 +1049,76 @@ const config = {
    * long-lived SSE response streams.
    */
   http: {
-    keepAliveTimeoutMs: parseNumericEnv('HTTP_KEEP_ALIVE_TIMEOUT_MS', process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS, 65000, { min: 1, integer: true }),
-    headersTimeoutMs: parseNumericEnv('HTTP_HEADERS_TIMEOUT_MS', process.env.HTTP_HEADERS_TIMEOUT_MS, 66000, { min: 1, integer: true }),
-    requestTimeoutMs: parseNumericEnv('HTTP_REQUEST_TIMEOUT_MS', process.env.HTTP_REQUEST_TIMEOUT_MS, 120000, { min: 1, integer: true }),
+    keepAliveTimeoutMs: parseNumericEnv(
+      'HTTP_KEEP_ALIVE_TIMEOUT_MS',
+      process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS,
+      65000,
+      { min: 1, integer: true },
+    ),
+    headersTimeoutMs: parseNumericEnv(
+      'HTTP_HEADERS_TIMEOUT_MS',
+      process.env.HTTP_HEADERS_TIMEOUT_MS,
+      66000,
+      { min: 1, integer: true },
+    ),
+    requestTimeoutMs: parseNumericEnv(
+      'HTTP_REQUEST_TIMEOUT_MS',
+      process.env.HTTP_REQUEST_TIMEOUT_MS,
+      120000,
+      { min: 1, integer: true },
+    ),
   },
   /** Lease expiry for pending idempotency claims (ms). A crashed request releases its claim after this window. */
-  idempotencyLeaseMs: parseNumericEnv('IDEMPOTENCY_LEASE_MS', process.env.IDEMPOTENCY_LEASE_MS, 35000, { min: 1000, integer: true }),
+  idempotencyLeaseMs: parseNumericEnv(
+    'IDEMPOTENCY_LEASE_MS',
+    process.env.IDEMPOTENCY_LEASE_MS,
+    35000,
+    { min: 1000, integer: true },
+  ),
   /**
    * Bounded Soroban transaction-confirmation poll window (ms). When a
    * submitted pay_to_contact/subscribe transaction has not reached a final
    * status (SUCCESS/FAILED) within this window, the payment is reported as
    * failed rather than treated as confirmed (Issue #761).
    */
-  txConfirmationTimeoutMs: parseNumericEnv('TX_CONFIRMATION_TIMEOUT_MS', process.env.TX_CONFIRMATION_TIMEOUT_MS, 60000, { min: 1000, integer: true }),
+  txConfirmationTimeoutMs: parseNumericEnv(
+    'TX_CONFIRMATION_TIMEOUT_MS',
+    process.env.TX_CONFIRMATION_TIMEOUT_MS,
+    60000,
+    { min: 1000, integer: true },
+  ),
   /** Per-request HTTP timeout for Pinata/IPFS axios calls (ms). */
-  ipfsHttpTimeoutMs: parseNumericEnv('IPFS_HTTP_TIMEOUT_MS', process.env.IPFS_HTTP_TIMEOUT_MS, 15000, { min: 1, integer: true }),
+  ipfsHttpTimeoutMs: parseNumericEnv(
+    'IPFS_HTTP_TIMEOUT_MS',
+    process.env.IPFS_HTTP_TIMEOUT_MS,
+    15000,
+    { min: 1, integer: true },
+  ),
   /** Per-request HTTP timeout for Soroban RPC / Stellar SDK calls (ms). */
-  stellarRpcTimeoutMs: parseNumericEnv('STELLAR_RPC_TIMEOUT_MS', process.env.STELLAR_RPC_TIMEOUT_MS, 15000, { min: 1, integer: true }),
+  stellarRpcTimeoutMs: parseNumericEnv(
+    'STELLAR_RPC_TIMEOUT_MS',
+    process.env.STELLAR_RPC_TIMEOUT_MS,
+    15000,
+    { min: 1, integer: true },
+  ),
   requestLog: {
-    skipPaths: (process.env.LOG_SKIP_PATHS ?? '/health,/health/liveness,/health/readiness,/ready,/metrics')
-      .split(',').map(p => p.trim()).filter(Boolean),
-    sampleRate: parseNumericEnv('LOG_SAMPLE_RATE', process.env.LOG_SAMPLE_RATE, 1, { min: 0, max: 1, integer: false }),
+    skipPaths: (
+      process.env.LOG_SKIP_PATHS ?? '/health,/health/liveness,/health/readiness,/ready,/metrics'
+    )
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean),
+    sampleRate: parseNumericEnv('LOG_SAMPLE_RATE', process.env.LOG_SAMPLE_RATE, 1, {
+      min: 0,
+      max: 1,
+      integer: false,
+    }),
   },
   /** TTL for player list cache entries in milliseconds. */
-  playerCacheTtlMs: parseNumericEnv('PLAYER_CACHE_TTL_MS', process.env.PLAYER_CACHE_TTL_MS, 60000, { min: 0, integer: true }),
+  playerCacheTtlMs: parseNumericEnv('PLAYER_CACHE_TTL_MS', process.env.PLAYER_CACHE_TTL_MS, 60000, {
+    min: 0,
+    integer: true,
+  }),
 
   /**
    * Cache key namespace prefix. Prepended to every key written to the cache
@@ -909,10 +1140,20 @@ const config = {
    * expiresInDays value expire after this many days from issuance (#674).
    * Set to 0 to disable the default expiry (not recommended for production).
    */
-  apiKeyDefaultTtlDays: parseNumericEnv('API_KEY_DEFAULT_TTL_DAYS', process.env.API_KEY_DEFAULT_TTL_DAYS, 90, { min: 0, integer: true }),
+  apiKeyDefaultTtlDays: parseNumericEnv(
+    'API_KEY_DEFAULT_TTL_DAYS',
+    process.env.API_KEY_DEFAULT_TTL_DAYS,
+    90,
+    { min: 0, integer: true },
+  ),
 
   /** Access token TTL in seconds (default: 15 minutes). Configurable via JWT_ACCESS_TTL_SECONDS. */
-  jwtAccessTtlSeconds: parseNumericEnv('JWT_ACCESS_TTL_SECONDS', process.env.JWT_ACCESS_TTL_SECONDS, 900, { min: 1, integer: true }),
+  jwtAccessTtlSeconds: parseNumericEnv(
+    'JWT_ACCESS_TTL_SECONDS',
+    process.env.JWT_ACCESS_TTL_SECONDS,
+    900,
+    { min: 1, integer: true },
+  ),
 
   /** Refresh token TTL in seconds (default: 7 days). */
   jwtRefreshTtlSeconds: 7 * 24 * 60 * 60,
@@ -922,11 +1163,28 @@ const config = {
    * After this window the offer is considered expired and cannot be responded to.
    * Default: 30 days. Set TRIAL_OFFER_TTL_MS=0 to disable expiry (not recommended).
    */
-  trialOfferTtlMs: parseNumericEnv('TRIAL_OFFER_TTL_MS', process.env.TRIAL_OFFER_TTL_MS, 30 * 24 * 60 * 60 * 1000, { min: 0, integer: true }),
+  trialOfferTtlMs: parseNumericEnv(
+    'TRIAL_OFFER_TTL_MS',
+    process.env.TRIAL_OFFER_TTL_MS,
+    30 * 24 * 60 * 60 * 1000,
+    { min: 0, integer: true },
+  ),
 
   playerImport: {
     /** Maximum number of rows accepted per bulk player import request. */
-    maxBatchSize: parseNumericEnv('PLAYER_IMPORT_MAX_BATCH', process.env.PLAYER_IMPORT_MAX_BATCH, 500, { min: 1, integer: true }),
+    maxBatchSize: parseNumericEnv(
+      'PLAYER_IMPORT_MAX_BATCH',
+      process.env.PLAYER_IMPORT_MAX_BATCH,
+      500,
+      { min: 1, integer: true },
+    ),
+    /** Maximum concurrent IPFS pin calls while preparing an import batch (#1794). */
+    concurrency: parseNumericEnv(
+      'PLAYER_IMPORT_CONCURRENCY',
+      process.env.PLAYER_IMPORT_CONCURRENCY,
+      3,
+      { min: 1, integer: true },
+    ),
   },
 
   // When set, the search cache (src/services/cache.ts) uses Redis so cache
@@ -935,32 +1193,82 @@ const config = {
   redisUrl: process.env.REDIS_URL || '',
 
   /** In-memory search cache max entries; LRU eviction applies after TTL expiry (default: 1000). */
-  searchCacheMaxEntries: parseNumericEnv('SEARCH_CACHE_MAX_ENTRIES', process.env.SEARCH_CACHE_MAX_ENTRIES, 1000, { min: 1, integer: true }),
+  searchCacheMaxEntries: parseNumericEnv(
+    'SEARCH_CACHE_MAX_ENTRIES',
+    process.env.SEARCH_CACHE_MAX_ENTRIES,
+    1000,
+    { min: 1, integer: true },
+  ),
 
   /** TTL for pinJson deduplication cache entries in milliseconds (default: 5 min). */
-  pinJsonCacheTtlMs: parseNumericEnv('PIN_JSON_CACHE_TTL_MS', process.env.PIN_JSON_CACHE_TTL_MS, 300000, { min: 0, integer: true }),
+  pinJsonCacheTtlMs: parseNumericEnv(
+    'PIN_JSON_CACHE_TTL_MS',
+    process.env.PIN_JSON_CACHE_TTL_MS,
+    300000,
+    { min: 0, integer: true },
+  ),
 
   /** Age threshold for pending pins before reconciliation in milliseconds (default: 5 min). */
-  ipfsReconcileAgeMs: parseNumericEnv('IPFS_RECONCILE_AGE_MS', process.env.IPFS_RECONCILE_AGE_MS, 300000, { min: 0, integer: true }),
+  ipfsReconcileAgeMs: parseNumericEnv(
+    'IPFS_RECONCILE_AGE_MS',
+    process.env.IPFS_RECONCILE_AGE_MS,
+    300000,
+    { min: 0, integer: true },
+  ),
 
   /** Scheduled interval for IPFS pending pin reconciliation in milliseconds (default: 60s). */
-  ipfsReconcileIntervalMs: parseNumericEnv('IPFS_RECONCILE_INTERVAL_MS', process.env.IPFS_RECONCILE_INTERVAL_MS, 60000, { min: 1000, integer: true }),
+  ipfsReconcileIntervalMs: parseNumericEnv(
+    'IPFS_RECONCILE_INTERVAL_MS',
+    process.env.IPFS_RECONCILE_INTERVAL_MS,
+    60000,
+    { min: 1000, integer: true },
+  ),
 
   /** Interval for IPFS pending-pin retry attempts in milliseconds (default: 30s, min: 5s). */
-  ipfsPinRetryIntervalMs: parseNumericEnv('IPFS_PIN_RETRY_INTERVAL_MS', process.env.IPFS_PIN_RETRY_INTERVAL_MS, 30000, { min: 5000, integer: true }),
+  ipfsPinRetryIntervalMs: parseNumericEnv(
+    'IPFS_PIN_RETRY_INTERVAL_MS',
+    process.env.IPFS_PIN_RETRY_INTERVAL_MS,
+    30000,
+    { min: 5000, integer: true },
+  ),
 
   /** Max attempts before expiring a stuck pending pin during reconciliation (default: 5). */
-  ipfsReconcileMaxAttempts: parseNumericEnv('IPFS_RECONCILE_MAX_ATTEMPTS', process.env.IPFS_RECONCILE_MAX_ATTEMPTS, 5, { min: 1, integer: true }),
+  ipfsReconcileMaxAttempts: parseNumericEnv(
+    'IPFS_RECONCILE_MAX_ATTEMPTS',
+    process.env.IPFS_RECONCILE_MAX_ATTEMPTS,
+    5,
+    { min: 1, integer: true },
+  ),
 
   /** Maximum evidence file size in bytes (default: 50 MB). */
-  evidenceMaxBytes: parseNumericEnv('EVIDENCE_MAX_BYTES', process.env.EVIDENCE_MAX_BYTES, 50 * 1024 * 1024, { min: 1, integer: true }),
-  evidenceValidatorBytesPerHour: parseNumericEnv('EVIDENCE_VALIDATOR_BYTES_PER_HOUR', process.env.EVIDENCE_VALIDATOR_BYTES_PER_HOUR, 500 * 1024 * 1024, { min: 1, integer: true }),
+  evidenceMaxBytes: parseNumericEnv(
+    'EVIDENCE_MAX_BYTES',
+    process.env.EVIDENCE_MAX_BYTES,
+    50 * 1024 * 1024,
+    { min: 1, integer: true },
+  ),
+  evidenceValidatorBytesPerHour: parseNumericEnv(
+    'EVIDENCE_VALIDATOR_BYTES_PER_HOUR',
+    process.env.EVIDENCE_VALIDATOR_BYTES_PER_HOUR,
+    500 * 1024 * 1024,
+    { min: 1, integer: true },
+  ),
 
   /** TTL for multi-admin action proposals in milliseconds (default: 1 hour). */
-  adminActionTtlMs: parseNumericEnv('ADMIN_ACTION_TTL_MS', process.env.ADMIN_ACTION_TTL_MS, 3600000, { min: 1, integer: true }),
+  adminActionTtlMs: parseNumericEnv(
+    'ADMIN_ACTION_TTL_MS',
+    process.env.ADMIN_ACTION_TTL_MS,
+    3600000,
+    { min: 1, integer: true },
+  ),
 
   /** Minimum response size in bytes to trigger compression (default: 1024 bytes). */
-  compressionThresholdBytes: parseNumericEnv('COMPRESSION_THRESHOLD', process.env.COMPRESSION_THRESHOLD ?? process.env.COMPRESSION_THRESHOLD_BYTES, 1024, { min: 1, integer: true }),
+  compressionThresholdBytes: parseNumericEnv(
+    'COMPRESSION_THRESHOLD',
+    process.env.COMPRESSION_THRESHOLD ?? process.env.COMPRESSION_THRESHOLD_BYTES,
+    1024,
+    { min: 1, integer: true },
+  ),
 
   /**
    * Log redaction configuration for sensitive data in production logs.
@@ -970,9 +1278,19 @@ const config = {
     /** Enable redaction in non-development environments (default: true for staging/production) */
     enabled: nodeEnv !== 'development' && process.env.LOG_REDACTION_ENABLED !== 'false',
     /** Number of characters to preserve at the start of masked wallet addresses (default: 1) */
-    walletPrefixLength: parseNumericEnv('LOG_REDACTION_WALLET_PREFIX', process.env.LOG_REDACTION_WALLET_PREFIX, 1, { min: 1, max: 10, integer: true }),
+    walletPrefixLength: parseNumericEnv(
+      'LOG_REDACTION_WALLET_PREFIX',
+      process.env.LOG_REDACTION_WALLET_PREFIX,
+      1,
+      { min: 1, max: 10, integer: true },
+    ),
     /** Number of characters to preserve at the end of masked wallet addresses (default: 4) */
-    walletSuffixLength: parseNumericEnv('LOG_REDACTION_WALLET_SUFFIX', process.env.LOG_REDACTION_WALLET_SUFFIX, 4, { min: 1, max: 10, integer: true }),
+    walletSuffixLength: parseNumericEnv(
+      'LOG_REDACTION_WALLET_SUFFIX',
+      process.env.LOG_REDACTION_WALLET_SUFFIX,
+      4,
+      { min: 1, max: 10, integer: true },
+    ),
     /** Hash correlation IDs instead of logging them raw (default: false) */
     hashCorrelationIds: process.env.LOG_REDACTION_HASH_CORRELATION_IDS === 'true',
   },
@@ -986,8 +1304,18 @@ const config = {
    * TIER_DIVERGENCE_SAMPLE_SIZE  — max players to check per run (default: 100)
    */
   tierDivergence: {
-    intervalMs: parseNumericEnv('TIER_DIVERGENCE_INTERVAL_MS', process.env.TIER_DIVERGENCE_INTERVAL_MS, 300_000, { min: 1000, integer: true }),
-    sampleSize: parseNumericEnv('TIER_DIVERGENCE_SAMPLE_SIZE', process.env.TIER_DIVERGENCE_SAMPLE_SIZE, 100, { min: 1, integer: true }),
+    intervalMs: parseNumericEnv(
+      'TIER_DIVERGENCE_INTERVAL_MS',
+      process.env.TIER_DIVERGENCE_INTERVAL_MS,
+      300_000,
+      { min: 1000, integer: true },
+    ),
+    sampleSize: parseNumericEnv(
+      'TIER_DIVERGENCE_SAMPLE_SIZE',
+      process.env.TIER_DIVERGENCE_SAMPLE_SIZE,
+      100,
+      { min: 1, integer: true },
+    ),
   },
 
   // ── Sensitive-read auditing (#1531) ────────────────────────────────────
@@ -1007,9 +1335,24 @@ const config = {
   // The scheduled job verifies new audit rows incrementally once an hour and
   // walks the whole chain weekly, catching edits to already-verified rows.
   auditVerify: {
-    intervalMs: parseNumericEnv('AUDIT_VERIFY_INTERVAL_MS', process.env.AUDIT_VERIFY_INTERVAL_MS, 3_600_000, { min: 1000, integer: true }),
-    fullIntervalMs: parseNumericEnv('AUDIT_FULL_VERIFY_INTERVAL_MS', process.env.AUDIT_FULL_VERIFY_INTERVAL_MS, 604_800_000, { min: 60_000, integer: true }),
-    batchSize: parseNumericEnv('AUDIT_VERIFY_BATCH_SIZE', process.env.AUDIT_VERIFY_BATCH_SIZE, 5_000, { min: 1, integer: true }),
+    intervalMs: parseNumericEnv(
+      'AUDIT_VERIFY_INTERVAL_MS',
+      process.env.AUDIT_VERIFY_INTERVAL_MS,
+      3_600_000,
+      { min: 1000, integer: true },
+    ),
+    fullIntervalMs: parseNumericEnv(
+      'AUDIT_FULL_VERIFY_INTERVAL_MS',
+      process.env.AUDIT_FULL_VERIFY_INTERVAL_MS,
+      604_800_000,
+      { min: 60_000, integer: true },
+    ),
+    batchSize: parseNumericEnv(
+      'AUDIT_VERIFY_BATCH_SIZE',
+      process.env.AUDIT_VERIFY_BATCH_SIZE,
+      5_000,
+      { min: 1, integer: true },
+    ),
     /** Optional SSRF-safe GET webhook fired when a break is detected. */
     alertWebhookUrl: process.env.AUDIT_ALERT_WEBHOOK_URL?.trim() || null,
   },
@@ -1018,26 +1361,66 @@ const config = {
   // Per-component timeout for readiness probes (#1317)
   readiness: {
     timeouts: {
-      dbMs: parseNumericEnv('READINESS_DB_TIMEOUT_MS', process.env.READINESS_DB_TIMEOUT_MS, 2000, { min: 100, max: 30000, integer: true }),
-      ipfsMs: parseNumericEnv('READINESS_IPFS_TIMEOUT_MS', process.env.READINESS_IPFS_TIMEOUT_MS, 5000, { min: 100, max: 30000, integer: true }),
-      stellarMs: parseNumericEnv('READINESS_STELLAR_TIMEOUT_MS', process.env.READINESS_STELLAR_TIMEOUT_MS, 5000, { min: 100, max: 30000, integer: true }),
+      dbMs: parseNumericEnv('READINESS_DB_TIMEOUT_MS', process.env.READINESS_DB_TIMEOUT_MS, 2000, {
+        min: 100,
+        max: 30000,
+        integer: true,
+      }),
+      ipfsMs: parseNumericEnv(
+        'READINESS_IPFS_TIMEOUT_MS',
+        process.env.READINESS_IPFS_TIMEOUT_MS,
+        5000,
+        { min: 100, max: 30000, integer: true },
+      ),
+      stellarMs: parseNumericEnv(
+        'READINESS_STELLAR_TIMEOUT_MS',
+        process.env.READINESS_STELLAR_TIMEOUT_MS,
+        5000,
+        { min: 100, max: 30000, integer: true },
+      ),
     },
-    maxLag: parseNumericEnv('READINESS_MAX_LAG', process.env.READINESS_MAX_LAG, 100, { min: 0, integer: true }),
-    gracePeriodMs: parseNumericEnv('READINESS_GRACE_PERIOD_MS', process.env.READINESS_GRACE_PERIOD_MS, 5 * 60 * 1000, { min: 0, integer: true }),
+    maxLag: parseNumericEnv('READINESS_MAX_LAG', process.env.READINESS_MAX_LAG, 100, {
+      min: 0,
+      integer: true,
+    }),
+    gracePeriodMs: parseNumericEnv(
+      'READINESS_GRACE_PERIOD_MS',
+      process.env.READINESS_GRACE_PERIOD_MS,
+      5 * 60 * 1000,
+      { min: 0, integer: true },
+    ),
   },
 
   // ── SSE settings ──────────────────────────────────────────────────────
 
   // ── Shutdown configuration ────────────────────────────────────────────
   shutdown: {
-    timeoutMs: parseNumericEnv('SHUTDOWN_TIMEOUT_MS', process.env.SHUTDOWN_TIMEOUT_MS, 10_000, { min: 1_000, max: 600_000, integer: true }),
-    prestopDelayMs: parseNumericEnv('SHUTDOWN_PRESTOP_DELAY_MS', process.env.SHUTDOWN_PRESTOP_DELAY_MS, 0, { min: 0, max: 120_000, integer: true }),
+    timeoutMs: parseNumericEnv('SHUTDOWN_TIMEOUT_MS', process.env.SHUTDOWN_TIMEOUT_MS, 10_000, {
+      min: 1_000,
+      max: 600_000,
+      integer: true,
+    }),
+    prestopDelayMs: parseNumericEnv(
+      'SHUTDOWN_PRESTOP_DELAY_MS',
+      process.env.SHUTDOWN_PRESTOP_DELAY_MS,
+      0,
+      { min: 0, max: 120_000, integer: true },
+    ),
     /** In-flight request drain window. Unset: half of timeoutMs (see src/shutdown.ts). */
     requestDrainMs: process.env.SHUTDOWN_REQUEST_DRAIN_MS?.trim()
-      ? parseNumericEnv('SHUTDOWN_REQUEST_DRAIN_MS', process.env.SHUTDOWN_REQUEST_DRAIN_MS, 0, { min: 0, max: 600000, integer: true })
+      ? parseNumericEnv('SHUTDOWN_REQUEST_DRAIN_MS', process.env.SHUTDOWN_REQUEST_DRAIN_MS, 0, {
+          min: 0,
+          max: 600000,
+          integer: true,
+        })
       : undefined,
     /** Slice of the budget reserved for Redis/DB/tracing cleanup. */
-    cleanupReserveMs: parseNumericEnv('SHUTDOWN_CLEANUP_RESERVE_MS', process.env.SHUTDOWN_CLEANUP_RESERVE_MS, 2_000, { min: 0, max: 600000, integer: true }),
+    cleanupReserveMs: parseNumericEnv(
+      'SHUTDOWN_CLEANUP_RESERVE_MS',
+      process.env.SHUTDOWN_CLEANUP_RESERVE_MS,
+      2_000,
+      { min: 0, max: 600000, integer: true },
+    ),
   },
 
   // ── Server-Sent Events (SSE) ──────────────────────────────────────────
@@ -1045,30 +1428,73 @@ const config = {
   // fields directly (e.g. `config.sse.maxConnections = 1`).
   sse: {
     /** Interval between keep-alive pings sent to SSE clients (ms). */
-    keepaliveIntervalMs: parseNumericEnv('SSE_KEEPALIVE_INTERVAL_MS', process.env.SSE_KEEPALIVE_INTERVAL_MS, 15000, { min: 1000, max: 120000, integer: true }),
+    keepaliveIntervalMs: parseNumericEnv(
+      'SSE_KEEPALIVE_INTERVAL_MS',
+      process.env.SSE_KEEPALIVE_INTERVAL_MS,
+      15000,
+      { min: 1000, max: 120000, integer: true },
+    ),
     /** Interval for shared SSE auth sweep (re-check revocations, blocklists) (ms). */
-    authSweepIntervalMs: parseNumericEnv('SSE_AUTH_SWEEP_INTERVAL_MS', process.env.SSE_AUTH_SWEEP_INTERVAL_MS, 30000, { min: 1000, max: 600000, integer: true }),
+    authSweepIntervalMs: parseNumericEnv(
+      'SSE_AUTH_SWEEP_INTERVAL_MS',
+      process.env.SSE_AUTH_SWEEP_INTERVAL_MS,
+      30000,
+      { min: 1000, max: 600000, integer: true },
+    ),
     /** Max concurrent SSE connections (0 = unlimited). */
-    maxConnections: parseNumericEnv('SSE_MAX_CONNECTIONS', process.env.SSE_MAX_CONNECTIONS, 0, { min: 0, integer: true }),
+    maxConnections: parseNumericEnv('SSE_MAX_CONNECTIONS', process.env.SSE_MAX_CONNECTIONS, 0, {
+      min: 0,
+      integer: true,
+    }),
     /** Max concurrent SSE connections per authenticated wallet (0 = unlimited). */
-    maxConnectionsPerWallet: parseNumericEnv('SSE_MAX_CONNECTIONS_PER_WALLET', process.env.SSE_MAX_CONNECTIONS_PER_WALLET, 5, { min: 0, integer: true }),
+    maxConnectionsPerWallet: parseNumericEnv(
+      'SSE_MAX_CONNECTIONS_PER_WALLET',
+      process.env.SSE_MAX_CONNECTIONS_PER_WALLET,
+      5,
+      { min: 0, integer: true },
+    ),
     /** Base retry interval for SSE reconnect hints (ms); jitter is added per connection. */
-    retryMs: parseNumericEnv('SSE_RETRY_MS', process.env.SSE_RETRY_MS, 5000, { min: 1, max: 300000, integer: true }),
+    retryMs: parseNumericEnv('SSE_RETRY_MS', process.env.SSE_RETRY_MS, 5000, {
+      min: 1,
+      max: 300000,
+      integer: true,
+    }),
   },
 
   // ── In-memory cache limits and TTLs ───────────────────────────────────
   // Read at use time so tests can override fields directly.
   cache: {
     /** Max entries in src/services/inMemoryCacheStore.ts before eviction. */
-    maxEntries: parseNumericEnv('CACHE_MAX_ENTRIES', process.env.CACHE_MAX_ENTRIES, 1000, { min: 1, integer: true }),
+    maxEntries: parseNumericEnv('CACHE_MAX_ENTRIES', process.env.CACHE_MAX_ENTRIES, 1000, {
+      min: 1,
+      integer: true,
+    }),
     /** Max entries in the in-memory store in src/services/cacheStore.ts (LRU eviction). */
-    maxSize: parseNumericEnv('CACHE_MAX_SIZE', process.env.CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
+    maxSize: parseNumericEnv('CACHE_MAX_SIZE', process.env.CACHE_MAX_SIZE, 1000, {
+      min: 1,
+      integer: true,
+    }),
     /** Max entries in the process-local bounded player cache (src/services/cache.ts). */
-    playerMaxSize: parseNumericEnv('PLAYER_CACHE_MAX_SIZE', process.env.PLAYER_CACHE_MAX_SIZE, 1000, { min: 1, integer: true }),
+    playerMaxSize: parseNumericEnv(
+      'PLAYER_CACHE_MAX_SIZE',
+      process.env.PLAYER_CACHE_MAX_SIZE,
+      1000,
+      { min: 1, integer: true },
+    ),
     /** TTL for synchronous feature-flag lookups (ms). 0 disables caching. */
-    featureFlagTtlMs: parseNumericEnv('FEATURE_FLAG_CACHE_TTL_MS', process.env.FEATURE_FLAG_CACHE_TTL_MS, 5000, { min: 0, integer: true }),
+    featureFlagTtlMs: parseNumericEnv(
+      'FEATURE_FLAG_CACHE_TTL_MS',
+      process.env.FEATURE_FLAG_CACHE_TTL_MS,
+      5000,
+      { min: 0, integer: true },
+    ),
     /** TTL for cached wallet-blocklist entries (ms). 0 disables caching. */
-    walletBlocklistTtlMs: parseNumericEnv('WALLET_BLOCKLIST_CACHE_TTL_MS', process.env.WALLET_BLOCKLIST_CACHE_TTL_MS, 30000, { min: 0, integer: true }),
+    walletBlocklistTtlMs: parseNumericEnv(
+      'WALLET_BLOCKLIST_CACHE_TTL_MS',
+      process.env.WALLET_BLOCKLIST_CACHE_TTL_MS,
+      30000,
+      { min: 0, integer: true },
+    ),
   },
 
   // ── Reindexing / catch-up mode ────────────────────────────────────────
@@ -1076,15 +1502,39 @@ const config = {
   // (MAX_REINDEX_RANGE in src/services/reindexService.ts).
   reindex: {
     /** Ledgers processed per batch in steady-state mode. */
-    batchSize: parseNumericEnv('REINDEX_BATCH_SIZE', process.env.REINDEX_BATCH_SIZE, 100, { min: 1, max: 10000, integer: true }),
+    batchSize: parseNumericEnv('REINDEX_BATCH_SIZE', process.env.REINDEX_BATCH_SIZE, 100, {
+      min: 1,
+      max: 10000,
+      integer: true,
+    }),
     /** Delay between reindex batches in steady-state mode (ms). */
-    batchDelayMs: parseNumericEnv('REINDEX_BATCH_DELAY_MS', process.env.REINDEX_BATCH_DELAY_MS, 50, { min: 0, max: 60000, integer: true }),
+    batchDelayMs: parseNumericEnv(
+      'REINDEX_BATCH_DELAY_MS',
+      process.env.REINDEX_BATCH_DELAY_MS,
+      50,
+      { min: 0, max: 60000, integer: true },
+    ),
     /** Ledgers processed per batch in catch-up mode (further capped at 1 000 by the service). */
-    catchupBatchSize: parseNumericEnv('REINDEX_CATCHUP_BATCH_SIZE', process.env.REINDEX_CATCHUP_BATCH_SIZE, 500, { min: 1, max: 10000, integer: true }),
+    catchupBatchSize: parseNumericEnv(
+      'REINDEX_CATCHUP_BATCH_SIZE',
+      process.env.REINDEX_CATCHUP_BATCH_SIZE,
+      500,
+      { min: 1, max: 10000, integer: true },
+    ),
     /** Remaining-ledger threshold above which catch-up mode activates. */
-    catchupThreshold: parseNumericEnv('REINDEX_CATCHUP_THRESHOLD', process.env.REINDEX_CATCHUP_THRESHOLD, 500, { min: 1, integer: true }),
+    catchupThreshold: parseNumericEnv(
+      'REINDEX_CATCHUP_THRESHOLD',
+      process.env.REINDEX_CATCHUP_THRESHOLD,
+      500,
+      { min: 1, integer: true },
+    ),
     /** Backoff when RPC returns rate-limit errors during reindex (ms). */
-    rateLimitBackoffMs: parseNumericEnv('REINDEX_RATE_LIMIT_BACKOFF_MS', process.env.REINDEX_RATE_LIMIT_BACKOFF_MS, 2000, { min: 1, max: 300000, integer: true }),
+    rateLimitBackoffMs: parseNumericEnv(
+      'REINDEX_RATE_LIMIT_BACKOFF_MS',
+      process.env.REINDEX_RATE_LIMIT_BACKOFF_MS,
+      2000,
+      { min: 1, max: 300000, integer: true },
+    ),
   },
 
   // ── Indexer settings ──────────────────────────────────────────────────
@@ -1095,34 +1545,49 @@ const config = {
    * it on testnet/staging to cut RPC usage, lower it for local sandboxes.
    * Values below 1 s are rejected because they only multiply RPC load.
    */
-  indexerPollIntervalMs: parseNumericEnv('INDEXER_POLL_INTERVAL_MS', process.env.INDEXER_POLL_INTERVAL_MS, 5000, { min: 1000, max: 300000, integer: true }),
+  indexerPollIntervalMs: parseNumericEnv(
+    'INDEXER_POLL_INTERVAL_MS',
+    process.env.INDEXER_POLL_INTERVAL_MS,
+    5000,
+    { min: 1000, max: 300000, integer: true },
+  ),
   indexer: {
     /** Finality margin: ledgers to hold back from tip to avoid reorgs. */
-    finalityMargin: parseNumericEnv('INDEXER_FINALITY_MARGIN', process.env.INDEXER_FINALITY_MARGIN, 10, { min: 0, max: 1000, integer: true }),
+    finalityMargin: parseNumericEnv(
+      'INDEXER_FINALITY_MARGIN',
+      process.env.INDEXER_FINALITY_MARGIN,
+      10,
+      { min: 0, max: 1000, integer: true },
+    ),
     /** Ledger lag threshold before warning logs are emitted. */
-    lagWarnThreshold: parseNumericEnv('INDEXER_LAG_WARN_THRESHOLD', process.env.INDEXER_LAG_WARN_THRESHOLD, 100, { min: 1, integer: true }),
+    lagWarnThreshold: parseNumericEnv(
+      'INDEXER_LAG_WARN_THRESHOLD',
+      process.env.INDEXER_LAG_WARN_THRESHOLD,
+      100,
+      { min: 1, integer: true },
+    ),
   },
 
   // ── Proxy settings ────────────────────────────────────────────────────
   /** Number of trusted reverse-proxy hops in front of this server (for IP resolution). */
-  trustedProxyCount: parseNumericEnv('TRUSTED_PROXY_COUNT', process.env.TRUSTED_PROXY_COUNT, 1, { min: 0, integer: true }),
+  trustedProxyCount: parseNumericEnv('TRUSTED_PROXY_COUNT', process.env.TRUSTED_PROXY_COUNT, 1, {
+    min: 0,
+    integer: true,
+  }),
 
   // ── Database query monitoring ─────────────────────────────────────────
   /** Log queries slower than this threshold (ms). */
-  slowQueryThresholdMs: parseNumericEnv('SLOW_QUERY_THRESHOLD_MS', process.env.SLOW_QUERY_THRESHOLD_MS, 50, { min: 0, integer: true }),
+  slowQueryThresholdMs: parseNumericEnv(
+    'SLOW_QUERY_THRESHOLD_MS',
+    process.env.SLOW_QUERY_THRESHOLD_MS,
+    50,
+    { min: 0, integer: true },
+  ),
 
   // ── API documentation visibility (#1834) ──────────────────────────────
-  apiDocs: {
-    mode: (() : ApiDocsMode => {
-      const raw = (process.env.API_DOCS_MODE ?? '').trim().toLowerCase();
-      if (raw && !VALID_API_DOCS_MODES.has(raw)) {
-        throw new Error(`Invalid API_DOCS_MODE: "${raw}". Must be one of: ${[...VALID_API_DOCS_MODES].join(', ')}.`);
-      }
-      return raw ? raw as ApiDocsMode :
-        (nodeEnv === 'production' || nodeEnv === 'staging' ? 'admin' : 'public');
-    })(),
-    hideAdminPaths: parseBooleanEnv('API_DOCS_HIDE_ADMIN', process.env.API_DOCS_HIDE_ADMIN, false),
-  },
+  // Shared object from config.apiDocs so runtime overrides are seen everywhere.
+  // API_DOCS_HIDE_ADMIN is still validated strictly at startup (below).
+  apiDocs: apiDocsConfig,
   // ── Metrics endpoint protection ────────────────────────────────────────
   /**
    * Optional bearer token for /metrics endpoint protection.
@@ -1133,7 +1598,15 @@ const config = {
     /** Collection defaults to enabled, matching the old middleware behaviour. */
     enabled: parseBooleanEnv('METRICS_ENABLED', process.env.METRICS_ENABLED, true),
     /** Legacy millisecond histogram remains enabled by default. */
-    legacyMs: parseBooleanEnv('METRICS_LEGACY_MS', process.env.METRICS_LEGACY_MS, true),
+    /** Read live so the toggle takes effect without a restart. */
+    get legacyMs(): boolean {
+      if ('metrics.legacyMs' in configOverrides)
+        return configOverrides['metrics.legacyMs'] as boolean;
+      return parseBooleanEnv('METRICS_LEGACY_MS', process.env.METRICS_LEGACY_MS, true);
+    },
+    set legacyMs(value: boolean) {
+      configOverrides['metrics.legacyMs'] = value;
+    },
     authToken: process.env.METRICS_AUTH_TOKEN ?? '',
     /**
      * Optional CIDR allowlist for /metrics endpoint.
@@ -1144,7 +1617,10 @@ const config = {
     allowedCidrs: (() => {
       const raw = process.env.METRICS_ALLOWED_CIDRS;
       if (!raw || raw.trim() === '') return [];
-      return raw.split(',').map((cidr) => cidr.trim()).filter(Boolean);
+      return raw
+        .split(',')
+        .map((cidr) => cidr.trim())
+        .filter(Boolean);
     })(),
   },
 
@@ -1156,18 +1632,48 @@ const config = {
   circuitBreaker: {
     /** Generic breaker for outbound calls (Stellar RPC, etc.). */
     default: {
-      failureThreshold: parseNumericEnv('CIRCUIT_BREAKER_FAILURE_THRESHOLD', process.env.CIRCUIT_BREAKER_FAILURE_THRESHOLD, 5, { min: 1, integer: true }),
-      resetTimeoutMs: parseNumericEnv('CIRCUIT_BREAKER_RESET_TIMEOUT_MS', process.env.CIRCUIT_BREAKER_RESET_TIMEOUT_MS, 30000, { min: 1000, integer: true }),
+      failureThreshold: parseNumericEnv(
+        'CIRCUIT_BREAKER_FAILURE_THRESHOLD',
+        process.env.CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+        5,
+        { min: 1, integer: true },
+      ),
+      resetTimeoutMs: parseNumericEnv(
+        'CIRCUIT_BREAKER_RESET_TIMEOUT_MS',
+        process.env.CIRCUIT_BREAKER_RESET_TIMEOUT_MS,
+        30000,
+        { min: 1000, integer: true },
+      ),
     },
     /** Per-webhook-subscription breaker, keyed by subscription id (#1512). */
     webhook: {
-      failureThreshold: parseNumericEnv('WEBHOOK_BREAKER_FAILURE_THRESHOLD', process.env.WEBHOOK_BREAKER_FAILURE_THRESHOLD, 5, { min: 1, integer: true }),
-      resetTimeoutMs: parseNumericEnv('WEBHOOK_BREAKER_RESET_TIMEOUT_MS', process.env.WEBHOOK_BREAKER_RESET_TIMEOUT_MS, 60000, { min: 1000, integer: true }),
+      failureThreshold: parseNumericEnv(
+        'WEBHOOK_BREAKER_FAILURE_THRESHOLD',
+        process.env.WEBHOOK_BREAKER_FAILURE_THRESHOLD,
+        5,
+        { min: 1, integer: true },
+      ),
+      resetTimeoutMs: parseNumericEnv(
+        'WEBHOOK_BREAKER_RESET_TIMEOUT_MS',
+        process.env.WEBHOOK_BREAKER_RESET_TIMEOUT_MS,
+        60000,
+        { min: 1000, integer: true },
+      ),
     },
     /** IPFS / Pinata pinning breaker (often tuned tighter than the generic one). */
     ipfs: {
-      failureThreshold: parseNumericEnv('IPFS_BREAKER_FAILURE_THRESHOLD', process.env.IPFS_BREAKER_FAILURE_THRESHOLD, 5, { min: 1, integer: true }),
-      resetTimeoutMs: parseNumericEnv('IPFS_BREAKER_RESET_TIMEOUT_MS', process.env.IPFS_BREAKER_RESET_TIMEOUT_MS, 30000, { min: 1000, integer: true }),
+      failureThreshold: parseNumericEnv(
+        'IPFS_BREAKER_FAILURE_THRESHOLD',
+        process.env.IPFS_BREAKER_FAILURE_THRESHOLD,
+        5,
+        { min: 1, integer: true },
+      ),
+      resetTimeoutMs: parseNumericEnv(
+        'IPFS_BREAKER_RESET_TIMEOUT_MS',
+        process.env.IPFS_BREAKER_RESET_TIMEOUT_MS,
+        30000,
+        { min: 1000, integer: true },
+      ),
     },
   },
 
@@ -1178,10 +1684,12 @@ const config = {
     const valid = ['strict', 'warn'] as const;
     const validStr = valid as readonly string[];
     if (mode && !validStr.includes(mode)) {
-      throw new Error(`Invalid MIGRATION_CHECKSUM_MODE="${mode}". Must be one of: ${valid.join(', ')}`);
+      throw new Error(
+        `Invalid MIGRATION_CHECKSUM_MODE="${mode}". Must be one of: ${valid.join(', ')}`,
+      );
     }
     // Default: strict in production, warn in dev/staging/test
-    if (mode) return mode as typeof valid[number];
+    if (mode) return mode as (typeof valid)[number];
     return nodeEnv === 'production' ? 'strict' : 'warn';
   })(),
 
@@ -1198,9 +1706,11 @@ const config = {
     const valid = ['open', 'closed', 'local'] as const;
     const validStr = valid as readonly string[];
     if (policy && !validStr.includes(policy)) {
-      throw new Error(`Invalid RATE_LIMIT_ERROR_POLICY="${policy}". Must be one of: ${valid.join(', ')}`);
+      throw new Error(
+        `Invalid RATE_LIMIT_ERROR_POLICY="${policy}". Must be one of: ${valid.join(', ')}`,
+      );
     }
-    return policy as typeof valid[number] | '';
+    return policy as (typeof valid)[number] | '';
   })(),
 
   authRateLimitErrorPolicy: (() => {
@@ -1208,10 +1718,12 @@ const config = {
     const valid = ['open', 'closed', 'local'] as const;
     const validStr = valid as readonly string[];
     if (policy && !validStr.includes(policy)) {
-      throw new Error(`Invalid AUTH_RATE_LIMIT_ERROR_POLICY="${policy}". Must be one of: ${valid.join(', ')}`);
+      throw new Error(
+        `Invalid AUTH_RATE_LIMIT_ERROR_POLICY="${policy}". Must be one of: ${valid.join(', ')}`,
+      );
     }
     // Auth endpoints default to more restrictive: closed in production, local elsewhere
-    if (policy) return policy as typeof valid[number];
+    if (policy) return policy as (typeof valid)[number];
     return nodeEnv === 'production' ? 'closed' : 'local';
   })(),
 
@@ -1222,12 +1734,20 @@ const config = {
      * `players(pageSize: 100) { milestones }` query fires 100 concurrent RPC
      * calls. Default: 8. Minimum: 1.
      */
-    milestoneLoaderConcurrency: parseNumericEnv(
-      'MILESTONE_LOADER_CONCURRENCY',
-      process.env.MILESTONE_LOADER_CONCURRENCY,
-      8,
-      { min: 1, integer: true },
-    ),
+    get milestoneLoaderConcurrency(): number {
+      if ('graphql.milestoneLoaderConcurrency' in configOverrides)
+        return configOverrides['graphql.milestoneLoaderConcurrency'] as number;
+      // Read live so the cap can be tuned without a restart (validated at startup too).
+      return parseNumericEnv(
+        'MILESTONE_LOADER_CONCURRENCY',
+        process.env.MILESTONE_LOADER_CONCURRENCY,
+        8,
+        { min: 1, integer: true },
+      );
+    },
+    set milestoneLoaderConcurrency(value: number) {
+      configOverrides['graphql.milestoneLoaderConcurrency'] = value;
+    },
   },
 
   /** Only accept registered persisted GraphQL operations (GRAPHQL_PERSISTED_ONLY=true). */
@@ -1252,7 +1772,8 @@ const config = {
    */
   sep10ClientDomainRequired: (() => {
     const raw = process.env.SEP10_CLIENT_DOMAIN_REQUIRED ?? 'false';
-    if (!['true', 'false'].includes(raw)) throw new Error('SEP10_CLIENT_DOMAIN_REQUIRED must be true or false');
+    if (!['true', 'false'].includes(raw))
+      throw new Error('SEP10_CLIENT_DOMAIN_REQUIRED must be true or false');
     return raw === 'true';
   })(),
 
@@ -1262,7 +1783,9 @@ const config = {
    */
   sep10ClientDomainAllowlist: (() => {
     const domains = (process.env.SEP10_CLIENT_DOMAIN_ALLOWLIST ?? '')
-      .split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
+      .split(',')
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
     for (const d of domains) {
       if (!SEP10_CLIENT_DOMAIN_PATTERN.test(d)) {
         throw new Error(`SEP10_CLIENT_DOMAIN_ALLOWLIST contains an invalid hostname: "${d}"`);
@@ -1273,19 +1796,40 @@ const config = {
 
   retention: (() => {
     const enabledRaw = process.env.RETENTION_ENABLED ?? 'false';
-    if (!['true', 'false'].includes(enabledRaw)) throw new Error('RETENTION_ENABLED must be true or false');
+    if (!['true', 'false'].includes(enabledRaw))
+      throw new Error('RETENTION_ENABLED must be true or false');
     const policies = parseRetentionPolicies(process.env.RETENTION_POLICIES);
     const checkpointKey = process.env.RETENTION_CHECKPOINT_KEY ?? '';
-    if (checkpointKey && !/^[a-fA-F0-9]{64}$/.test(checkpointKey)) throw new Error('RETENTION_CHECKPOINT_KEY must be 32 bytes in hex');
-    if (enabledRaw === 'true' && policies.some(p => p.table === 'audit_log') && !checkpointKey) {
+    if (checkpointKey && !/^[a-fA-F0-9]{64}$/.test(checkpointKey))
+      throw new Error('RETENTION_CHECKPOINT_KEY must be 32 bytes in hex');
+    if (enabledRaw === 'true' && policies.some((p) => p.table === 'audit_log') && !checkpointKey) {
       throw new Error('Audit retention requires RETENTION_CHECKPOINT_KEY');
     }
     return {
-      enabled: enabledRaw === 'true', policies, checkpointKey,
-      batchSize: parseNumericEnv('RETENTION_BATCH_SIZE', process.env.RETENTION_BATCH_SIZE, 1000, { min: 1, max: 1000, integer: true }),
-      pauseMs: parseNumericEnv('RETENTION_PAUSE_MS', process.env.RETENTION_PAUSE_MS, 100, { min: 1, max: 60000, integer: true }),
-      intervalMs: parseNumericEnv('RETENTION_INTERVAL_MS', process.env.RETENTION_INTERVAL_MS, 86400000, { min: 1000, integer: true }),
-      maxBatches: parseNumericEnv('RETENTION_MAX_BATCHES', process.env.RETENTION_MAX_BATCHES, 100, { min: 1, max: 10000, integer: true }),
+      enabled: enabledRaw === 'true',
+      policies,
+      checkpointKey,
+      batchSize: parseNumericEnv('RETENTION_BATCH_SIZE', process.env.RETENTION_BATCH_SIZE, 1000, {
+        min: 1,
+        max: 1000,
+        integer: true,
+      }),
+      pauseMs: parseNumericEnv('RETENTION_PAUSE_MS', process.env.RETENTION_PAUSE_MS, 100, {
+        min: 1,
+        max: 60000,
+        integer: true,
+      }),
+      intervalMs: parseNumericEnv(
+        'RETENTION_INTERVAL_MS',
+        process.env.RETENTION_INTERVAL_MS,
+        86400000,
+        { min: 1000, integer: true },
+      ),
+      maxBatches: parseNumericEnv('RETENTION_MAX_BATCHES', process.env.RETENTION_MAX_BATCHES, 100, {
+        min: 1,
+        max: 10000,
+        integer: true,
+      }),
       archiveDir: path.resolve(process.env.RETENTION_ARCHIVE_DIR ?? './data/audit-archives'),
       exportDir: path.resolve(process.env.DATA_EXPORT_ARCHIVE_DIR ?? './data/exports'),
     };
@@ -1319,7 +1863,12 @@ const config = {
      * A node below this version may lack methods the backend depends on.
      * Default: 20 (the protocol version at which Soroban became stable on mainnet).
      */
-    minProtocolVersion: parseNumericEnv('SOROBAN_RPC_MIN_PROTOCOL_VERSION', process.env.SOROBAN_RPC_MIN_PROTOCOL_VERSION, 20, { min: 1, integer: true }),
+    minProtocolVersion: parseNumericEnv(
+      'SOROBAN_RPC_MIN_PROTOCOL_VERSION',
+      process.env.SOROBAN_RPC_MIN_PROTOCOL_VERSION,
+      20,
+      { min: 1, integer: true },
+    ),
     /**
      * When true, a protocol-version mismatch is a hard failure (not just a
      * warning) in production. Set SOROBAN_RPC_STRICT_PROTOCOL=true to enable.
@@ -1329,7 +1878,12 @@ const config = {
      * Milliseconds without a new ledger sequence before the RPC is marked
      * "degraded" in /health/dependencies. Default: 60 s.
      */
-    ledgerStuckMs: parseNumericEnv('SOROBAN_RPC_LEDGER_STUCK_MS', process.env.SOROBAN_RPC_LEDGER_STUCK_MS, 60_000, { min: 1000, integer: true }),
+    ledgerStuckMs: parseNumericEnv(
+      'SOROBAN_RPC_LEDGER_STUCK_MS',
+      process.env.SOROBAN_RPC_LEDGER_STUCK_MS,
+      60_000,
+      { min: 1000, integer: true },
+    ),
   },
 
   // ── Auth failure lockout (#1830) ───────────────────────────────────────────
@@ -1340,32 +1894,48 @@ const config = {
   // Relationship: baseMs <= maxMs is validated post-build below.
   authLockout: {
     /** Consecutive failures before the account is locked out. */
-    threshold: parseNumericEnv('AUTH_FAIL_THRESHOLD', process.env.AUTH_FAIL_THRESHOLD, 5, { min: 1, integer: true }),
+    threshold: parseNumericEnv('AUTH_FAIL_THRESHOLD', process.env.AUTH_FAIL_THRESHOLD, 5, {
+      min: 1,
+      integer: true,
+    }),
     /** Sliding window in which failures are counted (ms). */
-    windowMs: parseNumericEnv('AUTH_FAIL_WINDOW_MS', process.env.AUTH_FAIL_WINDOW_MS, 15 * 60 * 1000, { min: 1, integer: true }),
+    windowMs: parseNumericEnv(
+      'AUTH_FAIL_WINDOW_MS',
+      process.env.AUTH_FAIL_WINDOW_MS,
+      15 * 60 * 1000,
+      { min: 1, integer: true },
+    ),
     /** First lockout duration (ms); doubles with each additional failure. */
-    baseMs: parseNumericEnv('AUTH_LOCKOUT_BASE_MS', process.env.AUTH_LOCKOUT_BASE_MS, 30_000, { min: 1, integer: true }),
+    baseMs: parseNumericEnv('AUTH_LOCKOUT_BASE_MS', process.env.AUTH_LOCKOUT_BASE_MS, 30_000, {
+      min: 1,
+      integer: true,
+    }),
     /** Maximum lockout duration (ms). */
-    maxMs: parseNumericEnv('AUTH_LOCKOUT_MAX_MS', process.env.AUTH_LOCKOUT_MAX_MS, 15 * 60 * 1000, { min: 1, integer: true }),
+    maxMs: parseNumericEnv('AUTH_LOCKOUT_MAX_MS', process.env.AUTH_LOCKOUT_MAX_MS, 15 * 60 * 1000, {
+      min: 1,
+      integer: true,
+    }),
   },
 
   readinessCriticalDependencies: (() => {
     const raw = process.env.READINESS_CRITICAL ?? 'db,stellar';
-    const deps = raw.split(',').map((d) => d.trim().toLowerCase()).filter((d) => d);
+    const deps = raw
+      .split(',')
+      .map((d) => d.trim().toLowerCase())
+      .filter((d) => d);
     const valid = new Set(['db', 'ipfs', 'stellar', 'indexer']);
-    
+
     for (const dep of deps) {
       if (!valid.has(dep)) {
         throw new Error(
           `Invalid READINESS_CRITICAL value: "${dep}" is not a valid dependency. ` +
-          `Valid dependencies are: ${Array.from(valid).join(', ')}.`,
+            `Valid dependencies are: ${Array.from(valid).join(', ')}.`,
         );
       }
     }
-    
+
     return new Set(deps);
   })(),
-
 };
 
 // ── Post-config validation ────────────────────────────────────────────────────
@@ -1374,7 +1944,7 @@ const config = {
 if (config.authLockout.baseMs > config.authLockout.maxMs) {
   throw new Error(
     `Invalid auth-lockout config: AUTH_LOCKOUT_BASE_MS (${config.authLockout.baseMs}) ` +
-    `must be less than or equal to AUTH_LOCKOUT_MAX_MS (${config.authLockout.maxMs}).`,
+      `must be less than or equal to AUTH_LOCKOUT_MAX_MS (${config.authLockout.maxMs}).`,
   );
 }
 
@@ -1382,8 +1952,8 @@ if (config.authLockout.baseMs > config.authLockout.maxMs) {
 if (config.shutdown.prestopDelayMs >= config.shutdown.timeoutMs) {
   throw new Error(
     `Invalid shutdown config: SHUTDOWN_PRESTOP_DELAY_MS (${config.shutdown.prestopDelayMs}) ` +
-    `must be less than SHUTDOWN_TIMEOUT_MS (${config.shutdown.timeoutMs}). ` +
-    `The pre-stop delay must leave time for the actual shutdown sequence.`,
+      `must be less than SHUTDOWN_TIMEOUT_MS (${config.shutdown.timeoutMs}). ` +
+      `The pre-stop delay must leave time for the actual shutdown sequence.`,
   );
 }
 
@@ -1391,7 +1961,7 @@ if (config.shutdown.prestopDelayMs >= config.shutdown.timeoutMs) {
 if (config.webhook.retryMaxDelayMs < config.webhook.retryBaseDelayMs) {
   throw new Error(
     `Invalid webhook retry config: WEBHOOK_RETRY_MAX_DELAY_MS (${config.webhook.retryMaxDelayMs}) ` +
-    `must be greater than or equal to WEBHOOK_RETRY_BASE_DELAY_MS (${config.webhook.retryBaseDelayMs}).`,
+      `must be greater than or equal to WEBHOOK_RETRY_BASE_DELAY_MS (${config.webhook.retryBaseDelayMs}).`,
   );
 }
 
@@ -1404,8 +1974,8 @@ if (nodeEnv === 'production' || nodeEnv === 'staging') {
   if (!config.metrics.authToken && config.metrics.allowedCidrs.length === 0) {
     console.warn(
       '[config] WARNING: /metrics endpoint is exposed without protection (METRICS_AUTH_TOKEN or METRICS_ALLOWED_CIDRS not set). ' +
-      'This exposes operational and business signals to any internet client. ' +
-      'Set METRICS_AUTH_TOKEN or METRICS_ALLOWED_CIDRS to restrict access.',
+        'This exposes operational and business signals to any internet client. ' +
+        'Set METRICS_AUTH_TOKEN or METRICS_ALLOWED_CIDRS to restrict access.',
     );
   }
 }
@@ -1416,13 +1986,19 @@ if (nodeEnv === 'production' || nodeEnv === 'staging') {
 if (config.http.headersTimeoutMs <= config.http.keepAliveTimeoutMs) {
   throw new Error(
     `HTTP_HEADERS_TIMEOUT_MS (${config.http.headersTimeoutMs}) must be greater than ` +
-    `HTTP_KEEP_ALIVE_TIMEOUT_MS (${config.http.keepAliveTimeoutMs})`,
+      `HTTP_KEEP_ALIVE_TIMEOUT_MS (${config.http.keepAliveTimeoutMs})`,
   );
 }
 
-export function isProduction(): boolean { return config.nodeEnv === 'production'; }
-export function isStaging(): boolean { return config.nodeEnv === 'staging'; }
-export function isDevelopment(): boolean { return config.nodeEnv === 'development'; }
+export function isProduction(): boolean {
+  return config.nodeEnv === 'production';
+}
+export function isStaging(): boolean {
+  return config.nodeEnv === 'staging';
+}
+export function isDevelopment(): boolean {
+  return config.nodeEnv === 'development';
+}
 
 /** Route prefix constants for API versioning */
 export const API_PREFIX = process.env.API_PREFIX ?? '/api';

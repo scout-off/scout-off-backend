@@ -70,7 +70,10 @@ export async function updateProfile(
       try {
         simResult = await server.simulateTransaction(tx);
       } catch (err) {
-        throw new PaymentError(`Simulation request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        throw new PaymentError(
+          `Simulation request failed: ${(err as Error).message}`,
+          'NETWORK_ERROR',
+        );
       }
 
       if (rpc.Api.isSimulationError(simResult)) {
@@ -109,7 +112,7 @@ export async function updateProfile(
       }
 
       if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
-        const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
+        const resultMeta = (getResult as unknown as { resultMetaXdr?: string }).resultMetaXdr ?? '';
         if (isPlayerNotFoundError(resultMeta)) {
           throw new PaymentError('Player not found on-chain', 'MISSING_PLAYER');
         }

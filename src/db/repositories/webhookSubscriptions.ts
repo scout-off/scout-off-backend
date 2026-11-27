@@ -11,7 +11,12 @@ import crypto from 'crypto';
 import config from '../../config';
 import { EventRecord, ContractEventType } from '../../types';
 import { encryptWebhookSecret, decryptWebhookSecret } from '../../utils/webhookSecretCipher';
-import { ApiKeyLimitError, MAX_API_KEYS_PER_SCOUT, MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT, WebhookSubscriptionLimitError } from '../../utils/scoutResourceLimits';
+import {
+  ApiKeyLimitError,
+  MAX_API_KEYS_PER_SCOUT,
+  MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT,
+  WebhookSubscriptionLimitError,
+} from '../../utils/scoutResourceLimits';
 
 // ─── Webhook subscriptions (#470) ────────────────────────────────────────────
 //
@@ -54,9 +59,7 @@ export function createWebhookSubscription(
   // issuance time) but is never written back to storage.
   const encryptedSecret = encryptWebhookSecret(finalSecret);
   const eventTypesJson = eventTypes && eventTypes.length > 0 ? JSON.stringify(eventTypes) : null;
-  const encryptedPreviousSecret = previousSecret
-    ? encryptWebhookSecret(previousSecret)
-    : null;
+  const encryptedPreviousSecret = previousSecret ? encryptWebhookSecret(previousSecret) : null;
   const sql = `INSERT INTO webhook_subscriptions 
     (url, secret, scout_wallet, event_types, previous_secret, previous_secret_expires_at) 
     VALUES (?, ?, ?, ?, ?, ?)`;
@@ -71,14 +74,16 @@ export function createWebhookSubscription(
         }
       }
 
-      const info = getDb().prepare(sql).run(
-        url,
-        encryptedSecret,
-        scoutWallet ?? null,
-        eventTypesJson,
-        encryptedPreviousSecret ?? null,
-        previousSecretExpiresAt ?? null,
-      );
+      const info = getDb()
+        .prepare(sql)
+        .run(
+          url,
+          encryptedSecret,
+          scoutWallet ?? null,
+          eventTypesJson,
+          encryptedPreviousSecret ?? null,
+          previousSecretExpiresAt ?? null,
+        );
       return {
         id: Number(info.lastInsertRowid),
         url,
@@ -117,9 +122,7 @@ export function listWebhookSubscriptions(): WebhookSubscription[] {
  */
 export function getWebhookSubscriptionById(id: number): WebhookSubscription | undefined {
   const sql = 'SELECT * FROM webhook_subscriptions WHERE id = ?';
-  return timedQuery(sql, () =>
-    getDb().prepare(sql).get(id) as WebhookSubscription | undefined,
-  );
+  return timedQuery(sql, () => getDb().prepare(sql).get(id) as WebhookSubscription | undefined);
 }
 
 /**
@@ -128,9 +131,7 @@ export function getWebhookSubscriptionById(id: number): WebhookSubscription | un
  */
 export function getWebhookSubscriptionsByScout(scoutWallet: string): WebhookSubscription[] {
   const sql = 'SELECT * FROM webhook_subscriptions WHERE scout_wallet = ? ORDER BY id ASC';
-  return timedQuery(sql, () =>
-    getDb().prepare(sql).all(scoutWallet) as WebhookSubscription[],
-  );
+  return timedQuery(sql, () => getDb().prepare(sql).all(scoutWallet) as WebhookSubscription[]);
 }
 
 /**
@@ -155,14 +156,14 @@ export function ensureLegacyWebhookSubscription(): void {
   if (!config.webhook.enabled || !config.webhook.url) return;
 
   const sql = 'SELECT * FROM webhook_subscriptions WHERE url = ?';
-  const existing = timedQuery(sql, () =>
-    getDb().prepare(sql).get(config.webhook.url) as WebhookSubscription | undefined
+  const existing = timedQuery(
+    sql,
+    () => getDb().prepare(sql).get(config.webhook.url) as WebhookSubscription | undefined,
   );
   if (existing) return;
 
   createWebhookSubscription(config.webhook.url, config.webhook.secret || undefined);
 }
-
 
 /**
  * Update a webhook subscription's previous secret and expiry for rotation.
@@ -266,7 +267,6 @@ export function updateWebhookSubscription(
   });
 }
 
-
 // ─── Endpoint health (#1512) ─────────────────────────────────────────────────
 
 /** Record a successful delivery: clears the failure streak and degraded status. */
@@ -299,8 +299,7 @@ export function recordWebhookSubscriptionFailure(
          WHERE id = ?`,
       ).run(now, now, id);
       const row = db.prepare('SELECT * FROM webhook_subscriptions WHERE id = ?').get(id) as
-        | WebhookSubscription
-        | undefined;
+        WebhookSubscription | undefined;
       if (!row) return undefined;
 
       const streak = row.consecutive_failures ?? 0;
@@ -314,7 +313,15 @@ export function recordWebhookSubscriptionFailure(
         db.prepare(
           `UPDATE webhook_subscriptions SET status = 'suspended', suspended_at = ?, suspended_reason = ? WHERE id = ?`,
         ).run(now, reason, id);
-        return { row: { ...row, status: 'suspended' as const, suspended_at: now, suspended_reason: reason }, justSuspended: true };
+        return {
+          row: {
+            ...row,
+            status: 'suspended' as const,
+            suspended_at: now,
+            suspended_reason: reason,
+          },
+          justSuspended: true,
+        };
       }
       return { row, justSuspended: false };
     });
@@ -334,8 +341,15 @@ export function reactivateWebhookSubscription(id: number, now = Date.now()): boo
 export function countWebhookSubscriptionsByStatus(): Record<WebhookSubscriptionStatus, number> {
   const sql = 'SELECT status, COUNT(*) AS count FROM webhook_subscriptions GROUP BY status';
   return timedQuery(sql, () => {
-    const counts: Record<WebhookSubscriptionStatus, number> = { active: 0, degraded: 0, suspended: 0 };
-    for (const r of getDb().prepare(sql).all() as Array<{ status: WebhookSubscriptionStatus; count: number }>) {
+    const counts: Record<WebhookSubscriptionStatus, number> = {
+      active: 0,
+      degraded: 0,
+      suspended: 0,
+    };
+    for (const r of getDb().prepare(sql).all() as Array<{
+      status: WebhookSubscriptionStatus;
+      count: number;
+    }>) {
       counts[r.status] = r.count;
     }
     return counts;

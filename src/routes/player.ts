@@ -1,9 +1,4 @@
-import {
-  Router,
-  type Request,
-  type Response,
-  type NextFunction,
-} from "express";
+import { Router, type Request, type Response, type NextFunction } from 'express';
 
 import {
   registerPlayer,
@@ -17,17 +12,29 @@ import {
   updatePlayerSchema,
   deactivatePlayerEndpoint,
   reactivatePlayerEndpoint,
-} from "../controllers/playerController";
-import { getPlayerHistory, getPlayerHistoryVersion, getPlayerHistoryDiff } from "../controllers/playerHistoryController";
-import { anonymizePlayer } from "../controllers/playerAnonymizationController";
-import { acceptTrialOffer, rejectTrialOffer, rejectOfferSchema } from "../controllers/trialOfferController";
-import { getPlayerTokenHolders, buyPlayerToken, buyTokenSchema } from "../controllers/playerTokenController";
+} from '../controllers/playerController';
+import {
+  getPlayerHistory,
+  getPlayerHistoryVersion,
+  getPlayerHistoryDiff,
+} from '../controllers/playerHistoryController';
+import { anonymizePlayer } from '../controllers/playerAnonymizationController';
+import {
+  acceptTrialOffer,
+  rejectTrialOffer,
+  rejectOfferSchema,
+} from '../controllers/trialOfferController';
+import {
+  getPlayerTokenHolders,
+  buyPlayerToken,
+  buyTokenSchema,
+} from '../controllers/playerTokenController';
 
-import { validateBody, validateQuery } from "../middleware/validate";
-import { requireRole, optionalAuth, requireApiKeyScope } from "../middleware/auth";
-import { requireOwner } from "../middleware/requireOwner";
-import { methodNotAllowed } from "../middleware/methodNotAllowed";
-import { emptyBodySchema } from "../validators/emptyBody";
+import { validateBody, validateQuery } from '../middleware/validate';
+import { requireRole, optionalAuth, requireApiKeyScope } from '../middleware/auth';
+import { requireOwner } from '../middleware/requireOwner';
+import { methodNotAllowed } from '../middleware/methodNotAllowed';
+import { emptyBodySchema } from '../validators/emptyBody';
 
 const router = Router();
 
@@ -41,7 +48,8 @@ const router = Router();
  * @response 400 { success: false, error: string } - Invalid query parameters
  * @response 422 { success: false, error: string } - minTier out of range
  */
-router.route("/")
+router
+  .route('/')
   .get(optionalAuth, validateQuery(filterSchema), filterPlayers)
   .head(optionalAuth, validateQuery(filterSchema), filterPlayers)
   .all(methodNotAllowed(['GET', 'HEAD']));
@@ -59,10 +67,11 @@ router.route("/")
  * @response 403 { success: false, error: string } - wallet does not match authenticated account
  * @auth Bearer (player role required)
  */
-router.route("/register")
+router
+  .route('/register')
   .post(
-    requireRole("player"),
-    validateBody(registerSchema, { context: "player_registration" }),
+    requireRole('player'),
+    validateBody(registerSchema, { context: 'player_registration' }),
     registerPlayer,
   )
   .all(methodNotAllowed(['POST']));
@@ -102,14 +111,10 @@ router.route("/register")
  * @response 428 { success: false, error: string } - If-Match header required
  * @auth Bearer (player role required, profile owner only)
  */
-router.route("/:playerId")
+router
+  .route('/:playerId')
   .get(optionalAuth, getPlayer)
-  .put(
-    requireRole("player"),
-    requireOwner,
-    validateBody(updatePlayerSchema),
-    updatePlayer,
-  )
+  .put(requireRole('player'), requireOwner, validateBody(updatePlayerSchema), updatePlayer)
   .all(methodNotAllowed(['GET', 'PUT', 'HEAD']));
 
 /**
@@ -130,7 +135,8 @@ router.route("/:playerId")
  * @response 400 { success: false, error: string } - Invalid playerId, limit, or query params
  * @response 404 { success: false, error: string } - Player not found or not visible to caller
  */
-router.route("/:playerId/milestones")
+router
+  .route('/:playerId/milestones')
   .get(optionalAuth, getPlayerMilestones)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -145,9 +151,10 @@ router.route("/:playerId/milestones")
  * @response 404 { success: false, error: string } - Player not found
  * @auth Bearer (player role required, profile owner only)
  */
-router.route("/:playerId/deactivate")
+router
+  .route('/:playerId/deactivate')
   .post(
-    requireRole("player"),
+    requireRole('player'),
     requireOwner,
     validateBody(emptyBodySchema),
     deactivatePlayerEndpoint,
@@ -165,9 +172,10 @@ router.route("/:playerId/deactivate")
  * @response 404 { success: false, error: string } - Player not found
  * @auth Bearer (player role required, profile owner only)
  */
-router.route("/:playerId/reactivate")
+router
+  .route('/:playerId/reactivate')
   .post(
-    requireRole("player"),
+    requireRole('player'),
     requireOwner,
     validateBody(emptyBodySchema),
     reactivatePlayerEndpoint,
@@ -190,13 +198,9 @@ router.route("/:playerId/reactivate")
  * @response 404 { success: false, error: string } - Player not found
  * @auth Bearer (player role required, profile owner only)
  */
-router.route("/:playerId/anonymize")
-  .post(
-    requireRole("player"),
-    requireOwner,
-    validateBody(emptyBodySchema),
-    anonymizePlayer,
-  )
+router
+  .route('/:playerId/anonymize')
+  .post(requireRole('player'), requireOwner, validateBody(emptyBodySchema), anonymizePlayer)
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -208,12 +212,13 @@ router.route("/:playerId/anonymize")
  * @response 400 { success: false, error: string } - Invalid playerId
  * @response 404 { success: false, error: string } - Player not found
  */
-router.route("/:playerId/history")
+router
+  .route('/:playerId/history')
   .get(
     optionalAuth,
     (req: Request, res: Response, next: NextFunction) => {
-      if (req.role === "admin") return next();
-      return requireRole("player")(req, res, () => requireOwner(req, res, next));
+      if (req.role === 'admin') return next();
+      return requireRole('player')(req, res, () => requireOwner(req, res, next));
     },
     getPlayerHistory,
   )
@@ -230,12 +235,13 @@ router.route("/:playerId/history")
  * @response 400 { success: false, error: string } - Invalid playerId or version
  * @response 404 { success: false, error: string } - Player not found or version out of range
  */
-router.route("/:playerId/history/:version")
+router
+  .route('/:playerId/history/:version')
   .get(
     optionalAuth,
     (req: Request, res: Response, next: NextFunction) => {
-      if (req.role === "admin") return next();
-      return requireRole("player")(req, res, () => requireOwner(req, res, next));
+      if (req.role === 'admin') return next();
+      return requireRole('player')(req, res, () => requireOwner(req, res, next));
     },
     getPlayerHistoryVersion,
   )
@@ -252,12 +258,13 @@ router.route("/:playerId/history/:version")
  * @response 400 { success: false, error: string } - Invalid playerId or version
  * @response 404 { success: false, error: string } - Player not found or version out of range
  */
-router.route("/:playerId/history/:version/diff")
+router
+  .route('/:playerId/history/:version/diff')
   .get(
     optionalAuth,
     (req: Request, res: Response, next: NextFunction) => {
-      if (req.role === "admin") return next();
-      return requireRole("player")(req, res, () => requireOwner(req, res, next));
+      if (req.role === 'admin') return next();
+      return requireRole('player')(req, res, () => requireOwner(req, res, next));
     },
     getPlayerHistoryDiff,
   )
@@ -272,12 +279,9 @@ router.route("/:playerId/history/:version/diff")
  * @response 400 { success: false, error: string } - Invalid playerId
  * @response 404 { success: false, error: string } - Player not found
  */
-router.route("/:playerId/analytics")
-  .get(
-    requireRole("player"),
-    requireOwner,
-    getPlayerAnalytics,
-  )
+router
+  .route('/:playerId/analytics')
+  .get(requireRole('player'), requireOwner, getPlayerAnalytics)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -293,8 +297,9 @@ router.route("/:playerId/analytics")
  * @response 409 { success: false, error: string } - Offer already responded to
  * @auth Bearer (player role required)
  */
-router.route("/:playerId/trial-offers/:offerId/accept")
-  .post(requireRole("player"), validateBody(emptyBodySchema), acceptTrialOffer)
+router
+  .route('/:playerId/trial-offers/:offerId/accept')
+  .post(requireRole('player'), validateBody(emptyBodySchema), acceptTrialOffer)
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -311,12 +316,9 @@ router.route("/:playerId/trial-offers/:offerId/accept")
  * @response 409 { success: false, error: string } - Offer already responded to
  * @auth Bearer (player role required)
  */
-router.route("/:playerId/trial-offers/:offerId/reject")
-  .post(
-    requireRole("player"),
-    validateBody(rejectOfferSchema),
-    rejectTrialOffer,
-  )
+router
+  .route('/:playerId/trial-offers/:offerId/reject')
+  .post(requireRole('player'), validateBody(rejectOfferSchema), rejectTrialOffer)
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -330,7 +332,8 @@ router.route("/:playerId/trial-offers/:offerId/reject")
  * @response 404 { success: false, error: string } - Feature flag disabled
  * @auth Bearer (optional — public read)
  */
-router.route("/:playerId/tokens")
+router
+  .route('/:playerId/tokens')
   .get(optionalAuth, getPlayerTokenHolders)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -353,8 +356,14 @@ router.route("/:playerId/tokens")
  * @response 409 { success: false, error: string, code: TOKEN_SUPPLY_EXHAUSTED } - Token supply exhausted
  * @auth Bearer token with scout role required
  */
-router.route("/:playerId/tokens/buy")
-  .post(requireRole("scout"), requireApiKeyScope("write:player_tokens"), validateBody(buyTokenSchema), buyPlayerToken)
+router
+  .route('/:playerId/tokens/buy')
+  .post(
+    requireRole('scout'),
+    requireApiKeyScope('write:player_tokens'),
+    validateBody(buyTokenSchema),
+    buyPlayerToken,
+  )
   .all(methodNotAllowed(['POST']));
 
 export default router;

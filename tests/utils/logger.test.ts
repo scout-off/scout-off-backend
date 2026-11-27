@@ -52,8 +52,8 @@ describe('logger — log level filtering', () => {
   // 1. LOG_LEVEL=error: only error is emitted; warn, info, debug are suppressed
   it('suppresses warn, info, and debug when LOG_LEVEL=error', () => {
     cfg.logLevel = 'error' as LogLevel;
-    const spyWarn  = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const spyInfo  = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const spyWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const spyInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
     const spyDebug = jest.spyOn(console, 'debug').mockImplementation(() => {});
     const spyError = jest.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -77,7 +77,7 @@ describe('logger — log level filtering', () => {
   it('emits info and error but suppresses debug when LOG_LEVEL=info', () => {
     cfg.logLevel = 'info';
     const spyDebug = jest.spyOn(console, 'debug').mockImplementation(() => {});
-    const spyInfo  = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const spyInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
     const spyError = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     logger.debug('suppressed');
@@ -97,8 +97,8 @@ describe('logger — log level filtering', () => {
   it('emits all levels when LOG_LEVEL=debug', () => {
     cfg.logLevel = 'debug';
     const spyDebug = jest.spyOn(console, 'debug').mockImplementation(() => {});
-    const spyInfo  = jest.spyOn(console, 'info').mockImplementation(() => {});
-    const spyWarn  = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const spyInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const spyWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const spyError = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     logger.debug('d');
@@ -121,8 +121,8 @@ describe('logger — log level filtering', () => {
   it('emits bracketed level prefix in log output', () => {
     cfg.logLevel = 'debug';
     const spyDebug = jest.spyOn(console, 'debug').mockImplementation(() => {});
-    const spyInfo  = jest.spyOn(console, 'info').mockImplementation(() => {});
-    const spyWarn  = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const spyInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const spyWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const spyError = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     logger.debug('msg');

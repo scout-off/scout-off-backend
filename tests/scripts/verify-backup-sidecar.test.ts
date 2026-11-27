@@ -44,15 +44,11 @@ function createTestDatabase(dbPath: string): void {
       VALUES ('register', 1, 'txhash1', '{}');
       CREATE TABLE migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL);
       INSERT INTO migrations (id, applied_at) VALUES ('001_initial.sql', 1);
-    `
+    `,
   );
 }
 
-function runScript(
-  script: string,
-  args: string[] = [],
-  env: NodeJS.ProcessEnv = {}
-): string {
+function runScript(script: string, args: string[] = [], env: NodeJS.ProcessEnv = {}): string {
   return execFileSync('bash', [script, ...args], {
     cwd: REPO_ROOT,
     env: { ...process.env, ...env },
@@ -63,7 +59,7 @@ function runScript(
 function runScriptExpectFailure(
   script: string,
   args: string[] = [],
-  env: NodeJS.ProcessEnv = {}
+  env: NodeJS.ProcessEnv = {},
 ): { stdout: string; stderr: string; status: number } {
   const result = spawnSync('bash', [script, ...args], {
     cwd: REPO_ROOT,
@@ -89,14 +85,12 @@ function makeStubCli(
   binDir: string,
   cliName: string,
   exitCode: number,
-  stderrOutput: string
+  stderrOutput: string,
 ): string {
   const stub = path.join(binDir, cliName);
-  fs.writeFileSync(
-    stub,
-    `#!/usr/bin/env bash\necho "${stderrOutput}" >&2\nexit ${exitCode}\n`,
-    { mode: 0o755 }
-  );
+  fs.writeFileSync(stub, `#!/usr/bin/env bash\necho "${stderrOutput}" >&2\nexit ${exitCode}\n`, {
+    mode: 0o755,
+  });
   return `${binDir}:${process.env.PATH ?? ''}`;
 }
 
@@ -122,7 +116,7 @@ function makeStubCli(
     });
     backupPath = path.join(
       backupDir,
-      fs.readdirSync(backupDir).find((n) => n.endsWith('.db'))!
+      fs.readdirSync(backupDir).find((n) => n.endsWith('.db'))!,
     );
   });
 
@@ -154,7 +148,7 @@ function makeStubCli(
       binDir,
       'aws',
       1,
-      'RequestError: send request failed — connection refused'
+      'RequestError: send request failed — connection refused',
     );
 
     const fakeS3Sidecar = 's3://my-bucket/backups/scout-off-20250101T000000Z.db.counts';
@@ -175,7 +169,12 @@ function makeStubCli(
     fs.mkdirSync(binDir, { recursive: true });
 
     // Stub `aws` to simulate a 404 / NoSuchKey response.
-    const stubPath = makeStubCli(binDir, 'aws', 1, 'An error occurred (NoSuchKey) when calling the CopyObject operation');
+    const stubPath = makeStubCli(
+      binDir,
+      'aws',
+      1,
+      'An error occurred (NoSuchKey) when calling the CopyObject operation',
+    );
 
     const fakeS3Sidecar = 's3://my-bucket/backups/scout-off-old.db.counts';
 
@@ -211,7 +210,12 @@ function makeStubCli(
     const binDir = path.join(tmpDir, 'stub-bin-gcs-404');
     fs.mkdirSync(binDir, { recursive: true });
 
-    const stubPath = makeStubCli(binDir, 'gsutil', 1, 'CommandException: No such object: gs://my-bucket/backups/old.db.counts');
+    const stubPath = makeStubCli(
+      binDir,
+      'gsutil',
+      1,
+      'CommandException: No such object: gs://my-bucket/backups/old.db.counts',
+    );
 
     const fakeGCSSidecar = 'gs://my-bucket/backups/old.db.counts';
 

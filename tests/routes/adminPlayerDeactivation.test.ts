@@ -58,8 +58,14 @@ jest.mock('../../src/db', () => ({
   fetchLastIndexedLedger: jest.fn().mockReturnValue(0),
   persistLastIndexedLedger: jest.fn(),
   insertAuditLog: jest.fn().mockReturnValue({
-    id: 1, hash: 'h', prev_hash: 'p', action: '', admin_wallet: '',
-    query_params: '{}', created_at: '', event_source: '',
+    id: 1,
+    hash: 'h',
+    prev_hash: 'p',
+    action: '',
+    admin_wallet: '',
+    query_params: '{}',
+    created_at: '',
+    event_source: '',
   }),
   getAuditLogs: jest.fn().mockReturnValue([]),
   getAuditLogsCount: jest.fn().mockReturnValue(0),
@@ -100,7 +106,7 @@ describe('POST /api/admin/players/:playerId/deactivate', () => {
   const mockDeactivate = db.deactivatePlayerWithReason as jest.Mock;
   const mockCancelMilestones = db.cancelPendingMilestonesForPlayer as jest.Mock;
   const mockGetUnlocks = db.getContactUnlocksByPlayer as jest.Mock;
-  const mockBroadcast = (broadcaster.broadcaster.broadcast) as jest.Mock;
+  const mockBroadcast = broadcaster.broadcaster.broadcast as jest.Mock;
   const mockInvalidate = cache.invalidatePlayerCache as jest.Mock;
 
   beforeEach(() => {
@@ -226,14 +232,13 @@ describe('POST /api/admin/players/:playerId/deactivate', () => {
 describe('POST /api/admin/players/:playerId/reactivate', () => {
   const mockGetPlayer = db.getPlayerById as jest.Mock;
   const mockReactivate = db.reactivatePlayerWithReason as jest.Mock;
-  const mockBroadcast = (broadcaster.broadcaster.broadcast) as jest.Mock;
+  const mockBroadcast = broadcaster.broadcaster.broadcast as jest.Mock;
   const mockInvalidate = cache.invalidatePlayerCache as jest.Mock;
 
   beforeEach(() => jest.clearAllMocks());
 
   it('returns 401 without a token', async () => {
-    const res = await request(app)
-      .post(`/api/admin/players/${PLAYER_ID}/reactivate`);
+    const res = await request(app).post(`/api/admin/players/${PLAYER_ID}/reactivate`);
     expect(res.status).toBe(401);
   });
 

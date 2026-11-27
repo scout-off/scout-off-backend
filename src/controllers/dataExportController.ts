@@ -54,7 +54,7 @@ export async function requestPlayerDataExport(req: Request, res: Response): Prom
         path: req.path,
         timestamp: new Date().toISOString(),
       }).catch(() => {});
-      sendForbidden(res, 'Cannot export another player\'s data');
+      sendForbidden(res, "Cannot export another player's data");
       return;
     }
 
@@ -97,7 +97,7 @@ export async function requestScoutDataExport(req: Request, res: Response): Promi
         path: req.path,
         timestamp: new Date().toISOString(),
       }).catch(() => {});
-      sendForbidden(res, 'Cannot export another scout\'s data');
+      sendForbidden(res, "Cannot export another scout's data");
       return;
     }
 
@@ -130,7 +130,7 @@ export async function getPlayerExportStatus(req: Request, res: Response): Promis
 
     // Ownership check
     if (req.account !== playerId && req.role !== 'admin') {
-      sendForbidden(res, 'Cannot access another player\'s export');
+      sendForbidden(res, "Cannot access another player's export");
       return;
     }
 
@@ -163,7 +163,7 @@ export async function getScoutExportStatus(req: Request, res: Response): Promise
 
     // Ownership check
     if (req.account !== wallet && req.role !== 'admin') {
-      sendForbidden(res, 'Cannot access another scout\'s export');
+      sendForbidden(res, "Cannot access another scout's export");
       return;
     }
 

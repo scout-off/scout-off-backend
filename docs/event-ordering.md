@@ -7,12 +7,12 @@ and how co-transaction groups are treated as an atomic unit (#1111).
 
 Every indexed row carries:
 
-| Column | Meaning |
-| --- | --- |
-| `ledger` | Closed ledger sequence |
-| `tx_application_order` | Application order of the transaction within the ledger |
-| `event_index` | In-transaction event index |
-| `contract_id` | Emitting contract (tie-break across multi-contract txs) |
+| Column                 | Meaning                                                 |
+| ---------------------- | ------------------------------------------------------- |
+| `ledger`               | Closed ledger sequence                                  |
+| `tx_application_order` | Application order of the transaction within the ledger  |
+| `event_index`          | In-transaction event index                              |
+| `contract_id`          | Emitting contract (tie-break across multi-contract txs) |
 
 **Sort key (ascending):**
 

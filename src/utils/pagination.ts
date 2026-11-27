@@ -21,9 +21,10 @@ export const DEFAULT_PAGE_SIZE = 20;
  * @returns A page size within the valid range
  */
 export function clampPageSize(requestedSize: unknown): number {
-  const parsed = typeof requestedSize === 'number'
-    ? Math.trunc(requestedSize)
-    : parseInt(String(requestedSize), 10);
+  const parsed =
+    typeof requestedSize === 'number'
+      ? Math.trunc(requestedSize)
+      : parseInt(String(requestedSize), 10);
 
   if (Number.isNaN(parsed)) {
     return DEFAULT_PAGE_SIZE;

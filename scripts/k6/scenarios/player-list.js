@@ -19,7 +19,7 @@ export const playerListOptions = {
   duration: '30s',
   thresholds: {
     http_req_duration: ['p(95)<200'],
-    http_req_failed:   ['rate<0.01'],
+    http_req_failed: ['rate<0.01'],
     player_list_errors: ['count<1'],
   },
 };
@@ -43,7 +43,11 @@ export default function playerListVU() {
   const ok = check(res, {
     'player list status 200': (r) => r.status === 200,
     'player list has success flag': (r) => {
-      try { return JSON.parse(r.body).success === true; } catch { return false; }
+      try {
+        return JSON.parse(r.body).success === true;
+      } catch {
+        return false;
+      }
     },
   });
 

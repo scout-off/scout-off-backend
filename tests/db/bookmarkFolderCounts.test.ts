@@ -1,13 +1,23 @@
-import { getBookmarkFoldersWithCounts } from '../../src/db/repositories/bookmarks';
-import { getDriver } from '../../src/db/query';
-
 jest.mock('../../src/db/query', () => ({
   getDriver: jest.fn(),
   timedQueryAsync: jest.fn((_sql: string, run: () => unknown) => run()),
 }));
 
+// tests/setup.ts imports src/db before this file's mocks apply, so reload the
+// repository after resetting the registry to bind it to the mocked query module.
+function load() {
+  jest.resetModules();
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { getBookmarkFoldersWithCounts } =
+    require('../../src/db/repositories/bookmarks') as typeof import('../../src/db/repositories/bookmarks');
+  const { getDriver } = require('../../src/db/query') as typeof import('../../src/db/query');
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  return { getBookmarkFoldersWithCounts, getDriver };
+}
+
 describe('getBookmarkFoldersWithCounts (#1792)', () => {
   it('executes exactly one grouped query and returns numeric counts including empty folders', async () => {
+    const { getBookmarkFoldersWithCounts, getDriver } = load();
     const all = jest.fn().mockResolvedValue([
       { id: 2, scout_wallet: 'GSCOUT', name: 'new', created_at: 20, bookmark_count: '50' },
       { id: 1, scout_wallet: 'GSCOUT', name: 'empty', created_at: 10, bookmark_count: '0' },

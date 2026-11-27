@@ -15,7 +15,11 @@ export class MissingAuthenticatedAccountError extends Error {
 
 export function requireAccount(req: Pick<Request, 'account'>): string {
   const account = req.account;
-  if (typeof account !== 'string' || !account.trim() || account.trim().toLowerCase() === 'unknown') {
+  if (
+    typeof account !== 'string' ||
+    !account.trim() ||
+    account.trim().toLowerCase() === 'unknown'
+  ) {
     logger.error('[auth] missing authenticated wallet for privileged action');
     throw new MissingAuthenticatedAccountError();
   }

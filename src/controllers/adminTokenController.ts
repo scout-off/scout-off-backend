@@ -5,16 +5,27 @@ import { revokeToken, isTokenRevoked } from '../services/tokenBlocklist';
 import { ErrorCode } from '../utils/errorCodes';
 import { listContractRoleMembers } from '../db';
 
-export const revokeTokenSchema = z.object({
-  jti: z.string().min(1).optional(),
-  token: z.string().min(1).optional(),
-}).strict().refine((d) => !!d.jti || !!d.token, { message: 'jti or token is required' });
+export const revokeTokenSchema = z
+  .object({
+    jti: z.string().min(1).optional(),
+    token: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((d) => !!d.jti || !!d.token, { message: 'jti or token is required' });
 
 /** POST /api/admin/tokens/revoke */
-export async function revokeTokenController(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function revokeTokenController(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   const parsed = revokeTokenSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'jti or token is required', code: ErrorCode.VALIDATION_ERROR });
+    res.status(400).json({
+      success: false,
+      error: parsed.error.issues[0]?.message ?? 'jti or token is required',
+      code: ErrorCode.VALIDATION_ERROR,
+    });
     return;
   }
 
@@ -25,7 +36,11 @@ export async function revokeTokenController(req: Request, res: Response, _next: 
   if (!jti && parsed.data.token) {
     const decoded = jwt.decode(parsed.data.token) as jwt.JwtPayload | null;
     if (!decoded?.jti) {
-      res.status(400).json({ success: false, error: 'Token does not contain a jti claim', code: ErrorCode.VALIDATION_ERROR });
+      res.status(400).json({
+        success: false,
+        error: 'Token does not contain a jti claim',
+        code: ErrorCode.VALIDATION_ERROR,
+      });
       return;
     }
     jti = decoded.jti;
@@ -33,7 +48,11 @@ export async function revokeTokenController(req: Request, res: Response, _next: 
   }
 
   if (!jti) {
-    res.status(400).json({ success: false, error: 'Token does not contain a jti claim', code: ErrorCode.VALIDATION_ERROR });
+    res.status(400).json({
+      success: false,
+      error: 'Token does not contain a jti claim',
+      code: ErrorCode.VALIDATION_ERROR,
+    });
     return;
   }
   await revokeToken(jti, expiresAt);
@@ -48,7 +67,11 @@ export async function revokeTokenController(req: Request, res: Response, _next: 
  * an arbitrary token there would let an admin introspect another user's
  * claims (#279).
  */
-export async function introspectToken(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function introspectToken(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   // requireRole('admin') has already verified this header's token.
   // Any `token` field in the request body is intentionally ignored — accepting
   // an arbitrary token there would let an admin introspect another user's
@@ -56,7 +79,9 @@ export async function introspectToken(req: Request, res: Response, next: NextFun
   const callerToken = (req.headers.authorization ?? '').slice(7);
   const payload = jwt.decode(callerToken) as jwt.JwtPayload | null;
   if (!payload) {
-    res.status(400).json({ success: false, error: 'Invalid or expired token', code: ErrorCode.TOKEN_INVALID });
+    res
+      .status(400)
+      .json({ success: false, error: 'Invalid or expired token', code: ErrorCode.TOKEN_INVALID });
     return;
   }
 

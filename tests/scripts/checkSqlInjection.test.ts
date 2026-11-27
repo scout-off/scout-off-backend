@@ -62,11 +62,7 @@ describe('check-sql-injection', () => {
   test('returns a non-zero exit code on findings', () => {
     const src = path.join(tmpDir, 'src');
     fs.mkdirSync(src, { recursive: true });
-    writeFixture(
-      src,
-      'bad.ts',
-      'const q = `DELETE FROM sessions WHERE token=${token}`;\n',
-    );
+    writeFixture(src, 'bad.ts', 'const q = `DELETE FROM sessions WHERE token=${token}`;\n');
     // Exercise the CLI contract in a child process: exit 1 when findings exist.
     const probe = `process.exit(require(${JSON.stringify(
       SCRIPT,

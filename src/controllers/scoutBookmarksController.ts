@@ -16,12 +16,11 @@ import {
   countBookmarkedPlayers,
   insertBookmarkFolder,
   getBookmarkFoldersByScout,
+  getBookmarkFoldersWithCounts,
   getBookmarkFolderById,
   renameBookmarkFolder,
   deleteBookmarkFolder,
   moveBookmarksToRoot,
-  countBookmarksInFolder,
-  ScoutBookmarkFolderRow,
   PlayerRow,
 } from '../db';
 import { getTierMeta } from '../utils/tier';
@@ -30,20 +29,22 @@ import { logger } from '../utils/logger';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
-export const addBookmarkSchema = z.object({
-  playerId: z
-    .string(requiredError('playerId is required'))
-    .min(1, 'playerId is required'),
-  folderId: z.number().int().optional().nullable(),
-  note: z.string().max(2000).optional().nullable(),
-}).strict();
+export const addBookmarkSchema = z
+  .object({
+    playerId: z.string(requiredError('playerId is required')).min(1, 'playerId is required'),
+    folderId: z.number().int().optional().nullable(),
+    note: z.string().max(2000).optional().nullable(),
+  })
+  .strict();
 
-export const createBookmarkFolderSchema = z.object({
-  name: z
-    .string(requiredError('name is required and must be a string'))
-    .min(1, 'name is required and must be a string')
-    .max(100),
-}).strict();
+export const createBookmarkFolderSchema = z
+  .object({
+    name: z
+      .string(requiredError('name is required and must be a string'))
+      .min(1, 'name is required and must be a string')
+      .max(100),
+  })
+  .strict();
 
 // Rename uses the same name rules as creation.
 export const renameBookmarkFolderSchema = createBookmarkFolderSchema;
@@ -75,11 +76,7 @@ function serializePlayer(row: PlayerRow): Record<string, unknown> {
  * Body: { playerId: string, folderId?: number, note?: string }
  * Returns 404 when the player does not exist in the local database.
  */
-export async function addBookmark(
-  req: Request,
-  res: Response,
-  _next: NextFunction,
-): Promise<void> {
+export async function addBookmark(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const { playerId, folderId, note } = req.body;
 
   if (!playerId) {
@@ -113,7 +110,12 @@ export async function addBookmark(
   });
 
   if (inserted) {
-    logger.info({ scout: req.params.wallet as string, playerId, folderId, action: 'bookmark_added' });
+    logger.info({
+      scout: req.params.wallet as string,
+      playerId,
+      folderId,
+      action: 'bookmark_added',
+    });
   }
 
   res.status(200).json({
@@ -138,7 +140,7 @@ export async function removeBookmark(
   res: Response,
   _next: NextFunction,
 ): Promise<void> {
-  const {playerId} = req.params as {playerId: string};
+  const { playerId } = req.params as { playerId: string };
   const removed = await deleteBookmark(req.params.wallet as string, playerId);
 
   if (!removed) {
@@ -240,17 +242,10 @@ export async function listBookmarkFolders(
   res: Response,
   _next: NextFunction,
 ): Promise<void> {
-  const folders: ScoutBookmarkFolderRow[] = await getBookmarkFoldersByScout(req.params.wallet as string);
+  // One grouped query for folders + counts (#1792).
+  const folders = await getBookmarkFoldersWithCounts(req.params.wallet as string);
 
-  // Enrich with bookmark counts
-  const enriched = await Promise.all(
-    folders.map(async (f) => ({
-      ...f,
-      bookmark_count: await countBookmarksInFolder(f.id),
-    })),
-  );
-
-  res.json({ success: true, data: enriched });
+  res.json({ success: true, data: folders });
 }
 
 /**
@@ -296,7 +291,12 @@ export async function renameBookmarkFolderHandler(
       return;
     }
 
-    logger.info({ scout: req.params.wallet as string, folderId: folderIdNum, name, action: 'folder_renamed' });
+    logger.info({
+      scout: req.params.wallet as string,
+      folderId: folderIdNum,
+      name,
+      action: 'folder_renamed',
+    });
 
     res.json({ success: true, data: updated });
   } catch (err) {
@@ -321,7 +321,7 @@ export async function deleteBookmarkFolderHandler(
   res: Response,
   _next: NextFunction,
 ): Promise<void> {
-  const {folderId} = req.params as {folderId: string};
+  const { folderId } = req.params as { folderId: string };
   const folderIdNum = parseInt(folderId, 10);
 
   if (isNaN(folderIdNum)) {
@@ -347,7 +347,11 @@ export async function deleteBookmarkFolderHandler(
     return;
   }
 
-  logger.info({ scout: req.params.wallet as string, folderId: folderIdNum, action: 'folder_deleted' });
+  logger.info({
+    scout: req.params.wallet as string,
+    folderId: folderIdNum,
+    action: 'folder_deleted',
+  });
 
   res.json({ success: true, data: { deleted: true, folder_id: folderIdNum } });
 }

@@ -29,7 +29,9 @@ export interface ResolvedApiKey {
 export function generateApiKey(): { key: string; keyHash: string; lookupHash: string } {
   const key = randomBytes(32).toString('hex');
   const salt = randomBytes(SALT_BYTES).toString('hex');
-  const hash = createHash('sha256').update(salt + key).digest('hex');
+  const hash = createHash('sha256')
+    .update(salt + key)
+    .digest('hex');
   const keyHash = `${salt}${SEPARATOR}${hash}`;
   return { key, keyHash, lookupHash: deriveApiKeyLookupHash(key) };
 }
@@ -41,7 +43,9 @@ export function verifyApiKey(rawKey: string, keyHash: string): boolean {
   const salt = keyHash.slice(0, separatorIndex);
   const hash = keyHash.slice(separatorIndex + 1);
   if (!salt || !hash) return false;
-  const expected = createHash('sha256').update(salt + rawKey).digest('hex');
+  const expected = createHash('sha256')
+    .update(salt + rawKey)
+    .digest('hex');
   const expectedBuf = Buffer.from(expected, 'hex');
   const actualBuf = Buffer.from(hash, 'hex');
   if (expectedBuf.length !== actualBuf.length) return false;

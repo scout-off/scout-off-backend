@@ -10,10 +10,7 @@ import {
   fetchLastIndexedLedger,
   getEventsCount,
 } from '../../src/db';
-import {
-  getIndexerEventMetrics,
-  resetMetrics,
-} from '../../src/middleware/metrics';
+import { getIndexerEventMetrics, resetMetrics } from '../../src/middleware/metrics';
 
 jest.mock('../../src/services/stellar', () => ({
   server: { getEvents: jest.fn() },
@@ -150,7 +147,12 @@ describe('indexer unknown/undecodable events (#1540)', () => {
           `tx-good-${base}`,
           base + 1,
         ),
-        makeEvent('milestone_approved', { player_id: 'P-BATCH', milestone_id: 'M1' }, `tx-after-${base}`, base + 2),
+        makeEvent(
+          'milestone_approved',
+          { player_id: 'P-BATCH', milestone_id: 'M1' },
+          `tx-after-${base}`,
+          base + 2,
+        ),
       ],
     });
 

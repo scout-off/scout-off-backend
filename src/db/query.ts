@@ -19,11 +19,13 @@ import { decryptField, encryptField } from '../utils/fieldCipher';
 import { DbDriver } from './driver';
 import { SqliteDriver } from './sqlite-driver';
 import { PostgresDriver } from './postgres-driver';
+import { createBetterSqlite3LoadError, isBetterSqlite3LoadFailure } from './betterSqlite3Error';
 import {
-  createBetterSqlite3LoadError,
-  isBetterSqlite3LoadFailure,
-} from './betterSqlite3Error';
-import { ApiKeyLimitError, MAX_API_KEYS_PER_SCOUT, MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT, WebhookSubscriptionLimitError } from '../utils/scoutResourceLimits';
+  ApiKeyLimitError,
+  MAX_API_KEYS_PER_SCOUT,
+  MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT,
+  WebhookSubscriptionLimitError,
+} from '../utils/scoutResourceLimits';
 
 /**
  * Slow-query log threshold (ms), sourced from the central config object
@@ -65,7 +67,12 @@ export function timedQuery<T>(sql: string, fn: () => T): T {
       typeof (result as unknown as { changes: unknown }).changes === 'number'
     ) {
       row_count = (result as unknown as { changes: number }).changes;
-    } else if (result !== null && result !== undefined && !Array.isArray(result) && typeof result !== 'object') {
+    } else if (
+      result !== null &&
+      result !== undefined &&
+      !Array.isArray(result) &&
+      typeof result !== 'object'
+    ) {
       // scalar (number, boolean, string) — treat as 1 row
       row_count = 1;
     }
@@ -94,23 +101,26 @@ let _db: Database.Database | null = null;
  * Initialise the database connection and run pending migrations.
  * Must be called once at application startup before any query helper is used.
  * Safe to call in tests with DB_PATH=:memory: set before import.
- * 
+ *
  * For PostgreSQL, this must be awaited as it requires async connection setup.
  */
 export async function initDb(): Promise<void> {
   if (config.dbDriver === 'postgres') {
     // PostgreSQL initialization
     if (!config.databaseUrl) {
-      throw new Error(
-        'DATABASE_URL environment variable is required when DB_DRIVER=postgres'
-      );
+      throw new Error('DATABASE_URL environment variable is required when DB_DRIVER=postgres');
     }
 
-    const pgDriver = new PostgresDriver(config.databaseUrl, config.databaseSsl, config.databasePoolSize, {
-      statementTimeoutMs: config.databaseStatementTimeoutMs,
-      queryTimeoutMs: config.databaseQueryTimeoutMs,
-      idleInTransactionSessionTimeoutMs: config.databaseIdleTransactionTimeoutMs,
-    });
+    const pgDriver = new PostgresDriver(
+      config.databaseUrl,
+      config.databaseSsl,
+      config.databasePoolSize,
+      {
+        statementTimeoutMs: config.databaseStatementTimeoutMs,
+        queryTimeoutMs: config.databaseQueryTimeoutMs,
+        idleInTransactionSessionTimeoutMs: config.databaseIdleTransactionTimeoutMs,
+      },
+    );
     await pgDriver.connect();
     _driver = pgDriver;
 
@@ -237,19 +247,17 @@ export async function initDb(): Promise<void> {
   // DB-backed subscription model without any manual migration step.
   // Imported lazily so this module never has a static dependency on a
   // repository (repositories import this module, not the other way round).
-  const { ensureLegacyWebhookSubscription } = await import(
-    './repositories/webhookSubscriptions'
-  );
+  const { ensureLegacyWebhookSubscription } = await import('./repositories/webhookSubscriptions');
   ensureLegacyWebhookSubscription();
 }
 
 export function getDriver(): DbDriver {
-  if (!_driver) throw new Error("Database not initialised — call initDb() first");
+  if (!_driver) throw new Error('Database not initialised — call initDb() first');
   return _driver;
 }
 
 export function getDb(): Database.Database {
-  if (!_db) throw new Error("Database not initialised — call initDb() first for SQLite");
+  if (!_db) throw new Error('Database not initialised — call initDb() first for SQLite');
   return _db;
 }
 

@@ -1,5 +1,5 @@
 import Redis from 'ioredis';
-import { RateLimitStore } from './rateLimitStore';
+import { ReadableRateLimitStore } from './rateLimitStore';
 import { logger } from '../utils/logger';
 
 /**
@@ -22,7 +22,7 @@ import { logger } from '../utils/logger';
  * (`commandTimeout: 2000` in `src/services/redis.ts`), so a hung Redis
  * connection will not cause `increment` to block indefinitely.
  */
-export class RedisRateLimitStore implements RateLimitStore {
+export class RedisRateLimitStore implements ReadableRateLimitStore {
   constructor(private client: Redis) {}
 
   async increment(key: string, windowMs: number): Promise<{ count: number; resetAt: number }> {
@@ -40,7 +40,7 @@ export class RedisRateLimitStore implements RateLimitStore {
     `;
 
     try {
-      const result = await this.client.eval(script, 1, redisKey, windowMs) as [number, number];
+      const result = (await this.client.eval(script, 1, redisKey, windowMs)) as [number, number];
       const count = result[0];
       const ttl = result[1] > 0 ? result[1] : windowMs;
       const resetAt = Date.now() + ttl;
@@ -50,6 +50,29 @@ export class RedisRateLimitStore implements RateLimitStore {
       // Log and re-throw — the rate-limit middleware is responsible for
       // deciding how to handle the failure (fail-open or fail-closed).
       logger.warn('[rate-limit] Redis increment failed', { key, err });
+      throw err;
+    }
+  }
+
+  async get(key: string): Promise<{ count: number; resetAt: number } | null> {
+    const redisKey = `rate-limit:${key}`;
+    try {
+      const [raw, ttl] = await Promise.all([this.client.get(redisKey), this.client.pttl(redisKey)]);
+      if (raw === null || ttl === -2) return null;
+      const count = Number(raw);
+      if (!Number.isFinite(count)) return null;
+      return { count, resetAt: Date.now() + (ttl > 0 ? ttl : 0) };
+    } catch (err) {
+      logger.warn('[rate-limit] Redis get failed', { key, err });
+      throw err;
+    }
+  }
+
+  async reset(key: string): Promise<void> {
+    try {
+      await this.client.del(`rate-limit:${key}`);
+    } catch (err) {
+      logger.warn('[rate-limit] Redis reset failed', { key, err });
       throw err;
     }
   }

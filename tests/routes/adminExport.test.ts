@@ -9,16 +9,39 @@ function makeRes() {
   let statusCode = 200;
   let ended = false;
   const res = Object.assign(ee, {
-    setHeader: (name: string, value: string) => { headers[name.toLowerCase()] = value; },
-    status: jest.fn((code: number) => { statusCode = code; return res; }),
-    send: jest.fn((data: string) => { chunks.push(data); return res; }),
-    write: jest.fn((chunk: string) => { chunks.push(chunk); return true; }),
-    end: jest.fn(() => { ended = true; return res; }),
-    json: jest.fn((data: unknown) => { chunks.push(JSON.stringify(data)); return res; }),
+    setHeader: (name: string, value: string) => {
+      headers[name.toLowerCase()] = value;
+    },
+    status: jest.fn((code: number) => {
+      statusCode = code;
+      return res;
+    }),
+    send: jest.fn((data: string) => {
+      chunks.push(data);
+      return res;
+    }),
+    write: jest.fn((chunk: string) => {
+      chunks.push(chunk);
+      return true;
+    }),
+    end: jest.fn(() => {
+      ended = true;
+      return res;
+    }),
+    json: jest.fn((data: unknown) => {
+      chunks.push(JSON.stringify(data));
+      return res;
+    }),
     _headers: headers,
     _body: () => chunks.join(''),
   });
-  return { res, headers, getBody: () => chunks.join(''), getStatus: () => statusCode, isEnded: () => ended };
+  return {
+    res,
+    headers,
+    getBody: () => chunks.join(''),
+    getStatus: () => statusCode,
+    isEnded: () => ended,
+  };
 }
 
 describe('GET /api/admin/events/export', () => {

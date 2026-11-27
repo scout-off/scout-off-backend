@@ -1,4 +1,12 @@
-import { ok, paginated, fail, toIso, normalizeTimestamps, sendSuccess, sendError } from '../../src/utils/response';
+import {
+  ok,
+  paginated,
+  fail,
+  toIso,
+  normalizeTimestamps,
+  sendSuccess,
+  sendError,
+} from '../../src/utils/response';
 
 // ---------------------------------------------------------------------------
 // Minimal mock of Express Response used by sendSuccess / sendError tests.
@@ -8,10 +16,22 @@ function makeMockRes() {
     statusCode: 200,
     headers: {} as Record<string, string>,
     body: null as unknown,
-    status(code: number) { this.statusCode = code; return this; },
-    json(data: unknown) { this.body = data; return this; },
-    setHeader(name: string, value: string) { this.headers[name] = value; return this; },
-    set(name: string, value: string) { this.headers[name] = value; return this; },
+    status(code: number) {
+      this.statusCode = code;
+      return this;
+    },
+    json(data: unknown) {
+      this.body = data;
+      return this;
+    },
+    setHeader(name: string, value: string) {
+      this.headers[name] = value;
+      return this;
+    },
+    set(name: string, value: string) {
+      this.headers[name] = value;
+      return this;
+    },
   };
   return res;
 }

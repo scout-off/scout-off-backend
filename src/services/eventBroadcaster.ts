@@ -105,9 +105,11 @@ export function isEventRelevantToWallet(
 
     case 'player_deactivated':
       // Notify the player themselves and any scout who unlocked their contact.
-      return (playerId !== undefined && p.player_id === playerId) ||
+      return (
+        (playerId !== undefined && p.player_id === playerId) ||
         p.wallet === wallet ||
-        p.scout_wallet === wallet;
+        p.scout_wallet === wallet
+      );
 
     case 'player_reactivated':
       return (playerId !== undefined && p.player_id === playerId) || p.wallet === wallet;
@@ -272,12 +274,12 @@ export class EventBroadcaster extends EventEmitter {
     this._redisUnsubscribe = subscribeSseEvents((data: unknown) => {
       const msg = data as { type: string; payload: Record<string, unknown>; origin: string };
       metrics.received++;
-      
+
       // Skip events from our own origin (avoid echo)
       if (msg.origin === INSTANCE_ID) {
         return;
       }
-      
+
       // Local broadcast to subscribers
       metrics.localBroadcasts++;
       this.emit(EventBroadcaster.CHANNEL, {
@@ -316,7 +318,8 @@ export class EventBroadcaster extends EventEmitter {
     };
 
     // Attach listener with the subscriber as the key so we can remove it later.
-    (subscriber as SseSubscriber & { _listener?: (e: BroadcastEvent) => void })._listener = listener;
+    (subscriber as SseSubscriber & { _listener?: (e: BroadcastEvent) => void })._listener =
+      listener;
     this.on(EventBroadcaster.CHANNEL, listener);
 
     logger.debug(
@@ -329,7 +332,8 @@ export class EventBroadcaster extends EventEmitter {
    * Must be called when the client disconnects to prevent memory leaks.
    */
   unsubscribe(subscriber: SseSubscriber): void {
-    const listener = (subscriber as SseSubscriber & { _listener?: (e: BroadcastEvent) => void })._listener;
+    const listener = (subscriber as SseSubscriber & { _listener?: (e: BroadcastEvent) => void })
+      ._listener;
     if (listener) {
       this.off(EventBroadcaster.CHANNEL, listener);
     }
@@ -343,34 +347,36 @@ export class EventBroadcaster extends EventEmitter {
   /**
    * Emit an event to all relevant subscribers.
    * Called by the indexer after persisting a batch of events.
-   * 
+   *
    * When Redis is configured, the event is also published to Redis so other
    * instances can receive it. Events are deduped by origin to avoid double
    * delivery when both a controller and the indexer emit the same logical event.
    */
   broadcast(event: BroadcastEvent): void {
-    logger.debug(`[eventBroadcaster] broadcast type=${event.type} subscribers=${this._subscribers.size}`);
-    
+    logger.debug(
+      `[eventBroadcaster] broadcast type=${event.type} subscribers=${this._subscribers.size}`,
+    );
+
     const origin = INSTANCE_ID;
-    
+
     // Publish to Redis if available
     const redisPublished = publishSseEvent({
       type: event.type,
       payload: event.payload,
       origin,
     });
-    
+
     if (redisPublished) {
       metrics.published++;
       metrics.redisBroadcasts++;
     } else {
       metrics.published++;
     }
-    
+
     // Local broadcast to in-process subscribers
     this.emit(EventBroadcaster.CHANNEL, event);
   }
-  
+
   /**
    * Clean up Redis subscription on destroy.
    */
@@ -385,4 +391,3 @@ export class EventBroadcaster extends EventEmitter {
 /** Convenience accessor for the singleton. */
 /** Convenience accessor for the singleton. */
 export const broadcaster = EventBroadcaster.getInstance();
-

@@ -36,7 +36,7 @@ on:
 
 concurrency:
   group: deploy-mainnet
-  cancel-in-progress: false   # Never cancel a mainnet deploy mid-flight
+  cancel-in-progress: false # Never cancel a mainnet deploy mid-flight
 
 permissions:
   contents: read
@@ -151,7 +151,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write    # cosign keyless signing via GitHub OIDC
+      id-token: write # cosign keyless signing via GitHub OIDC
       attestations: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}

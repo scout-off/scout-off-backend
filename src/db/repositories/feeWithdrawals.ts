@@ -47,10 +47,13 @@ export async function insertFeeWithdrawal(p: {
   });
 }
 
-export async function getFeeWithdrawalByIdempotencyKey(key: string): Promise<FeeWithdrawalRow | null> {
+export async function getFeeWithdrawalByIdempotencyKey(
+  key: string,
+): Promise<FeeWithdrawalRow | null> {
   const sql = `SELECT * FROM fee_withdrawals WHERE idempotency_key = ? LIMIT 1`;
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<FeeWithdrawalRow>(sql, [key])) ?? null,
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<FeeWithdrawalRow>(sql, [key])) ?? null,
   );
 }
 
@@ -84,9 +87,10 @@ export async function insertAdminFeeConfigLog(p: {
   );
 }
 
-export async function listAdminFeeConfigLog(limit = 50, offset = 0): Promise<AdminFeeConfigLogRow[]> {
+export async function listAdminFeeConfigLog(
+  limit = 50,
+  offset = 0,
+): Promise<AdminFeeConfigLogRow[]> {
   const sql = `SELECT * FROM admin_fee_config_log ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-  return timedQueryAsync(sql, () =>
-    getDriver().all<AdminFeeConfigLogRow>(sql, [limit, offset]),
-  );
+  return timedQueryAsync(sql, () => getDriver().all<AdminFeeConfigLogRow>(sql, [limit, offset]));
 }

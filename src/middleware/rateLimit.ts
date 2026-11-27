@@ -21,7 +21,7 @@ const defaultStore: RateLimitStore = createStore();
 
 export interface RateLimitOptions {
   windowMs?: number; // time window in ms (default: config.rateLimit.windowMs)
-  max?: number;      // max requests per window per IP (default: config.rateLimit.max)
+  max?: number; // max requests per window per IP (default: config.rateLimit.max)
   store?: RateLimitStore; // override default store (useful for tests)
   /** Return a stable subject key instead of the request IP for identity-based limits. */
   keyGenerator?: (req: Request) => string | undefined;

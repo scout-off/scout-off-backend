@@ -21,9 +21,9 @@ import { BASE_URL } from '../config.js';
 
 // ── Custom metrics ────────────────────────────────────────────────────────────
 
-const authErrors   = new Counter('auth_errors');
+const authErrors = new Counter('auth_errors');
 const challengeRtt = new Trend('auth_challenge_rtt', true);
-const tokenRtt     = new Trend('auth_token_rtt', true);
+const tokenRtt = new Trend('auth_token_rtt', true);
 
 // ── Scenario options (exported for the suite entry-point to consume) ──────────
 
@@ -54,7 +54,11 @@ export default function authFlowVU() {
   const challengeOk = check(challengeRes, {
     'challenge status is 200': (r) => r.status === 200,
     'challenge body has challenge field': (r) => {
-      try { return !!JSON.parse(r.body).challenge; } catch { return false; }
+      try {
+        return !!JSON.parse(r.body).challenge;
+      } catch {
+        return false;
+      }
     },
   });
 

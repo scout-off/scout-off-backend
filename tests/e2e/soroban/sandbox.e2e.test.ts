@@ -56,7 +56,10 @@ describeE2E('soroban sandbox E2E', () => {
         // Force a paused-path classification through the public PaymentError mapper
         // by constructing an error string the classifiers recognise.
         const { PaymentError } = stellar;
-        const err = new PaymentError('Contract is paused; contact unlocks are unavailable', 'CONTRACT_PAUSED');
+        const err = new PaymentError(
+          'Contract is paused; contact unlocks are unavailable',
+          'CONTRACT_PAUSED',
+        );
         expect(err.code).toBe('CONTRACT_PAUSED');
       })(),
     ).resolves.toBeUndefined();

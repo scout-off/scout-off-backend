@@ -139,7 +139,10 @@ describe('GET /api/players/:playerId/milestones — deactivated player', () => {
   it('returns 404 (hidden) for an unauthorized player role', async () => {
     const res = await request(app)
       .get(`/api/players/${PLAYER_ID}/milestones`)
-      .set('Authorization', `Bearer ${makeToken('GOTHERPLAYER1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'player')}`);
+      .set(
+        'Authorization',
+        `Bearer ${makeToken('GOTHERPLAYER1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'player')}`,
+      );
     expect(res.status).toBe(404);
   });
 

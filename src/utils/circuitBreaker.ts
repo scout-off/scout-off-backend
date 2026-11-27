@@ -98,7 +98,7 @@ export class CircuitBreaker {
         this.name,
         this.lastOpenedAt !== null
           ? Math.max(0, this.resetTimeoutMs - (Date.now() - this.lastOpenedAt))
-          : this.resetTimeoutMs
+          : this.resetTimeoutMs,
       );
     }
 
@@ -205,7 +205,7 @@ export class RetryingCircuitBreaker {
         throw new CircuitBreakerError(
           'ServiceUnavailable: Circuit breaker is OPEN',
           this.name,
-          Math.max(0, this.nextAttemptAt - Date.now())
+          Math.max(0, this.nextAttemptAt - Date.now()),
         );
       }
     }

@@ -39,7 +39,6 @@ function loadWithMockedPool(): {
   return { PostgresDriver: mod.PostgresDriver, mockPoolConstructor };
 }
 
-
 // ─── SSL option: false (default) ─────────────────────────────────────────────
 
 describe('ssl: false (no TLS)', () => {

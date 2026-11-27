@@ -11,7 +11,11 @@ import {
   INVALIDATION_CHANNEL,
   INVALIDATION_MESSAGE,
 } from '../../src/services/cache';
-import { closeRedisClients, getRedisClient, getRedisSubscriberClient } from '../../src/services/redis';
+import {
+  closeRedisClients,
+  getRedisClient,
+  getRedisSubscriberClient,
+} from '../../src/services/redis';
 import { initBlocklist, isTokenRevoked } from '../../src/services/tokenBlocklist';
 import {
   clearFeatureFlagCache,
@@ -72,10 +76,14 @@ describeWithRedis('production Redis integration', () => {
       Array.from({ length: limit + 5 }, () => store.increment(key, 250)),
     );
 
-    expect(results.map(({ count }) => count).sort((a, b) => a - b))
-      .toEqual(Array.from({ length: limit + 5 }, (_, i) => i + 1));
+    expect(results.map(({ count }) => count).sort((a, b) => a - b)).toEqual(
+      Array.from({ length: limit + 5 }, (_, i) => i + 1),
+    );
     expect(results.every(({ resetAt }) => resetAt > Date.now())).toBe(true);
-    await waitFor(async () => (await redis.exists(`rate-limit:${key}`)) === 0, 'rate-limit key expiry');
+    await waitFor(
+      async () => (await redis.exists(`rate-limit:${key}`)) === 0,
+      'rate-limit key expiry',
+    );
     await expect(store.increment(key, 250)).resolves.toMatchObject({ count: 1 });
   });
 
@@ -88,7 +96,10 @@ describeWithRedis('production Redis integration', () => {
     await store.set(`${cachePrefix}expires`, 'short-lived', 200);
 
     await expect(store.get(`${cachePrefix}1`)).resolves.toEqual({ key: `${cachePrefix}1` });
-    await waitFor(async () => (await redis.exists(`${cachePrefix}expires`)) === 0, 'cache key expiry');
+    await waitFor(
+      async () => (await redis.exists(`${cachePrefix}expires`)) === 0,
+      'cache key expiry',
+    );
 
     await store.deleteByPrefix(cachePrefix);
 

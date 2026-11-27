@@ -44,7 +44,9 @@ import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
 // approach as tests/routes/admin.test.ts.
 jest.mock('../../src/services/stellar', () => ({
   ...jest.requireActual('../../src/services/stellar'),
-  registerValidatorOnChain: jest.fn().mockResolvedValue({ transactionId: 'e2e-import-register-txid' }),
+  registerValidatorOnChain: jest
+    .fn()
+    .mockResolvedValue({ transactionId: 'e2e-import-register-txid' }),
   revokeValidatorOnChain: jest.fn().mockResolvedValue({ transactionId: 'e2e-import-revoke-txid' }),
 }));
 
@@ -58,9 +60,7 @@ async function getToken(role: string): Promise<string> {
   const challengeRes = await request(app).get(`/auth/challenge?account=${kp.publicKey()}`);
   const tx = new Transaction(challengeRes.body.challenge, Networks.TESTNET);
   tx.sign(kp);
-  const tokenRes = await request(app)
-    .post('/auth/token')
-    .send({ transaction: tx.toXdr(), role });
+  const tokenRes = await request(app).post('/auth/token').send({ transaction: tx.toXdr(), role });
   return tokenRes.body.token;
 }
 
@@ -168,7 +168,10 @@ describe('processBatch()', () => {
 
   it('includes label and region in results', async () => {
     const wallet = Keypair.random().publicKey();
-    const results = await processBatch([{ wallet, label: 'Ali', region: 'Africa' }], 'admin-wallet');
+    const results = await processBatch(
+      [{ wallet, label: 'Ali', region: 'Africa' }],
+      'admin-wallet',
+    );
     expect(results[0].label).toBe('Ali');
     expect(results[0].region).toBe('Africa');
   });
@@ -180,11 +183,7 @@ describe('processBatch()', () => {
     await processBatch([{ wallet: alreadyRegistered }], 'admin-wallet');
 
     const results = await processBatch(
-      [
-        { wallet: validNew },
-        { wallet: 'BAD_WALLET' },
-        { wallet: alreadyRegistered },
-      ],
+      [{ wallet: validNew }, { wallet: 'BAD_WALLET' }, { wallet: alreadyRegistered }],
       'admin-wallet',
     );
 
@@ -203,9 +202,7 @@ describe('processBatch()', () => {
 
 describe('POST /api/admin/validators/import — auth guards', () => {
   it('returns 401 when no token is provided', async () => {
-    const res = await request(app)
-      .post('/api/admin/validators/import')
-      .send({ validators: [] });
+    const res = await request(app).post('/api/admin/validators/import').send({ validators: [] });
     expect(res.status).toBe(401);
   });
 
@@ -293,7 +290,9 @@ describe('POST /api/admin/validators/import — JSON body', () => {
     expect(res.status).toBe(200); // whole request succeeds
     expect(res.body.data.summary.registered).toBe(1);
     expect(res.body.data.summary.invalid).toBe(1);
-    const invalidEntry = res.body.data.results.find((r: { wallet: string }) => r.wallet === 'BAD_ADDR');
+    const invalidEntry = res.body.data.results.find(
+      (r: { wallet: string }) => r.wallet === 'BAD_ADDR',
+    );
     expect(invalidEntry.status).toBe('invalid');
     expect(invalidEntry.reason).toBeDefined();
   });
@@ -343,9 +342,9 @@ describe('POST /api/admin/validators/import — JSON body', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         validators: [
-          { wallet: w1 },              // valid new
-          { wallet: 'INVALID_ADDR' },  // invalid
-          { wallet: w3 },              // already registered → duplicate
+          { wallet: w1 }, // valid new
+          { wallet: 'INVALID_ADDR' }, // invalid
+          { wallet: w3 }, // already registered → duplicate
           { wallet: w2, label: 'Coach', region: 'Africa' }, // valid with metadata
         ],
       });

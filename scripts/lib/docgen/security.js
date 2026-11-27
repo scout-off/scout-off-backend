@@ -54,7 +54,9 @@ function deriveSecurity(middleware) {
           }
         }
         if (/req\.role\s*===/.test(mw.raw)) {
-          notes.push('Authorization includes custom inline logic beyond a single role check — see the route source.');
+          notes.push(
+            'Authorization includes custom inline logic beyond a single role check — see the route source.',
+          );
         }
         break;
       default:

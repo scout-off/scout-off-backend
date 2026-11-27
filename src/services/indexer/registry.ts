@@ -83,10 +83,11 @@ export async function insertValidator(wallet: string, txHash?: string): Promise<
  * No-op if the wallet is not found.
  */
 export async function revokeValidatorRow(wallet: string, txHash?: string): Promise<void> {
-  await getDriver().run(
-    `UPDATE validators SET revoked_at = ?, tx_hash = ? WHERE wallet = ?`,
-    [Math.floor(Date.now() / 1000), txHash ?? null, wallet],
-  );
+  await getDriver().run(`UPDATE validators SET revoked_at = ?, tx_hash = ? WHERE wallet = ?`, [
+    Math.floor(Date.now() / 1000),
+    txHash ?? null,
+    wallet,
+  ]);
 }
 
 /**

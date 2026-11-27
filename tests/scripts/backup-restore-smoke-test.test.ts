@@ -33,11 +33,7 @@ function runSql(dbPath: string, sql: string): void {
   });
 }
 
-function runScript(
-  script: string,
-  args: string[] = [],
-  env: NodeJS.ProcessEnv = {}
-): string {
+function runScript(script: string, args: string[] = [], env: NodeJS.ProcessEnv = {}): string {
   return execFileSync('bash', [script, ...args], {
     cwd: REPO_ROOT,
     env: { ...process.env, ...env },
@@ -48,7 +44,7 @@ function runScript(
 function runScriptExpectFailure(
   script: string,
   args: string[] = [],
-  env: NodeJS.ProcessEnv = {}
+  env: NodeJS.ProcessEnv = {},
 ): { stdout: string; stderr: string; status: number } {
   const result = spawnSync('bash', [script, ...args], {
     cwd: REPO_ROOT,
@@ -77,14 +73,14 @@ function createTestDatabase(dbPath: string): void {
       VALUES ('register', 100, 'abc123hash', '{}');
       CREATE TABLE migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL);
       INSERT INTO migrations (id, applied_at) VALUES ('001_initial.sql', 1);
-    `
+    `,
   );
 }
 
 function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     const startTime = Date.now();
-    
+
     function check() {
       const req = http.get(`http://localhost:${port}/health/liveness`, (res) => {
         if (res.statusCode === 200) {
@@ -93,9 +89,9 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
           retry();
         }
       });
-      
+
       req.on('error', retry);
-      
+
       function retry() {
         if (Date.now() - startTime > timeoutMs) {
           resolve(false);
@@ -104,7 +100,7 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
         }
       }
     }
-    
+
     check();
   });
 }
@@ -129,10 +125,10 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
   it('runs the complete backup-restore-smoke-test cycle successfully', () => {
     const dbPath = path.join(tmpDir, 'test.db');
     const backupDest = path.join(tmpDir, 'backups');
-    
+
     // Create initial test database
     createTestDatabase(dbPath);
-    
+
     const output = runScript(SMOKE_TEST_SCRIPT, [], {
       DB_PATH: dbPath,
       BACKUP_DEST: backupDest,
@@ -169,12 +165,12 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
   it('detects row count mismatches after restore', () => {
     // This test verifies that the smoke test would catch row count mismatches
     // We simulate this by creating a backup, then manually modifying the restored DB
-    
+
     const dbPath = path.join(tmpDir, 'test.db');
     const backupDest = path.join(tmpDir, 'backups');
-    
+
     createTestDatabase(dbPath);
-    
+
     // Run the smoke test but with a modified environment that will cause a mismatch
     // We'll test the row count verification logic directly
     const output = runScript(SMOKE_TEST_SCRIPT, [], {
@@ -198,9 +194,9 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
   it('fails when the app does not start', () => {
     const dbPath = path.join(tmpDir, 'test.db');
     const backupDest = path.join(tmpDir, 'backups');
-    
+
     createTestDatabase(dbPath);
-    
+
     const { stderr } = runScriptExpectFailure(SMOKE_TEST_SCRIPT, [], {
       DB_PATH: dbPath,
       BACKUP_DEST: backupDest,
@@ -219,9 +215,9 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
   it('fails when /health/readiness returns non-200', () => {
     const dbPath = path.join(tmpDir, 'test.db');
     const backupDest = path.join(tmpDir, 'backups');
-    
+
     createTestDatabase(dbPath);
-    
+
     // Create a simple HTTP server that returns 503
     const serverScript = path.join(tmpDir, 'fake-server.js');
     fs.writeFileSync(
@@ -241,7 +237,7 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
         }
       });
       server.listen(3459, () => console.log('Fake server listening on 3459'));
-      `
+      `,
     );
 
     const { stderr } = runScriptExpectFailure(SMOKE_TEST_SCRIPT, [], {
@@ -290,7 +286,7 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
         }
       });
       server.listen(3460, () => console.log('Fake healthy server listening on 3460'));
-      `
+      `,
     );
 
     // Use a mock app that reports healthy so the script's happy path
@@ -316,12 +312,12 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
   it('handles corrupted backups gracefully', () => {
     // This test verifies that if a backup is corrupted during creation,
     // the smoke test fails appropriately
-    
+
     const dbPath = path.join(tmpDir, 'test.db');
     const backupDest = path.join(tmpDir, 'backups');
-    
+
     createTestDatabase(dbPath);
-    
+
     // Create a custom backup script that creates a corrupted backup
     const corruptBackupScript = path.join(tmpDir, 'corrupt-backup.sh');
     fs.writeFileSync(
@@ -330,7 +326,7 @@ function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
       mkdir -p ${backupDest}
       echo "corrupted data" > ${backupDest}/test-20250101T000000Z.db
       exit 0
-      `
+      `,
     );
     fs.chmodSync(corruptBackupScript, 0o755);
 

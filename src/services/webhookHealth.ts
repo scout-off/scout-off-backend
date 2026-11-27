@@ -46,7 +46,9 @@ export function refreshSubscriptionStatusGauge(): void {
   try {
     setWebhookSubscriptionStatusCounts(countWebhookSubscriptionsByStatus());
   } catch (err) {
-    logger.warn(`[webhooks] failed to refresh subscription status gauge: ${(err as Error).message}`);
+    logger.warn(
+      `[webhooks] failed to refresh subscription status gauge: ${(err as Error).message}`,
+    );
   }
 }
 
@@ -124,13 +126,13 @@ async function notifySuspension(suspended: WebhookSubscription): Promise<void> {
       { retries: 1, secret: healthy.secret, subscription: healthy, eventType: 'webhook.suspended' },
     );
   } catch (err) {
-    logger.warn(`[webhooks] webhook.suspended notice to subscription ${healthy.id} failed: ${(err as Error).message}`);
+    logger.warn(
+      `[webhooks] webhook.suspended notice to subscription ${healthy.id} failed: ${(err as Error).message}`,
+    );
   }
 }
 
-export type ReactivateResult =
-  | { ok: true }
-  | { ok: false; error: string };
+export type ReactivateResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Reactivate a subscription, but only if a test ping to its endpoint succeeds.
@@ -144,10 +146,18 @@ export async function reactivateAfterPing(
     await postWebhookWithRetry(
       subscription.url,
       { event: 'test', timestamp: new Date().toISOString() },
-      { retries: 1, secret: subscription.secret, subscription, eventType: 'webhook.reactivation_ping' },
+      {
+        retries: 1,
+        secret: subscription.secret,
+        subscription,
+        eventType: 'webhook.reactivation_ping',
+      },
     );
   } catch (err) {
-    return { ok: false, error: `Test ping failed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      ok: false,
+      error: `Test ping failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   reactivateWebhookSubscription(subscription.id);
   getWebhookBreaker(subscription.id).reset();

@@ -48,18 +48,17 @@ RETENTION_ARCHIVE_DIR=/data/audit-archives
 
 See [docs/audit-log.md](docs/audit-log.md) for the retention/archival contract.
 
-
 ## Database Migrations
 
 The backend uses a deterministic migration system (file-based, ordered alphabetically) to evolve the database schema. Migrations are automatically applied on server startup, but operators often need to run them independently — for example, in pre-deployment validation steps or when troubleshooting without starting the full server.
 
 ### Available Commands
 
-| Command | Purpose | Exit Code |
-|---------|---------|-----------|
-| `npm run db:migrate` | Apply all pending migrations | 0 on success, 1 on error |
-| `npm run db:migrate:status` | Show which migrations have been applied | 0 if up-to-date, 2 if behind, 1 on error |
-| `npm run db:migrate:version` | Print the current schema version (last applied migration) | 0 on success, 1 on error |
+| Command                      | Purpose                                                   | Exit Code                                |
+| ---------------------------- | --------------------------------------------------------- | ---------------------------------------- |
+| `npm run db:migrate`         | Apply all pending migrations                              | 0 on success, 1 on error                 |
+| `npm run db:migrate:status`  | Show which migrations have been applied                   | 0 if up-to-date, 2 if behind, 1 on error |
+| `npm run db:migrate:version` | Print the current schema version (last applied migration) | 0 on success, 1 on error                 |
 
 ### Running Migrations as a One-Off
 
@@ -104,7 +103,7 @@ spec:
       containers:
         - name: migrate
           image: scout-off-backend:latest
-          command: 
+          command:
             - /bin/sh
             - -c
             - |
@@ -122,17 +121,18 @@ spec:
                   key: DATABASE_URL
           resources:
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: '500m'
+              memory: '512Mi'
             requests:
-              cpu: "100m"
-              memory: "256Mi"
+              cpu: '100m'
+              memory: '256Mi'
       restartPolicy: Never
 ```
 
 ### ⚠️ Production Images
 
 The **production Docker image** (`Dockerfile.prod` or similar) typically does **not** include:
+
 - `scripts/` directory
 - `ts-node` or TypeScript compiler
 - dev dependencies (see `npm install --omit=dev` above)
@@ -140,6 +140,7 @@ The **production Docker image** (`Dockerfile.prod` or similar) typically does **
 **Option 1: Run migrations from a development image** (shown above; simple but larger download)
 
 **Option 2: Precompile the migration script** into the production build:
+
 ```dockerfile
 # In Dockerfile.prod
 RUN npm run build && \
@@ -147,6 +148,7 @@ RUN npm run build && \
 ```
 
 Then invoke the compiled version:
+
 ```bash
 node dist/scripts/migrate.js up
 ```
@@ -166,7 +168,6 @@ fi
 
 See also [`db/README.md`](db/README.md) for naming conventions, file pairing (SQLite + PostgreSQL), and how to write new migrations.
 
-
 ## Environment Setup
 
 Copy `.env.example` to `.env` and fill in all required values before starting the server.
@@ -184,18 +185,19 @@ To opt back in explicitly (for example a single-host deployment that keeps its c
 
 The `NETWORK` environment variable determines which Stellar network the backend connects to. Accepted values:
 
-| Value | Description | Use Case |
-|-------|-------------|----------|
-| `testnet` | Test SDF Network | Development, testing |
-| `mainnet` | Public Global Stellar Network | Production |
-| `futurenet` | Test SDF Future Network | Testing upcoming protocol changes |
-| `standalone` | Standalone Network | Local development with Soroban sandbox |
+| Value        | Description                   | Use Case                               |
+| ------------ | ----------------------------- | -------------------------------------- |
+| `testnet`    | Test SDF Network              | Development, testing                   |
+| `mainnet`    | Public Global Stellar Network | Production                             |
+| `futurenet`  | Test SDF Future Network       | Testing upcoming protocol changes      |
+| `standalone` | Standalone Network            | Local development with Soroban sandbox |
 
 Default: `testnet`.
 
 When `NETWORK_PASSPHRASE` is unset, the server uses the default passphrase for the selected network. Override `NETWORK_PASSPHRASE` only when using non-standard networks.
 
 For local development with the Soroban sandbox, use:
+
 ```env
 NETWORK=standalone
 NETWORK_PASSPHRASE=Standalone Network ; February 2017
@@ -206,66 +208,66 @@ The sandbox can be started with `scripts/soroban-sandbox` (see [scripts/soroban-
 > [!IMPORTANT]
 > In production, **always** set `NETWORK=mainnet`. Deployments using `testnet`, `futurenet`, or `standalone` in production emit a startup warning.
 
-| Variable | Required | Notes |
-|---|---|---|
-| `CONTRACT_ID` | — | Legacy single-contract address (backward compat). Falls back as default for each per-contract var below. |
-| `REGISTER_CONTRACT_ID` | ✅ | Deployed `register` Soroban contract address |
-| `PROGRESS_CONTRACT_ID` | ✅ | Deployed `progress` Soroban contract address |
-| `SUBSCRIPTION_CONTRACT_ID` | ✅ | Deployed `subscription` Soroban contract address |
-| `CONNECTION_CONTRACT_ID` | ✅ | Deployed `connection` Soroban contract address |
-| `JWT_SECRET` | ✅ | Min 32 chars; rotate via dual-key window (see below) |
-| `JWT_SECRET_PREVIOUS` | — | Previous signing secret during rotation grace window |
-| `JWT_SECRET_PREVIOUS_UNTIL` | — | Absolute grace-window end (Unix seconds or ISO-8601). After this time previous tokens are rejected even if `JWT_SECRET_PREVIOUS` is still set |
-| `SEP10_SERVER_SECRET` | ✅ | Stellar secret key (starts with `S`) used to sign and verify SEP-10 challenge transactions. **Must be identical across every backend instance** — without it each process generates an ephemeral random keypair, causing cross-instance auth failures under a load balancer. Generate with `stellar keys generate` and store in your secrets manager. See [docs/auth.md](docs/auth.md#sep-10-server-keypair-sep10_server_secret) for rotation guidance. |
-| `HORIZON_URL` | ✅ | e.g. `https://horizon-testnet.stellar.org` |
-| `SOROBAN_RPC_URL` | ✅ | e.g. `https://soroban-testnet.stellar.org` |
-| `NETWORK` | ✅ | `testnet`, `mainnet`, `futurenet`, or `standalone` (see below) |
-| `PINATA_API_KEY` / `PINATA_SECRET` | ✅ | IPFS upload credentials |
-| `DB_DRIVER` | — | Database driver: `sqlite` (default) or `postgres` |
-| `DB_PATH` | — | SQLite file path (default: `scout-off.db`); only used when `DB_DRIVER=sqlite` |
-| `DATABASE_URL` | — (required when `DB_DRIVER=postgres`) | PostgreSQL connection string, e.g. `postgresql://user:pass@host:5432/db` |
-| `SQLITE_BUSY_TIMEOUT_MS` | — | SQLite lock-contention wait in milliseconds (default: `5000`; SQLite only) |
-| `DB_STATEMENT_TIMEOUT_MS` | — | PostgreSQL server-side statement limit in milliseconds (default: `25000`) |
-| `DB_QUERY_TIMEOUT_MS` | — | PostgreSQL client query limit in milliseconds (default: `30000`) |
-| `DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS` | — | PostgreSQL idle transaction limit in milliseconds (default: `60000`) |
-| `SSE_KEEPALIVE_INTERVAL_MS` | — | Keep-alive ping interval for SSE connections, in ms (default: `15000`) |
-| `SSE_MAX_CONNECTIONS` | — | Max concurrent SSE connections; `0` = unlimited (default: `0`) |
-| `SSE_RETRY_MS` | — | Base reconnect delay for SSE clients in retry: frame, in ms (default: `5000`) |
-| `PORT` | — | API port (default: `4000`) |
-| `LOG_LEVEL` | — | `debug` / `info` / `warn` / `error` |
-| `LOG_SKIP_PATHS` | — | Comma-separated paths requestLogger silences (default: health + metrics probes) |
-| `LOG_SAMPLE_RATE` | — | Float 0–1 sample rate for non-skipped paths (default: `1` = log all) |
-| `STELLAR_HEALTH_CHECK` | — | Set `false` in staging to skip Stellar RPC check |
-| `TRUSTED_PROXY_COUNT` | — | Number of trusted reverse proxies (default: `1`). Set to the exact number of proxy hops between the internet and this server. **Fail-safe**: if the observed `X-Forwarded-For` chain has fewer entries than this value implies, `extractClientIp()` falls back to the raw socket address rather than trusting the attacker-controlled leftmost value. A chain shorter than expected (direct connection bypassing a proxy, or a client crafting a short header) will therefore appear to come from the connecting IP, not a spoofed address. |
-| `ADMIN_WALLET` | — | Single admin wallet address (for backward compatibility) |
-| `ADMIN_WALLETS` | — | Comma-separated list of admin wallet addresses (e.g., `GABC...,GDEF...`) |
-| `ADMIN_THRESHOLD` | — | Number of admin signatures required for high-value operations (default: `1`) |
-| `ADMIN_ACTION_TTL_MS` | — | TTL for pending admin multi-sig actions in milliseconds (default: `3600000` = 1 hour) |
-| `CORS_ALLOWED_ORIGINS` | — | Comma-separated CORS allowed origins (defaults per env: `*` in dev, `https://staging.scoutoff.io` in staging, `https://app.scoutoff.io,https://scoutoff.io` in prod) |
-| `ADMIN_IP_ALLOWLIST` | — | Comma-separated list of **IPv4** addresses/CIDR ranges allowed to reach admin endpoints (e.g. `192.168.1.0/24,10.0.0.1`). Unset/empty disables the check. IPv6 is not supported yet — any IPv6 client IP is rejected with 403 regardless of this setting (fail closed). |
-| `RATE_LIMIT_ENABLED` | — | Enable rate limiting (default: `true`). See [docs/rate-limiting.md](docs/rate-limiting.md). |
-| `RATE_LIMIT_WINDOW_MS` | — | Rate limit window in milliseconds (default: `60000`). See [docs/rate-limiting.md](docs/rate-limiting.md). |
-| `RATE_LIMIT_MAX` | — | Max requests per window per IP (default: `60`). See [docs/rate-limiting.md](docs/rate-limiting.md). |
-| `AUTH_RATE_LIMIT_WINDOW_MS` | — | Auth rate limit window (default: `60000`). See [docs/rate-limiting.md](docs/rate-limiting.md). |
-| `AUTH_RATE_LIMIT_MAX` | — | Max auth requests per account and endpoint per window (default: `5`). See [docs/rate-limiting.md](docs/rate-limiting.md). |
-| `AUTH_RATE_LIMIT_IP_MAX` | — | Max requests per auth endpoint per IP and window (default: `60`). See [docs/rate-limiting.md](docs/rate-limiting.md). |
-| `MILESTONE_RATE_WINDOW_MS` | — | Rate limit window for milestone evidence submissions, in ms (default: `60000` = 1 min). See [docs/rate-limiting.md](docs/rate-limiting.md#4-milestone-evidence-submission-rate-limiter). |
-| `MILESTONE_RATE_MAX` | — | Max milestone evidence submissions per window per caller (default: `10`). See [docs/rate-limiting.md](docs/rate-limiting.md#4-milestone-evidence-submission-rate-limiter). |
-| `READINESS_MAX_LAG` | — | Maximum indexer ledger lag (in ledgers) allowed for readiness check. If the indexer is more than this many ledgers behind the chain tip, the readiness check will report the indexer as unavailable. Default: `100`. Set to `0` to disable the lag check. See [docs/readiness-check.md](docs/readiness-check.md). |
-| `READINESS_GRACE_PERIOD_MS` | — | Startup grace period in milliseconds for the readiness lag check. After process startup, the indexer is allowed to lag without failing readiness for this duration (to accommodate initial sync from persisted cursor). Default: `300000` (5 minutes). Set to `0` to disable the grace period. See [docs/readiness-check.md](docs/readiness-check.md). |
-| `READINESS_DB_TIMEOUT_MS` | — | Per-probe timeout for DB writability readiness check, in ms (default: `2000`). See [docs/readiness-check.md](docs/readiness-check.md#readiness_db_timeout_ms). |
-| `READINESS_IPFS_TIMEOUT_MS` | — | Per-probe timeout for Pinata IPFS connectivity readiness check, in ms (default: `5000`). See [docs/readiness-check.md](docs/readiness-check.md#readiness_ipfs_timeout_ms). |
-| `READINESS_STELLAR_TIMEOUT_MS` | — | Per-probe timeout for Stellar RPC connectivity readiness check, in ms (default: `5000`). See [docs/readiness-check.md](docs/readiness-check.md#readiness_stellar_timeout_ms). |
-| `CIRCUIT_BREAKER_FAILURE_THRESHOLD` | — | Number of consecutive failures before generic circuit breaker opens (default: `5`). See [docs/degradation-contracts.md](docs/degradation-contracts.md#circuit-breakers). |
-| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | — | Cooldown duration before generic circuit breaker half-opens to test recovery, in ms (default: `30000` = 30 s). See [docs/degradation-contracts.md](docs/degradation-contracts.md#circuit-breakers). |
-| `HTTP_KEEP_ALIVE_TIMEOUT_MS` | — | Node HTTP keep-alive socket timeout in ms (default: `65000`). Set higher than the load balancer idle timeout (AWS ALB: 60 s) so the LB closes idle sockets first and intermittent 502s on reused connections are avoided. |
-| `HTTP_HEADERS_TIMEOUT_MS` | — | Node HTTP headers timeout in ms (default: `66000`). Must be greater than `HTTP_KEEP_ALIVE_TIMEOUT_MS` — startup fails otherwise. |
-| `HTTP_REQUEST_TIMEOUT_MS` | — | Node HTTP request timeout in ms (default: `120000`). Covers receiving the request (headers + body) only; long-lived SSE response streams stay open past it. |
-| `IPFS_BREAKER_FAILURE_THRESHOLD` | — | Number of consecutive failures before Pinata IPFS circuit breaker opens (default: `5`). See [docs/degradation-contracts.md](docs/degradation-contracts.md#ipfs--pinata-circuit-breaker). |
-| `IPFS_BREAKER_RESET_TIMEOUT_MS` | — | Cooldown duration before Pinata IPFS circuit breaker half-opens to test recovery, in ms (default: `30000` = 30 s). See [docs/degradation-contracts.md](docs/degradation-contracts.md#ipfs--pinata-circuit-breaker). |
-| `METRICS_ENABLED` | — | Enable or disable metrics collection (default: `true`). Set to `false` to disable. |
-| `METRICS_AUTH_TOKEN` | — | Optional bearer token for `/metrics` endpoint protection. When set, requests must include `Authorization: Bearer <token>`. Recommended in production to prevent unauthorized scraping of operational and business signals. |
-| `METRICS_ALLOWED_CIDRS` | — | Optional CIDR allowlist for `/metrics` endpoint. Comma-separated list of IPv4 addresses or CIDR ranges (e.g., `10.0.0.0/8,192.168.1.0/24`). When set, requests from outside the CIDRs are rejected with 403. Uses `req.socket.remoteAddress` (not `X-Forwarded-For`) since Prometheus scrapers connect directly. |
+| Variable                                    | Required                               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONTRACT_ID`                               | —                                      | Legacy single-contract address (backward compat). Falls back as default for each per-contract var below.                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `REGISTER_CONTRACT_ID`                      | ✅                                     | Deployed `register` Soroban contract address                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `PROGRESS_CONTRACT_ID`                      | ✅                                     | Deployed `progress` Soroban contract address                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `SUBSCRIPTION_CONTRACT_ID`                  | ✅                                     | Deployed `subscription` Soroban contract address                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `CONNECTION_CONTRACT_ID`                    | ✅                                     | Deployed `connection` Soroban contract address                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `JWT_SECRET`                                | ✅                                     | Min 32 chars; rotate via dual-key window (see below)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `JWT_SECRET_PREVIOUS`                       | —                                      | Previous signing secret during rotation grace window                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `JWT_SECRET_PREVIOUS_UNTIL`                 | —                                      | Absolute grace-window end (Unix seconds or ISO-8601). After this time previous tokens are rejected even if `JWT_SECRET_PREVIOUS` is still set                                                                                                                                                                                                                                                                                                                                                                                               |
+| `SEP10_SERVER_SECRET`                       | ✅                                     | Stellar secret key (starts with `S`) used to sign and verify SEP-10 challenge transactions. **Must be identical across every backend instance** — without it each process generates an ephemeral random keypair, causing cross-instance auth failures under a load balancer. Generate with `stellar keys generate` and store in your secrets manager. See [docs/auth.md](docs/auth.md#sep-10-server-keypair-sep10_server_secret) for rotation guidance.                                                                                     |
+| `HORIZON_URL`                               | ✅                                     | e.g. `https://horizon-testnet.stellar.org`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `SOROBAN_RPC_URL`                           | ✅                                     | e.g. `https://soroban-testnet.stellar.org`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `NETWORK`                                   | ✅                                     | `testnet`, `mainnet`, `futurenet`, or `standalone` (see below)                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `PINATA_API_KEY` / `PINATA_SECRET`          | ✅                                     | IPFS upload credentials                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `DB_DRIVER`                                 | —                                      | Database driver: `sqlite` (default) or `postgres`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `DB_PATH`                                   | —                                      | SQLite file path (default: `scout-off.db`); only used when `DB_DRIVER=sqlite`                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `DATABASE_URL`                              | — (required when `DB_DRIVER=postgres`) | PostgreSQL connection string, e.g. `postgresql://user:pass@host:5432/db`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `SQLITE_BUSY_TIMEOUT_MS`                    | —                                      | SQLite lock-contention wait in milliseconds (default: `5000`; SQLite only)                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `DB_STATEMENT_TIMEOUT_MS`                   | —                                      | PostgreSQL server-side statement limit in milliseconds (default: `25000`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `DB_QUERY_TIMEOUT_MS`                       | —                                      | PostgreSQL client query limit in milliseconds (default: `30000`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS` | —                                      | PostgreSQL idle transaction limit in milliseconds (default: `60000`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `SSE_KEEPALIVE_INTERVAL_MS`                 | —                                      | Keep-alive ping interval for SSE connections, in ms (default: `15000`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `SSE_MAX_CONNECTIONS`                       | —                                      | Max concurrent SSE connections; `0` = unlimited (default: `0`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `SSE_RETRY_MS`                              | —                                      | Base reconnect delay for SSE clients in retry: frame, in ms (default: `5000`)                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `PORT`                                      | —                                      | API port (default: `4000`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `LOG_LEVEL`                                 | —                                      | `debug` / `info` / `warn` / `error`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `LOG_SKIP_PATHS`                            | —                                      | Comma-separated paths requestLogger silences (default: health + metrics probes)                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `LOG_SAMPLE_RATE`                           | —                                      | Float 0–1 sample rate for non-skipped paths (default: `1` = log all)                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `STELLAR_HEALTH_CHECK`                      | —                                      | Set `false` in staging to skip Stellar RPC check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `TRUSTED_PROXY_COUNT`                       | —                                      | Number of trusted reverse proxies (default: `1`). Set to the exact number of proxy hops between the internet and this server. **Fail-safe**: if the observed `X-Forwarded-For` chain has fewer entries than this value implies, `extractClientIp()` falls back to the raw socket address rather than trusting the attacker-controlled leftmost value. A chain shorter than expected (direct connection bypassing a proxy, or a client crafting a short header) will therefore appear to come from the connecting IP, not a spoofed address. |
+| `ADMIN_WALLET`                              | —                                      | Single admin wallet address (for backward compatibility)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `ADMIN_WALLETS`                             | —                                      | Comma-separated list of admin wallet addresses (e.g., `GABC...,GDEF...`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `ADMIN_THRESHOLD`                           | —                                      | Number of admin signatures required for high-value operations (default: `1`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `ADMIN_ACTION_TTL_MS`                       | —                                      | TTL for pending admin multi-sig actions in milliseconds (default: `3600000` = 1 hour)                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `CORS_ALLOWED_ORIGINS`                      | —                                      | Comma-separated CORS allowed origins (defaults per env: `*` in dev, `https://staging.scoutoff.io` in staging, `https://app.scoutoff.io,https://scoutoff.io` in prod)                                                                                                                                                                                                                                                                                                                                                                        |
+| `ADMIN_IP_ALLOWLIST`                        | —                                      | Comma-separated list of **IPv4** addresses/CIDR ranges allowed to reach admin endpoints (e.g. `192.168.1.0/24,10.0.0.1`). Unset/empty disables the check. IPv6 is not supported yet — any IPv6 client IP is rejected with 403 regardless of this setting (fail closed).                                                                                                                                                                                                                                                                     |
+| `RATE_LIMIT_ENABLED`                        | —                                      | Enable rate limiting (default: `true`). See [docs/rate-limiting.md](docs/rate-limiting.md).                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `RATE_LIMIT_WINDOW_MS`                      | —                                      | Rate limit window in milliseconds (default: `60000`). See [docs/rate-limiting.md](docs/rate-limiting.md).                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `RATE_LIMIT_MAX`                            | —                                      | Max requests per window per IP (default: `60`). See [docs/rate-limiting.md](docs/rate-limiting.md).                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `AUTH_RATE_LIMIT_WINDOW_MS`                 | —                                      | Auth rate limit window (default: `60000`). See [docs/rate-limiting.md](docs/rate-limiting.md).                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `AUTH_RATE_LIMIT_MAX`                       | —                                      | Max auth requests per account and endpoint per window (default: `5`). See [docs/rate-limiting.md](docs/rate-limiting.md).                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `AUTH_RATE_LIMIT_IP_MAX`                    | —                                      | Max requests per auth endpoint per IP and window (default: `60`). See [docs/rate-limiting.md](docs/rate-limiting.md).                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `MILESTONE_RATE_WINDOW_MS`                  | —                                      | Rate limit window for milestone evidence submissions, in ms (default: `60000` = 1 min). See [docs/rate-limiting.md](docs/rate-limiting.md#4-milestone-evidence-submission-rate-limiter).                                                                                                                                                                                                                                                                                                                                                    |
+| `MILESTONE_RATE_MAX`                        | —                                      | Max milestone evidence submissions per window per caller (default: `10`). See [docs/rate-limiting.md](docs/rate-limiting.md#4-milestone-evidence-submission-rate-limiter).                                                                                                                                                                                                                                                                                                                                                                  |
+| `READINESS_MAX_LAG`                         | —                                      | Maximum indexer ledger lag (in ledgers) allowed for readiness check. If the indexer is more than this many ledgers behind the chain tip, the readiness check will report the indexer as unavailable. Default: `100`. Set to `0` to disable the lag check. See [docs/readiness-check.md](docs/readiness-check.md).                                                                                                                                                                                                                           |
+| `READINESS_GRACE_PERIOD_MS`                 | —                                      | Startup grace period in milliseconds for the readiness lag check. After process startup, the indexer is allowed to lag without failing readiness for this duration (to accommodate initial sync from persisted cursor). Default: `300000` (5 minutes). Set to `0` to disable the grace period. See [docs/readiness-check.md](docs/readiness-check.md).                                                                                                                                                                                      |
+| `READINESS_DB_TIMEOUT_MS`                   | —                                      | Per-probe timeout for DB writability readiness check, in ms (default: `2000`). See [docs/readiness-check.md](docs/readiness-check.md#readiness_db_timeout_ms).                                                                                                                                                                                                                                                                                                                                                                              |
+| `READINESS_IPFS_TIMEOUT_MS`                 | —                                      | Per-probe timeout for Pinata IPFS connectivity readiness check, in ms (default: `5000`). See [docs/readiness-check.md](docs/readiness-check.md#readiness_ipfs_timeout_ms).                                                                                                                                                                                                                                                                                                                                                                  |
+| `READINESS_STELLAR_TIMEOUT_MS`              | —                                      | Per-probe timeout for Stellar RPC connectivity readiness check, in ms (default: `5000`). See [docs/readiness-check.md](docs/readiness-check.md#readiness_stellar_timeout_ms).                                                                                                                                                                                                                                                                                                                                                               |
+| `CIRCUIT_BREAKER_FAILURE_THRESHOLD`         | —                                      | Number of consecutive failures before generic circuit breaker opens (default: `5`). See [docs/degradation-contracts.md](docs/degradation-contracts.md#circuit-breakers).                                                                                                                                                                                                                                                                                                                                                                    |
+| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS`          | —                                      | Cooldown duration before generic circuit breaker half-opens to test recovery, in ms (default: `30000` = 30 s). See [docs/degradation-contracts.md](docs/degradation-contracts.md#circuit-breakers).                                                                                                                                                                                                                                                                                                                                         |
+| `HTTP_KEEP_ALIVE_TIMEOUT_MS`                | —                                      | Node HTTP keep-alive socket timeout in ms (default: `65000`). Set higher than the load balancer idle timeout (AWS ALB: 60 s) so the LB closes idle sockets first and intermittent 502s on reused connections are avoided.                                                                                                                                                                                                                                                                                                                   |
+| `HTTP_HEADERS_TIMEOUT_MS`                   | —                                      | Node HTTP headers timeout in ms (default: `66000`). Must be greater than `HTTP_KEEP_ALIVE_TIMEOUT_MS` — startup fails otherwise.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `HTTP_REQUEST_TIMEOUT_MS`                   | —                                      | Node HTTP request timeout in ms (default: `120000`). Covers receiving the request (headers + body) only; long-lived SSE response streams stay open past it.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `IPFS_BREAKER_FAILURE_THRESHOLD`            | —                                      | Number of consecutive failures before Pinata IPFS circuit breaker opens (default: `5`). See [docs/degradation-contracts.md](docs/degradation-contracts.md#ipfs--pinata-circuit-breaker).                                                                                                                                                                                                                                                                                                                                                    |
+| `IPFS_BREAKER_RESET_TIMEOUT_MS`             | —                                      | Cooldown duration before Pinata IPFS circuit breaker half-opens to test recovery, in ms (default: `30000` = 30 s). See [docs/degradation-contracts.md](docs/degradation-contracts.md#ipfs--pinata-circuit-breaker).                                                                                                                                                                                                                                                                                                                         |
+| `METRICS_ENABLED`                           | —                                      | Enable or disable metrics collection (default: `true`). Set to `false` to disable.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `METRICS_AUTH_TOKEN`                        | —                                      | Optional bearer token for `/metrics` endpoint protection. When set, requests must include `Authorization: Bearer <token>`. Recommended in production to prevent unauthorized scraping of operational and business signals.                                                                                                                                                                                                                                                                                                                  |
+| `METRICS_ALLOWED_CIDRS`                     | —                                      | Optional CIDR allowlist for `/metrics` endpoint. Comma-separated list of IPv4 addresses or CIDR ranges (e.g., `10.0.0.0/8,192.168.1.0/24`). When set, requests from outside the CIDRs are rejected with 403. Uses `req.socket.remoteAddress` (not `X-Forwarded-For`) since Prometheus scrapers connect directly.                                                                                                                                                                                                                            |
 
 ## Metrics Endpoint Protection
 
@@ -309,7 +311,7 @@ Or configure CIDR allowlist in Helm values:
 
 ```yaml
 env:
-  METRICS_ALLOWED_CIDRS: "10.0.0.0/8,192.168.1.0/24"
+  METRICS_ALLOWED_CIDRS: '10.0.0.0/8,192.168.1.0/24'
 ```
 
 ### Ingress Exclusion (Recommended)
@@ -381,13 +383,13 @@ See [Platform Signing Keypairs](docs/secrets-rotation.md#3-platform-signing-keyp
 
 ScoutOff deploys five separate Soroban contracts, each with its own on-chain address:
 
-| Contract | Env var | Purpose |
-|---|---|---|
-| `register` | `REGISTER_CONTRACT_ID` | Player profiles, progress levels |
-| `progress` | `PROGRESS_CONTRACT_ID` | Milestone submission and approval |
+| Contract       | Env var                    | Purpose                                        |
+| -------------- | -------------------------- | ---------------------------------------------- |
+| `register`     | `REGISTER_CONTRACT_ID`     | Player profiles, progress levels               |
+| `progress`     | `PROGRESS_CONTRACT_ID`     | Milestone submission and approval              |
 | `subscription` | `SUBSCRIPTION_CONTRACT_ID` | Scout subscriptions, contact fees, fee balance |
-| `connection` | `CONNECTION_CONTRACT_ID` | Scout-player connections, trial offers |
-| `player_token` | _(not yet wired)_ | Player token contract (future) |
+| `connection`   | `CONNECTION_CONTRACT_ID`   | Scout-player connections, trial offers         |
+| `player_token` | _(not yet wired)_          | Player token contract (future)                 |
 
 ### Deploying the contracts
 
@@ -478,7 +480,6 @@ Single-contract deployments that set only `CONTRACT_ID` continue to work without
 changes. Each per-contract env var falls back to `CONTRACT_ID` when unset,
 preserving backward compatibility during staged migrations.
 
-
 ## Kubernetes / Helm Deployment
 
 The `helm/scout-off-backend/` directory contains a production-grade Helm 3 chart
@@ -549,11 +550,13 @@ kubectl create secret generic scout-off-secrets \
 ```
 
 For PostgreSQL deployments, also add:
+
 ```bash
   --from-literal=DATABASE_URL=postgresql://user:pass@host:5432/db
 ```
 
 Optional keys (only include when needed):
+
 ```bash
   --from-literal=CONTRACT_ID=<legacy-single-contract-id>        # backward compat
   --from-literal=JWT_SECRET_PREVIOUS=<old-secret>               # during rotation
@@ -580,6 +583,7 @@ Do **not** hard-cutover `JWT_SECRET` alone — that instantly invalidates every
 active access and refresh token. Use the dual-key window instead:
 
 1. **Stage previous secret + grace deadline**
+
    ```bash
    # Capture the currently deployed secret, then create a new one
    OLD_JWT_SECRET=$(kubectl get secret scout-off-secrets -n <ns> -o jsonpath='{.data.JWT_SECRET}' | base64 -d)
@@ -589,6 +593,7 @@ active access and refresh token. Use the dual-key window instead:
    ```
 
 2. **Apply both secrets and redeploy**
+
    ```bash
    kubectl create secret generic scout-off-secrets \
      --from-literal=CONTRACT_ID=<same-as-before> \
@@ -599,6 +604,7 @@ active access and refresh token. Use the dual-key window instead:
      --dry-run=client -o yaml | kubectl apply -f - --namespace <your-namespace>
    kubectl rollout restart deployment/scout-off-backend --namespace <your-namespace>
    ```
+
    New tokens are signed only with `JWT_SECRET`. Tokens signed with the old
    secret continue to verify until `JWT_SECRET_PREVIOUS_UNTIL`.
 
@@ -649,25 +655,25 @@ helm upgrade --install scout-off-backend ./helm/scout-off-backend \
 
 Common overrides:
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `image.tag` | chart appVersion | Docker image tag to deploy |
-| `replicaCount` | `1` | Pod count. Keep at `1` while `env.DB_DRIVER=sqlite` (SQLite is single-process); raise it only after switching to PostgreSQL |
-| `hpa.enabled` | `false` | Enable autoscaling. Requires `env.DB_DRIVER=postgres` + `env.DATABASE_URL` |
-| `hpa.maxReplicas` | `10` | Maximum pods under autoscaling (only when `hpa.enabled=true`) |
-| `hpa.targetCPUUtilizationPercentage` | `70` | CPU threshold to trigger scale-up |
-| `hpa.targetMemoryUtilizationPercentage` | `80` | Memory threshold to trigger scale-up |
-| `pdb.enabled` | `false` | Enable a PodDisruptionBudget. Enable for multi-replica (PostgreSQL-backed) deployments |
-| `ingress.enabled` | `false` | Expose the service via an Ingress |
-| `ingress.hosts[0].host` | `api.scoutoff.io` | Public hostname |
-| `ingress.tls[0].secretName` | `scout-off-tls` | TLS certificate Secret name |
-| `resources.requests.cpu` | `100m` | CPU request |
-| `resources.limits.cpu` | `500m` | CPU limit |
-| `resources.requests.memory` | `256Mi` | Memory request |
-| `resources.limits.memory` | `512Mi` | Memory limit |
-| `secretName` | `scout-off-secrets` | Name of the Kubernetes Secret |
-| `env.NODE_ENV` | `production` | Node environment |
-| `env.DB_DRIVER` | `sqlite` | `sqlite` or `postgres` |
+| Key                                     | Default             | Description                                                                                                                 |
+| --------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `image.tag`                             | chart appVersion    | Docker image tag to deploy                                                                                                  |
+| `replicaCount`                          | `1`                 | Pod count. Keep at `1` while `env.DB_DRIVER=sqlite` (SQLite is single-process); raise it only after switching to PostgreSQL |
+| `hpa.enabled`                           | `false`             | Enable autoscaling. Requires `env.DB_DRIVER=postgres` + `env.DATABASE_URL`                                                  |
+| `hpa.maxReplicas`                       | `10`                | Maximum pods under autoscaling (only when `hpa.enabled=true`)                                                               |
+| `hpa.targetCPUUtilizationPercentage`    | `70`                | CPU threshold to trigger scale-up                                                                                           |
+| `hpa.targetMemoryUtilizationPercentage` | `80`                | Memory threshold to trigger scale-up                                                                                        |
+| `pdb.enabled`                           | `false`             | Enable a PodDisruptionBudget. Enable for multi-replica (PostgreSQL-backed) deployments                                      |
+| `ingress.enabled`                       | `false`             | Expose the service via an Ingress                                                                                           |
+| `ingress.hosts[0].host`                 | `api.scoutoff.io`   | Public hostname                                                                                                             |
+| `ingress.tls[0].secretName`             | `scout-off-tls`     | TLS certificate Secret name                                                                                                 |
+| `resources.requests.cpu`                | `100m`              | CPU request                                                                                                                 |
+| `resources.limits.cpu`                  | `500m`              | CPU limit                                                                                                                   |
+| `resources.requests.memory`             | `256Mi`             | Memory request                                                                                                              |
+| `resources.limits.memory`               | `512Mi`             | Memory limit                                                                                                                |
+| `secretName`                            | `scout-off-secrets` | Name of the Kubernetes Secret                                                                                               |
+| `env.NODE_ENV`                          | `production`        | Node environment                                                                                                            |
+| `env.DB_DRIVER`                         | `sqlite`            | `sqlite` or `postgres`                                                                                                      |
 
 ### 5. Lint the chart
 
@@ -712,14 +718,14 @@ place, point it at an existing Secret:
 **PrometheusRule** — ships alerts for the metrics the backend exports. Every
 threshold and `for` duration is a value, and each alert can be disabled:
 
-| Alert | Default expression | Value path |
-| ----- | ------------------ | ---------- |
-| `ScoutOffIndexerLagHigh` | `indexer_ledger_lag > 100` for `10m` | `metrics.prometheusRule.rules.indexerLag` |
-| `ScoutOffWebhookDLQGrowing` | `sum(scout_off_webhook_dead_letters_total) > 100` for `15m` | `...rules.webhookDlqDepth` |
-| `ScoutOffTierDivergence` | `increase(scout_off_tier_divergence_total[1h]) > 0` | `...rules.tierDivergence` |
-| `ScoutOffStuckPins` | `stuck_pending_pins_count > 0` for `30m` | `...rules.stuckPins` |
-| `ScoutOffHigh5xxRate` | 5xx/total ratio `> 0.05` for `5m` | `...rules.high5xxRate` |
-| `ScoutOffNotReady` | pod not ready (`kube-state-metrics`), disabled by default | `...rules.notReady` |
+| Alert                       | Default expression                                          | Value path                                |
+| --------------------------- | ----------------------------------------------------------- | ----------------------------------------- |
+| `ScoutOffIndexerLagHigh`    | `indexer_ledger_lag > 100` for `10m`                        | `metrics.prometheusRule.rules.indexerLag` |
+| `ScoutOffWebhookDLQGrowing` | `sum(scout_off_webhook_dead_letters_total) > 100` for `15m` | `...rules.webhookDlqDepth`                |
+| `ScoutOffTierDivergence`    | `increase(scout_off_tier_divergence_total[1h]) > 0`         | `...rules.tierDivergence`                 |
+| `ScoutOffStuckPins`         | `stuck_pending_pins_count > 0` for `30m`                    | `...rules.stuckPins`                      |
+| `ScoutOffHigh5xxRate`       | 5xx/total ratio `> 0.05` for `5m`                           | `...rules.high5xxRate`                    |
+| `ScoutOffNotReady`          | pod not ready (`kube-state-metrics`), disabled by default   | `...rules.notReady`                       |
 
 Add your own rules with `metrics.prometheusRule.extraRules`. Each alert links
 to the [Prometheus alerts runbook](docs/runbook.md#prometheus-alerts).
@@ -804,18 +810,18 @@ When two or more deployments (staging + production, or a blue/green pair) share 
 instance, cache keys must be namespaced so they cannot collide. Without a namespace, a cache
 write from staging could silently be served to production requests (or vice versa).
 
-| Variable | Default | Description |
-|---|---|---|
-| `CACHE_NAMESPACE` | `NODE_ENV` value | Prefix prepended to every cache key. |
-| `REDIS_URL` | _(unset — in-memory)_ | Redis connection URL. When unset, an in-memory store is used and namespacing is a no-op. |
-| `PLAYER_CACHE_TTL_MS` | `60000` | TTL for player list cache entries (ms). |
+| Variable              | Default               | Description                                                                              |
+| --------------------- | --------------------- | ---------------------------------------------------------------------------------------- |
+| `CACHE_NAMESPACE`     | `NODE_ENV` value      | Prefix prepended to every cache key.                                                     |
+| `REDIS_URL`           | _(unset — in-memory)_ | Redis connection URL. When unset, an in-memory store is used and namespacing is a no-op. |
+| `PLAYER_CACHE_TTL_MS` | `60000`               | TTL for player list cache entries (ms).                                                  |
 
 **Default behavior:** `CACHE_NAMESPACE` defaults to `NODE_ENV`, so `development`, `test`,
 `staging`, and `production` environments are always distinct out-of-the-box without any
 operator action.
 
 **When to override:** Set `CACHE_NAMESPACE` explicitly when two deployments share both the
-same `NODE_ENV` *and* the same Redis instance — e.g., two production pods in a blue/green
+same `NODE_ENV` _and_ the same Redis instance — e.g., two production pods in a blue/green
 cutover using separate logical namespaces:
 
 ```bash
@@ -827,6 +833,7 @@ CACHE_NAMESPACE=production-green
 ```
 
 > **Helm:** Add `CACHE_NAMESPACE` to the Kubernetes Secret alongside `REDIS_URL`:
+>
 > ```bash
 > kubectl create secret generic scout-off-secrets ... \
 >   --from-literal=REDIS_URL=redis://:password@host:6379 \
@@ -838,9 +845,9 @@ CACHE_NAMESPACE=production-green
 Server-to-server API keys default to a 90-day lifetime so that forgotten or leaked keys
 automatically decay rather than remaining valid indefinitely.
 
-| Variable | Default | Description |
-|---|---|---|
-| `API_KEY_DEFAULT_TTL_DAYS` | `90` | Default key lifetime in days. `0` disables automatic expiry. |
+| Variable                   | Default | Description                                                  |
+| -------------------------- | ------- | ------------------------------------------------------------ |
+| `API_KEY_DEFAULT_TTL_DAYS` | `90`    | Default key lifetime in days. `0` disables automatic expiry. |
 
 Callers can override the default at issuance time by passing `expiresInDays` in the
 `POST /api/scouts/:wallet/api-keys` request body (see [docs/auth.md](docs/auth.md#api-keys)).
@@ -905,12 +912,12 @@ CONNECTION_CONTRACT_ID=CEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 
 ### When to Set Each Per-Contract ID
 
-| Variable | Purpose | When to Set |
-|---|---|---|
-| `REGISTER_CONTRACT_ID` | Player registration contract | Multi-contract setup with separate registration logic |
-| `PROGRESS_CONTRACT_ID` | Milestone/progress tracking contract | Multi-contract setup with separate progress tracking |
-| `SUBSCRIPTION_CONTRACT_ID` | Subscription management contract | Multi-contract setup with separate subscription logic |
-| `CONNECTION_CONTRACT_ID` | Connection/relationship contract | Multi-contract setup with separate connection logic |
+| Variable                   | Purpose                              | When to Set                                           |
+| -------------------------- | ------------------------------------ | ----------------------------------------------------- |
+| `REGISTER_CONTRACT_ID`     | Player registration contract         | Multi-contract setup with separate registration logic |
+| `PROGRESS_CONTRACT_ID`     | Milestone/progress tracking contract | Multi-contract setup with separate progress tracking  |
+| `SUBSCRIPTION_CONTRACT_ID` | Subscription management contract     | Multi-contract setup with separate subscription logic |
+| `CONNECTION_CONTRACT_ID`   | Connection/relationship contract     | Multi-contract setup with separate connection logic   |
 
 If any per-contract ID is **not** set, the system falls back to `CONTRACT_ID`. If `CONTRACT_ID` itself is unset, operations using that contract will fail (the system requires at least one defined contract ID).
 
@@ -925,6 +932,7 @@ The event indexer (`src/services/indexer.ts`) currently assumes a **single contr
 ### Configuration Examples
 
 **Single-contract (simplest):**
+
 ```env
 CONTRACT_ID=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 NODE_ENV=production
@@ -933,6 +941,7 @@ NETWORK=mainnet
 ```
 
 **Multi-contract with per-contract IDs:**
+
 ```env
 CONTRACT_ID=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 REGISTER_CONTRACT_ID=CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
@@ -944,6 +953,7 @@ NETWORK=mainnet
 ```
 
 **Hybrid (partial multi-contract):**
+
 ```env
 CONTRACT_ID=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 PROGRESS_CONTRACT_ID=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
@@ -989,10 +999,10 @@ It supports local paths, AWS S3, and Google Cloud Storage.
 
 ### Environment variables
 
-| Variable | Required | Description |
-|---|---|---|
-| `DB_PATH` | — | Path to the SQLite file (default: `scout-off.db`) |
-| `BACKUP_DEST` | ✅ | Backup destination — local path, `s3://…`, or `gs://…` |
+| Variable      | Required | Description                                            |
+| ------------- | -------- | ------------------------------------------------------ |
+| `DB_PATH`     | —        | Path to the SQLite file (default: `scout-off.db`)      |
+| `BACKUP_DEST` | ✅       | Backup destination — local path, `s3://…`, or `gs://…` |
 
 ### One-off backup
 
@@ -1109,6 +1119,7 @@ For S3, configure an [Object Lifecycle rule](https://docs.aws.amazon.com/AmazonS
 For detailed documentation on rate limiting configuration, behavior, and namespacing, see [docs/rate-limiting.md](docs/rate-limiting.md).
 
 **Quick summary:**
+
 - Per-IP rate limiting via in-memory store (configurable window and max requests)
 - Per-wallet rate limiting for authenticated endpoints
 - Separate auth endpoint limits for brute-force protection
@@ -1119,6 +1130,7 @@ For detailed documentation on rate limiting configuration, behavior, and namespa
 For detailed documentation on reindexing workflows, status polling, and operational considerations, see [docs/reindexing.md](docs/reindexing.md).
 
 **Quick summary:**
+
 - Reindex by posting to `POST /api/admin/indexer/reindex` with `{ fromLedger: N }`
 - Poll status via separate endpoint (exact URL TBD in docs/reindexing.md)
 - Single reindex at a time (singleton guard enforced)
@@ -1133,12 +1145,12 @@ For detailed documentation on reindexing workflows, status polling, and operatio
 
 ## Health & Monitoring
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /health` | Liveness check; includes Stellar RPC status |
-| `GET /ready` | Readiness probe; checks IPFS connectivity |
+| Endpoint                   | Purpose                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `GET /health`              | Liveness check; includes Stellar RPC status                                                                  |
+| `GET /ready`               | Readiness probe; checks IPFS connectivity                                                                    |
 | `GET /health/dependencies` | Operator incident probe; returns endpoint, version, and real round-trip latency per downstream (admin-gated) |
-| `GET /version` | Deployed package version and git commit SHA |
+| `GET /version`             | Deployed package version and git commit SHA                                                                  |
 
 Configure your load balancer or orchestrator to poll `/health` every 30 seconds.  
 Alert on consecutive failures (≥ 2) to catch Stellar RPC or IPFS outages early.
@@ -1146,6 +1158,7 @@ Alert on consecutive failures (≥ 2) to catch Stellar RPC or IPFS outages early
 ### Incident Diagnosis & Downstream Dependencies (`GET /health/dependencies`)
 
 During partial outages or performance degradation, operators can call `GET /health/dependencies` (requires admin Bearer token auth) to inspect individual downstream dependencies:
+
 - **Stellar RPC**: Resolved endpoint, protocol version/health status, and live round-trip latency.
 - **Horizon**: Resolved endpoint, Horizon/Core version, and live round-trip latency.
 - **IPFS Gateway**: Resolved gateway endpoint, web server handshake string, and live round-trip latency.
@@ -1153,20 +1166,47 @@ During partial outages or performance degradation, operators can call `GET /heal
 - **Database**: Resolved connection target, engine version (PostgreSQL or SQLite), and live query latency.
 
 Response example:
+
 ```json
 {
   "status": "ok",
   "dependencies": {
-    "stellar": { "endpoint": "https://soroban-testnet.stellar.org", "version": "healthy (protocol 20)", "status": "ok", "latencyMs": 142 },
-    "horizon": { "endpoint": "https://horizon-testnet.stellar.org", "version": "2.30.0", "status": "ok", "latencyMs": 85 },
-    "ipfs": { "endpoint": "https://gateway.pinata.cloud", "version": "nginx/1.22.1", "status": "ok", "latencyMs": 210 },
-    "redis": { "endpoint": "redis://***@127.0.0.1:6379", "version": "7.0.5", "status": "ok", "latencyMs": 3 },
-    "db": { "endpoint": "sqlite (./scout-off.db)", "version": "SQLite 3.39.5", "status": "ok", "latencyMs": 1 }
+    "stellar": {
+      "endpoint": "https://soroban-testnet.stellar.org",
+      "version": "healthy (protocol 20)",
+      "status": "ok",
+      "latencyMs": 142
+    },
+    "horizon": {
+      "endpoint": "https://horizon-testnet.stellar.org",
+      "version": "2.30.0",
+      "status": "ok",
+      "latencyMs": 85
+    },
+    "ipfs": {
+      "endpoint": "https://gateway.pinata.cloud",
+      "version": "nginx/1.22.1",
+      "status": "ok",
+      "latencyMs": 210
+    },
+    "redis": {
+      "endpoint": "redis://***@127.0.0.1:6379",
+      "version": "7.0.5",
+      "status": "ok",
+      "latencyMs": 3
+    },
+    "db": {
+      "endpoint": "sqlite (./scout-off.db)",
+      "version": "SQLite 3.39.5",
+      "status": "ok",
+      "latencyMs": 1
+    }
   }
 }
 ```
 
 Recommended metrics to track:
+
 - HTTP 5xx error rate
 - Event indexer lag (gap between latest on-chain event and last indexed event, exposed as `indexer_ledger_lag` on `GET /metrics`)
 - SQLite file size growth
@@ -1181,7 +1221,7 @@ The `docker-compose.yml` configures a healthcheck on the backend service that po
 
 ```yaml
 healthcheck:
-  test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/health/liveness"]
+  test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:4000/health/liveness']
   interval: 10s
   timeout: 5s
   retries: 3
@@ -1234,11 +1274,13 @@ If any check fails, roll back to the previous build immediately.
 Staging uses a local blue-green deployment strategy to eliminate restart downtime.
 
 ### Topology
+
 - **Process Manager**: PM2 manages two identical Node.js services named `scout-off-backend-blue` (port 4000) and `scout-off-backend-green` (port 4001).
 - **Reverse Proxy**: Nginx routes traffic to the active slot.
 - **State**: The currently active slot is stored in a `.active-slot` file in the deployment root.
 
 ### Nginx Configuration Requirement
+
 To support dynamic traffic flipping, Nginx must be configured to use a dedicated upstream config block located at `/etc/nginx/conf.d/scout-off-upstream.conf`.
 
 1. Create the upstream config file:
@@ -1256,13 +1298,16 @@ To support dynamic traffic flipping, Nginx must be configured to use a dedicated
    ```
 
 ### Manual Override & Rollback
+
 If you need to manually rollback traffic to the previously active slot:
+
 ```bash
 # From the deployment root path:
 bash scripts/deploy-staging.sh . rollback
 ```
 
 To manually view the PM2 processes:
+
 ```bash
 pm2 status
 pm2 logs scout-off-backend-blue

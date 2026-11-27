@@ -30,18 +30,14 @@ function camelToSnake(key: string): string {
 
 /** Convert every camelCase key in a payload to snake_case. */
 export function normalizePayload(payload: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(payload).map(([k, v]) => [camelToSnake(k), v])
-  );
+  return Object.fromEntries(Object.entries(payload).map(([k, v]) => [camelToSnake(k), v]));
 }
 
 function jsonSafe(value: unknown): unknown {
   if (typeof value === 'bigint') return value.toString();
   if (Array.isArray(value)) return value.map(jsonSafe);
   if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, jsonSafe(entry)]),
-    );
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, jsonSafe(entry)]));
   }
   return value;
 }
@@ -51,10 +47,10 @@ function nativeText(value: unknown): string {
 }
 
 /** Normalize the register contract's compact topics and positional event data. */
-export function normalizeSorobanEvent(raw: {
-  topic?: unknown[];
-  value?: unknown;
-}): { type: string; payload: Record<string, unknown> } {
+export function normalizeSorobanEvent(raw: { topic?: unknown[]; value?: unknown }): {
+  type: string;
+  payload: Record<string, unknown>;
+} {
   const topics = raw.topic ?? [];
   const rawType = topics[0] ? nativeText(scValToNative(topics[0] as never)) : '';
   const typeAliases: Record<string, string> = {
@@ -69,19 +65,25 @@ export function normalizeSorobanEvent(raw: {
   let payload: Record<string, unknown>;
 
   if (['role_granted', 'role_revoked'].includes(rawType)) {
-    return { type, payload: {
-      role: nativeText(topics[1] ? scValToNative(topics[1] as never) : undefined),
-      account: nativeText(tuple[0]),
-      sender: nativeText(tuple[1]),
-    } };
+    return {
+      type,
+      payload: {
+        role: nativeText(topics[1] ? scValToNative(topics[1] as never) : undefined),
+        account: nativeText(tuple[0]),
+        sender: nativeText(tuple[1]),
+      },
+    };
   }
   if (rawType === 'role_admin_changed') {
-    return { type, payload: {
-      role: nativeText(topics[1] ? scValToNative(topics[1] as never) : undefined),
-      previous_admin_role: nativeText(tuple[0]),
-      admin_role: nativeText(tuple[1]),
-      sender: nativeText(tuple[2]),
-    } };
+    return {
+      type,
+      payload: {
+        role: nativeText(topics[1] ? scValToNative(topics[1] as never) : undefined),
+        previous_admin_role: nativeText(tuple[0]),
+        admin_role: nativeText(tuple[1]),
+        sender: nativeText(tuple[2]),
+      },
+    };
   }
 
   if (rawType === 'player_rg') {
@@ -133,15 +135,24 @@ export function normalizeSorobanEvent(raw: {
     if (topics[1]) payload.validator = nativeText(scValToNative(topics[1] as never));
   }
 
-  const playerTopicIndex = rawType.startsWith('tok_')
-    || ['token_issued', 'token_bought'].includes(type)
-    ? 1
-    : ['milestone_submitted', 'milestone_approved', 'milestone_rejected', 'contact_unlocked', 'connection_created', 'connection_closed', 'trial_offer_logged'].includes(type)
-      ? 2
-      : -1;
-  const topicPlayerId = playerTopicIndex >= 0 && topics[playerTopicIndex]
-    ? nativeText(scValToNative(topics[playerTopicIndex] as never))
-    : '';
+  const playerTopicIndex =
+    rawType.startsWith('tok_') || ['token_issued', 'token_bought'].includes(type)
+      ? 1
+      : [
+            'milestone_submitted',
+            'milestone_approved',
+            'milestone_rejected',
+            'contact_unlocked',
+            'connection_created',
+            'connection_closed',
+            'trial_offer_logged',
+          ].includes(type)
+        ? 2
+        : -1;
+  const topicPlayerId =
+    playerTopicIndex >= 0 && topics[playerTopicIndex]
+      ? nativeText(scValToNative(topics[playerTopicIndex] as never))
+      : '';
   const payloadPlayerId = nativeText(payload.player_id);
   const onChainPlayerId = topicPlayerId || (/^\d+$/.test(payloadPlayerId) ? payloadPlayerId : '');
 
@@ -188,10 +199,10 @@ export function safeTopicType(raw: { topic?: unknown[] }): string {
  * Serialize an event's raw topic/value to XDR (base64) so it can be replayed
  * later. Returns nulls when XDR encoding is not possible for a field.
  */
-export function serializeEventForReplay(raw: {
-  topic?: unknown[];
-  value?: unknown;
-}): { topicJson: string | null; valueXdr: string | null } {
+export function serializeEventForReplay(raw: { topic?: unknown[]; value?: unknown }): {
+  topicJson: string | null;
+  valueXdr: string | null;
+} {
   const toXdr = (sv: unknown): string | null => {
     try {
       if (sv && typeof (sv as { toXdr?: unknown }).toXdr === 'function') {
@@ -215,7 +226,10 @@ export function serializeEventForReplay(raw: {
  * indexer_unprocessed_events, so a stored event can be replayed through
  * normalizeSorobanEvent after a decoder fix.
  */
-export function deserializeEventFromReplay(topicJson: string | null, valueXdr: string | null): {
+export function deserializeEventFromReplay(
+  topicJson: string | null,
+  valueXdr: string | null,
+): {
   topic?: xdr.ScVal[];
   value?: xdr.ScVal;
 } {

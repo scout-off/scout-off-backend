@@ -35,7 +35,7 @@ const MILESTONE_A = {
 };
 
 // Mutable so tests can swap it out
-let mockMilestones: typeof MILESTONE_A[] = [MILESTONE_A];
+let mockMilestones: (typeof MILESTONE_A)[] = [MILESTONE_A];
 let mockPlayer: typeof PLAYER | null = PLAYER;
 
 jest.mock('../../src/db', () => ({
@@ -105,9 +105,7 @@ describe('GET /api/players/:playerId/milestones — ETag / 304 support (#1139)',
     expect(first.status).toBe(200);
     const etag = first.headers.etag as string;
 
-    const second = await request(app)
-      .get(ENDPOINT)
-      .set('If-None-Match', etag);
+    const second = await request(app).get(ENDPOINT).set('If-None-Match', etag);
     expect(second.status).toBe(304);
     // 304 must have an empty body
     expect(second.text).toBe('');
@@ -127,9 +125,7 @@ describe('GET /api/players/:playerId/milestones — ETag / 304 support (#1139)',
     };
     mockMilestones = [MILESTONE_A, MILESTONE_B];
 
-    const second = await request(app)
-      .get(ENDPOINT)
-      .set('If-None-Match', firstEtag);
+    const second = await request(app).get(ENDPOINT).set('If-None-Match', firstEtag);
     // List changed → ETag changed → 200, not 304
     expect(second.status).toBe(200);
     expect(second.headers.etag).toBeDefined();

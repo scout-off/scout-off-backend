@@ -50,7 +50,9 @@ const EVENTS_COLUMNS =
 /**
  * Idempotent event insert matching indexer dedup on (tx_hash, event_index).
  */
-export async function insertEvent(partial: TestEventInsert): Promise<{ changes: number; lastId: number }> {
+export async function insertEvent(
+  partial: TestEventInsert,
+): Promise<{ changes: number; lastId: number }> {
   const {
     type,
     ledger,
@@ -97,9 +99,10 @@ export async function resetTables(tableNames: string[]): Promise<void> {
 
 export async function countEvents(type?: string): Promise<number> {
   if (type) {
-    const row = await dbGet<{ count: number }>('SELECT COUNT(*) AS count FROM events WHERE type = ?', [
-      type,
-    ]);
+    const row = await dbGet<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM events WHERE type = ?',
+      [type],
+    );
     return row?.count ?? 0;
   }
   const row = await dbGet<{ count: number }>('SELECT COUNT(*) AS count FROM events');
@@ -107,10 +110,9 @@ export async function countEvents(type?: string): Promise<number> {
 }
 
 export async function fetchLastIndexedLedgerTest(): Promise<number> {
-  const row = await dbGet<{ value: string }>(
-    'SELECT value FROM indexer_state WHERE key = ?',
-    ['last_ledger'],
-  );
+  const row = await dbGet<{ value: string }>('SELECT value FROM indexer_state WHERE key = ?', [
+    'last_ledger',
+  ]);
   return row ? parseInt(row.value, 10) : 0;
 }
 

@@ -48,9 +48,7 @@ describe('POST /api/players/:playerId/anonymize', () => {
   });
 
   it('returns 401 without auth', async () => {
-    const res = await request(app)
-      .post(`/api/players/${PLAYER_ID}/anonymize`)
-      .send();
+    const res = await request(app).post(`/api/players/${PLAYER_ID}/anonymize`).send();
     expect(res.status).toBe(401);
   });
 
@@ -130,7 +128,13 @@ describe('POST /api/players/:playerId/anonymize', () => {
     await getDriver().run(
       `INSERT INTO trial_offer_events (scout_wallet, player_id, details_uri, tx_hash, created_at)
        VALUES (?, ?, ?, ?, ?)`,
-      ['GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', PLAYER_ID, 'ipfs://details', 'tx-anon-1', now],
+      [
+        'GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        PLAYER_ID,
+        'ipfs://details',
+        'tx-anon-1',
+        now,
+      ],
     );
     await getDriver().run(
       `INSERT INTO events (type, ledger, tx_hash, payload, created_at, tx_application_order, event_index, contract_id)
@@ -161,7 +165,10 @@ describe('POST /api/players/:playerId/anonymize', () => {
     expect(res.body.anonymized.stores.eventsPayloadsRedacted).toBeGreaterThanOrEqual(1);
     expect(res.body.anonymized.stores.savedSearchNotificationsDeleted).toBeGreaterThanOrEqual(1);
 
-    const note = await db.getScoutNote('GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', PLAYER_ID);
+    const note = await db.getScoutNote(
+      'GSCOUT1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      PLAYER_ID,
+    );
     expect(note).toBeNull();
     const eventRow = await getDriver().get<{ payload: string }>(
       'SELECT payload FROM events WHERE tx_hash = ?',

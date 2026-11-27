@@ -80,7 +80,9 @@ export async function getPlayerProfileHistoryVersioned(
        FROM player_profile_history
        WHERE player_id = ?
        ORDER BY id ASC`;
-  const rows = await timedQueryAsync(sql, () => getDriver().all<PlayerProfileHistoryRow>(sql, [playerId]));
+  const rows = await timedQueryAsync(sql, () =>
+    getDriver().all<PlayerProfileHistoryRow>(sql, [playerId]),
+  );
 
   return rows.map((row, idx) => ({ ...row, version: idx + 1 }));
 }
@@ -104,7 +106,16 @@ export async function insertOrUpdatePlayer(p: {
          region       = excluded.region,
          metadata_uri = excluded.metadata_uri`;
   await timedQueryAsync(sql, () =>
-    getDriver().run(sql, [p.player_id, p.on_chain_player_id ?? null, p.wallet, p.position ?? null, p.region ?? null, p.metadata_uri ?? null, p.created_at ?? null, p.registered_at ?? 0])
+    getDriver().run(sql, [
+      p.player_id,
+      p.on_chain_player_id ?? null,
+      p.wallet,
+      p.position ?? null,
+      p.region ?? null,
+      p.metadata_uri ?? null,
+      p.created_at ?? null,
+      p.registered_at ?? 0,
+    ]),
   );
 }
 
@@ -138,8 +149,9 @@ export async function incrementValidatorRejected(wallet: string): Promise<void> 
 
 export async function getValidatorStats(wallet: string): Promise<ValidatorStatsRow | null> {
   const sql = 'SELECT * FROM validator_stats WHERE wallet = ?';
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<ValidatorStatsRow>(sql, [wallet])) ?? null
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<ValidatorStatsRow>(sql, [wallet])) ?? null,
   );
 }
 
@@ -243,8 +255,7 @@ export async function getValidatorStatsSummary(
   const { fromMs, toMs } = options;
   const hasRange = fromMs !== undefined || toMs !== undefined;
 
-  const pendingSql =
-    'SELECT COUNT(*) AS count FROM pending_milestones WHERE validator_wallet = ?';
+  const pendingSql = 'SELECT COUNT(*) AS count FROM pending_milestones WHERE validator_wallet = ?';
   const pendingRow = await timedQueryAsync(pendingSql, () =>
     driver.get<{ count: number | string }>(pendingSql, [wallet]),
   );
@@ -262,7 +273,11 @@ export async function getValidatorStatsSummary(
                       WHERE ${actionTypes} AND ${validatorPayloadMatch('payload')}${range.sql}
                       GROUP BY type`;
     const rows = await timedQueryAsync(countSql, () =>
-      driver.all<{ type: string; count: number | string }>(countSql, [wallet, wallet, ...range.params]),
+      driver.all<{ type: string; count: number | string }>(countSql, [
+        wallet,
+        wallet,
+        ...range.params,
+      ]),
     );
     for (const row of rows) {
       if (row.type === 'milestone_approved') milestones_approved = Number(row.count);
@@ -317,7 +332,11 @@ export async function getValidatorStatsSummary(
     FROM ranked
     WHERE rn IN ((cnt + 1) / 2, (cnt + 2) / 2)`;
   const medianRow = await timedQueryAsync(medianSql, () =>
-    driver.get<{ median: number | string | null }>(medianSql, [wallet, wallet, ...approvedRange.params]),
+    driver.get<{ median: number | string | null }>(medianSql, [
+      wallet,
+      wallet,
+      ...approvedRange.params,
+    ]),
   );
   const median_approval_seconds =
     medianRow?.median != null ? Math.round(Number(medianRow.median)) : null;
@@ -346,14 +365,21 @@ export async function insertPendingMilestone(
   validatorWallet: string,
   milestoneType: string,
   evidenceUri: string,
-  submittedAt: number
+  submittedAt: number,
 ): Promise<void> {
   const sql = `INSERT INTO pending_milestones
                (milestone_id, player_id, validator_wallet, milestone_type, evidence_uri, submitted_at)
                VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT (milestone_id) DO NOTHING`;
   await timedQueryAsync(sql, () =>
-    getDriver().run(sql, [milestoneId, playerId, validatorWallet, milestoneType, evidenceUri, submittedAt])
+    getDriver().run(sql, [
+      milestoneId,
+      playerId,
+      validatorWallet,
+      milestoneType,
+      evidenceUri,
+      submittedAt,
+    ]),
   );
 }
 
@@ -387,7 +413,9 @@ export interface GetPendingMilestonesOptions {
   pageSize?: number;
 }
 
-export async function getPendingMilestones(options: GetPendingMilestonesOptions): Promise<{ data: PendingMilestoneRow[], total: number }> {
+export async function getPendingMilestones(
+  options: GetPendingMilestonesOptions,
+): Promise<{ data: PendingMilestoneRow[]; total: number }> {
   const driver = getDriver();
   // We need to join with players to filter by position and region
   const whereConditions: string[] = [];
@@ -425,7 +453,9 @@ export async function getPendingMilestones(options: GetPendingMilestonesOptions)
   const countSql = `SELECT COUNT(*) AS total FROM pending_milestones pm
                     LEFT JOIN players p ON pm.player_id = p.player_id
                     ${whereClause}`;
-  const countRow = await timedQueryAsync(countSql, () => driver.get<{ total: number }>(countSql, params));
+  const countRow = await timedQueryAsync(countSql, () =>
+    driver.get<{ total: number }>(countSql, params),
+  );
   const total = Number(countRow?.total ?? 0);
 
   // Get paginated data
@@ -439,7 +469,7 @@ export async function getPendingMilestones(options: GetPendingMilestonesOptions)
                    ORDER BY pm.submitted_at DESC
                    LIMIT ? OFFSET ?`;
   const data = await timedQueryAsync(dataSql, () =>
-    driver.all<PendingMilestoneRow>(dataSql, [...params, pageSize, offset])
+    driver.all<PendingMilestoneRow>(dataSql, [...params, pageSize, offset]),
   );
 
   return { data, total };
@@ -447,22 +477,25 @@ export async function getPendingMilestones(options: GetPendingMilestonesOptions)
 
 export async function getPlayerById(playerId: string): Promise<PlayerRow | null> {
   const sql = 'SELECT * FROM players WHERE player_id = ?';
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<PlayerRow>(sql, [playerId])) ?? null
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<PlayerRow>(sql, [playerId])) ?? null,
   );
 }
 
 export async function getPlayerByWallet(wallet: string): Promise<PlayerRow | null> {
   const sql = 'SELECT * FROM players WHERE wallet = ?';
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<PlayerRow>(sql, [wallet])) ?? null
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<PlayerRow>(sql, [wallet])) ?? null,
   );
 }
 
 export async function getPlayerByOnChainId(onChainPlayerId: string): Promise<PlayerRow | null> {
   const sql = 'SELECT * FROM players WHERE on_chain_player_id = ?';
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<PlayerRow>(sql, [onChainPlayerId])) ?? null
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<PlayerRow>(sql, [onChainPlayerId])) ?? null,
   );
 }
 
@@ -476,10 +509,7 @@ export async function getPlayersMissingOnChainId(
   return timedQueryAsync(sql, () => getDriver().all<PlayerRow>(sql, [afterPlayerId, limit]));
 }
 
-export async function setPlayerOnChainId(
-  playerId: string,
-  onChainPlayerId: string,
-): Promise<void> {
+export async function setPlayerOnChainId(playerId: string, onChainPlayerId: string): Promise<void> {
   const sql = `UPDATE players SET on_chain_player_id = ?
                WHERE player_id = ? AND (on_chain_player_id IS NULL OR on_chain_player_id = ?)`;
   await timedQueryAsync(sql, () =>
@@ -509,10 +539,7 @@ export type PlayerTokenPurchaseResult =
   | { status: 'exhausted'; remaining: number }
   | { status: 'purchased'; newBalance: number };
 
-export async function seedPlayerTokenSupply(
-  playerId: string,
-  totalSupply: number,
-): Promise<void> {
+export async function seedPlayerTokenSupply(playerId: string, totalSupply: number): Promise<void> {
   const sql = `INSERT INTO player_token_supply (player_id, total_supply)
                VALUES (?, ?)
                ON CONFLICT(player_id) DO UPDATE SET total_supply = excluded.total_supply`;
@@ -607,28 +634,31 @@ export async function reactivatePlayer(playerId: string): Promise<void> {
 
 /** Clear deactivation state and reason on reactivation. */
 export async function reactivatePlayerWithReason(playerId: string): Promise<void> {
-  const sql = "UPDATE players SET is_active = 1, deactivation_reason = NULL WHERE player_id = ?";
+  const sql = 'UPDATE players SET is_active = 1, deactivation_reason = NULL WHERE player_id = ?';
   await timedQueryAsync(sql, () => getDriver().run(sql, [playerId]));
 }
 
-function buildPlayerWhereClause(opts: QueryPlayersOptions): { where: string; params: (string | number)[] } {
+function buildPlayerWhereClause(opts: QueryPlayersOptions): {
+  where: string;
+  params: (string | number)[];
+} {
   const conditions: string[] = [];
   const params: (string | number)[] = [];
 
   if (opts.region) {
-    conditions.push("region = ?");
+    conditions.push('region = ?');
     params.push(opts.region);
   }
   if (opts.position) {
-    conditions.push("position = ?");
+    conditions.push('position = ?');
     params.push(opts.position);
   }
   if (opts.minTier !== undefined) {
-    conditions.push("progress_level >= ?");
+    conditions.push('progress_level >= ?');
     params.push(opts.minTier);
   }
   if (!opts.includeDeactivated) {
-    conditions.push("is_active = 1");
+    conditions.push('is_active = 1');
   }
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -641,12 +671,12 @@ export async function queryPlayers(opts: QueryPlayersOptions): Promise<PlayerRow
   const offset = opts.offset ?? 0;
   // sql-injection-check-ignore: `where` is built from hardcoded `col = ?` conditions; values are bound via params.
   const sql = `SELECT * FROM players ${where} ORDER BY created_at ASC LIMIT ? OFFSET ?`;
-  return timedQueryAsync(sql, () =>
-    getDriver().all<PlayerRow>(sql, [...params, limit, offset])
-  );
+  return timedQueryAsync(sql, () => getDriver().all<PlayerRow>(sql, [...params, limit, offset]));
 }
 
-export async function countPlayers(opts: Omit<QueryPlayersOptions, 'limit' | 'offset'>): Promise<number> {
+export async function countPlayers(
+  opts: Omit<QueryPlayersOptions, 'limit' | 'offset'>,
+): Promise<number> {
   const { where, params } = buildPlayerWhereClause(opts);
   // sql-injection-check-ignore: `where` is built from hardcoded `col = ?` conditions; values are bound via params.
   const sql = `SELECT COUNT(*) as count FROM players ${where}`;
@@ -720,7 +750,7 @@ export async function searchPlayers(opts: SearchPlayersOptions): Promise<SearchP
   if (sortBy === 'relevance') {
     let cursorWhere = '';
     const cursorParams: (string | number)[] = [];
-    const offsetClause = (!useCursor && opts.offset) ? `OFFSET ${opts.offset}` : '';
+    const offsetClause = !useCursor && opts.offset ? `OFFSET ${opts.offset}` : '';
 
     if (useCursor) {
       const decoded = decodeCursor(opts.cursor as string);
@@ -745,9 +775,7 @@ export async function searchPlayers(opts: SearchPlayersOptions): Promise<SearchP
     LIMIT ? ${offsetClause}`;
 
     const allParams = [...params, ...cursorParams, fetchLimit];
-    const rows = await timedQueryAsync(sql, () =>
-      driver.all<ScoredPlayerRow>(sql, allParams)
-    );
+    const rows = await timedQueryAsync(sql, () => driver.all<ScoredPlayerRow>(sql, allParams));
 
     if (useCursor) {
       return processCursorResults(rows, limit, sortBy, sortOrder);
@@ -772,7 +800,7 @@ export async function searchPlayers(opts: SearchPlayersOptions): Promise<SearchP
 
   let cursorWhere = '';
   const cursorParams: (string | number)[] = [];
-  const offsetClause = (!useCursor && opts.offset) ? `OFFSET ${opts.offset}` : '';
+  const offsetClause = !useCursor && opts.offset ? `OFFSET ${opts.offset}` : '';
 
   if (useCursor) {
     const decoded = decodeCursor(opts.cursor as string);
@@ -789,9 +817,7 @@ export async function searchPlayers(opts: SearchPlayersOptions): Promise<SearchP
   // sql-injection-check-ignore: baseWhere/cursorWhere use `?` placeholders for values; orderColumn/direction are drawn from fixed enums; offsetClause embeds a validated number.
   const sql = `SELECT * FROM players ${baseWhere} ${cursorWhere} ORDER BY ${orderColumn} ${direction}, player_id ASC LIMIT ? ${offsetClause}`;
   const allParams = [...params, ...cursorParams, fetchLimit];
-  const rows = await timedQueryAsync(sql, () =>
-    driver.all<PlayerRow>(sql, allParams)
-  );
+  const rows = await timedQueryAsync(sql, () => driver.all<PlayerRow>(sql, allParams));
 
   if (useCursor) {
     return processCursorResults(rows, limit, sortBy, sortOrder);

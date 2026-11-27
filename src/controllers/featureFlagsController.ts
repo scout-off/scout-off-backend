@@ -20,22 +20,31 @@ import { setFeatureFlag, clearFeatureFlagCache } from '../services/featureFlags'
 /** Valid snake_case flag name: lowercase letter, then lowercase letters/digits/underscores. */
 const flagNameRegex = /^[a-z][a-z0-9_]*$/;
 
-export const updateFeatureFlagBodySchema = z.object({
-  name: z
-    .string()
-    .min(1)
-    .max(100)
-    .regex(flagNameRegex, 'Flag name must be snake_case starting with a letter'),
-  enabled: z.boolean(),
-}).strict();
+export const updateFeatureFlagBodySchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .max(100)
+      .regex(flagNameRegex, 'Flag name must be snake_case starting with a letter'),
+    enabled: z.boolean(),
+  })
+  .strict();
 
-export const toggleFlagBodySchema = z.object({
-  enabled: z.boolean(requiredError('enabled is required')),
-}).strict();
+export const toggleFlagBodySchema = z
+  .object({
+    enabled: z.boolean(requiredError('enabled is required')),
+  })
+  .strict();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function serializeFlag(row: { name: string; enabled: number; updated_at: number; updated_by: string }) {
+function serializeFlag(row: {
+  name: string;
+  enabled: number;
+  updated_at: number;
+  updated_by: string;
+}) {
   return {
     name: row.name,
     enabled: row.enabled === 1,
@@ -123,7 +132,7 @@ export async function toggleFeatureFlag(
   res: Response,
   _next: NextFunction,
 ): Promise<void> {
-  const {name} = req.params as {name: string};
+  const { name } = req.params as { name: string };
 
   if (!flagNameRegex.test(name)) {
     res.status(400).json({

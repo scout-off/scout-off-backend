@@ -13,23 +13,29 @@ All four tasks have been fully implemented and committed to branch `feat/paginat
 ## What Was Implemented
 
 ### Task #801: Player Pagination ✅
+
 **Already implemented** — no changes needed. The existing `filterPlayers` controller:
+
 - Accepts `?page=` and `?pageSize=` query params (defaults: 1 and 20, max 100)
-- Returns `{ success, data, total, page, pageSize, pages }` 
+- Returns `{ success, data, total, page, pageSize, pages }`
 - Computes `pages = Math.ceil(total / pageSize)`
 - All test expectations in `tests/routes/playerPagination.test.ts` satisfied
 
 ### Task #817: API Versioning Middleware ✅
+
 **New files:**
+
 - `src/middleware/versionRouting.ts` — reads `API-Version` request header, emits deprecation warnings
 - `src/routes/v2/index.ts` — v2 router (re-exports v1 handlers, no breaking changes)
 
 **Modified files:**
+
 - `src/app.ts` — mounts v2 routes, sets `API-Version` response header, wires versionRouting middleware
 - `src/config.ts` — exports `API_V2_PREFIX = '/api/v2'`
 - `BACKEND_API_DOCS.md` — documents versioning strategy
 
 **Features:**
+
 - URL-based versioning: `/api/v1/*` and `/api/v2/*` routes
 - Header-based override: `API-Version: 2` request header
 - Response header: `API-Version: 1` or `API-Version: 2` on all `/api/*` responses
@@ -37,10 +43,13 @@ All four tasks have been fully implemented and committed to branch `feat/paginat
 - All test expectations in `tests/routes/apiVersioning.test.ts` satisfied
 
 ### Task #819: Payment History Filters & CSV Export ✅
+
 **New DB function:**
+
 - `src/db/index.ts` — added `getSubscriptionsByScout(wallet)` helper
 
 **Modified files:**
+
 - `src/controllers/scoutController.ts` — completely rewrote `getPaymentHistory`:
   - `?type=subscription|contact_unlock` filter
   - `?from=` / `?to=` ISO 8601 date range filters
@@ -54,13 +63,16 @@ All four tasks have been fully implemented and committed to branch `feat/paginat
 - `BACKEND_API_DOCS.md` — documented updated payment endpoint
 
 **Features:**
+
 - Combines `contact_unlocks` table + `subscriptions` table + `contact_unlocked` events
 - Deduplicates by `tx_hash` when same payment appears in multiple sources
 - CSV export includes all payment fields with proper escaping
 - All test expectations in `tests/routes/payments.test.ts` and `tests/routes/paymentHistoryOwnership.test.ts` satisfied
 
 ### Task #825: Withdrawal Mutex ✅
+
 **Already implemented** — no changes needed. The existing `withdrawFeesController`:
+
 - In-process `withdrawalInProgress` boolean flag prevents concurrent withdrawals
 - Returns 409 when another withdrawal is in progress
 - Lock released in `finally` block (success and error paths)
@@ -72,6 +84,7 @@ All four tasks have been fully implemented and committed to branch `feat/paginat
 ## Files Changed
 
 **Modified (5):**
+
 - `BACKEND_API_DOCS.md` — versioning strategy + payment endpoint docs
 - `src/app.ts` — v2 routes, API-Version header, versionRouting middleware
 - `src/config.ts` — API_V2_PREFIX export
@@ -79,6 +92,7 @@ All four tasks have been fully implemented and committed to branch `feat/paginat
 - `src/db/index.ts` — getSubscriptionsByScout helper
 
 **Created (2):**
+
 - `src/middleware/versionRouting.ts`
 - `src/routes/v2/index.ts`
 
@@ -93,6 +107,7 @@ The branch is ready locally but push is blocked due to GitHub authentication (st
 ### To complete:
 
 1. **Authenticate with a GitHub account that has push rights:**
+
    ```bash
    # Option 1: Update Windows Credential Manager with correct PAT
    # Option 2: Use SSH instead of HTTPS
@@ -100,11 +115,13 @@ The branch is ready locally but push is blocked due to GitHub authentication (st
    ```
 
 2. **Push the branch:**
+
    ```bash
    git push -u origin feat/pagination-versioning-payments-mutex
    ```
 
 3. **Create the PR** (if `gh` CLI is available):
+
    ```bash
    gh pr create \
      --title "feat: player pagination, API versioning, payment history filters, withdrawal mutex" \
@@ -114,22 +131,27 @@ The branch is ready locally but push is blocked due to GitHub authentication (st
    ```
 
    Or create manually on GitHub with this title:
+
    ```
    feat: player pagination, API versioning, payment history filters, withdrawal mutex
    ```
 
    And description:
+
    ```markdown
    ## Summary
+
    Implements four medium-difficulty backend features.
 
    ## Changes
+
    - **#801** Player pagination with page/pageSize/pages response fields
    - **#817** API versioning: /api/v2 routes, API-Version header, deprecation warnings
    - **#819** Payment history: type/date filters, pagination, CSV export, enriched objects
    - **#825** Withdrawal mutex: in-process lock prevents concurrent fee withdrawals
 
    ## Testing
+
    All test suites pass: `playerPagination`, `apiVersioning`, `payments`, `paymentHistoryOwnership`, `withdrawalMutex`
 
    Closes #801

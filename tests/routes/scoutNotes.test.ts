@@ -60,7 +60,12 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -93,7 +98,7 @@ const mockDeleteScoutPlayerNote = deleteScoutPlayerNote as jest.Mock;
 
 const SCOUT_A = 'GAAKO6EK5AIJWZH7ITXBFZTPASYKPY3YVMFVFVD5UDG2C6NUIXTT7BE3';
 const SCOUT_B = 'GAEZS7NMWCNTUFGDNXWVYVTKGGP47CESPEV5BVT5LNFHKXC5TGBZ4O5O';
-const PLAYER  = 'GBXDL7VCREKVMQWV3ZL4BK3OFZZUVRKUTPHKCDPUMOVMCUFLZGKQMXWY';
+const PLAYER = 'GBXDL7VCREKVMQWV3ZL4BK3OFZZUVRKUTPHKCDPUMOVMCUFLZGKQMXWY';
 const PLAYER_ID = 'player-abc-123';
 
 function makeToken(wallet: string, role = 'scout'): string {
@@ -259,8 +264,7 @@ describe('GET /api/scouts/:wallet/notes/:playerId', () => {
   });
 
   it('returns 401 when no token provided', async () => {
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/notes/${PLAYER_ID}`);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/notes/${PLAYER_ID}`);
 
     expect(res.status).toBe(401);
   });
@@ -308,8 +312,7 @@ describe('GET /api/scouts/:wallet/notes', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/notes`);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/notes`);
 
     expect(res.status).toBe(401);
   });
@@ -318,11 +321,7 @@ describe('GET /api/scouts/:wallet/notes', () => {
 // ─── Notes must not leak through admin endpoints ──────────────────────────────
 
 describe('Admin endpoints must not expose scout notes', () => {
-  const ADMIN_TOKEN = jwt.sign(
-    { sub: 'GADMIN', role: 'admin' },
-    SECRET,
-    { expiresIn: '1h' },
-  );
+  const ADMIN_TOKEN = jwt.sign({ sub: 'GADMIN', role: 'admin' }, SECRET, { expiresIn: '1h' });
 
   it('GET /api/admin/events does not contain scout_player_notes data', async () => {
     const res = await request(app)
@@ -470,8 +469,22 @@ describe('GET /api/scouts/:wallet/players/:playerId/notes', () => {
 
   it('returns all notes for the scout-player pair, newest first', async () => {
     mockGetScoutPlayerNotes.mockReturnValueOnce([
-      { id: 2, scout_wallet: SCOUT_A, player_id: PLAYER_ID, content: 'Follow up after cup final', created_at: 2_000_000, updated_at: 2_000_000 },
-      { id: 1, scout_wallet: SCOUT_A, player_id: PLAYER_ID, content: 'Impressive left foot',      created_at: 1_000_000, updated_at: 1_000_000 },
+      {
+        id: 2,
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER_ID,
+        content: 'Follow up after cup final',
+        created_at: 2_000_000,
+        updated_at: 2_000_000,
+      },
+      {
+        id: 1,
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER_ID,
+        content: 'Impressive left foot',
+        created_at: 1_000_000,
+        updated_at: 1_000_000,
+      },
     ]);
 
     const res = await request(app)
@@ -507,8 +520,7 @@ describe('GET /api/scouts/:wallet/players/:playerId/notes', () => {
   });
 
   it('returns 401 when no token is provided', async () => {
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/players/${PLAYER_ID}/notes`);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/players/${PLAYER_ID}/notes`);
 
     expect(res.status).toBe(401);
   });
@@ -664,8 +676,7 @@ describe('DELETE /api/scouts/:wallet/players/:playerId/notes/:noteId', () => {
   });
 
   it('returns 401 when no token is provided', async () => {
-    const res = await request(app)
-      .delete(`/api/scouts/${SCOUT_A}/players/${PLAYER_ID}/notes/1`);
+    const res = await request(app).delete(`/api/scouts/${SCOUT_A}/players/${PLAYER_ID}/notes/1`);
 
     expect(res.status).toBe(401);
   });
@@ -696,7 +707,14 @@ describe('full CRUD lifecycle for player notes', () => {
 
     // 2. List
     mockGetScoutPlayerNotes.mockReturnValueOnce([
-      { id: noteId, scout_wallet: SCOUT_A, player_id: PLAYER_ID, content: 'Initial observation', created_at: 1, updated_at: 1 },
+      {
+        id: noteId,
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER_ID,
+        content: 'Initial observation',
+        created_at: 1,
+        updated_at: 1,
+      },
     ]);
     const listRes = await request(app)
       .get(`/api/scouts/${SCOUT_A}/players/${PLAYER_ID}/notes`)

@@ -14,10 +14,10 @@ const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 
 // Player wallet (the wallet that registered as "player")
 const PLAYER_WALLET = 'GPLAYERWALLET1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const PLAYER_ID     = 'player-abc-123';
-const OTHER_WALLET  = 'GOTHERWALLET2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const SCOUT_WALLET  = 'GSCOUTWALLET1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const OFFER_ID      = 'offer-xyz-789';
+const PLAYER_ID = 'player-abc-123';
+const OTHER_WALLET = 'GOTHERWALLET2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const SCOUT_WALLET = 'GSCOUTWALLET1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const OFFER_ID = 'offer-xyz-789';
 
 // In-memory store for mocked trial offers
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +48,12 @@ jest.mock('../../src/db', () => ({
 }));
 
 // Ensure we can update the player_registered event wallet in tests
-import { queryEvents, getTrialOfferById, insertTrialOffer, respondToTrialOffer } from '../../src/db';
+import {
+  queryEvents,
+  getTrialOfferById,
+  insertTrialOffer,
+  respondToTrialOffer,
+} from '../../src/db';
 
 const mockGetEvents = queryEvents as jest.Mock;
 const mockGetOffer = getTrialOfferById as jest.Mock;
@@ -108,7 +113,7 @@ describe(`POST /api/players/${PLAYER_ID}/trial-offers/${OFFER_ID}/accept`, () =>
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 when a different player tries to accept another player\'s offer', async () => {
+  it("returns 403 when a different player tries to accept another player's offer", async () => {
     mockGetOffer.mockReturnValue(pendingOffer);
     const token = makePlayerToken(OTHER_WALLET);
     const res = await request(app).post(ACCEPT_URL).set('Authorization', `Bearer ${token}`);
@@ -178,7 +183,7 @@ describe(`POST /api/players/${PLAYER_ID}/trial-offers/${OFFER_ID}/reject`, () =>
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 when a different player tries to reject another player\'s offer', async () => {
+  it("returns 403 when a different player tries to reject another player's offer", async () => {
     mockGetOffer.mockReturnValue(pendingOffer);
     const token = makePlayerToken(OTHER_WALLET);
     const res = await request(app).post(REJECT_URL).set('Authorization', `Bearer ${token}`);

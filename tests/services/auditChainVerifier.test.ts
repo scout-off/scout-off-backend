@@ -194,10 +194,7 @@ describe('scheduled audit chain verification (#1539)', () => {
   it('does not let an unsafe alert webhook URL break the job', async () => {
     config.auditVerify.alertWebhookUrl = 'https://127.0.0.1/internal-hook';
     const ids = await seed(2);
-    await getDriver().run('UPDATE audit_log SET action = ? WHERE id = ?', [
-      'tampered',
-      ids[0],
-    ]);
+    await getDriver().run('UPDATE audit_log SET action = ? WHERE id = ?', ['tampered', ids[0]]);
 
     const result = await runAuditChainVerification({ mode: 'full', batchSize: 2 });
 

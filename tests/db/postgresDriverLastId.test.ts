@@ -94,10 +94,9 @@ describe('PostgresDriver.run() – lastId extraction', () => {
 
   it('returns 0 for a string primary key that is not numeric', async () => {
     const { driver } = makeDriver({ rows: [{ wallet: 'GXYZ...' }], rowCount: 1 });
-    const result = await driver.run(
-      'INSERT INTO validators (wallet) VALUES (?) RETURNING wallet',
-      ['GXYZ...'],
-    );
+    const result = await driver.run('INSERT INTO validators (wallet) VALUES (?) RETURNING wallet', [
+      'GXYZ...',
+    ]);
     expect(result.lastId).toBe(0);
     expect(result.changes).toBe(1);
   });
@@ -112,6 +111,9 @@ describe('PostgresDriver.run() – lastId extraction', () => {
   it('translates ? placeholders to $1, $2, ... before calling pg', async () => {
     const { driver, mockQuery } = makeDriver({ rows: [{ id: 1 }], rowCount: 1 });
     await driver.run('INSERT INTO t (a, b) VALUES (?, ?) RETURNING id', ['x', 'y']);
-    expect(mockQuery).toHaveBeenLastCalledWith('INSERT INTO t (a, b) VALUES ($1, $2) RETURNING id', ['x', 'y']);
+    expect(mockQuery).toHaveBeenLastCalledWith(
+      'INSERT INTO t (a, b) VALUES ($1, $2) RETURNING id',
+      ['x', 'y'],
+    );
   });
 });

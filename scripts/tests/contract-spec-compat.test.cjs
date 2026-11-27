@@ -1,14 +1,70 @@
 'use strict';
-const {test}=require('node:test');
-const assert=require('node:assert/strict');
-const {check}=require('../contract-spec-compat.cjs');
-const f=(name='transfer', inputs=[{name:'to',type:'Address'}])=>({functionV0:{name,inputs,outputs:['void']}});
-const en=(cases)=>({udtErrorEnumV0:{name:'Error', cases}});
-const st=(fields)=>({udtStructV0:{name:'Stored',fields}});
-test('adding a function is compatible',()=>assert.deepEqual(check([f()],[f(),f('new')]).breaking,[]));
-test('renaming a function is breaking',()=>assert.match(check([f()],[f('renamed')]).breaking[0],/removed or renamed/));
-test('reordering arguments is breaking',()=>assert.ok(check([f('transfer',[{name:'a',type:'I32'},{name:'b',type:'U32'}])],[f('transfer',[{name:'b',type:'U32'},{name:'a',type:'I32'}])]).breaking.length));
-test('changing stored struct field order is breaking',()=>assert.ok(check([st([{name:'a',type:'u32'},{name:'b',type:'u64'}])],[st([{name:'b',type:'u64'},{name:'a',type:'u32'}])]).breaking.length));
-test('renumbering error code is breaking',()=>assert.match(check([en([{name:'Bad',value:1}])],[en([{name:'Bad',value:3}])]).breaking[0],/error-code renumbering/));
-test('appending enum variant is compatible',()=>assert.deepEqual(check([en([{name:'Bad',value:1}])],[en([{name:'Bad',value:1},{name:'Worse',value:2}])]).breaking,[]));
-test('comments are ignored',()=>assert.deepEqual(check([f()],[{functionV0:{...f().functionV0,doc:'hello'}}]).breaking,[]));
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { check } = require('../contract-spec-compat.cjs');
+const f = (name = 'transfer', inputs = [{ name: 'to', type: 'Address' }]) => ({
+  functionV0: { name, inputs, outputs: ['void'] },
+});
+const en = (cases) => ({ udtErrorEnumV0: { name: 'Error', cases } });
+const st = (fields) => ({ udtStructV0: { name: 'Stored', fields } });
+test('adding a function is compatible', () =>
+  assert.deepEqual(check([f()], [f(), f('new')]).breaking, []));
+test('renaming a function is breaking', () =>
+  assert.match(check([f()], [f('renamed')]).breaking[0], /removed or renamed/));
+test('reordering arguments is breaking', () =>
+  assert.ok(
+    check(
+      [
+        f('transfer', [
+          { name: 'a', type: 'I32' },
+          { name: 'b', type: 'U32' },
+        ]),
+      ],
+      [
+        f('transfer', [
+          { name: 'b', type: 'U32' },
+          { name: 'a', type: 'I32' },
+        ]),
+      ],
+    ).breaking.length,
+  ));
+test('changing stored struct field order is breaking', () =>
+  assert.ok(
+    check(
+      [
+        st([
+          { name: 'a', type: 'u32' },
+          { name: 'b', type: 'u64' },
+        ]),
+      ],
+      [
+        st([
+          { name: 'b', type: 'u64' },
+          { name: 'a', type: 'u32' },
+        ]),
+      ],
+    ).breaking.length,
+  ));
+test('renumbering error code is breaking', () =>
+  assert.match(
+    check([en([{ name: 'Bad', value: 1 }])], [en([{ name: 'Bad', value: 3 }])]).breaking[0],
+    /error-code renumbering/,
+  ));
+test('appending enum variant is compatible', () =>
+  assert.deepEqual(
+    check(
+      [en([{ name: 'Bad', value: 1 }])],
+      [
+        en([
+          { name: 'Bad', value: 1 },
+          { name: 'Worse', value: 2 },
+        ]),
+      ],
+    ).breaking,
+    [],
+  ));
+test('comments are ignored', () =>
+  assert.deepEqual(
+    check([f()], [{ functionV0: { ...f().functionV0, doc: 'hello' } }]).breaking,
+    [],
+  ));

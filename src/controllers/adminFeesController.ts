@@ -38,7 +38,11 @@ const feesQuerySchema = z
   );
 
 /** GET /api/admin/fees — returns fees_withdrawn event payloads */
-export async function getFeeSummary(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function getFeeSummary(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   const parsed = feesQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
@@ -52,16 +56,18 @@ export async function getFeeSummary(req: Request, res: Response, _next: NextFunc
     queryParams: req.query as Record<string, unknown>,
     timestamp: new Date().toISOString(),
   }).catch(() => {});
-  const withdrawals = queryEvents('fees_withdrawn').map((e) => e.payload as Record<string, unknown>);
+  const withdrawals = queryEvents('fees_withdrawn').map(
+    (e) => e.payload as Record<string, unknown>,
+  );
   const body: ApiResponse<Record<string, unknown>[]> = { success: true, data: withdrawals };
   res.json(body);
 }
 
-export const withdrawFeesSchema = z.object({
-  recipient: z
-    .string()
-    .refine((v) => STELLAR_ADDRESS_RE.test(v), 'Invalid Stellar address'),
-}).strict();
+export const withdrawFeesSchema = z
+  .object({
+    recipient: z.string().refine((v) => STELLAR_ADDRESS_RE.test(v), 'Invalid Stellar address'),
+  })
+  .strict();
 
 /**
  * In-process mutex: prevents concurrent fee withdrawals.
@@ -80,10 +86,16 @@ export function setWithdrawalLockForTesting(): void {
 }
 
 /** POST /api/admin/fees — withdraw accumulated platform fees */
-export async function withdrawFeesController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function withdrawFeesController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   // Controller-level role guard (defence-in-depth in addition to the route middleware).
   if (req.role !== 'admin') {
-    res.status(403).json({ success: false, error: 'Insufficient permissions', code: ErrorCode.FORBIDDEN });
+    res
+      .status(403)
+      .json({ success: false, error: 'Insufficient permissions', code: ErrorCode.FORBIDDEN });
     return;
   }
 
@@ -111,11 +123,20 @@ export async function withdrawFeesController(req: Request, res: Response, next: 
 
   // Check threshold for high-value operations
   if (config.adminThreshold > 1) {
-    const proposal = await proposeAction('withdraw_fees', { recipient: parsed.data.recipient }, adminWallet);
+    const proposal = await proposeAction(
+      'withdraw_fees',
+      { recipient: parsed.data.recipient },
+      adminWallet,
+    );
     res.status(202).json({
       success: true,
       message: `Fee withdrawal proposed, awaiting ${config.adminThreshold - 1} more admin signature(s)`,
-      data: { actionId: proposal.actionId, collectedSignatures: 1, requiredSignatures: config.adminThreshold, recipient: parsed.data.recipient },
+      data: {
+        actionId: proposal.actionId,
+        collectedSignatures: 1,
+        requiredSignatures: config.adminThreshold,
+        recipient: parsed.data.recipient,
+      },
     });
     return;
   }
@@ -131,7 +152,11 @@ export async function withdrawFeesController(req: Request, res: Response, next: 
       timestamp: new Date().toISOString(),
       contractAction: 'withdraw_fees',
     }).catch(() => {});
-    res.status(409).json({ success: false, error: 'A withdrawal is already in progress', code: ErrorCode.CONFLICT });
+    res.status(409).json({
+      success: false,
+      error: 'A withdrawal is already in progress',
+      code: ErrorCode.CONFLICT,
+    });
     return;
   }
 
@@ -183,22 +208,42 @@ export async function withdrawFeesController(req: Request, res: Response, next: 
     if (err instanceof FeeWithdrawalError) {
       switch (err.code) {
         case 'NO_FEES':
-          res.status(409).json({ success: false, error: 'No fees available to withdraw', code: ErrorCode.NO_FEES });
+          res.status(409).json({
+            success: false,
+            error: 'No fees available to withdraw',
+            code: ErrorCode.NO_FEES,
+          });
           return;
         case 'INSUFFICIENT_FEES':
           // Legacy path withdraws the full balance, so this only happens when
           // the live balance dropped after the amount was resolved — the
           // requested (full) amount is no longer available.
-          res.status(409).json({ success: false, error: 'No fees available to withdraw', code: ErrorCode.NO_FEES });
+          res.status(409).json({
+            success: false,
+            error: 'No fees available to withdraw',
+            code: ErrorCode.NO_FEES,
+          });
           return;
         case 'CONTRACT_PAUSED':
-          res.status(409).json({ success: false, error: 'Contract is paused; withdrawal not available', code: ErrorCode.CONTRACT_PAUSED });
+          res.status(409).json({
+            success: false,
+            error: 'Contract is paused; withdrawal not available',
+            code: ErrorCode.CONTRACT_PAUSED,
+          });
           return;
         case 'INVALID_RECIPIENT':
-          res.status(400).json({ success: false, error: 'Invalid recipient address', code: ErrorCode.INVALID_RECIPIENT });
+          res.status(400).json({
+            success: false,
+            error: 'Invalid recipient address',
+            code: ErrorCode.INVALID_RECIPIENT,
+          });
           return;
         case 'NETWORK_ERROR':
-          res.status(503).json({ success: false, error: 'Network error; please retry', code: ErrorCode.NETWORK_ERROR });
+          res.status(503).json({
+            success: false,
+            error: 'Network error; please retry',
+            code: ErrorCode.NETWORK_ERROR,
+          });
           return;
       }
     }
@@ -208,19 +253,21 @@ export async function withdrawFeesController(req: Request, res: Response, next: 
   }
 }
 
-export const withdrawFeesV2Schema = z.object({
-  treasuryAddress: z
-    .string(requiredError('treasuryAddress is required'))
-    .refine(isValidStellarAddress, {
-      message: 'treasuryAddress must be a valid Stellar public key',
-    }),
-  amountStroops: z
-    .union([z.string(), z.number()])
-    .transform((v) => String(v))
-    .refine((v) => /^\d+$/.test(v) && BigInt(v) > 0n, {
-      message: 'amountStroops must be a positive integer',
-    }),
-}).strict();
+export const withdrawFeesV2Schema = z
+  .object({
+    treasuryAddress: z
+      .string(requiredError('treasuryAddress is required'))
+      .refine(isValidStellarAddress, {
+        message: 'treasuryAddress must be a valid Stellar public key',
+      }),
+    amountStroops: z
+      .union([z.string(), z.number()])
+      .transform((v) => String(v))
+      .refine((v) => /^\d+$/.test(v) && BigInt(v) > 0n, {
+        message: 'amountStroops must be a positive integer',
+      }),
+  })
+  .strict();
 
 /**
  * POST /api/admin/fees/withdraw

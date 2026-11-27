@@ -1,19 +1,27 @@
 // Import processing tests use mocked Pinata/DB only; no external services.
 jest.mock('../../src/config', () => ({
-  __esModule: true, default: { playerImport: { maxBatchSize: 500, concurrency: 3 } },
+  __esModule: true,
+  default: { playerImport: { maxBatchSize: 500, concurrency: 3 } },
 }));
 jest.mock('../../src/controllers/playerController', () => ({
   registerSchema: {
-    safeParse: (value: { valid?: boolean; wallet?: string }) => value?.valid === false
-      ? { success: false, error: { issues: [{ message: 'invalid player' }] } }
-      : { success: true, data: { wallet: value.wallet, position: 'Forward', region: 'West', metadata: {} } },
+    safeParse: (value: { valid?: boolean; wallet?: string }) =>
+      value?.valid === false
+        ? { success: false, error: { issues: [{ message: 'invalid player' }] } }
+        : {
+            success: true,
+            data: { wallet: value.wallet, position: 'Forward', region: 'West', metadata: {} },
+          },
   },
 }));
 jest.mock('../../src/db', () => ({
-  getDriver: jest.fn(), insertOrUpdatePlayer: jest.fn().mockResolvedValue(undefined),
+  getDriver: jest.fn(),
+  insertOrUpdatePlayer: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../src/services/ipfs', () => ({ pinJson: jest.fn() }));
-jest.mock('../../src/services/webhooks', () => ({ dispatchEventWebhook: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../../src/services/webhooks', () => ({
+  dispatchEventWebhook: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../../src/services/cache', () => ({ invalidatePlayerCache: jest.fn() }));
 jest.mock('../../src/services/audit', () => ({ logAuditEvent: jest.fn() }));
 jest.mock('../../src/utils/logger', () => ({ logger: { warn: jest.fn(), info: jest.fn() } }));

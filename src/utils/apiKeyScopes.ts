@@ -85,20 +85,22 @@ export function parseApiKeyScopes(
     parsed = JSON.parse(trimmed);
   } catch {
     // Fail-open: a corrupt row must not brick an otherwise valid key.
-    warn(`[apiKeyScopes] unparseable scopes value, treating key as unrestricted: ${trimmed.slice(0, 80)}`);
+    warn(
+      `[apiKeyScopes] unparseable scopes value, treating key as unrestricted: ${trimmed.slice(0, 80)}`,
+    );
     return null;
   }
 
   // JSON values such as `"read:players"` (a bare string) or `42` are not a
   // scope list — fail-open to legacy behavior.
   if (!Array.isArray(parsed)) {
-    warn(`[apiKeyScopes] non-array scopes value, treating key as unrestricted: ${trimmed.slice(0, 80)}`);
+    warn(
+      `[apiKeyScopes] non-array scopes value, treating key as unrestricted: ${trimmed.slice(0, 80)}`,
+    );
     return null;
   }
 
-  const scopes = parsed
-    .filter((s): s is string => typeof s === 'string')
-    .filter(Boolean);
+  const scopes = parsed.filter((s): s is string => typeof s === 'string').filter(Boolean);
 
   // The literal migration default means "this key predates scope
   // enforcement" — keep it unrestricted for backward compatibility.
@@ -117,10 +119,7 @@ export function parseApiKeyScopes(
  * Whether a parsed scope list permits the given scope.
  * `null` (legacy/unrestricted key) always permits.
  */
-export function hasApiKeyScope(
-  scopes: string[] | null | undefined,
-  required: string,
-): boolean {
+export function hasApiKeyScope(scopes: string[] | null | undefined, required: string): boolean {
   if (scopes === null || scopes === undefined) return true;
   return scopes.includes(required);
 }

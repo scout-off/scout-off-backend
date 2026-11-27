@@ -22,7 +22,9 @@ import { Keypair, Transaction, Networks, nativeToScVal } from '@stellar/stellar-
 const mockGetEvents = jest.fn();
 
 // Stub out the parts that admin.test.ts doesn't need to hit the real DB
-jest.mock('../../src/services/audit', () => ({ logAuditEvent: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../../src/services/audit', () => ({
+  logAuditEvent: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../../src/services/stellar', () => ({
   ...jest.requireActual('../../src/services/stellar'),
   server: {

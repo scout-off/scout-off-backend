@@ -1,4 +1,10 @@
-import { canonical, convertValue, orderTables, TableChecksum, toPostgresValue } from '../../scripts/migrate-sqlite-to-postgres';
+import {
+  canonical,
+  convertValue,
+  orderTables,
+  TableChecksum,
+  toPostgresValue,
+} from '../../scripts/migrate-sqlite-to-postgres';
 
 describe('SQLite to Postgres conversion', () => {
   it('converts only strict SQLite booleans and preserves nulls', () => {
@@ -20,9 +26,13 @@ describe('SQLite to Postgres conversion', () => {
     expect(toPostgresValue(null, 'jsonb')).toBeNull();
     const columns = [{ column_name: 'payload', data_type: 'jsonb' }];
     expect(canonical({ payload: 'null' }, columns)).not.toBe(canonical({ payload: null }, columns));
-    expect(canonical({ payload: '{"b":2,"a":1}' }, columns)).toBe(canonical({ payload: '{"a":1,"b":2}' }, columns));
+    expect(canonical({ payload: '{"b":2,"a":1}' }, columns)).toBe(
+      canonical({ payload: '{"a":1,"b":2}' }, columns),
+    );
     expect(toPostgresValue('{"n":9007199254740993}', 'jsonb')).toBe('{"n":9007199254740993}');
-    expect(canonical({ payload: '9007199254740993' }, columns)).not.toBe(canonical({ payload: '9007199254740992' }, columns));
+    expect(canonical({ payload: '9007199254740993' }, columns)).not.toBe(
+      canonical({ payload: '9007199254740992' }, columns),
+    );
     expect(canonical({ payload: '1.00e3' }, columns)).toBe(canonical({ payload: '1000' }, columns));
     expect(canonical({ payload: '[1, {"nested": "escaped \\" quote"}, null]' }, columns)).toBe(
       canonical({ payload: '[1.0,{"nested":"escaped \\" quote"},null]' }, columns),
@@ -36,12 +46,27 @@ describe('SQLite to Postgres conversion', () => {
   });
 
   it('orders dependencies and rejects cycles', () => {
-    expect(orderTables(['child', 'parent'], new Map([['child', ['parent']]]))).toEqual(['parent', 'child']);
-    expect(() => orderTables(['a', 'b'], new Map([['a', ['b']], ['b', ['a']]]))).toThrow('cycle');
+    expect(orderTables(['child', 'parent'], new Map([['child', ['parent']]]))).toEqual([
+      'parent',
+      'child',
+    ]);
+    expect(() =>
+      orderTables(
+        ['a', 'b'],
+        new Map([
+          ['a', ['b']],
+          ['b', ['a']],
+        ]),
+      ),
+    ).toThrow('cycle');
   });
 
   it('checksums are order independent but sensitive to duplicates and changes', () => {
-    const checksum = (rows: string[]) => { const result = new TableChecksum(); rows.forEach(row => result.add(row)); return result.digest(); };
+    const checksum = (rows: string[]) => {
+      const result = new TableChecksum();
+      rows.forEach((row) => result.add(row));
+      return result.digest();
+    };
     expect(checksum(['a', 'b', 'a'])).toBe(checksum(['b', 'a', 'a']));
     expect(checksum(['a', 'b'])).not.toBe(checksum(['a', 'b', 'a']));
     expect(checksum(['a', 'c'])).not.toBe(checksum(['a', 'b']));

@@ -5,7 +5,10 @@
  * fail with an explicit message (mocked RPC). A stuck ledger is detected.
  */
 
-import { probeSorobanRpcCheck, runSorobanRpcStartupCheck } from '../../src/services/sorobanRpcCheck';
+import {
+  probeSorobanRpcCheck,
+  runSorobanRpcStartupCheck,
+} from '../../src/services/sorobanRpcCheck';
 
 // ── Mock stellar SDK ──────────────────────────────────────────────────────────
 
@@ -129,10 +132,34 @@ describe('probeSorobanRpcCheck — ledger liveness', () => {
     jest.isolateModules(async () => {
       jest.mock('@stellar/stellar-sdk', () => ({
         ...jest.requireActual('@stellar/stellar-sdk'),
-        rpc: { Server: jest.fn().mockImplementation(() => ({ getNetwork: jest.fn().mockResolvedValue({ passphrase: 'Test SDF Network ; September 2015', protocolVersion: 22 }), getLatestLedger: jest.fn().mockResolvedValue({ sequence: 5000 }) })) },
+        rpc: {
+          Server: jest.fn().mockImplementation(() => ({
+            getNetwork: jest.fn().mockResolvedValue({
+              passphrase: 'Test SDF Network ; September 2015',
+              protocolVersion: 22,
+            }),
+            getLatestLedger: jest.fn().mockResolvedValue({ sequence: 5000 }),
+          })),
+        },
       }));
-      jest.mock('../../src/config', () => ({ __esModule: true, default: { sorobanRpcUrl: 'http://localhost:8000', networkPassphrase: 'Test SDF Network ; September 2015', stellarHealthCheckEnabled: true, stellarRpcTimeoutMs: 5000, nodeEnv: 'test', sorobanRpc: { minProtocolVersion: 20, strictProtocolVersion: false, ledgerStuckMs: 60_000 } } }));
-      jest.mock('../../src/utils/logger', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
+      jest.mock('../../src/config', () => ({
+        __esModule: true,
+        default: {
+          sorobanRpcUrl: 'http://localhost:8000',
+          networkPassphrase: 'Test SDF Network ; September 2015',
+          stellarHealthCheckEnabled: true,
+          stellarRpcTimeoutMs: 5000,
+          nodeEnv: 'test',
+          sorobanRpc: {
+            minProtocolVersion: 20,
+            strictProtocolVersion: false,
+            ledgerStuckMs: 60_000,
+          },
+        },
+      }));
+      jest.mock('../../src/utils/logger', () => ({
+        logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+      }));
       const { probeSorobanRpcCheck: probe } = await import('../../src/services/sorobanRpcCheck');
       const result = await probe();
       expect(result.ledgerLiveness).toBe('ok');
@@ -196,9 +223,12 @@ describe('runSorobanRpcStartupCheck — production hard failure', () => {
         })),
       },
     }));
-    jest.mock('../../src/utils/logger', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
+    jest.mock('../../src/utils/logger', () => ({
+      logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+    }));
 
-    const { runSorobanRpcStartupCheck: startupCheck } = await import('../../src/services/sorobanRpcCheck');
+    const { runSorobanRpcStartupCheck: startupCheck } =
+      await import('../../src/services/sorobanRpcCheck');
     await expect(startupCheck()).rejects.toThrow(/FATAL/);
   });
 });

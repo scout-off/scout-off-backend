@@ -36,7 +36,13 @@ jest.mock('../../src/db', () => ({
   countStuckPendingPins: jest.fn().mockReturnValue(0),
 }));
 
-import { insertPendingPin, deletePendingPinByHash, getPendingPins, deletePendingPin, incrementPendingPinAttempts } from '../../src/db';
+import {
+  insertPendingPin,
+  deletePendingPinByHash,
+  getPendingPins,
+  deletePendingPin,
+  incrementPendingPinAttempts,
+} from '../../src/db';
 
 // Mock logger to capture critical calls
 const mockCritical = jest.fn();
@@ -60,7 +66,7 @@ describe('pinJson IPFS failure handling (#346)', () => {
     await expect(pinJson({ wallet: 'Gtest' })).rejects.toThrow('Pinata 503');
     expect(mockCritical).toHaveBeenCalledWith(
       expect.stringContaining('[ipfs] Pinata unavailable'),
-      expect.any(String)
+      expect.any(String),
     );
   });
 
@@ -75,14 +81,14 @@ describe('pinJson IPFS failure handling (#346)', () => {
 
       try {
         await expect(pinJson({ staging: 'missing-pinata-config' })).rejects.toThrow(
-          'PINATA_API_KEY and PINATA_SECRET must be set in staging and production'
+          'PINATA_API_KEY and PINATA_SECRET must be set in staging and production',
         );
         const { pinFile, checkHealth } = await import('../../src/services/ipfs');
-        await expect(pinFile(Buffer.from('evidence'), 'evidence.txt', 'text/plain')).rejects.toThrow(
-          'PINATA_API_KEY and PINATA_SECRET must be set in staging and production'
-        );
+        await expect(
+          pinFile(Buffer.from('evidence'), 'evidence.txt', 'text/plain'),
+        ).rejects.toThrow('PINATA_API_KEY and PINATA_SECRET must be set in staging and production');
         await expect(checkHealth()).rejects.toThrow(
-          'PINATA_API_KEY and PINATA_SECRET must be set in staging and production'
+          'PINATA_API_KEY and PINATA_SECRET must be set in staging and production',
         );
         expect(mockedPost).not.toHaveBeenCalled();
       } finally {
@@ -98,7 +104,7 @@ describe('pinJson IPFS failure handling (#346)', () => {
     const body = { wallet: 'Gqueue', position: 'striker' };
     await expect(pinJson(body)).rejects.toThrow();
     expect(insertPendingPin).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: JSON.stringify(body) })
+      expect.objectContaining({ payload: JSON.stringify(body) }),
     );
   });
 
@@ -151,7 +157,6 @@ describe('pinJson dedup caching', () => {
   });
 });
 
-
 describe('retryPendingPins background worker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -160,7 +165,12 @@ describe('retryPendingPins background worker', () => {
   it('retries successfully and removes row', async () => {
     const fakeNow = Date.now();
     (getPendingPins as jest.Mock).mockReturnValue([
-      { id: 1, payload: JSON.stringify({ wallet: 'G1' }), attempts: 0, last_tried: new Date(fakeNow - 100000).toISOString() },
+      {
+        id: 1,
+        payload: JSON.stringify({ wallet: 'G1' }),
+        attempts: 0,
+        last_tried: new Date(fakeNow - 100000).toISOString(),
+      },
     ]);
     mockedPost.mockResolvedValue({ data: { IpfsHash: 'QmRetried' } });
 
@@ -175,9 +185,19 @@ describe('retryPendingPins background worker', () => {
     const fakeNow = Date.now();
     (getPendingPins as jest.Mock).mockReturnValue([
       // attempt 1, backed off 2 * 60s = 120s. last tried 60s ago -> skip
-      { id: 1, payload: JSON.stringify({ wallet: 'G1' }), attempts: 1, last_tried: new Date(fakeNow - 60000).toISOString() },
+      {
+        id: 1,
+        payload: JSON.stringify({ wallet: 'G1' }),
+        attempts: 1,
+        last_tried: new Date(fakeNow - 60000).toISOString(),
+      },
       // attempt 1, backed off 120s. last tried 130s ago -> retry
-      { id: 2, payload: JSON.stringify({ wallet: 'G2' }), attempts: 1, last_tried: new Date(fakeNow - 130000).toISOString() },
+      {
+        id: 2,
+        payload: JSON.stringify({ wallet: 'G2' }),
+        attempts: 1,
+        last_tried: new Date(fakeNow - 130000).toISOString(),
+      },
     ]);
     mockedPost.mockRejectedValue(new Error('Still down'));
 
@@ -190,9 +210,14 @@ describe('retryPendingPins background worker', () => {
   it('skips rows that have permanently failed (attempts >= 5)', async () => {
     const fakeNow = Date.now();
     (getPendingPins as jest.Mock).mockReturnValue([
-      { id: 1, payload: JSON.stringify({ wallet: 'G1' }), attempts: 5, last_tried: new Date(fakeNow - 9999999).toISOString() },
+      {
+        id: 1,
+        payload: JSON.stringify({ wallet: 'G1' }),
+        attempts: 5,
+        last_tried: new Date(fakeNow - 9999999).toISOString(),
+      },
     ]);
-    
+
     await retryPendingPins();
 
     expect(mockedPost).not.toHaveBeenCalled();

@@ -1,4 +1,8 @@
-import { enrichPlayerResult, normalizePositionQuery, EnrichedPlayerResult } from '../../src/utils/searchEnrichment';
+import {
+  enrichPlayerResult,
+  normalizePositionQuery,
+  EnrichedPlayerResult,
+} from '../../src/utils/searchEnrichment';
 
 describe('enrichPlayerResult', () => {
   it('returns correct progressLabel and verificationBadge for level 0', () => {

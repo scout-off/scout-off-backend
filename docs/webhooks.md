@@ -20,6 +20,7 @@ Two signature headers are sent with each webhook delivery:
    `t=<timestamp>,v1=<signature-current>,v1=<signature-previous>`
 
 The versioned format (`X-Webhook-Signature-V1`) contains:
+
 - `t=<timestamp>` — Unix timestamp in seconds (same value as `X-Webhook-Timestamp`)
 - `v1=<signature>` — One or more HMAC-SHA256 signatures using the current and/or previous secrets
 
@@ -126,12 +127,12 @@ casing the contract emitted.
 Fires when a player registers a new on-chain profile (`POST /api/players`,
 or the admin bulk-import endpoints).
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `player_id` | string | Newly generated player ID |
-| `wallet` | string | Player's Stellar wallet address |
-| `position` | string \| undefined | Playing position |
-| `region` | string \| undefined | Player's region |
+| Field         | Type                | Description                             |
+| ------------- | ------------------- | --------------------------------------- |
+| `player_id`   | string              | Newly generated player ID               |
+| `wallet`      | string              | Player's Stellar wallet address         |
+| `position`    | string \| undefined | Playing position                        |
+| `region`      | string \| undefined | Player's region                         |
 | `metadataUri` | string \| undefined | IPFS URI for off-chain profile metadata |
 
 ```json
@@ -153,13 +154,13 @@ or the admin bulk-import endpoints).
 Fires when a validator submits a milestone for a player on-chain; indexed
 from the Soroban contract event.
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `milestone_id` | string | On-chain milestone ID |
-| `player_id` | string | Player the milestone belongs to |
-| `validator` | string | Validator's wallet address |
-| `milestone_type` | string | Milestone category |
-| `evidence_uri` | string | IPFS URI for supporting evidence |
+| Field            | Type   | Description                      |
+| ---------------- | ------ | -------------------------------- |
+| `milestone_id`   | string | On-chain milestone ID            |
+| `player_id`      | string | Player the milestone belongs to  |
+| `validator`      | string | Validator's wallet address       |
+| `milestone_type` | string | Milestone category               |
+| `evidence_uri`   | string | IPFS URI for supporting evidence |
 
 ```json
 {
@@ -181,11 +182,11 @@ Fires when a submitted milestone is approved on-chain; indexed from the
 Soroban contract event. Approval count drives the player's progress tier
 (`tierForApprovedMilestones()`).
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `player_id` | string | Player whose milestone was approved |
-| `milestone_id` | string | Approved milestone ID |
-| `validator` | string \| undefined | Approving validator's wallet |
+| Field          | Type                | Description                         |
+| -------------- | ------------------- | ----------------------------------- |
+| `player_id`    | string              | Player whose milestone was approved |
+| `milestone_id` | string              | Approved milestone ID               |
+| `validator`    | string \| undefined | Approving validator's wallet        |
 
 ```json
 {
@@ -203,13 +204,13 @@ Soroban contract event. Approval count drives the player's progress tier
 
 Fires when a scout purchases or renews a subscription tier.
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `scout` | string | Scout's wallet address |
-| `tier` | string | Subscription tier purchased |
+| Field        | Type   | Description                                  |
+| ------------ | ------ | -------------------------------------------- |
+| `scout`      | string | Scout's wallet address                       |
+| `tier`       | string | Subscription tier purchased                  |
 | `expires_at` | number | Unix timestamp when the subscription expires |
-| `tx_hash` | string | Stellar transaction hash |
-| `timestamp` | string | ISO 8601 timestamp of the event |
+| `tx_hash`    | string | Stellar transaction hash                     |
+| `timestamp`  | string | ISO 8601 timestamp of the event              |
 
 ```json
 {
@@ -230,12 +231,12 @@ Fires when a scout purchases or renews a subscription tier.
 Fires when a scout pays the contact fee to unlock a player's contact
 details.
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `scout` | string | Scout's wallet address |
+| Field       | Type   | Description                       |
+| ----------- | ------ | --------------------------------- |
+| `scout`     | string | Scout's wallet address            |
 | `player_id` | string | Player whose contact was unlocked |
-| `tx_hash` | string | Stellar transaction hash |
-| `timestamp` | string | ISO 8601 timestamp of the event |
+| `tx_hash`   | string | Stellar transaction hash          |
+| `timestamp` | string | ISO 8601 timestamp of the event   |
 
 ```json
 {
@@ -254,14 +255,14 @@ details.
 
 Fires when a scout submits a trial offer for a player.
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `offer_id` | string | Generated trial offer ID |
-| `scout` | string | Scout's wallet address |
-| `player_id` | string | Player the offer is for |
-| `details_uri` | string | IPFS URI with offer details |
-| `tx_hash` | string | Stellar transaction hash |
-| `timestamp` | string | ISO 8601 timestamp of the event |
+| Field         | Type   | Description                     |
+| ------------- | ------ | ------------------------------- |
+| `offer_id`    | string | Generated trial offer ID        |
+| `scout`       | string | Scout's wallet address          |
+| `player_id`   | string | Player the offer is for         |
+| `details_uri` | string | IPFS URI with offer details     |
+| `tx_hash`     | string | Stellar transaction hash        |
+| `timestamp`   | string | ISO 8601 timestamp of the event |
 
 ```json
 {
@@ -282,11 +283,11 @@ Fires when a scout submits a trial offer for a player.
 
 Fires when an admin withdraws accumulated platform fees from the contract.
 
-| Field | Type | Description |
-| --- | --- | --- |
+| Field       | Type   | Description                               |
+| ----------- | ------ | ----------------------------------------- |
 | `recipient` | string | Wallet address the fees were withdrawn to |
-| `amount` | string | Amount withdrawn |
-| `token` | string | Token/asset withdrawn (e.g. `XLM`) |
+| `amount`    | string | Amount withdrawn                          |
+| `token`     | string | Token/asset withdrawn (e.g. `XLM`)        |
 
 ```json
 {
@@ -316,15 +317,18 @@ The versioned header contains one or more signatures for rotation support.
 ### Header Format
 
 The **X-Webhook-Signature-V1** header format is:
+
 ```
 t=<timestamp>,v1=<signature-current>,v1=<signature-previous>
 ```
 
 Where:
+
 - `t=<timestamp>` matches `X-Webhook-Timestamp`
 - `v1=<sig>` — One or more HMAC-SHA256 signatures (comma-separated)
 
 The **X-Webhook-Signature** (legacy) header uses:
+
 ```
 sha256=<hex-encoded HMAC-SHA256 digest>
 ```
@@ -349,10 +353,10 @@ const crypto = require('crypto');
 
 function parseVersionedSignature(header) {
   if (!header || !header.startsWith('t=')) return null;
-  
+
   const parts = header.split(',');
   const result = { timestamp: null, signatures: [] };
-  
+
   for (const part of parts) {
     if (part.startsWith('t=')) {
       result.timestamp = part.slice(2);
@@ -360,7 +364,7 @@ function parseVersionedSignature(header) {
       result.signatures.push(part.slice(3));
     }
   }
-  
+
   return result;
 }
 
@@ -369,7 +373,8 @@ function isValidSignature(rawBody, timestamp, signatureHeaders, secrets) {
   if (!timestamp || !/^\d+$/.test(timestamp)) return false;
   const timestampSeconds = Number(timestamp);
   const nowSeconds = Math.floor(Date.now() / 1000);
-  if (Math.abs(nowSeconds - timestampSeconds) > 300) { // 5 minute tolerance
+  if (Math.abs(nowSeconds - timestampSeconds) > 300) {
+    // 5 minute tolerance
     return false;
   }
 
@@ -379,15 +384,18 @@ function isValidSignature(rawBody, timestamp, signatureHeaders, secrets) {
     if (parsed) {
       for (const sig of parsed.signatures) {
         for (const secret of secrets) {
-          const expected = crypto.createHmac('sha256', secret)
+          const expected = crypto
+            .createHmac('sha256', secret)
             .update(`${timestamp}.${rawBody}`)
             .digest('hex');
-          
+
           const expectedBuf = Buffer.from(expected, 'hex');
           const providedBuf = Buffer.from(sig, 'hex');
-          
-          if (expectedBuf.length === providedBuf.length &&
-              crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+
+          if (
+            expectedBuf.length === providedBuf.length &&
+            crypto.timingSafeEqual(expectedBuf, providedBuf)
+          ) {
             return true; // Valid signature found
           }
         }
@@ -396,21 +404,24 @@ function isValidSignature(rawBody, timestamp, signatureHeaders, secrets) {
       // Legacy single-value format
       const provided = header.slice('sha256='.length);
       for (const secret of secrets) {
-        const expected = crypto.createHmac('sha256', secret)
+        const expected = crypto
+          .createHmac('sha256', secret)
           .update(`${timestamp}.${rawBody}`)
           .digest('hex');
-        
+
         const expectedBuf = Buffer.from(expected, 'hex');
         const providedBuf = Buffer.from(provided, 'hex');
-        
-        if (expectedBuf.length === providedBuf.length &&
-            crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+
+        if (
+          expectedBuf.length === providedBuf.length &&
+          crypto.timingSafeEqual(expectedBuf, providedBuf)
+        ) {
           return true;
         }
       }
     }
   }
-  
+
   return false; // No valid signature found
 }
 
@@ -418,15 +429,15 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   const timestamp = req.headers['x-webhook-timestamp'];
   const signatureV1 = req.headers['x-webhook-signature-v1'];
   const signatureLegacy = req.headers['x-webhook-signature'];
-  
+
   const signatureHeaders = [signatureV1, signatureLegacy].filter(Boolean);
-  
+
   // Try both current and previous secrets (for rotation window)
   const secrets = [
-    process.env.SCOUTOFF_WEBHOOK_SECRET,      // current
+    process.env.SCOUTOFF_WEBHOOK_SECRET, // current
     process.env.SCOUTOFF_WEBHOOK_SECRET_PREVIOUS, // previous (may be undefined)
   ].filter(Boolean);
-  
+
   if (!isValidSignature(req.body, timestamp, signatureHeaders, secrets)) {
     return res.status(401).send('invalid signature');
   }
@@ -450,16 +461,16 @@ def parse_versioned_signature(header: str) -> Optional[dict]:
     """Parse X-Webhook-Signature-V1 header."""
     if not header or not header.startswith('t='):
         return None
-    
+
     parts = header.split(',')
     result = {'timestamp': None, 'signatures': []}
-    
+
     for part in parts:
         if part.startswith('t='):
             result['timestamp'] = part[2:]
         elif part.startswith('v1='):
             result['signatures'].append(part[3:])
-    
+
     return result
 
 def compute_hmac(secret: str, timestamp: str, body: bytes) -> str:
@@ -480,14 +491,14 @@ def is_valid_signature(
     """Verify signature against multiple secrets (for rotation)."""
     if not timestamp or not timestamp.isdigit():
         return False
-    
+
     timestamp_seconds = int(timestamp)
     now_seconds = int(time.time())
-    
+
     # 5 minute tolerance
     if abs(now_seconds - timestamp_seconds) > 300:
         return False
-    
+
     for header in signature_headers:
         parsed = parse_versioned_signature(header)
         if parsed:
@@ -503,29 +514,29 @@ def is_valid_signature(
                 expected = compute_hmac(secret, timestamp, raw_body)
                 if hmac.compare_digest(provided, expected):
                     return True
-    
+
     return False
 
 @app.post('/webhook')
 async def webhook(request: Request):
     body = await request.body()
     timestamp = request.headers.get('x-webhook-timestamp', '')
-    
+
     signature_v1 = request.headers.get('x-webhook-signature-v1', '')
     signature_legacy = request.headers.get('x-webhook-signature', '')
-    
+
     signature_headers = [h for h in [signature_v1, signature_legacy] if h]
-    
+
     # Try both current and previous secrets
     secrets = [
         os.getenv('SCOUTOFF_WEBHOOK_SECRET'),
         os.getenv('SCOUTOFF_WEBHOOK_SECRET_PREVIOUS')
     ]
     secrets = [s for s in secrets if s]
-    
+
     if not is_valid_signature(body, timestamp, signature_headers, secrets):
         return JSONResponse(status_code=401, content={'error': 'invalid signature'})
-    
+
     event = json.loads(body.decode())
     # Persistently deduplicate event['deliveryId'] before applying side effects
     # ... handle event ...
@@ -544,7 +555,7 @@ To deduplicate on the receiver side:
 1. **Extract `deliveryId`** from the parsed JSON body.
 2. **Maintain an in-memory or persistent dedup cache** keyed on `deliveryId`.
 3. **On each delivery**, check whether the `deliveryId` already exists in the
-cache. If it does, acknowledge the webhook (return 200) but skip processing.
+   cache. If it does, acknowledge the webhook (return 200) but skip processing.
 4. **If the `deliveryId` is new**, process the event and add it to the cache.
 
 Example (Node.js):
@@ -600,12 +611,12 @@ slow subscriber cannot fail an unrelated request (e.g. player registration).
 The dead-letter retry job refreshes a per-subscription Prometheus gauge and
 evaluates configurable thresholds on every sweep:
 
-| Env | Default | Meaning |
-| --- | --- | --- |
-| `WEBHOOK_DLQ_SIZE_THRESHOLD` | `100` | Absolute queue depth |
-| `WEBHOOK_DLQ_RATE_THRESHOLD` | `50` | Inserts within the rate window |
-| `WEBHOOK_DLQ_RATE_WINDOW_MS` | `300000` | Sliding window for the rate check |
-| `PLATFORM_ADMIN_NOTIFY_URL` | _(empty)_ | Optional JSON POST target on crossing |
+| Env                          | Default   | Meaning                               |
+| ---------------------------- | --------- | ------------------------------------- |
+| `WEBHOOK_DLQ_SIZE_THRESHOLD` | `100`     | Absolute queue depth                  |
+| `WEBHOOK_DLQ_RATE_THRESHOLD` | `50`      | Inserts within the rate window        |
+| `WEBHOOK_DLQ_RATE_WINDOW_MS` | `300000`  | Sliding window for the rate check     |
+| `PLATFORM_ADMIN_NOTIFY_URL`  | _(empty)_ | Optional JSON POST target on crossing |
 
 Crossing either threshold emits a **critical** log line
 (`webhook_dead_letter_threshold_crossed`) that includes the top culprit
@@ -677,7 +688,7 @@ Until a dedicated rotation endpoint ships, the only way to rotate a secret is to
 2. **Delete the subscription** (or mark it inactive in the database).
 
 3. **Re-create the subscription** — the backend generates a fresh `crypto.randomBytes(32)` secret
-   on creation.  For the legacy single-subscriber flow, clear `WEBHOOK_SECRET` and restart the
+   on creation. For the legacy single-subscriber flow, clear `WEBHOOK_SECRET` and restart the
    backend; a new random secret is generated automatically.
 
 4. **Update your receiver** with the new secret so it can re-validate the
@@ -685,7 +696,7 @@ Until a dedicated rotation endpoint ships, the only way to rotate a secret is to
 
 > ⚠️ **Note on in-flight deliveries**: Any dead-lettered rows that were signed with the old
 > secret can still be replayed via `POST /api/admin/webhooks/:id/replay` — the replay endpoint
-> re-signs the payload with the *current* secret, so the receiver will see the new signature.
+> re-signs the payload with the _current_ secret, so the receiver will see the new signature.
 
 ### Legacy single-subscriber (WEBHOOK_SECRET env var)
 
@@ -723,11 +734,11 @@ response field.
 
 ### Query parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `status` | `"failed"` \| `"succeeded"` | *(all)* | Filter by delivery outcome |
-| `page` | integer ≥ 1 | `1` | 1-based page number |
-| `pageSize` | integer 1–100 | `20` | Results per page |
+| Parameter  | Type                        | Default | Description                |
+| ---------- | --------------------------- | ------- | -------------------------- |
+| `status`   | `"failed"` \| `"succeeded"` | _(all)_ | Filter by delivery outcome |
+| `page`     | integer ≥ 1                 | `1`     | 1-based page number        |
+| `pageSize` | integer 1–100               | `20`    | Results per page           |
 
 ### Response (200)
 
@@ -753,25 +764,25 @@ response field.
 }
 ```
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `deliveryId` | string | Unique delivery attempt identifier |
-| `eventType` | string | Contract event type that triggered the delivery |
-| `createdAt` | number | Unix timestamp (ms) of the first attempt |
-| `attempts` | number | Total attempt count |
-| `lastStatusCode` | number \| null | HTTP status code of the last attempt |
-| `lastLatencyMs` | number \| null | Round-trip latency of the last attempt (ms) |
-| `lastError` | string \| null | Error message, truncated to 200 chars; internal IPs and hostnames are redacted to `[redacted]` |
-| `nextRetryAt` | null | Always `null` — retry scheduling is not tracked in DB |
-| `deadLettered` | false | Always `false` — dead-letter promotion is not tracked per row |
+| Field            | Type           | Notes                                                                                          |
+| ---------------- | -------------- | ---------------------------------------------------------------------------------------------- |
+| `deliveryId`     | string         | Unique delivery attempt identifier                                                             |
+| `eventType`      | string         | Contract event type that triggered the delivery                                                |
+| `createdAt`      | number         | Unix timestamp (ms) of the first attempt                                                       |
+| `attempts`       | number         | Total attempt count                                                                            |
+| `lastStatusCode` | number \| null | HTTP status code of the last attempt                                                           |
+| `lastLatencyMs`  | number \| null | Round-trip latency of the last attempt (ms)                                                    |
+| `lastError`      | string \| null | Error message, truncated to 200 chars; internal IPs and hostnames are redacted to `[redacted]` |
+| `nextRetryAt`    | null           | Always `null` — retry scheduling is not tracked in DB                                          |
+| `deadLettered`   | false          | Always `false` — dead-letter promotion is not tracked per row                                  |
 
 ### Error responses
 
-| Status | Condition |
-|--------|-----------|
-| `400` | Non-integer `:id` or invalid `status` value |
-| `403` | Subscription exists but belongs to a different scout |
-| `404` | No subscription with that `:id` exists |
+| Status | Condition                                            |
+| ------ | ---------------------------------------------------- |
+| `400`  | Non-integer `:id` or invalid `status` value          |
+| `403`  | Subscription exists but belongs to a different scout |
+| `404`  | No subscription with that `:id` exists               |
 
 ## Admin endpoints
 
@@ -809,7 +820,7 @@ Query params: `page` (default `1`), `pageSize` (default `20`, max `100`).
 ### `POST /api/admin/webhooks/:id/replay`
 
 Re-attempts delivery of one dead-lettered row, re-signing the payload with the
-subscriber's *current* secret (which may have rotated since the original
+subscriber's _current_ secret (which may have rotated since the original
 attempt) and re-running the same retry/backoff flow.
 
 - On success, the row is marked `replayed` and `200 { success: true }` is returned.

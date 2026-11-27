@@ -22,7 +22,13 @@ function loadFile(absPath) {
   if (fileCache.has(absPath)) return fileCache.get(absPath);
 
   const text = fs.readFileSync(absPath, 'utf8');
-  const sourceFile = ts.createSourceFile(absPath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const sourceFile = ts.createSourceFile(
+    absPath,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
 
   const scope = new Map(); // top-level const NAME -> initializer expression
   const imports = new Map(); // local name -> resolved absolute file path (relative imports only)

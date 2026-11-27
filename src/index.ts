@@ -1,38 +1,41 @@
-import { initTracing, shutdownTracing } from "./tracing";
+import { initTracing, shutdownTracing } from './tracing';
 initTracing();
 
-import app, { setDraining } from "./app";
-import config from "./config";
-import { logger } from "./utils/logger";
-import { initDb, closeDb, fetchLastIndexedLedger, persistLastIndexedLedger } from "./db";
-import { stellarHealth, stellarBreaker } from "./services/stellar";
-import { checkHealth, retryPendingPins, reconcilePendingPins, ipfsBreaker } from "./services/ipfs";
-import { indexEvents } from "./services/indexer";
-import { initBlocklist } from "./services/tokenBlocklist";
-import { startDecayTimer } from "./services/ipReputation";
+import app, { setDraining } from './app';
+import config from './config';
+import { logger } from './utils/logger';
+import { initDb, closeDb, fetchLastIndexedLedger, persistLastIndexedLedger } from './db';
+import { stellarHealth, stellarBreaker } from './services/stellar';
+import { checkHealth, retryPendingPins, reconcilePendingPins, ipfsBreaker } from './services/ipfs';
+import { indexEvents } from './services/indexer';
+import { initBlocklist } from './services/tokenBlocklist';
+import { startDecayTimer } from './services/ipReputation';
 import {
   initCacheInvalidationSubscriber,
   closeCacheInvalidationSubscriber,
-} from "./services/cache";
+} from './services/cache';
 import {
   initSecurityEventSubscriber,
   closeSecurityEventSubscriber,
-} from "./services/securityEventPubSub";
-import { closeRedisClients } from "./services/redis";
-import { runTierDivergenceCheck, getTierDivergenceTotal } from "./services/tierDivergenceJob";
-import { runScheduledAuditChainVerification } from "./services/auditChainVerifier";
+} from './services/securityEventPubSub';
+import { closeRedisClients } from './services/redis';
+import { runTierDivergenceCheck, getTierDivergenceTotal } from './services/tierDivergenceJob';
+import { runScheduledAuditChainVerification } from './services/auditChainVerifier';
 import {
   setTierDivergenceGetter,
   initEventLoopMonitoring,
   initGcMonitoring,
   incUnhandledRejections,
   registerCircuitBreaker,
-} from "./middleware/metrics";
-import { drainAllSessions, setAcceptingSseSessions } from "./routes/events";
+} from './middleware/metrics';
+import { drainAllSessions, setAcceptingSseSessions } from './routes/events';
 import { startRetentionJob, stopRetentionJob } from './services/retention';
-import { startFieldReencryptionJob, stopFieldReencryptionJob } from './services/fieldReencryptionJob';
-import { applyHttpTimeouts } from "./httpServer";
-import { runShutdown } from "./shutdown";
+import {
+  startFieldReencryptionJob,
+  stopFieldReencryptionJob,
+} from './services/fieldReencryptionJob';
+import { applyHttpTimeouts } from './httpServer';
+import { runShutdown } from './shutdown';
 
 // Database initialization is now async - must be awaited
 async function start() {
@@ -51,7 +54,7 @@ async function start() {
   try {
     await initDb();
   } catch (err) {
-    logger.error("Failed to initialize database:", err);
+    logger.error('Failed to initialize database:', err);
     process.exit(1);
   }
 
@@ -76,9 +79,7 @@ async function start() {
     const stored = fetchLastIndexedLedger();
     if (config.backfillFromLedger < stored) {
       persistLastIndexedLedger(config.backfillFromLedger);
-      logger.info(
-        `Backfill: reset last_ledger from ${stored} to ${config.backfillFromLedger}`,
-      );
+      logger.info(`Backfill: reset last_ledger from ${stored} to ${config.backfillFromLedger}`);
     }
   }
 
@@ -101,13 +102,11 @@ async function start() {
 
 async function startServer() {
   const server = app.listen(config.port, () => {
-    logger.info(
-      `ScoutOff backend running on port ${config.port} [${config.network}]`,
-    );
+    logger.info(`ScoutOff backend running on port ${config.port} [${config.network}]`);
     applyHttpTimeouts(server, config.http);
     logger.info(
       `HTTP timeouts: keepAlive=${config.http.keepAliveTimeoutMs}ms ` +
-      `headers=${config.http.headersTimeoutMs}ms request=${config.http.requestTimeoutMs}ms`,
+        `headers=${config.http.headersTimeoutMs}ms request=${config.http.requestTimeoutMs}ms`,
     );
     // Log startup health of critical dependencies
     void (async () => {
@@ -115,22 +114,22 @@ async function startServer() {
 
       try {
         await checkHealth();
-        statuses.ipfs = "ok";
-        logger.info("Pinata credential validation successful");
+        statuses.ipfs = 'ok';
+        logger.info('Pinata credential validation successful');
       } catch (err) {
-        statuses.ipfs = "unavailable";
-        logger.error("Pinata credential validation failed at startup:", err);
+        statuses.ipfs = 'unavailable';
+        logger.error('Pinata credential validation failed at startup:', err);
       }
 
       if (config.stellarHealthCheckEnabled) {
         try {
           const sOk = await stellarHealth();
-          statuses.stellar = sOk ? "ok" : "unavailable";
+          statuses.stellar = sOk ? 'ok' : 'unavailable';
         } catch {
-          statuses.stellar = "unavailable";
+          statuses.stellar = 'unavailable';
         }
       } else {
-        statuses.stellar = "disabled";
+        statuses.stellar = 'disabled';
       }
 
       logger.info(`Startup health: ${JSON.stringify(statuses)}`);
@@ -162,7 +161,7 @@ async function startServer() {
     try {
       await indexEvents();
     } catch (err) {
-      logger.error("Indexer error:", (err as Error).message);
+      logger.error('Indexer error:', (err as Error).message);
     }
   });
 
@@ -175,7 +174,7 @@ async function startServer() {
     try {
       await retryPendingPins();
     } catch (err) {
-      logger.error("IPFS retry worker error:", (err as Error).message);
+      logger.error('IPFS retry worker error:', (err as Error).message);
     }
   });
 
@@ -190,7 +189,7 @@ async function startServer() {
     try {
       await reconcilePendingPins();
     } catch (err) {
-      logger.error("IPFS reconcile worker error:", (err as Error).message);
+      logger.error('IPFS reconcile worker error:', (err as Error).message);
     }
   });
 
@@ -204,7 +203,7 @@ async function startServer() {
     try {
       await runTierDivergenceCheck();
     } catch (err) {
-      logger.error("Tier divergence check error:", (err as Error).message);
+      logger.error('Tier divergence check error:', (err as Error).message);
     }
   });
 
@@ -221,15 +220,12 @@ async function startServer() {
         shouldStop: () => isShuttingDown,
       });
     } catch (err) {
-      logger.error("Audit chain verification error:", (err as Error).message);
+      logger.error('Audit chain verification error:', (err as Error).message);
     }
   });
 
   void runAuditVerify();
-  const auditVerifyInterval = setInterval(
-    runAuditVerify,
-    config.auditVerify.intervalMs,
-  );
+  const auditVerifyInterval = setInterval(runAuditVerify, config.auditVerify.intervalMs);
 
   // ── Graceful shutdown ──────────────────────────────────────────────────────
   // Deadline-driven drain sequence (#1315, #1538). The implementation lives in
@@ -248,7 +244,8 @@ async function startServer() {
 
   const SHUTDOWN_TIMEOUT_MS = config.shutdown.timeoutMs;
   const SHUTDOWN_PRESTOP_DELAY_MS = config.shutdown.prestopDelayMs;
-  const SHUTDOWN_REQUEST_DRAIN_MS = config.shutdown.requestDrainMs ?? Math.floor(SHUTDOWN_TIMEOUT_MS * 0.5);
+  const SHUTDOWN_REQUEST_DRAIN_MS =
+    config.shutdown.requestDrainMs ?? Math.floor(SHUTDOWN_TIMEOUT_MS * 0.5);
   const SHUTDOWN_CLEANUP_RESERVE_MS = config.shutdown.cleanupReserveMs;
 
   const shutdown = async (signal: string, exitCode = 0) => {
@@ -292,16 +289,16 @@ async function startServer() {
         await closeCacheInvalidationSubscriber();
         await closeSecurityEventSubscriber();
         await closeRedisClients();
-        logger.info("Redis connections closed");
+        logger.info('Redis connections closed');
       },
       closeDb: async () => {
         await stopRetentionJob();
         await closeDb();
-        logger.info("Database connection closed");
+        logger.info('Database connection closed');
       },
       shutdownTracing: async () => {
         await shutdownTracing();
-        logger.info("Tracing SDK shut down");
+        logger.info('Tracing SDK shut down');
       },
       logger,
     });
@@ -312,20 +309,22 @@ async function startServer() {
         `Graceful shutdown finished with cleanup failure(s): ${result.cleanupFailures.join(', ')} after ${result.durationMs}ms`,
       );
     } else {
-      logger.info(
-        `Graceful shutdown complete in ${result.durationMs}ms`,
-      );
+      logger.info(`Graceful shutdown complete in ${result.durationMs}ms`);
     }
     process.exit(Math.max(exitCode, result.exitCode));
   };
 
-  process.on("SIGTERM", () => { shutdown("SIGTERM").catch(() => process.exit(1)); });
-  process.on("SIGINT",  () => { shutdown("SIGINT").catch(() => process.exit(1)); });
+  process.on('SIGTERM', () => {
+    shutdown('SIGTERM').catch(() => process.exit(1));
+  });
+  process.on('SIGINT', () => {
+    shutdown('SIGINT').catch(() => process.exit(1));
+  });
   // Process-level safety nets (#1391). Registered once, after `shutdown` is
   // defined, so uncaught exceptions can trigger the same graceful shutdown.
   let unhandledRejectionsTotal = 0;
 
-  process.on("unhandledRejection", (reason: unknown) => {
+  process.on('unhandledRejection', (reason: unknown) => {
     unhandledRejectionsTotal += 1;
     incUnhandledRejections();
     const err = reason instanceof Error ? reason : new Error(String(reason));
@@ -335,17 +334,17 @@ async function startServer() {
     );
     // Do not exit by default; set EXIT_ON_UNHANDLED_REJECTION=true to opt in.
     if (config.exitOnUnhandledRejection) {
-      void shutdown("unhandledRejection", 1);
+      void shutdown('unhandledRejection', 1);
     }
   });
 
-  process.on("uncaughtException", (err: Error) => {
-    logger.error("Uncaught exception, shutting down:", err.stack ?? err.message);
-    void shutdown("uncaughtException", 1);
+  process.on('uncaughtException', (err: Error) => {
+    logger.error('Uncaught exception, shutting down:', err.stack ?? err.message);
+    void shutdown('uncaughtException', 1);
   });
 }
 
 start().catch((err) => {
-  logger.error("Unhandled startup error:", err);
+  logger.error('Unhandled startup error:', err);
   process.exit(1);
 });

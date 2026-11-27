@@ -53,7 +53,7 @@ export function validateBody<T>(schema: ZodSchema<T>, options?: ValidationOption
     if (hasRequestBody(req) && !hasJsonContentType(req)) {
       const correlationId = getCorrelationId(req);
       logger.warn(
-        `[validation] ${options?.context ?? 'body'} rejected — missing or invalid Content-Type correlationId=${correlationId}`
+        `[validation] ${options?.context ?? 'body'} rejected — missing or invalid Content-Type correlationId=${correlationId}`,
       );
       res.status(415).json({
         success: false,
@@ -78,7 +78,7 @@ export function validateBody<T>(schema: ZodSchema<T>, options?: ValidationOption
       logger.warn(
         `[validation] ${options?.context ?? 'body'} rejected — error=${
           result.error.issues[0]?.message ?? 'Invalid request body'
-        } correlationId=${correlationId}`
+        } correlationId=${correlationId}`,
       );
       res.status(400).json({
         success: false,
@@ -128,7 +128,10 @@ export function validateJsonBodyOrPassThrough<T>(
  *
  * Usage: router.get('/route', validateQuery(mySchema), handler)
  */
-export function validateQuery<T>(schema: ZodSchema<T>, options?: ValidationOptions): RequestHandler {
+export function validateQuery<T>(
+  schema: ZodSchema<T>,
+  options?: ValidationOptions,
+): RequestHandler {
   return (req, res, next): void => {
     const result = schema.safeParse(req.query);
     if (!result.success) {
@@ -140,7 +143,7 @@ export function validateQuery<T>(schema: ZodSchema<T>, options?: ValidationOptio
       logger.warn(
         `[validation] ${options?.context ?? 'query'} rejected — error=${
           result.error.issues[0]?.message ?? 'Invalid query parameters'
-        } correlationId=${correlationId}`
+        } correlationId=${correlationId}`,
       );
       res.status(400).json({
         success: false,
@@ -171,7 +174,10 @@ export function validateQuery<T>(schema: ZodSchema<T>, options?: ValidationOptio
  *
  * Usage: router.get('/route/:id', validateParams(mySchema), handler)
  */
-export function validateParams<T>(schema: ZodSchema<T>, options?: ValidationOptions): RequestHandler {
+export function validateParams<T>(
+  schema: ZodSchema<T>,
+  options?: ValidationOptions,
+): RequestHandler {
   return (req, res, next): void => {
     const result = schema.safeParse(req.params);
     if (!result.success) {
@@ -179,7 +185,7 @@ export function validateParams<T>(schema: ZodSchema<T>, options?: ValidationOpti
       logger.warn(
         `[validation] ${options?.context ?? 'params'} rejected — error=${
           result.error.issues[0]?.message ?? 'Invalid route parameters'
-        } correlationId=${correlationId}`
+        } correlationId=${correlationId}`,
       );
       res.status(400).json({
         success: false,

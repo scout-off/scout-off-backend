@@ -47,6 +47,7 @@ jest.mock('../../src/db', () => ({
   countBookmarkedPlayers: jest.fn().mockResolvedValue(0),
   insertBookmarkFolder: jest.fn(),
   getBookmarkFoldersByScout: jest.fn(),
+  getBookmarkFoldersWithCounts: jest.fn(),
   getBookmarkFolderById: jest.fn(),
   renameBookmarkFolder: jest.fn(),
   deleteBookmarkFolder: jest.fn(),
@@ -62,7 +63,12 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -81,6 +87,7 @@ import {
   getBookmarkedPlayersWithDetails,
   insertBookmarkFolder,
   getBookmarkFoldersByScout,
+  getBookmarkFoldersWithCounts,
   getBookmarkFolderById,
   renameBookmarkFolder,
   deleteBookmarkFolder,
@@ -88,23 +95,23 @@ import {
   countBookmarksInFolder,
 } from '../../src/db';
 
-const mockGetPlayerById        = getPlayerById        as jest.Mock;
-const mockInsertBookmark       = insertBookmark       as jest.Mock;
-const mockDeleteBookmark       = deleteBookmark       as jest.Mock;
-const mockGetBookmarks         = getBookmarksByScout   as jest.Mock;
+const mockGetPlayerById = getPlayerById as jest.Mock;
+const mockInsertBookmark = insertBookmark as jest.Mock;
+const mockDeleteBookmark = deleteBookmark as jest.Mock;
+const mockGetBookmarks = getBookmarksByScout as jest.Mock;
 const mockGetBookmarkedPlayers = getBookmarkedPlayersWithDetails as jest.Mock;
 const mockInsertBookmarkFolder = insertBookmarkFolder as jest.Mock;
-const mockGetBookmarkFolders   = getBookmarkFoldersByScout as jest.Mock;
+const mockGetBookmarkFolders = getBookmarkFoldersByScout as jest.Mock;
 const mockGetBookmarkFolderById = getBookmarkFolderById as jest.Mock;
 const mockRenameBookmarkFolder = renameBookmarkFolder as jest.Mock;
 const mockDeleteBookmarkFolder = deleteBookmarkFolder as jest.Mock;
-const mockMoveBookmarksToRoot  = moveBookmarksToRoot  as jest.Mock;
+const mockMoveBookmarksToRoot = moveBookmarksToRoot as jest.Mock;
 const mockCountBookmarksInFolder = countBookmarksInFolder as jest.Mock;
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-const SCOUT_A   = 'GAAKO6EK5AIJWZH7ITXBFZTPASYKPY3YVMFVFVD5UDG2C6NUIXTT7BE3';
-const SCOUT_B   = 'GAEZS7NMWCNTUFGDNXWVYVTKGGP47CESPEV5BVT5LNFHKXC5TGBZ4O5O';
+const SCOUT_A = 'GAAKO6EK5AIJWZH7ITXBFZTPASYKPY3YVMFVFVD5UDG2C6NUIXTT7BE3';
+const SCOUT_B = 'GAEZS7NMWCNTUFGDNXWVYVTKGGP47CESPEV5BVT5LNFHKXC5TGBZ4O5O';
 const PLAYER_ID = 'player-abc-123';
 
 const MOCK_PLAYER = {
@@ -146,7 +153,12 @@ describe('POST /api/scouts/:wallet/bookmarks', () => {
 
   it('bookmarks a player with folder and note', async () => {
     mockGetPlayerById.mockReturnValueOnce(MOCK_PLAYER);
-    mockGetBookmarkFolderById.mockReturnValueOnce({ id: 1, scout_wallet: SCOUT_A, name: 'Test Folder', created_at: 1 });
+    mockGetBookmarkFolderById.mockReturnValueOnce({
+      id: 1,
+      scout_wallet: SCOUT_A,
+      name: 'Test Folder',
+      created_at: 1,
+    });
     mockInsertBookmark.mockReturnValueOnce(true);
 
     const res = await request(app)
@@ -276,8 +288,7 @@ describe('DELETE /api/scouts/:wallet/bookmarks/:playerId', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .delete(`/api/scouts/${SCOUT_A}/bookmarks/${PLAYER_ID}`);
+    const res = await request(app).delete(`/api/scouts/${SCOUT_A}/bookmarks/${PLAYER_ID}`);
 
     expect(res.status).toBe(401);
   });
@@ -412,8 +423,7 @@ describe('GET /api/scouts/:wallet/bookmarks', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/bookmarks`);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/bookmarks`);
 
     expect(res.status).toBe(401);
   });
@@ -527,11 +537,11 @@ describe('GET /api/scouts/:wallet/bookmark-folders', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('lists folders with bookmark counts', async () => {
-    mockGetBookmarkFolders.mockReturnValueOnce([
-      { id: 1, scout_wallet: SCOUT_A, name: 'Prospects', created_at: 1 },
-      { id: 2, scout_wallet: SCOUT_A, name: 'Watchlist', created_at: 2 },
+    // Folders and counts come from one grouped query (#1792).
+    (getBookmarkFoldersWithCounts as jest.Mock).mockResolvedValueOnce([
+      { id: 1, scout_wallet: SCOUT_A, name: 'Prospects', created_at: 1, bookmark_count: 5 },
+      { id: 2, scout_wallet: SCOUT_A, name: 'Watchlist', created_at: 2, bookmark_count: 3 },
     ]);
-    mockCountBookmarksInFolder.mockImplementation((id) => id === 1 ? 5 : 3);
 
     const res = await request(app)
       .get(`/api/scouts/${SCOUT_A}/bookmark-folders`)
@@ -557,11 +567,21 @@ describe('PATCH /api/scouts/:wallet/bookmark-folders/:folderId', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('renames a folder and returns 200', async () => {
-    mockGetBookmarkFolderById.mockReturnValueOnce({ id: 1, scout_wallet: SCOUT_A, name: 'Old', created_at: 1 });
+    mockGetBookmarkFolderById.mockReturnValueOnce({
+      id: 1,
+      scout_wallet: SCOUT_A,
+      name: 'Old',
+      created_at: 1,
+    });
     mockGetBookmarkFolders.mockReturnValueOnce([
       { id: 1, scout_wallet: SCOUT_A, name: 'Old', created_at: 1 },
     ]);
-    mockRenameBookmarkFolder.mockReturnValueOnce({ id: 1, scout_wallet: SCOUT_A, name: 'New', created_at: 1 });
+    mockRenameBookmarkFolder.mockReturnValueOnce({
+      id: 1,
+      scout_wallet: SCOUT_A,
+      name: 'New',
+      created_at: 1,
+    });
 
     const res = await request(app)
       .patch(`/api/scouts/${SCOUT_A}/bookmark-folders/1`)
@@ -599,7 +619,12 @@ describe('PATCH /api/scouts/:wallet/bookmark-folders/:folderId', () => {
   });
 
   it('returns 409 on a conflicting name', async () => {
-    mockGetBookmarkFolderById.mockReturnValueOnce({ id: 1, scout_wallet: SCOUT_A, name: 'Old', created_at: 1 });
+    mockGetBookmarkFolderById.mockReturnValueOnce({
+      id: 1,
+      scout_wallet: SCOUT_A,
+      name: 'Old',
+      created_at: 1,
+    });
     mockGetBookmarkFolders.mockReturnValueOnce([
       { id: 1, scout_wallet: SCOUT_A, name: 'Old', created_at: 1 },
       { id: 2, scout_wallet: SCOUT_A, name: 'Taken', created_at: 2 },
@@ -628,7 +653,12 @@ describe('DELETE /api/scouts/:wallet/bookmark-folders/:folderId', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('deletes folder and moves bookmarks to root', async () => {
-    mockGetBookmarkFolderById.mockReturnValueOnce({ id: 1, scout_wallet: SCOUT_A, name: 'Test', created_at: 1 });
+    mockGetBookmarkFolderById.mockReturnValueOnce({
+      id: 1,
+      scout_wallet: SCOUT_A,
+      name: 'Test',
+      created_at: 1,
+    });
     mockDeleteBookmarkFolder.mockReturnValueOnce(true);
 
     const res = await request(app)

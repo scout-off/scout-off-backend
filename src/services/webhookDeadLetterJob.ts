@@ -91,9 +91,7 @@ export async function runDeadLetterRetryJob(): Promise<number> {
 
   const eligible = rows.filter(
     (r: WebhookDeadLetter) =>
-      r.status === 'pending' &&
-      r.attempts < MAX_AUTO_RETRIES &&
-      r.created_at <= cutoff,
+      r.status === 'pending' && r.attempts < MAX_AUTO_RETRIES && r.created_at <= cutoff,
   );
 
   if (eligible.length === 0) {
@@ -120,9 +118,7 @@ export async function runDeadLetterRetryJob(): Promise<number> {
   const refreshedRows = listWebhookDeadLetters(200, 0);
   const refreshedEligible = refreshedRows.filter(
     (r: WebhookDeadLetter) =>
-      r.status === 'pending' &&
-      r.attempts < MAX_AUTO_RETRIES &&
-      r.created_at <= cutoff,
+      r.status === 'pending' && r.attempts < MAX_AUTO_RETRIES && r.created_at <= cutoff,
   );
 
   // ── Process each eligible row with atomic claim ──────────────────────────────

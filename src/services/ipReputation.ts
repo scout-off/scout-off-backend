@@ -21,7 +21,7 @@
  */
 
 const HOUR_MS = 60 * 60 * 1000;
-const DECAY_RATE = 0.10; // 10% decay per hour
+const DECAY_RATE = 0.1; // 10% decay per hour
 const DECAY_INTERVAL_MS = HOUR_MS;
 
 export interface IpReputation {
@@ -90,9 +90,9 @@ export function resetReputationStore(): void {
 
 // ─── Score thresholds ────────────────────────────────────────────────────────
 
-export const SCORE_DELAY_THRESHOLD = 50;      // 500 ms delay
-export const SCORE_RESTRICT_THRESHOLD = 75;   // reduced rate limit
-export const SCORE_BLOCK_THRESHOLD = 90;      // immediate 429
+export const SCORE_DELAY_THRESHOLD = 50; // 500 ms delay
+export const SCORE_RESTRICT_THRESHOLD = 75; // reduced rate limit
+export const SCORE_BLOCK_THRESHOLD = 90; // immediate 429
 
 // ─── Point increments ────────────────────────────────────────────────────────
 

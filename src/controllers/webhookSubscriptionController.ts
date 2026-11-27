@@ -50,18 +50,20 @@ export const KNOWN_EVENT_TYPES: readonly ContractEventType[] = [
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
-export const registerWebhookSchema = z.object({
-  url: z
-    .string()
-    .url('url must be a valid HTTP/HTTPS URL')
-    .refine((u) => u.startsWith('http://') || u.startsWith('https://'), {
-      message: 'url must use http or https protocol',
-    }),
-  eventTypes: z
-    .array(z.enum(KNOWN_EVENT_TYPES as [ContractEventType, ...ContractEventType[]]))
-    .min(1, 'eventTypes must contain at least one event type')
-    .optional(),
-}).strict();
+export const registerWebhookSchema = z
+  .object({
+    url: z
+      .string()
+      .url('url must be a valid HTTP/HTTPS URL')
+      .refine((u) => u.startsWith('http://') || u.startsWith('https://'), {
+        message: 'url must use http or https protocol',
+      }),
+    eventTypes: z
+      .array(z.enum(KNOWN_EVENT_TYPES as [ContractEventType, ...ContractEventType[]]))
+      .min(1, 'eventTypes must contain at least one event type')
+      .optional(),
+  })
+  .strict();
 
 export type RegisterWebhookRequest = z.infer<typeof registerWebhookSchema>;
 
@@ -70,20 +72,22 @@ export type RegisterWebhookRequest = z.infer<typeof registerWebhookSchema>;
  * filter are optional, and `rotateSecret` opts into issuing a fresh signing
  * secret (returned in plaintext exactly once).
  */
-export const updateWebhookSchema = z.object({
-  url: z
-    .string()
-    .url('url must be a valid HTTP/HTTPS URL')
-    .refine((u) => u.startsWith('http://') || u.startsWith('https://'), {
-      message: 'url must use http or https protocol',
-    })
-    .optional(),
-  eventTypes: z
-    .array(z.enum(KNOWN_EVENT_TYPES as [ContractEventType, ...ContractEventType[]]))
-    .min(1, 'eventTypes must contain at least one event type')
-    .optional(),
-  rotateSecret: z.boolean().optional(),
-}).strict();
+export const updateWebhookSchema = z
+  .object({
+    url: z
+      .string()
+      .url('url must be a valid HTTP/HTTPS URL')
+      .refine((u) => u.startsWith('http://') || u.startsWith('https://'), {
+        message: 'url must use http or https protocol',
+      })
+      .optional(),
+    eventTypes: z
+      .array(z.enum(KNOWN_EVENT_TYPES as [ContractEventType, ...ContractEventType[]]))
+      .min(1, 'eventTypes must contain at least one event type')
+      .optional(),
+    rotateSecret: z.boolean().optional(),
+  })
+  .strict();
 
 export type UpdateWebhookRequest = z.infer<typeof updateWebhookSchema>;
 
@@ -154,9 +158,7 @@ function serializeSubscription(
   return {
     id: row.id,
     url: row.url,
-    ...(opts.omitSecret
-      ? {}
-      : { secret: opts.revealSecret ? plaintext : maskSecret(plaintext) }),
+    ...(opts.omitSecret ? {} : { secret: opts.revealSecret ? plaintext : maskSecret(plaintext) }),
     eventTypes: row.event_types ? (JSON.parse(row.event_types) as string[]) : null,
     createdAt: row.created_at,
     status: row.status ?? 'active',
@@ -272,11 +274,7 @@ export async function listWebhooks(
  * @response 404 { success: false, error: string } - Subscription not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-export async function getWebhook(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
+export async function getWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) {
@@ -291,7 +289,7 @@ export async function getWebhook(
     }
 
     // Ownership check: the subscription must belong to this scout
-    if (row.scout_wallet !== req.params.wallet as string) {
+    if (row.scout_wallet !== (req.params.wallet as string)) {
       sendForbidden(res, 'Forbidden: subscription belongs to another scout');
       return;
     }
@@ -433,7 +431,11 @@ export async function deleteWebhook(
     return;
   }
 
-  logger.info({ scout: req.params.wallet as string, subscriptionId: id, action: 'webhook_deleted' });
+  logger.info({
+    scout: req.params.wallet as string,
+    subscriptionId: id,
+    action: 'webhook_deleted',
+  });
 
   res.json({ success: true, data: { removed: true, id } });
 }
@@ -452,12 +454,8 @@ export async function deleteWebhook(
  * @response 502 Remote server returned non-2xx or connection failed
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-export async function testWebhook(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-try {
+export async function testWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) {
       res.status(400).json({ success: false, error: 'Invalid subscription id' });
@@ -471,7 +469,7 @@ try {
     }
 
     // Ownership check: the subscription must belong to this scout
-    if (row.scout_wallet !== req.params.wallet as string) {
+    if (row.scout_wallet !== (req.params.wallet as string)) {
       sendForbidden(res, 'Forbidden: subscription belongs to another scout');
       return;
     }
@@ -480,7 +478,13 @@ try {
     const rawBody = JSON.stringify(payload);
     const plainSecret = decryptWebhookSecret(row.secret);
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const { versioned, legacy } = buildSignatureHeader(rawBody, plainSecret, timestamp, row.previous_secret ?? null, row.previous_secret_expires_at ? Number(row.previous_secret_expires_at) : null);
+    const { versioned, legacy } = buildSignatureHeader(
+      rawBody,
+      plainSecret,
+      timestamp,
+      row.previous_secret ?? null,
+      row.previous_secret_expires_at ? Number(row.previous_secret_expires_at) : null,
+    );
     const signatureHeader = legacy ?? versioned;
 
     try {
@@ -505,7 +509,12 @@ try {
         return;
       }
 
-      logger.info({ scout: req.params.wallet as string, subscriptionId: id, url: row.url, action: 'webhook_test_sent' });
+      logger.info({
+        scout: req.params.wallet as string,
+        subscriptionId: id,
+        url: row.url,
+        action: 'webhook_test_sent',
+      });
 
       res.json({
         success: true,
@@ -551,7 +560,10 @@ async function reactivate(
     }
 
     const actor = ownerWallet ?? (req.account as string | undefined) ?? 'admin';
-    const result = await reactivateAfterPing({ ...row, secret: decryptWebhookSecret(row.secret) }, actor);
+    const result = await reactivateAfterPing(
+      { ...row, secret: decryptWebhookSecret(row.secret) },
+      actor,
+    );
     if (!result.ok) {
       res.status(502).json({ success: false, error: result.error, data: { id, url: row.url } });
       return;
@@ -574,7 +586,11 @@ async function reactivate(
  * @response 502 Test ping failed; subscription stays suspended
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-export async function reactivateWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function reactivateWebhook(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   return reactivate(req, res, next, req.params.wallet as string);
 }
 
@@ -582,7 +598,11 @@ export async function reactivateWebhook(req: Request, res: Response, next: NextF
  * POST /api/admin/webhooks/:id/reactivate
  * Admin equivalent of {@link reactivateWebhook} (no ownership check).
  */
-export async function adminReactivateWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function adminReactivateWebhook(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   return reactivate(req, res, next, null);
 }
 
@@ -661,11 +681,8 @@ export async function getScoutWebhookDeliveries(
   const page = isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
 
   const rawPageSize = parseInt((req.query.pageSize as string | undefined) ?? '20', 10);
-  const pageSize = isNaN(rawPageSize) || rawPageSize < 1
-    ? 20
-    : rawPageSize > 100
-      ? 100
-      : rawPageSize;
+  const pageSize =
+    isNaN(rawPageSize) || rawPageSize < 1 ? 20 : rawPageSize > 100 ? 100 : rawPageSize;
 
   const { data: rows, total } = getWebhookDeliveries({
     subscriptionId: String(id),

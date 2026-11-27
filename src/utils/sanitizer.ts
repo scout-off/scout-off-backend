@@ -7,20 +7,20 @@
  */
 export function normalizeText(input: string): string {
   if (typeof input !== 'string') return input;
-  
+
   // 1. Unicode Normalisation (NFC) — ensures consistent representation
   let normalized = input.normalize('NFC');
-  
+
   // 2. Trim surrounding whitespace
   normalized = normalized.trim();
-  
+
   // 3. Strip null bytes and control chars (U+0000 to U+001F and U+007F)
   // This inherently removes \n and \r (log injection / CRLF injection defense).
   normalized = normalized
     .split('')
-    .filter(c => c.charCodeAt(0) > 31 && c.charCodeAt(0) !== 127)
+    .filter((c) => c.charCodeAt(0) > 31 && c.charCodeAt(0) !== 127)
     .join('');
-  
+
   return normalized;
 }
 

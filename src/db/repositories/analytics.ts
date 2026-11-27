@@ -38,7 +38,10 @@ function dateBucketExpr(column: string): string {
 /**
  * Get daily counts of new players registered within a time window.
  */
-export async function getNewPlayersTimeSeries(startDateMs: number, endDateMs: number): Promise<TimeSeriesPoint[]> {
+export async function getNewPlayersTimeSeries(
+  startDateMs: number,
+  endDateMs: number,
+): Promise<TimeSeriesPoint[]> {
   // sql-injection-check-ignore: dateBucketExpr takes a hardcoded column literal, not user input; the SQL it returns is driver-specific date formatting.
   const sql = `
     SELECT ${dateBucketExpr('created_at')} as date, COUNT(*) as count
@@ -48,7 +51,7 @@ export async function getNewPlayersTimeSeries(startDateMs: number, endDateMs: nu
     ORDER BY date ASC
   `;
   const rows = await timedQueryAsync(sql, () =>
-    getDriver().all<{ date: string; count: number | string }>(sql, [startDateMs, endDateMs])
+    getDriver().all<{ date: string; count: number | string }>(sql, [startDateMs, endDateMs]),
   );
   return rows.map((r) => ({ date: r.date, count: Number(r.count) }));
 }
@@ -56,7 +59,10 @@ export async function getNewPlayersTimeSeries(startDateMs: number, endDateMs: nu
 /**
  * Get daily counts of milestones approved within a time window.
  */
-export function getMilestonesApprovedTimeSeries(startDateMs: number, endDateMs: number): TimeSeriesPoint[] {
+export function getMilestonesApprovedTimeSeries(
+  startDateMs: number,
+  endDateMs: number,
+): TimeSeriesPoint[] {
   const sql = `
     SELECT strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') as date, COUNT(*) as count
     FROM events
@@ -64,8 +70,10 @@ export function getMilestonesApprovedTimeSeries(startDateMs: number, endDateMs: 
     GROUP BY date
     ORDER BY date ASC
   `;
-  const rows = timedQuery(sql, () =>
-    getDb().prepare(sql).all(startDateMs, endDateMs) as Array<{ date: string; count: number }>
+  const rows = timedQuery(
+    sql,
+    () =>
+      getDb().prepare(sql).all(startDateMs, endDateMs) as Array<{ date: string; count: number }>,
   );
   return rows.map((r) => ({ date: r.date, count: r.count }));
 }
@@ -73,7 +81,10 @@ export function getMilestonesApprovedTimeSeries(startDateMs: number, endDateMs: 
 /**
  * Get daily counts of contact unlocks within a time window.
  */
-export async function getContactUnlocksTimeSeries(startDateMs: number, endDateMs: number): Promise<TimeSeriesPoint[]> {
+export async function getContactUnlocksTimeSeries(
+  startDateMs: number,
+  endDateMs: number,
+): Promise<TimeSeriesPoint[]> {
   // sql-injection-check-ignore: dateBucketExpr takes a hardcoded column literal, not user input; the SQL it returns is driver-specific date formatting.
   const sql = `
     SELECT ${dateBucketExpr('unlocked_at')} as date, COUNT(*) as count
@@ -83,7 +94,7 @@ export async function getContactUnlocksTimeSeries(startDateMs: number, endDateMs
     ORDER BY date ASC
   `;
   const rows = await timedQueryAsync(sql, () =>
-    getDriver().all<{ date: string; count: number | string }>(sql, [startDateMs, endDateMs])
+    getDriver().all<{ date: string; count: number | string }>(sql, [startDateMs, endDateMs]),
   );
   return rows.map((r) => ({ date: r.date, count: Number(r.count) }));
 }
@@ -91,7 +102,10 @@ export async function getContactUnlocksTimeSeries(startDateMs: number, endDateMs
 /**
  * Get daily counts of subscriptions started within a time window.
  */
-export async function getSubscriptionsStartedTimeSeries(startDateMs: number, endDateMs: number): Promise<TimeSeriesPoint[]> {
+export async function getSubscriptionsStartedTimeSeries(
+  startDateMs: number,
+  endDateMs: number,
+): Promise<TimeSeriesPoint[]> {
   // sql-injection-check-ignore: dateBucketExpr takes a hardcoded column literal, not user input; the SQL it returns is driver-specific date formatting.
   const sql = `
     SELECT ${dateBucketExpr('created_at')} as date, COUNT(*) as count
@@ -101,7 +115,7 @@ export async function getSubscriptionsStartedTimeSeries(startDateMs: number, end
     ORDER BY date ASC
   `;
   const rows = await timedQueryAsync(sql, () =>
-    getDriver().all<{ date: string; count: number | string }>(sql, [startDateMs, endDateMs])
+    getDriver().all<{ date: string; count: number | string }>(sql, [startDateMs, endDateMs]),
   );
   return rows.map((r) => ({ date: r.date, count: Number(r.count) }));
 }
@@ -109,7 +123,10 @@ export async function getSubscriptionsStartedTimeSeries(startDateMs: number, end
 /**
  * Get daily counts of new players grouped by region within a time window.
  */
-export async function getNewPlayersByRegionTimeSeries(startDateMs: number, endDateMs: number): Promise<RegionBreakdownPoint[]> {
+export async function getNewPlayersByRegionTimeSeries(
+  startDateMs: number,
+  endDateMs: number,
+): Promise<RegionBreakdownPoint[]> {
   // sql-injection-check-ignore: dateBucketExpr takes a hardcoded column literal, not user input; the SQL it returns is driver-specific date formatting.
   const sql = `
     SELECT ${dateBucketExpr('created_at')} as date, region, COUNT(*) as count
@@ -119,7 +136,10 @@ export async function getNewPlayersByRegionTimeSeries(startDateMs: number, endDa
     ORDER BY date ASC, region ASC
   `;
   const rows = await timedQueryAsync(sql, () =>
-    getDriver().all<{ date: string; region: string | null; count: number | string }>(sql, [startDateMs, endDateMs])
+    getDriver().all<{ date: string; region: string | null; count: number | string }>(sql, [
+      startDateMs,
+      endDateMs,
+    ]),
   );
   return rows.map((r) => ({ date: r.date, region: r.region ?? 'unknown', count: Number(r.count) }));
 }

@@ -44,7 +44,8 @@ const keyringCache = new Map<string, { raw: string; active: string; ring: Keyrin
 
 /** The configured keyring for `purpose`, or null when only the legacy single key is set. */
 export function getKeyring(purpose: FieldCipherPurpose): Keyring | null {
-  const raw = purpose === 'webhook' ? config.webhookSecretEncryptionKeys : config.notesEncryptionKeys;
+  const raw =
+    purpose === 'webhook' ? config.webhookSecretEncryptionKeys : config.notesEncryptionKeys;
   const active =
     purpose === 'webhook'
       ? config.webhookSecretEncryptionActiveKeyId
@@ -53,7 +54,12 @@ export function getKeyring(purpose: FieldCipherPurpose): Keyring | null {
   if (cached && cached.raw === raw && cached.active === active) return cached.ring;
   const ring =
     purpose === 'webhook'
-      ? parseKeyring(raw, active, 'WEBHOOK_SECRET_ENCRYPTION_KEYS', 'WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID')
+      ? parseKeyring(
+          raw,
+          active,
+          'WEBHOOK_SECRET_ENCRYPTION_KEYS',
+          'WEBHOOK_SECRET_ENCRYPTION_ACTIVE_KEY_ID',
+        )
       : parseKeyring(raw, active, 'NOTES_ENCRYPTION_KEYS', 'NOTES_ENCRYPTION_ACTIVE_KEY_ID');
   keyringCache.set(purpose, { raw, active, ring });
   return ring;
@@ -132,9 +138,9 @@ export function encryptField(
   const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
   const body = [iv.toString('hex'), authTag.toString('hex'), ciphertext.toString('hex')];
-  return (ring ? [FIELD_CIPHER_VERSION_V2, ring.activeKeyId, ...body] : [FIELD_CIPHER_VERSION, ...body]).join(
-    ':',
-  );
+  return (
+    ring ? [FIELD_CIPHER_VERSION_V2, ring.activeKeyId, ...body] : [FIELD_CIPHER_VERSION, ...body]
+  ).join(':');
 }
 
 function decryptWithKey(ivHex: string, authTagHex: string, cipherHex: string, key: Buffer): string {
@@ -153,7 +159,8 @@ function decryptWithKey(ivHex: string, authTagHex: string, cipherHex: string, ke
 /** Candidate keys for a legacy `v1:` value: primary, previous, then keyring keys. */
 function v1Candidates(purpose: FieldCipherPurpose): Buffer[] {
   const ring = getKeyring(purpose);
-  const rawPrimary = purpose === 'webhook' ? config.webhookSecretEncryptionKey : config.notesEncryptionKey;
+  const rawPrimary =
+    purpose === 'webhook' ? config.webhookSecretEncryptionKey : config.notesEncryptionKey;
   const candidates: Buffer[] = [];
   if (rawPrimary || !ring) candidates.push(resolvePrimaryKey(purpose));
   const previous = resolvePreviousKey(purpose);

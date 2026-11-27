@@ -48,11 +48,11 @@ the same value and remain in `.env.example` for backward compatibility during mi
 
 `API_DOCS_MODE` controls who can access `/api/docs`:
 
-| Mode | Access |
-|------|--------|
-| `public` | Fully open (default in dev/test) |
-| `admin` | Requires `requireRole('admin')` (default in staging/production) |
-| `disabled` | Returns 404 on all doc endpoints |
+| Mode       | Access                                                          |
+| ---------- | --------------------------------------------------------------- |
+| `public`   | Fully open (default in dev/test)                                |
+| `admin`    | Requires `requireRole('admin')` (default in staging/production) |
+| `disabled` | Returns 404 on all doc endpoints                                |
 
 When `API_DOCS_HIDE_ADMIN=true` in public mode, `/admin/*` paths are stripped from the
 served spec.

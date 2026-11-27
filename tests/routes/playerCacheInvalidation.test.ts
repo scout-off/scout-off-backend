@@ -138,7 +138,11 @@ describe('Player Cache Invalidation', () => {
       });
 
       // Set up cache with old tier
-      await cacheSet(`players:${PLAYER_ID}`, { player_id: PLAYER_ID, progress_level: 0, wallet: WALLET });
+      await cacheSet(`players:${PLAYER_ID}`, {
+        player_id: PLAYER_ID,
+        progress_level: 0,
+        wallet: WALLET,
+      });
 
       // Update player tier in DB
       await updatePlayerProgress(PLAYER_ID, 3);

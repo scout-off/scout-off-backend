@@ -13,8 +13,8 @@
  */
 export const authorizedOperations = () => {
   return (targetVal, _opts, paths) => {
-    const path = paths.path[paths.path.length - 1] || "";
-    const method = paths.path[paths.path.length - 2] || "";
+    const path = paths.path[paths.path.length - 1] || '';
+    const method = paths.path[paths.path.length - 2] || '';
 
     // Check if this operation touches a protected resource
     const isProtectedPath = /\/(scouts|admin)/.test(path);

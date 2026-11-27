@@ -48,7 +48,8 @@ const milestonePlayerRateLimit = playerRateLimit();
  * @response 429 { success: false, error: string } - Per-player rate limit exceeded; Retry-After header set
  * @auth Bearer (validator role required)
  */
-router.route('/milestone')
+router
+  .route('/milestone')
   .post(
     milestoneRateLimit,
     requireRole('validator'),
@@ -67,7 +68,8 @@ router.route('/milestone')
  * @response 200 { success: true, data: PendingMilestone[], total, page, pageSize }
  * @auth Bearer (validator role required)
  */
-router.route('/milestones/pending')
+router
+  .route('/milestones/pending')
   .get(requireRole('validator'), validateQuery(pendingQuerySchema), getPendingMilestones)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -82,7 +84,8 @@ router.route('/milestones/pending')
  * @response 403 { success: false, error: string } - Wallet mismatch (non-admin/non-owner)
  * @auth Bearer (validator role required; wallet must match authenticated account)
  */
-router.route('/:wallet/milestones/pending')
+router
+  .route('/:wallet/milestones/pending')
   .get(
     requireRole('validator', 'admin'),
     requireWalletOwner({ mismatchStatus: 401 }),
@@ -111,7 +114,8 @@ router.route('/:wallet/milestones/pending')
  * @response 409 { success: false, error: string } - Idempotency key reused for a different request
  * @auth Bearer (validator role required)
  */
-router.route('/milestones/approve-bulk')
+router
+  .route('/milestones/approve-bulk')
   .post(
     requireRole('validator'),
     validateBody(bulkApproveSchema),
@@ -136,7 +140,8 @@ router.route('/milestones/approve-bulk')
  * @response 403 { success: false, error: string } - Insufficient permissions or wallet mismatch
  * @auth Bearer (validator role required; own wallet only — admins may query any wallet)
  */
-router.route('/:wallet/stats')
+router
+  .route('/:wallet/stats')
   .get(requireRole('validator', 'admin'), requireWalletOwner(), getValidatorDashboardStats)
   .all(methodNotAllowed(['GET', 'HEAD']));
 

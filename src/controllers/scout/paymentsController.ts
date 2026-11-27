@@ -1,10 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import {
-  queryEvents,
-  getContactUnlocksByScout,
-  getSubscriptionsByScout,
-} from '../../db';
+import { queryEvents, getContactUnlocksByScout, getSubscriptionsByScout } from '../../db';
 import { ErrorCode } from '../../utils/errorCodes';
 
 /**
@@ -36,12 +32,20 @@ const paymentHistoryQuerySchema = z.object({
 });
 
 /** GET /api/scouts/:wallet/payments — payment history */
-export async function getPaymentHistory(req: Request, res: Response, _next: NextFunction): Promise<void> {
-  const {wallet} = req.params as {wallet: string};
+export async function getPaymentHistory(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const { wallet } = req.params as { wallet: string };
 
   const parsed = paymentHistoryQuerySchema.safeParse(req.query);
   if (!parsed.success) {
-    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid query parameters', code: ErrorCode.VALIDATION_ERROR });
+    res.status(400).json({
+      success: false,
+      error: parsed.error.issues[0]?.message ?? 'Invalid query parameters',
+      code: ErrorCode.VALIDATION_ERROR,
+    });
     return;
   }
   const { from, to, type, page, pageSize, format } = parsed.data;
@@ -50,11 +54,15 @@ export async function getPaymentHistory(req: Request, res: Response, _next: Next
   const toDate = to ? new Date(to) : null;
 
   if (fromDate && isNaN(fromDate.getTime())) {
-    res.status(400).json({ success: false, error: 'Invalid from date', code: ErrorCode.VALIDATION_ERROR });
+    res
+      .status(400)
+      .json({ success: false, error: 'Invalid from date', code: ErrorCode.VALIDATION_ERROR });
     return;
   }
   if (toDate && isNaN(toDate.getTime())) {
-    res.status(400).json({ success: false, error: 'Invalid to date', code: ErrorCode.VALIDATION_ERROR });
+    res
+      .status(400)
+      .json({ success: false, error: 'Invalid to date', code: ErrorCode.VALIDATION_ERROR });
     return;
   }
 
@@ -94,7 +102,10 @@ export async function getPaymentHistory(req: Request, res: Response, _next: Next
       if (fromDate && new Date(ts) < fromDate) continue;
       if (toDate && new Date(ts) > toDate) continue;
       const txHash = (e.payload.tx_hash as string | undefined) ?? null;
-      const playerId = (e.payload.player_id as string | undefined) ?? (e.payload.playerId as string | undefined) ?? null;
+      const playerId =
+        (e.payload.player_id as string | undefined) ??
+        (e.payload.playerId as string | undefined) ??
+        null;
       const fee = (e.payload.fee ?? '0') as string;
       // A DB row for this tx may already be in the list (pushed above,
       // always with amount '0' since the contact_unlocks table doesn't

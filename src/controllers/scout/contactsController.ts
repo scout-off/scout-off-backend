@@ -6,10 +6,7 @@ import {
   getContactUnlocksByScout,
   hasContactUnlock,
 } from '../../db';
-import {
-  submitContactPayment,
-  PaymentError,
-} from '../../services/stellar';
+import { submitContactPayment, PaymentError } from '../../services/stellar';
 import { logger } from '../../utils/logger';
 import { checkWalletOwnership } from '../../middleware/requireOwner';
 import { broadcaster } from '../../services/eventBroadcaster';
@@ -48,8 +45,12 @@ export const unlockContactSchema = z.object({}).strict().default({});
 // ─── GET /api/scouts/:wallet/contacts ─────────────────────────────────────────
 
 /** GET /api/scouts/:wallet/contacts */
-export async function getUnlockedContacts(req: Request, res: Response, _next: NextFunction): Promise<void> {
-  const {wallet} = req.params as {wallet: string};
+export async function getUnlockedContacts(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const { wallet } = req.params as { wallet: string };
   const { playerId } = req.query as { playerId?: string };
 
   let contacts = await getContactUnlocksByScout(wallet);
@@ -71,11 +72,19 @@ export async function getUnlockedContacts(req: Request, res: Response, _next: Ne
 // ─── POST /api/scouts/:wallet/contacts/:playerId/unlock ───────────────────────
 
 /** POST /api/scouts/:wallet/contacts/:playerId/unlock */
-export async function unlockContact(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
-    const {wallet, playerId} = req.params as {wallet: string, playerId: string};
+export async function unlockContact(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { wallet, playerId } = req.params as { wallet: string; playerId: string };
     if (!wallet || !playerId) {
-      res.status(400).json({ success: false, error: 'wallet and playerId are required', code: ErrorCode.VALIDATION_ERROR });
+      res.status(400).json({
+        success: false,
+        error: 'wallet and playerId are required',
+        code: ErrorCode.VALIDATION_ERROR,
+      });
       return;
     }
 
@@ -83,20 +92,26 @@ try {
     // shared guard is re-invoked here so direct callers (unit tests) get the
     // same protection without duplicating the comparison inline.
     if (!checkWalletOwnership(req, res)) {
-      logger.warn(`[scout] action=unlock_contact_denied scout=${wallet} playerId=${playerId} reason=wallet_mismatch`);
+      logger.warn(
+        `[scout] action=unlock_contact_denied scout=${wallet} playerId=${playerId} reason=wallet_mismatch`,
+      );
       return;
     }
 
     // Validate the requested player before any payment is considered.
     const player = await getPlayerById(playerId);
     if (!player) {
-      res.status(404).json({ success: false, error: 'Player not found', code: ErrorCode.PLAYER_NOT_FOUND });
+      res
+        .status(404)
+        .json({ success: false, error: 'Player not found', code: ErrorCode.PLAYER_NOT_FOUND });
       return;
     }
 
     // A scout must never pay to unlock their own profile.
     if (player.wallet === wallet) {
-      logger.warn(`[scout] action=unlock_contact_denied scout=${wallet} playerId=${playerId} reason=self_unlock`);
+      logger.warn(
+        `[scout] action=unlock_contact_denied scout=${wallet} playerId=${playerId} reason=self_unlock`,
+      );
       res.status(400).json({
         success: false,
         error: 'Cannot unlock your own profile',
@@ -108,7 +123,9 @@ try {
     // Idempotent: a player already unlocked by this scout must not be charged again.
     // Return the cached contact details so the client can use them immediately.
     if (await hasContactUnlock(wallet, playerId)) {
-      logger.info(`[scout] action=unlock_contact_already_unlocked scout=${wallet} playerId=${playerId}`);
+      logger.info(
+        `[scout] action=unlock_contact_already_unlocked scout=${wallet} playerId=${playerId}`,
+      );
       res.json({
         success: true,
         data: {
@@ -160,7 +177,9 @@ try {
     });
   } catch (err) {
     if (err instanceof PaymentError) {
-      res.status(paymentErrorStatus(err.code)).json({ success: false, error: err.message, code: err.code });
+      res
+        .status(paymentErrorStatus(err.code))
+        .json({ success: false, error: err.message, code: err.code });
       return;
     }
     next(err);
@@ -168,8 +187,12 @@ try {
 }
 
 /** GET /api/scouts/:wallet/contacts/:playerId */
-export async function getContactDetails(req: Request, res: Response, _next: NextFunction): Promise<void> {
-  const {wallet, playerId} = req.params as {wallet: string, playerId: string};
+export async function getContactDetails(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const { wallet, playerId } = req.params as { wallet: string; playerId: string };
 
   const player = await getPlayerById(playerId);
   if (!player) {

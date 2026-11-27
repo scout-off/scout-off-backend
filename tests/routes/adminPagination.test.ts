@@ -73,9 +73,7 @@ async function getAdminToken(): Promise<string> {
 describe('GET /api/admin/events - pagination', () => {
   it('returns pagination metadata with defaults', async () => {
     const token = await getAdminToken();
-    const res = await request(app)
-      .get('/api/admin/events')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/events').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.data)).toBe(true);
@@ -143,9 +141,7 @@ describe('GET /api/admin/events - pagination', () => {
 
   it('returns totalPages in response', async () => {
     const token = await getAdminToken();
-    const res = await request(app)
-      .get('/api/admin/events')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/events').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(typeof res.body.totalPages).toBe('number');
   });

@@ -30,7 +30,9 @@ describe('isValidStellarAddress', () => {
   });
 
   it('rejects a string with wrong starting character', () => {
-    expect(isValidStellarAddress('XAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN')).toBe(false);
+    expect(isValidStellarAddress('XAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN')).toBe(
+      false,
+    );
   });
 
   it('rejects an address one character short (55 chars)', () => {

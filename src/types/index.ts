@@ -78,7 +78,7 @@ export interface Milestone {
   playerId: string;
   milestoneType: MilestoneType;
   evidenceUri: string; // IPFS CID
-  validator: string;   // Stellar address
+  validator: string; // Stellar address
   approved: boolean;
   createdAt: number;
 }
@@ -91,7 +91,6 @@ export interface PlayerMilestone {
 }
 
 // ─── Scout ────────────────────────────────────────────────────────────────────
-
 
 export interface Scout {
   wallet: string;
@@ -243,7 +242,7 @@ export const CONTRACT_EVENT_TYPES = [
   'player_reactivated',
 ] as const;
 
-export type ContractEventType = typeof CONTRACT_EVENT_TYPES[number];
+export type ContractEventType = (typeof CONTRACT_EVENT_TYPES)[number];
 
 export interface ContractEvent {
   type: ContractEventType;

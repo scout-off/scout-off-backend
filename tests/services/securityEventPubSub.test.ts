@@ -12,14 +12,22 @@ jest.mock('../../src/utils/logger', () => ({
   logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-jest.mock('../../src/services/walletBlocklist', () => ({
-  onWalletBlockedRemote: jest.fn(),
-  onWalletUnblockedRemote: jest.fn(),
-}), { virtual: false });
+jest.mock(
+  '../../src/services/walletBlocklist',
+  () => ({
+    onWalletBlockedRemote: jest.fn(),
+    onWalletUnblockedRemote: jest.fn(),
+  }),
+  { virtual: false },
+);
 
-jest.mock('../../src/services/tokenBlocklist', () => ({
-  onTokenRevokedRemote: jest.fn(),
-}), { virtual: false });
+jest.mock(
+  '../../src/services/tokenBlocklist',
+  () => ({
+    onTokenRevokedRemote: jest.fn(),
+  }),
+  { virtual: false },
+);
 
 type MockSubscriber = EventEmitter & {
   subscribe: jest.Mock;
@@ -67,9 +75,7 @@ describe('securityEventPubSub', () => {
   it('init with no Redis client logs info and does not subscribe', async () => {
     const { mod, logger } = loadWithRedis(null, null);
     await mod.initSecurityEventSubscriber();
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('Redis not configured'),
-    );
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Redis not configured'));
     await mod.closeSecurityEventSubscriber(); // idempotent no-op
   });
 
@@ -140,9 +146,7 @@ describe('securityEventPubSub', () => {
     const { mod, logger } = loadWithRedis({}, sub);
     await mod.initSecurityEventSubscriber();
     await emit(sub, 'security:nonsense', JSON.stringify({}));
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('unknown channel'),
-    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unknown channel'));
     await mod.closeSecurityEventSubscriber();
   });
 

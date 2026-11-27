@@ -334,20 +334,20 @@ npm run dev
 
 **Available npm scripts:**
 
-| Script          | Command                                                   | Description                                 |
-| --------------- | --------------------------------------------------------- | ------------------------------------------- |
-| `npm run dev`   | `ts-node-dev --respawn --transpile-only src/index.ts`     | Start with hot-reload for development       |
-| `npm run build` | `tsc`                                                     | Compile TypeScript to `dist/`               |
-| `npm start`     | `node dist/index.js`                                      | Run the compiled server (run `build` first) |
-| `npm test`      | `jest --runInBand`                                        | Run the test suite                          |
-| `npm run test:contracts` | Unit and invariant contract tests (CI-equivalent) | Run the Rust workspace tests                 |
-| `npm run test:contracts:unit` | `cargo test --workspace --lib`                   | Run contract unit tests                      |
-| `npm run test:contracts:invariants` | `cargo test --workspace --tests ... invariants` | Run contract invariant tests (256 cases)      |
-| `npm run lint`  | `eslint 'src/**/*.ts' 'tests/**/*.ts' --ext .ts`          | Run TypeScript linting                      |
-| `npm run seed`  | `ts-node --project tsconfig.scripts.json scripts/seed.ts` | Seed the local DB with sample data          |
-| `npm run backfill` | `node scripts/backfill.js`                             | Reset the indexer's last_ledger to replay events from a given ledger |
-| `npm run backup-db` | `bash scripts/backup-db.sh`                           | Back up the SQLite database (local/S3/GCS)  |
-| `npm run verify-backup` | `bash scripts/verify-backup.sh`                   | Verify a backup is restorable               |
+| Script                              | Command                                                   | Description                                                          |
+| ----------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------- |
+| `npm run dev`                       | `ts-node-dev --respawn --transpile-only src/index.ts`     | Start with hot-reload for development                                |
+| `npm run build`                     | `tsc`                                                     | Compile TypeScript to `dist/`                                        |
+| `npm start`                         | `node dist/index.js`                                      | Run the compiled server (run `build` first)                          |
+| `npm test`                          | `jest --runInBand`                                        | Run the test suite                                                   |
+| `npm run test:contracts`            | Unit and invariant contract tests (CI-equivalent)         | Run the Rust workspace tests                                         |
+| `npm run test:contracts:unit`       | `cargo test --workspace --lib`                            | Run contract unit tests                                              |
+| `npm run test:contracts:invariants` | `cargo test --workspace --tests ... invariants`           | Run contract invariant tests (256 cases)                             |
+| `npm run lint`                      | `eslint 'src/**/*.ts' 'tests/**/*.ts' --ext .ts`          | Run TypeScript linting                                               |
+| `npm run seed`                      | `ts-node --project tsconfig.scripts.json scripts/seed.ts` | Seed the local DB with sample data                                   |
+| `npm run backfill`                  | `node scripts/backfill.js`                                | Reset the indexer's last_ledger to replay events from a given ledger |
+| `npm run backup-db`                 | `bash scripts/backup-db.sh`                               | Back up the SQLite database (local/S3/GCS)                           |
+| `npm run verify-backup`             | `bash scripts/verify-backup.sh`                           | Verify a backup is restorable                                        |
 
 On startup the server will:
 
@@ -485,14 +485,14 @@ Required environment variables (the server will fail to start without these):
 
 Optional but commonly set:
 
-| Variable                           | Default         | Description                                     |
-| ---------------------------------- | --------------- | ----------------------------------------------- |
-| `PORT`                             | `4000`          | Backend API port                                |
-| `HORIZON_URL`                      | Stellar testnet | Stellar Horizon endpoint                        |
-| `SOROBAN_RPC_URL`                  | Stellar testnet | Soroban RPC endpoint                            |
-| `PINATA_API_KEY` / `PINATA_SECRET` | —               | IPFS upload credentials                         |
-| `DB_PATH`                          | `scout-off.db`  | SQLite database file path                       |
-| `LOG_LEVEL`                        | `info`          | Log verbosity: `debug`, `info`, `warn`, `error` |
+| Variable                           | Default         | Description                                        |
+| ---------------------------------- | --------------- | -------------------------------------------------- |
+| `PORT`                             | `4000`          | Backend API port                                   |
+| `HORIZON_URL`                      | Stellar testnet | Stellar Horizon endpoint                           |
+| `SOROBAN_RPC_URL`                  | Stellar testnet | Soroban RPC endpoint                               |
+| `PINATA_API_KEY` / `PINATA_SECRET` | —               | IPFS upload credentials                            |
+| `DB_PATH`                          | `scout-off.db`  | SQLite database file path                          |
+| `LOG_LEVEL`                        | `info`          | Log verbosity: `debug`, `info`, `warn`, `error`    |
 | `SLOW_QUERY_THRESHOLD_MS`          | `50`            | Log a warning for DB queries slower than this (ms) |
 
 See [.env.example](.env.example) for the full list of supported variables.
@@ -612,12 +612,12 @@ npm run lint
 
 ### Troubleshooting local setup
 
-| Error text | Cause | Fix |
-| ---------- | ----- | --- |
-| `Error: Missing required environment variable: JWT_SECRET` (or `CONTRACT_ID`) | `src/config.ts` calls `required(...)` for these vars and throws on startup if they're unset. `predev`/`prestart` also run `scripts/validate-env.js --runtime`, which fails fast with the same error. | Copy `.env.example` to `.env` and fill in `JWT_SECRET` and `CONTRACT_ID` (see [Environment Setup](#environment-setup)). |
+| Error text                                                                                                                                             | Cause                                                                                                                                                                                                                                                                                                                                                       | Fix                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Error: Missing required environment variable: JWT_SECRET` (or `CONTRACT_ID`)                                                                          | `src/config.ts` calls `required(...)` for these vars and throws on startup if they're unset. `predev`/`prestart` also run `scripts/validate-env.js --runtime`, which fails fast with the same error.                                                                                                                                                        | Copy `.env.example` to `.env` and fill in `JWT_SECRET` and `CONTRACT_ID` (see [Environment Setup](#environment-setup)).                                                                                                                                                                                                                                                 |
 | `Error: Cannot find module '../build/Release/better_sqlite3.node'` or a native binding / ABI mismatch error on `npm install` / `npm run dev` / startup | `better-sqlite3` ships a native addon compiled against a specific Node ABI. Installing with one Node version then running with another (or a stale Docker layer) leaves a binary that does not match the running process. Startup now throws a single `BetterSqlite3LoadError` naming the detected Node version, the ABI mismatch, and the rebuild command. | Run `nvm use` (Node `22.x` — see `.nvmrc` / `package.json` `engines`), then `npm rebuild better-sqlite3`. If that still fails: `rm -rf node_modules && npm install`. In Docker/CI, ensure the image Node major matches `engines.node` and that native modules are rebuilt in the same stage that runs the app (do not copy `node_modules` across different Node bases). |
-| `The engine "node" is incompatible with this module` (npm) or unexpected runtime errors on an unsupported Node version | The project's `engines.node` in `package.json` is `>=22.0.0 <25.0.0`, and `.nvmrc` pins the exact version used in CI's primary coverage job. | Install the pinned version with `nvm install && nvm use` (or the equivalent for fnm/asdf) before running `npm install`. |
-| `validate-env` fails during `npm install`/`npm run dev`/`npm start` (`predev`/`prestart` hooks) listing missing or unrecognised env vars | `scripts/validate-env.js --runtime` checks that every required var is set and that `NODE_ENV`/`DB_DRIVER`/`PINATA_GATEWAY` (when set) have valid values. | Read the specific error line — it names the offending variable — and fix it in `.env`. Run `node scripts/validate-env.js` (without `--runtime`) to also check that `.env.example` documents every var referenced in `src/`. |
+| `The engine "node" is incompatible with this module` (npm) or unexpected runtime errors on an unsupported Node version                                 | The project's `engines.node` in `package.json` is `>=22.0.0 <25.0.0`, and `.nvmrc` pins the exact version used in CI's primary coverage job.                                                                                                                                                                                                                | Install the pinned version with `nvm install && nvm use` (or the equivalent for fnm/asdf) before running `npm install`.                                                                                                                                                                                                                                                 |
+| `validate-env` fails during `npm install`/`npm run dev`/`npm start` (`predev`/`prestart` hooks) listing missing or unrecognised env vars               | `scripts/validate-env.js --runtime` checks that every required var is set and that `NODE_ENV`/`DB_DRIVER`/`PINATA_GATEWAY` (when set) have valid values.                                                                                                                                                                                                    | Read the specific error line — it names the offending variable — and fix it in `.env`. Run `node scripts/validate-env.js` (without `--runtime`) to also check that `.env.example` documents every var referenced in `src/`.                                                                                                                                             |
 
 ## Health Endpoints
 
@@ -737,11 +737,11 @@ The backend uses [Pinata](https://pinata.cloud) to pin player metadata and miles
 
 In **staging and production** the same functions throw immediately if the credentials are absent, preventing silent data loss and fake CIDs from being stored as real evidence.
 
-| Env var          | Required        | Description                                                       |
-| ---------------- | --------------- | ----------------------------------------------------------------- |
-| `PINATA_API_KEY` | staging/production | Pinata API key                                                 |
-| `PINATA_SECRET`  | staging/production | Pinata secret key                                               |
-| `PINATA_GATEWAY` | no              | Public gateway base URL (default: `https://gateway.pinata.cloud`) |
+| Env var          | Required           | Description                                                       |
+| ---------------- | ------------------ | ----------------------------------------------------------------- |
+| `PINATA_API_KEY` | staging/production | Pinata API key                                                    |
+| `PINATA_SECRET`  | staging/production | Pinata secret key                                                 |
+| `PINATA_GATEWAY` | no                 | Public gateway base URL (default: `https://gateway.pinata.cloud`) |
 
 ## How It Works
 
@@ -788,73 +788,73 @@ Operator topics (secrets rotation, data privacy, Postgres migration, deployment)
 
 > **Note:** For complete configuration details and advanced options, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-| Variable                          | Description                                                                                                           |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `CONTRACT_ID`                     | Deployed ScoutOff contract address (**required**)                                                                     |
-| `JWT_SECRET`                      | Secret used to sign SEP-10 JWT tokens (**required**)                                                                  |
-| `HORIZON_URL`                     | Stellar Horizon endpoint                                                                                              |
-| `SOROBAN_RPC_URL`                 | Soroban RPC endpoint                                                                                                  |
-| `NETWORK`                         | `testnet` or `mainnet`                                                                                                |
-| `NETWORK_PASSPHRASE`              | Stellar network passphrase (auto-set by `NETWORK`)                                                                    |
-| `PINATA_API_KEY`                  | Pinata API key for IPFS uploads                                                                                       |
-| `PINATA_SECRET`                   | Pinata secret                                                                                                         |
-| `PINATA_GATEWAY`                  | IPFS gateway used to resolve pinned content (default: `https://gateway.pinata.cloud`)                                 |
-| `PLATFORM_FEE_BPS`                | Platform fee in basis points (default: 500)                                                                           |
-| `PORT`                            | Backend API port (default: 4000)                                                                                      |
-| `DB_DRIVER`                       | Database driver to use: `sqlite` (default) or `postgres`                                                              |
-| `DB_PATH`                         | SQLite database file path (default: `scout-off.db`)                                                                   |
-| `DATABASE_URL`                    | PostgreSQL connection URL (required when `DB_DRIVER=postgres`)                                                        |
-| `DATABASE_SSL`                    | PostgreSQL SSL mode: `true`, `no-verify`, or `false` (default: `false`)                                               |
-| `SQLITE_BUSY_TIMEOUT_MS`          | SQLite lock-contention wait before returning `SQLITE_BUSY` (default: `5000`)                                          |
-| `DB_STATEMENT_TIMEOUT_MS`         | PostgreSQL server-side statement timeout in milliseconds (default: `25000`)                                           |
-| `DB_QUERY_TIMEOUT_MS`             | PostgreSQL client query timeout in milliseconds (default: `30000`)                                                    |
-| `DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS` | PostgreSQL idle-in-transaction timeout in milliseconds (default: `60000`)                               |
-| `LOG_LEVEL`                       | Log verbosity: `debug`, `info`, `warn`, `error` (default: `info`)                                                     |
-| `LOG_SKIP_PATHS`                  | Comma-separated paths to skip in request logging (default: health and metrics probes)                                 |
-| `LOG_SAMPLE_RATE`                 | Sample rate for non-skipped paths (default: `1` = log all)                                                            |
-| `ADMIN_WALLET`                    | Single admin Stellar address (for backward compatibility)                                                             |
-| `ADMIN_WALLETS`                   | Comma-separated list of admin Stellar addresses                                                                       |
-| `ADMIN_THRESHOLD`                 | Number of admin signatures required for high-value operations (default: `1`)                                          |
-| `STELLAR_HEALTH_CHECK`            | Set to `false` to disable Stellar RPC check in `/health` (default: `true`)                                            |
-| `JSON_PAYLOAD_LIMIT`              | Maximum JSON request body size (default: `1mb`); requests exceeding limit return HTTP 413                             |
-| `UPLOAD_PAYLOAD_LIMIT`            | Max JSON body for upload endpoints — player registration and milestone evidence (default: `10mb`)                     |
-| `RATE_LIMIT_ENABLED`              | Set to `false` to disable rate limiting (default: `true`)                                                             |
-| `RATE_LIMIT_WINDOW_MS`            | Rate limit window in milliseconds (default: `60000`)                                                                  |
-| `RATE_LIMIT_MAX`                  | Max requests per window (default: `60`)                                                                               |
-| `AUTH_RATE_LIMIT_WINDOW_MS`       | Auth rate limit window in milliseconds (default: `60000`)                                                             |
-| `AUTH_RATE_LIMIT_MAX`             | Max auth requests per account and endpoint per window (default: `5`)                                                  |
-| `AUTH_RATE_LIMIT_IP_MAX`          | Max requests per auth endpoint per IP and window (default: `60`)                                                      |
-| `CORS_ALLOWED_ORIGINS`            | Comma-separated list of allowed origins (environment-specific defaults)                                               |
-| `TRUSTED_PROXY_COUNT`             | Number of trusted reverse-proxy hops (default: `1`)                                                                   |
-| `WEBHOOK_ENABLED`                 | Set to `true` to enable event webhooks (default: `false`)                                                             |
-| `WEBHOOK_URL`                     | Endpoint to POST contract events to when `WEBHOOK_ENABLED=true`                                                       |
-| `WEBHOOK_SECRET`                  | HMAC secret for the legacy `WEBHOOK_URL` subscription (see `docs/webhooks.md`); a random secret is generated if unset |
-| `WEBHOOK_TIMEOUT_MS`              | Per-attempt timeout for outbound webhook deliveries in milliseconds (default: `10000`)                                |
-| `REDIS_URL`                       | Redis connection URL for distributed caching (falls back to in-memory if unset)                                       |
-| `PLAYER_CACHE_TTL_MS`             | TTL for player list cache entries in milliseconds (default: `60000`)                                                  |
-| `PLAYER_IMPORT_MAX_BATCH`         | Maximum rows per bulk player import request (default: `500`)                                                          |
-| `PIN_JSON_CACHE_TTL_MS`           | TTL for pinJson deduplication cache entries in milliseconds (default: `300000` = 5 min)                               |
-| `ADMIN_ACTION_TTL_MS`             | TTL for pending admin multi-sig actions in milliseconds (default: `3600000` = 1 hour)                                 |
-| `SUBSCRIPTION_GRACE_PERIOD_HOURS` | Grace period after subscription expiry during which access is still granted (default: `24`)                           |
-| `TRIAL_OFFER_TTL_MS`              | How long a trial offer remains open for accept/reject, in milliseconds (default: `2592000000` = 30 days). Set to `0` to disable expiry. |
-| `REQUEST_TIMEOUT_MS`              | Global request timeout in milliseconds before responding with 503 (default: `30000`)                                  |
-| `IPFS_HTTP_TIMEOUT_MS`            | Per-request HTTP timeout for Pinata/IPFS axios calls in milliseconds (default: `15000`)                               |
-| `STELLAR_RPC_TIMEOUT_MS`          | Per-request HTTP timeout for Soroban RPC / Stellar SDK calls in milliseconds (default: `15000`)                       |
-| `ADMIN_IP_ALLOWLIST`              | Comma-separated list of IPv4 addresses/CIDRs allowed on admin routes (unset = allow all)                              |
-| `SLOW_QUERY_THRESHOLD_MS`         | Log a structured warning for DB queries slower than this, in milliseconds (default: `50`)                             |
-| `SSE_KEEPALIVE_INTERVAL_MS`       | Interval in milliseconds to send SSE keep-alive comments (default: `15000` = 15 seconds)                              |
-| `SSE_MAX_CONNECTIONS_PER_WALLET` | Maximum simultaneous SSE streams per wallet (default: `5`; `0` = unlimited)                                           |
-| `SSE_MAX_CONNECTIONS`             | Maximum number of concurrent SSE connections (default: `0` = unlimited)                                               |
-| `SSE_RETRY_MS`                     | Base reconnection delay in milliseconds sent to SSE clients in `retry:` frame (default: `5000` = 5 seconds)             |
-| `READINESS_DB_TIMEOUT_MS`         | Per-probe timeout for DB readiness heartbeat check, in milliseconds (default: `2000`)                                  |
-| `READINESS_IPFS_TIMEOUT_MS`       | Per-probe timeout for Pinata IPFS connectivity readiness check, in milliseconds (default: `5000`)                      |
-| `READINESS_STELLAR_TIMEOUT_MS`    | Per-probe timeout for Stellar RPC connectivity readiness check, in milliseconds (default: `5000`)                     |
-| `MILESTONE_RATE_WINDOW_MS`        | Rolling time window for validator milestone evidence submissions, in milliseconds (default: `60000`)                  |
-| `MILESTONE_RATE_MAX`              | Max milestone evidence submissions per window per caller (default: `10`)                                              |
-| `CIRCUIT_BREAKER_FAILURE_THRESHOLD`| Consecutive failures before generic circuit breaker trips open (default: `5`)                                          |
-| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS`| Cooldown period in milliseconds before generic circuit breaker tests dependency recovery (default: `30000`)          |
-| `IPFS_BREAKER_FAILURE_THRESHOLD`  | Consecutive failures before Pinata IPFS circuit breaker trips open (default: `5`)                                      |
-| `IPFS_BREAKER_RESET_TIMEOUT_MS`   | Cooldown period in milliseconds before Pinata IPFS circuit breaker tests recovery (default: `30000`)                  |
+| Variable                                    | Description                                                                                                                             |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONTRACT_ID`                               | Deployed ScoutOff contract address (**required**)                                                                                       |
+| `JWT_SECRET`                                | Secret used to sign SEP-10 JWT tokens (**required**)                                                                                    |
+| `HORIZON_URL`                               | Stellar Horizon endpoint                                                                                                                |
+| `SOROBAN_RPC_URL`                           | Soroban RPC endpoint                                                                                                                    |
+| `NETWORK`                                   | `testnet` or `mainnet`                                                                                                                  |
+| `NETWORK_PASSPHRASE`                        | Stellar network passphrase (auto-set by `NETWORK`)                                                                                      |
+| `PINATA_API_KEY`                            | Pinata API key for IPFS uploads                                                                                                         |
+| `PINATA_SECRET`                             | Pinata secret                                                                                                                           |
+| `PINATA_GATEWAY`                            | IPFS gateway used to resolve pinned content (default: `https://gateway.pinata.cloud`)                                                   |
+| `PLATFORM_FEE_BPS`                          | Platform fee in basis points (default: 500)                                                                                             |
+| `PORT`                                      | Backend API port (default: 4000)                                                                                                        |
+| `DB_DRIVER`                                 | Database driver to use: `sqlite` (default) or `postgres`                                                                                |
+| `DB_PATH`                                   | SQLite database file path (default: `scout-off.db`)                                                                                     |
+| `DATABASE_URL`                              | PostgreSQL connection URL (required when `DB_DRIVER=postgres`)                                                                          |
+| `DATABASE_SSL`                              | PostgreSQL SSL mode: `true`, `no-verify`, or `false` (default: `false`)                                                                 |
+| `SQLITE_BUSY_TIMEOUT_MS`                    | SQLite lock-contention wait before returning `SQLITE_BUSY` (default: `5000`)                                                            |
+| `DB_STATEMENT_TIMEOUT_MS`                   | PostgreSQL server-side statement timeout in milliseconds (default: `25000`)                                                             |
+| `DB_QUERY_TIMEOUT_MS`                       | PostgreSQL client query timeout in milliseconds (default: `30000`)                                                                      |
+| `DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS` | PostgreSQL idle-in-transaction timeout in milliseconds (default: `60000`)                                                               |
+| `LOG_LEVEL`                                 | Log verbosity: `debug`, `info`, `warn`, `error` (default: `info`)                                                                       |
+| `LOG_SKIP_PATHS`                            | Comma-separated paths to skip in request logging (default: health and metrics probes)                                                   |
+| `LOG_SAMPLE_RATE`                           | Sample rate for non-skipped paths (default: `1` = log all)                                                                              |
+| `ADMIN_WALLET`                              | Single admin Stellar address (for backward compatibility)                                                                               |
+| `ADMIN_WALLETS`                             | Comma-separated list of admin Stellar addresses                                                                                         |
+| `ADMIN_THRESHOLD`                           | Number of admin signatures required for high-value operations (default: `1`)                                                            |
+| `STELLAR_HEALTH_CHECK`                      | Set to `false` to disable Stellar RPC check in `/health` (default: `true`)                                                              |
+| `JSON_PAYLOAD_LIMIT`                        | Maximum JSON request body size (default: `1mb`); requests exceeding limit return HTTP 413                                               |
+| `UPLOAD_PAYLOAD_LIMIT`                      | Max JSON body for upload endpoints — player registration and milestone evidence (default: `10mb`)                                       |
+| `RATE_LIMIT_ENABLED`                        | Set to `false` to disable rate limiting (default: `true`)                                                                               |
+| `RATE_LIMIT_WINDOW_MS`                      | Rate limit window in milliseconds (default: `60000`)                                                                                    |
+| `RATE_LIMIT_MAX`                            | Max requests per window (default: `60`)                                                                                                 |
+| `AUTH_RATE_LIMIT_WINDOW_MS`                 | Auth rate limit window in milliseconds (default: `60000`)                                                                               |
+| `AUTH_RATE_LIMIT_MAX`                       | Max auth requests per account and endpoint per window (default: `5`)                                                                    |
+| `AUTH_RATE_LIMIT_IP_MAX`                    | Max requests per auth endpoint per IP and window (default: `60`)                                                                        |
+| `CORS_ALLOWED_ORIGINS`                      | Comma-separated list of allowed origins (environment-specific defaults)                                                                 |
+| `TRUSTED_PROXY_COUNT`                       | Number of trusted reverse-proxy hops (default: `1`)                                                                                     |
+| `WEBHOOK_ENABLED`                           | Set to `true` to enable event webhooks (default: `false`)                                                                               |
+| `WEBHOOK_URL`                               | Endpoint to POST contract events to when `WEBHOOK_ENABLED=true`                                                                         |
+| `WEBHOOK_SECRET`                            | HMAC secret for the legacy `WEBHOOK_URL` subscription (see `docs/webhooks.md`); a random secret is generated if unset                   |
+| `WEBHOOK_TIMEOUT_MS`                        | Per-attempt timeout for outbound webhook deliveries in milliseconds (default: `10000`)                                                  |
+| `REDIS_URL`                                 | Redis connection URL for distributed caching (falls back to in-memory if unset)                                                         |
+| `PLAYER_CACHE_TTL_MS`                       | TTL for player list cache entries in milliseconds (default: `60000`)                                                                    |
+| `PLAYER_IMPORT_MAX_BATCH`                   | Maximum rows per bulk player import request (default: `500`)                                                                            |
+| `PIN_JSON_CACHE_TTL_MS`                     | TTL for pinJson deduplication cache entries in milliseconds (default: `300000` = 5 min)                                                 |
+| `ADMIN_ACTION_TTL_MS`                       | TTL for pending admin multi-sig actions in milliseconds (default: `3600000` = 1 hour)                                                   |
+| `SUBSCRIPTION_GRACE_PERIOD_HOURS`           | Grace period after subscription expiry during which access is still granted (default: `24`)                                             |
+| `TRIAL_OFFER_TTL_MS`                        | How long a trial offer remains open for accept/reject, in milliseconds (default: `2592000000` = 30 days). Set to `0` to disable expiry. |
+| `REQUEST_TIMEOUT_MS`                        | Global request timeout in milliseconds before responding with 503 (default: `30000`)                                                    |
+| `IPFS_HTTP_TIMEOUT_MS`                      | Per-request HTTP timeout for Pinata/IPFS axios calls in milliseconds (default: `15000`)                                                 |
+| `STELLAR_RPC_TIMEOUT_MS`                    | Per-request HTTP timeout for Soroban RPC / Stellar SDK calls in milliseconds (default: `15000`)                                         |
+| `ADMIN_IP_ALLOWLIST`                        | Comma-separated list of IPv4 addresses/CIDRs allowed on admin routes (unset = allow all)                                                |
+| `SLOW_QUERY_THRESHOLD_MS`                   | Log a structured warning for DB queries slower than this, in milliseconds (default: `50`)                                               |
+| `SSE_KEEPALIVE_INTERVAL_MS`                 | Interval in milliseconds to send SSE keep-alive comments (default: `15000` = 15 seconds)                                                |
+| `SSE_MAX_CONNECTIONS_PER_WALLET`            | Maximum simultaneous SSE streams per wallet (default: `5`; `0` = unlimited)                                                             |
+| `SSE_MAX_CONNECTIONS`                       | Maximum number of concurrent SSE connections (default: `0` = unlimited)                                                                 |
+| `SSE_RETRY_MS`                              | Base reconnection delay in milliseconds sent to SSE clients in `retry:` frame (default: `5000` = 5 seconds)                             |
+| `READINESS_DB_TIMEOUT_MS`                   | Per-probe timeout for DB readiness heartbeat check, in milliseconds (default: `2000`)                                                   |
+| `READINESS_IPFS_TIMEOUT_MS`                 | Per-probe timeout for Pinata IPFS connectivity readiness check, in milliseconds (default: `5000`)                                       |
+| `READINESS_STELLAR_TIMEOUT_MS`              | Per-probe timeout for Stellar RPC connectivity readiness check, in milliseconds (default: `5000`)                                       |
+| `MILESTONE_RATE_WINDOW_MS`                  | Rolling time window for validator milestone evidence submissions, in milliseconds (default: `60000`)                                    |
+| `MILESTONE_RATE_MAX`                        | Max milestone evidence submissions per window per caller (default: `10`)                                                                |
+| `CIRCUIT_BREAKER_FAILURE_THRESHOLD`         | Consecutive failures before generic circuit breaker trips open (default: `5`)                                                           |
+| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS`          | Cooldown period in milliseconds before generic circuit breaker tests dependency recovery (default: `30000`)                             |
+| `IPFS_BREAKER_FAILURE_THRESHOLD`            | Consecutive failures before Pinata IPFS circuit breaker trips open (default: `5`)                                                       |
+| `IPFS_BREAKER_RESET_TIMEOUT_MS`             | Cooldown period in milliseconds before Pinata IPFS circuit breaker tests recovery (default: `30000`)                                    |
 
 ## Testing
 
@@ -964,6 +964,7 @@ Contributions are welcome! This section provides guidance for backend contributo
    ScoutOff is part of the Drips funding wave program. If you're a contributor interested in joining, visit [drips.network](https://drips.network) to learn about opportunities and register your interest. Funded contributors receive support through the Drips platform.
 
 1. **Fork and Set Up**
+
    ```bash
    git clone https://github.com/scout-off/scout-off-backend.git
    cd scout-off-backend
@@ -1073,6 +1074,7 @@ Priority is assigned by maintainers based on impact and timeline:
    ❌ _"Bug with tokens"_
 
 1. **Provide Steps to Reproduce** (for bugs)
+
    ```
    1. Create a scout account
    2. Purchase a 30-day subscription via /api/scouts/subscribe
@@ -1122,7 +1124,7 @@ Detailed explanation of what you're reporting or proposing.
 
 1.
 2.
-1. ## Expected vs. Actual (for bugs)
+3. ## Expected vs. Actual (for bugs)
 
 - Expected: …
 - Actual: …
@@ -1142,11 +1144,13 @@ Fixes #XXX / Related to #YYY
    Comment on the issue to indicate you're working on it. Maintainers will assign it to you.
 
 1. **Create a Feature Branch**
+
    ```bash
    git checkout -b add-your-feature-description
    ```
 
 1. **Make Changes and Test Locally**
+
    ```bash
    npm run test           # Run backend tests
    npm run lint           # Check code style
@@ -1154,6 +1158,7 @@ Fixes #XXX / Related to #YYY
    ```
 
 1. **Commit with Clear Messages**
+
    ```bash
    git commit -m "fix: resolve auth token expiration bug
 
@@ -1197,4 +1202,5 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) for additional guidelines.
 ## Handsoff notes
 
 <!-- handsoff-issue-1392 -->
+
 - #1392: Add a Mermaid sequence diagram of the full SEP-10 + refresh/logout lifecycle to docs/auth.md

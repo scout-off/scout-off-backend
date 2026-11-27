@@ -5,7 +5,8 @@ import * as db from '../../src/db';
 import * as webhooks from '../../src/services/webhooks';
 
 const SECRET = process.env.JWT_SECRET ?? 'test-secret';
-const ADMIN_WALLET = process.env.ADMIN_WALLET ?? 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
+const ADMIN_WALLET =
+  process.env.ADMIN_WALLET ?? 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
 
 function adminToken(): string {
   return jwt.sign({ sub: ADMIN_WALLET, role: 'admin' }, SECRET, { expiresIn: '1h' });
@@ -50,7 +51,16 @@ jest.mock('../../src/db', () => ({
   getEventsCount: jest.fn().mockReturnValue(0),
   fetchLastIndexedLedger: jest.fn().mockReturnValue(0),
   persistLastIndexedLedger: jest.fn(),
-  insertAuditLog: jest.fn().mockReturnValue({ id: 1, hash: 'aaa', prev_hash: 'bbb', action: '', admin_wallet: '', query_params: '{}', created_at: '', event_source: '' }),
+  insertAuditLog: jest.fn().mockReturnValue({
+    id: 1,
+    hash: 'aaa',
+    prev_hash: 'bbb',
+    action: '',
+    admin_wallet: '',
+    query_params: '{}',
+    created_at: '',
+    event_source: '',
+  }),
   getAuditLogs: jest.fn().mockReturnValue([]),
   getAuditLogsCount: jest.fn().mockReturnValue(0),
   getAllAuditLogRows: jest.fn().mockReturnValue([]),

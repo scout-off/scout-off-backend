@@ -71,7 +71,9 @@ export const typeDefs = /* GraphQL */ `
   }
 
   type Query {
-    """Fetch a single player by ID. Returns null if not found or deactivated."""
+    """
+    Fetch a single player by ID. Returns null if not found or deactivated.
+    """
     player(id: ID!): Player
 
     """
@@ -86,10 +88,14 @@ export const typeDefs = /* GraphQL */ `
       pageSize: Int
     ): PlayerConnection!
 
-    """All approved and pending milestones for a player."""
+    """
+    All approved and pending milestones for a player.
+    """
     milestones(playerId: ID!): [Milestone!]!
 
-    """Active subscription status for a scout wallet."""
+    """
+    Active subscription status for a scout wallet.
+    """
     scoutSubscription(wallet: String!): ScoutSubscription
   }
 `;

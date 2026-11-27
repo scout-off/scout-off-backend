@@ -1,6 +1,6 @@
 /**
  * Tests for adminMultiSig execution dispatch and atomicity (#1017)
- * 
+ *
  * Covers all acceptance criteria:
  * 1. Every AdminActionType variant executes real operations when quorum is reached
  * 2. Action types are correctly tagged (no more 'pause_contract' for validators)  
@@ -75,17 +75,17 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     jest.clearAllMocks();
-    
+
     // Set default successful responses
     mockStellar.pauseContractOnChain.mockResolvedValue({ transactionId: 'tx_pause_123' });
     mockStellar.unpauseContractOnChain.mockResolvedValue({ transactionId: 'tx_unpause_123' });
     mockStellar.registerValidatorOnChain.mockResolvedValue({ transactionId: 'tx_register_123' });
     mockStellar.revokeValidatorOnChain.mockResolvedValue({ transactionId: 'tx_revoke_123' });
-    mockStellar.withdrawFees.mockResolvedValue({ 
+    mockStellar.withdrawFees.mockResolvedValue({
       transactionId: 'tx_withdraw_123',
       amount: 1000000,
       recipient: treasuryAddress,
-      token: 'XLM'
+      token: 'XLM',
     });
   });
 
@@ -102,7 +102,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     test('unpause_contract executes unpauseContractOnChain', async () => {
       const proposal = await proposeAction('unpause_contract', {}, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
-      
+
       expect(result.status).toBe('approved');
       expect(mockStellar.unpauseContractOnChain).toHaveBeenCalledWith(adminWallet1);
     });
@@ -110,7 +110,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     test('register_validator executes registerValidatorOnChain', async () => {
       const proposal = await proposeAction('register_validator', { validatorWallet }, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
-      
+
       expect(result.status).toBe('approved');
       expect(mockStellar.registerValidatorOnChain).toHaveBeenCalledWith(validatorWallet);
     });
@@ -118,27 +118,35 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     test('revoke_validator executes revokeValidatorOnChain', async () => {
       const proposal = await proposeAction('revoke_validator', { validatorWallet }, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
-      
+
       expect(result.status).toBe('approved');
       expect(mockStellar.revokeValidatorOnChain).toHaveBeenCalledWith(validatorWallet);
     });
 
     test('withdraw_fees executes withdrawFees', async () => {
-      const proposal = await proposeAction('withdraw_fees', { recipient: treasuryAddress }, adminWallet1);
+      const proposal = await proposeAction(
+        'withdraw_fees',
+        { recipient: treasuryAddress },
+        adminWallet1,
+      );
       const result = await approveAction(proposal.actionId, adminWallet2);
-      
+
       expect(result.status).toBe('approved');
       expect(mockStellar.withdrawFees).toHaveBeenCalledWith(treasuryAddress);
     });
 
     test('bulk_validator_import executes registerValidatorOnChain', async () => {
-      const proposal = await proposeAction('bulk_validator_import', { 
-        wallet: validatorWallet, 
-        label: 'Test Validator',
-        region: 'US' 
-      }, adminWallet1);
+      const proposal = await proposeAction(
+        'bulk_validator_import',
+        {
+          wallet: validatorWallet,
+          label: 'Test Validator',
+          region: 'US',
+        },
+        adminWallet1,
+      );
       const result = await approveAction(proposal.actionId, adminWallet2);
-      
+
       expect(result.status).toBe('approved');
       expect(mockStellar.registerValidatorOnChain).toHaveBeenCalledWith(validatorWallet);
     });
@@ -160,10 +168,9 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
       // type (queried by actionId, not just action_type, since other tests
       // in this suite create their own register_validator proposals against
       // the same shared test database).
-      const actions = await getDriver().all(
-        'SELECT * FROM pending_admin_actions WHERE id = ?',
-        [response.body.data.actionId],
-      );
+      const actions = await getDriver().all('SELECT * FROM pending_admin_actions WHERE id = ?', [
+        response.body.data.actionId,
+      ]);
       expect(actions).toHaveLength(1);
       expect((actions[0] as any).action_type).toBe('register_validator');
     });
@@ -180,10 +187,9 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
 
       // See the register_validator test above for why this queries by
       // actionId rather than action_type.
-      const actions = await getDriver().all(
-        'SELECT * FROM pending_admin_actions WHERE id = ?',
-        [response.body.data.actionId],
-      );
+      const actions = await getDriver().all('SELECT * FROM pending_admin_actions WHERE id = ?', [
+        response.body.data.actionId,
+      ]);
       expect(actions).toHaveLength(1);
       expect((actions[0] as any).action_type).toBe('revoke_validator');
     });
@@ -240,11 +246,15 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
       // Exactly one call counts as a new signature (collected 1 -> 2,
       // still below the threshold=3 quorum); the rest must be reported as
       // graceful duplicates, and none may reject.
-      const rejected = results.filter(r => r.status === 'rejected');
+      const rejected = results.filter((r) => r.status === 'rejected');
       expect(rejected).toHaveLength(0);
 
-      const counted = results.filter(r => r.status === 'fulfilled' && (r.value as any).status === 'pending');
-      const duplicates = results.filter(r => r.status === 'fulfilled' && (r.value as any).status === 'duplicate');
+      const counted = results.filter(
+        (r) => r.status === 'fulfilled' && (r.value as any).status === 'pending',
+      );
+      const duplicates = results.filter(
+        (r) => r.status === 'fulfilled' && (r.value as any).status === 'duplicate',
+      );
 
       expect(counted).toHaveLength(1);
       expect(duplicates).toHaveLength(2);
@@ -256,17 +266,22 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
       // Create a pending action
       const proposal = await proposeAction('register_validator', { validatorWallet }, adminWallet1);
       expect(proposal.status).toBe('proposed');
-      
+
       // Approve to reach quorum
       const result = await approveAction(proposal.actionId, adminWallet2);
       expect(result.status).toBe('approved');
-      
+
       // Verify action exists in database
-      const actions = await getDriver().all('SELECT * FROM pending_admin_actions WHERE id = ?', [proposal.actionId]);
+      const actions = await getDriver().all('SELECT * FROM pending_admin_actions WHERE id = ?', [
+        proposal.actionId,
+      ]);
       expect(actions).toHaveLength(1);
-      
-      // Verify signatures exist in database  
-      const signatures = await getDriver().all('SELECT * FROM admin_action_signatures WHERE action_id = ?', [proposal.actionId]);
+
+      // Verify signatures exist in database
+      const signatures = await getDriver().all(
+        'SELECT * FROM admin_action_signatures WHERE action_id = ?',
+        [proposal.actionId],
+      );
       expect(signatures).toHaveLength(2); // proposer + approver
     };
 
@@ -282,44 +297,54 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
     test('execution failure is gracefully handled and retryable', async () => {
       // Mock stellar operation to fail
       mockStellar.pauseContractOnChain.mockRejectedValue(new Error('Network timeout'));
-      
+
       const proposal = await proposeAction('pause_contract', {}, adminWallet1);
-      
+
       // Approval should fail due to execution error
-      await expect(approveAction(proposal.actionId, adminWallet2)).rejects.toThrow('Network timeout');
-      
+      await expect(approveAction(proposal.actionId, adminWallet2)).rejects.toThrow(
+        'Network timeout',
+      );
+
       // Action should remain in pending state for retry
-      const action = await getDriver().get('SELECT * FROM pending_admin_actions WHERE id = ?', [proposal.actionId]);
+      const action = await getDriver().get('SELECT * FROM pending_admin_actions WHERE id = ?', [
+        proposal.actionId,
+      ]);
       expect((action as any)?.status).toBe('pending');
     });
 
     test('execution success is properly logged', async () => {
       const proposal = await proposeAction('pause_contract', {}, adminWallet1);
       const result = await approveAction(proposal.actionId, adminWallet2);
-      
+
       expect(result.status).toBe('approved');
       expect(mockStellar.pauseContractOnChain).toHaveBeenCalled();
-      
+
       // Action should be marked as executed
-      const action = await getDriver().get('SELECT * FROM pending_admin_actions WHERE id = ?', [proposal.actionId]);
+      const action = await getDriver().get('SELECT * FROM pending_admin_actions WHERE id = ?', [
+        proposal.actionId,
+      ]);
       expect((action as any)?.status).toBe('executed');
     });
   });
 
   describe('Acceptance Criteria 6: Fee withdrawal DB-write failure is surfaced (#1207)', () => {
     test('a failed insertFeeWithdrawal after a successful on-chain withdrawal logs critical and increments the metric, but still reports success', async () => {
-      const insertSpy = jest.spyOn(db, 'insertFeeWithdrawal').mockRejectedValueOnce(new Error('disk full'));
+      const insertSpy = jest
+        .spyOn(db, 'insertFeeWithdrawal')
+        .mockRejectedValueOnce(new Error('disk full'));
       const criticalSpy = jest.spyOn(logger, 'critical').mockImplementation(() => {});
       const before = getFeeWithdrawalDbWriteFailuresTotal();
 
-      const proposal = await proposeAction('withdraw_fees', { recipient: treasuryAddress }, adminWallet1);
+      const proposal = await proposeAction(
+        'withdraw_fees',
+        { recipient: treasuryAddress },
+        adminWallet1,
+      );
       const result = await approveAction(proposal.actionId, adminWallet2);
 
       expect(result.status).toBe('approved');
       expect(insertSpy).toHaveBeenCalled();
-      expect(criticalSpy).toHaveBeenCalledWith(
-        expect.stringContaining('tx_withdraw_123'),
-      );
+      expect(criticalSpy).toHaveBeenCalledWith(expect.stringContaining('tx_withdraw_123'));
       expect(criticalSpy.mock.calls[0][0]).toContain(treasuryAddress);
       expect(getFeeWithdrawalDbWriteFailuresTotal()).toBe(before + 1);
 
@@ -331,8 +356,10 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
   describe('Edge cases and error handling', () => {
     test('missing payload fields cause execution to fail gracefully', async () => {
       const proposal = await proposeAction('register_validator', {}, adminWallet1); // Missing validatorWallet
-      
-      await expect(approveAction(proposal.actionId, adminWallet2)).rejects.toThrow('Missing validatorWallet in payload');
+
+      await expect(approveAction(proposal.actionId, adminWallet2)).rejects.toThrow(
+        'Missing validatorWallet in payload',
+      );
     });
 
     test('invalid action type is handled gracefully', async () => {
@@ -340,19 +367,28 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
       const actionId = 'test-invalid-action';
       await getDriver().run(
         'INSERT INTO pending_admin_actions (id, action_type, proposer, payload, required_signatures, expires_at, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [actionId, 'invalid_action', adminWallet1, '{}', 2, Date.now() + 86400000, Date.now(), 'pending']
+        [
+          actionId,
+          'invalid_action',
+          adminWallet1,
+          '{}',
+          2,
+          Date.now() + 86400000,
+          Date.now(),
+          'pending',
+        ],
       );
-      
+
       await getDriver().run(
         'INSERT INTO admin_action_signatures (action_id, signer, signed_at) VALUES (?, ?, ?)',
-        [actionId, adminWallet1, Date.now()]
+        [actionId, adminWallet1, Date.now()],
       );
-      
+
       await getDriver().run(
         'UPDATE pending_admin_actions SET collected_signatures = 1 WHERE id = ?',
-        [actionId]
+        [actionId],
       );
-      
+
       await expect(approveAction(actionId, adminWallet2)).rejects.toThrow('Unknown action type');
     });
 
@@ -360,7 +396,7 @@ describe('Admin Multi-Signature Execution and Atomicity', () => {
       // Temporarily set threshold to 1
       const originalThreshold = config.adminThreshold;
       config.adminThreshold = 1;
-      
+
       try {
         const proposal = await proposeAction('pause_contract', {}, adminWallet1);
         expect(proposal.status).toBe('immediate');

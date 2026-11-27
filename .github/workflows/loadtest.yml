@@ -78,7 +78,7 @@ jobs:
         env:
           TEST_ADMIN_JWT: ${{ secrets.STAGING_ADMIN_JWT }}
           TEST_SCOUT_JWT: ${{ secrets.STAGING_SCOUT_JWT }}
-          K6_PLAYER_ID:   ${{ vars.STAGING_SEED_PLAYER_ID || 'seed-player-001' }}
+          K6_PLAYER_ID: ${{ vars.STAGING_SEED_PLAYER_ID || 'seed-player-001' }}
         run: |
           k6 run \
             --env K6_BASE_URL="${K6_BASE_URL}" \

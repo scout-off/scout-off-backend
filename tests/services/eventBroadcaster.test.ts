@@ -30,161 +30,201 @@ beforeEach(() => {
 describe('isEventRelevantToWallet', () => {
   describe('milestone_approved', () => {
     it('returns true when player_id matches the wallet owner player ID', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'milestone_approved', payload: { player_id: PLAYER_1 } },
-        WALLET_A,
-        PLAYER_1,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'milestone_approved', payload: { player_id: PLAYER_1 } },
+          WALLET_A,
+          PLAYER_1,
+        ),
+      ).toBe(true);
     });
 
     it('returns false when player_id does not match the wallet owner player ID', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'milestone_approved', payload: { player_id: PLAYER_1 } },
-        WALLET_A,
-        'player-cuid-2',
-      )).toBe(false);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'milestone_approved', payload: { player_id: PLAYER_1 } },
+          WALLET_A,
+          'player-cuid-2',
+        ),
+      ).toBe(false);
     });
 
     it('returns true when payload.wallet matches', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'milestone_approved', payload: { player_id: 'p1', wallet: WALLET_A } },
-        WALLET_A,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'milestone_approved', payload: { player_id: 'p1', wallet: WALLET_A } },
+          WALLET_A,
+        ),
+      ).toBe(true);
     });
   });
 
   describe('scout_subscribed', () => {
     it('returns true when scout matches wallet', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'scout_subscribed', payload: { scout: WALLET_A, tier: 'premium' } },
-        WALLET_A,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'scout_subscribed', payload: { scout: WALLET_A, tier: 'premium' } },
+          WALLET_A,
+        ),
+      ).toBe(true);
     });
 
     it('returns false when scout is a different wallet', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'scout_subscribed', payload: { scout: WALLET_B } },
-        WALLET_A,
-      )).toBe(false);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'scout_subscribed', payload: { scout: WALLET_B } },
+          WALLET_A,
+        ),
+      ).toBe(false);
     });
 
     it('returns true when payload.wallet matches (alternate field)', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'scout_subscribed', payload: { wallet: WALLET_A } },
-        WALLET_A,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'scout_subscribed', payload: { wallet: WALLET_A } },
+          WALLET_A,
+        ),
+      ).toBe(true);
     });
   });
 
   describe('contact_unlocked', () => {
     it('returns true when scout matches wallet', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'contact_unlocked', payload: { scout: WALLET_A, player_id: 'p1' } },
-        WALLET_A,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'contact_unlocked', payload: { scout: WALLET_A, player_id: 'p1' } },
+          WALLET_A,
+        ),
+      ).toBe(true);
     });
 
     it('returns false when scout does not match', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'contact_unlocked', payload: { scout: WALLET_B, player_id: 'p1' } },
-        WALLET_A,
-      )).toBe(false);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'contact_unlocked', payload: { scout: WALLET_B, player_id: 'p1' } },
+          WALLET_A,
+        ),
+      ).toBe(false);
     });
   });
 
   describe('trial_offer_logged', () => {
     it('returns true when scout matches wallet', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'trial_offer_logged', payload: { scout: WALLET_A, player_id: WALLET_B } },
-        WALLET_A,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'trial_offer_logged', payload: { scout: WALLET_A, player_id: WALLET_B } },
+          WALLET_A,
+        ),
+      ).toBe(true);
     });
 
     it('returns true when player_id matches the wallet owner player ID', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'trial_offer_logged', payload: { scout: WALLET_A, player_id: PLAYER_1 } },
-        WALLET_B,
-        PLAYER_1,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'trial_offer_logged', payload: { scout: WALLET_A, player_id: PLAYER_1 } },
+          WALLET_B,
+          PLAYER_1,
+        ),
+      ).toBe(true);
     });
 
     it('returns false for an unrelated wallet', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'trial_offer_logged', payload: { scout: WALLET_A, player_id: PLAYER_1 } },
-        WALLET_C,
-        'player-cuid-2',
-      )).toBe(false);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'trial_offer_logged', payload: { scout: WALLET_A, player_id: PLAYER_1 } },
+          WALLET_C,
+          'player-cuid-2',
+        ),
+      ).toBe(false);
     });
   });
 
   describe('player_registered', () => {
     it('returns true when wallet matches', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'player_registered', payload: { wallet: WALLET_A, player_id: 'p1' } },
-        WALLET_A,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'player_registered', payload: { wallet: WALLET_A, player_id: 'p1' } },
+          WALLET_A,
+        ),
+      ).toBe(true);
     });
 
     it('returns true when player_id matches the wallet owner player ID', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'player_registered', payload: { wallet: WALLET_B, player_id: PLAYER_1 } },
-        WALLET_A,
-        PLAYER_1,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'player_registered', payload: { wallet: WALLET_B, player_id: PLAYER_1 } },
+          WALLET_A,
+          PLAYER_1,
+        ),
+      ).toBe(true);
     });
 
     it('returns false for unrelated wallet', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'player_registered', payload: { wallet: WALLET_B, player_id: 'p1' } },
-        WALLET_A,
-      )).toBe(false);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'player_registered', payload: { wallet: WALLET_B, player_id: 'p1' } },
+          WALLET_A,
+        ),
+      ).toBe(false);
     });
   });
 
   describe('milestone_submitted', () => {
     it('returns true when player_id matches the wallet owner player ID', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'milestone_submitted', payload: { player_id: PLAYER_1, validator: WALLET_B } },
-        WALLET_A,
-        PLAYER_1,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'milestone_submitted', payload: { player_id: PLAYER_1, validator: WALLET_B } },
+          WALLET_A,
+          PLAYER_1,
+        ),
+      ).toBe(true);
     });
 
     it('returns true when validator matches', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'milestone_submitted', payload: { player_id: WALLET_A, validator: WALLET_B } },
-        WALLET_B,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'milestone_submitted', payload: { player_id: WALLET_A, validator: WALLET_B } },
+          WALLET_B,
+        ),
+      ).toBe(true);
     });
 
     it('returns false for unrelated wallet', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'milestone_submitted', payload: { player_id: WALLET_A, validator: WALLET_B } },
-        WALLET_C,
-      )).toBe(false);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'milestone_submitted', payload: { player_id: WALLET_A, validator: WALLET_B } },
+          WALLET_C,
+        ),
+      ).toBe(false);
     });
   });
 
   describe('fees_withdrawn', () => {
     it('returns true when recipient matches', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'fees_withdrawn', payload: { recipient: WALLET_A, amount: '100' } },
-        WALLET_A,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'fees_withdrawn', payload: { recipient: WALLET_A, amount: '100' } },
+          WALLET_A,
+        ),
+      ).toBe(true);
     });
 
     it('returns true when wallet field matches', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'fees_withdrawn', payload: { wallet: WALLET_A, amount: '100' } },
-        WALLET_A,
-      )).toBe(true);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'fees_withdrawn', payload: { wallet: WALLET_A, amount: '100' } },
+          WALLET_A,
+        ),
+      ).toBe(true);
     });
 
     it('returns false for unrelated wallet', () => {
-      expect(isEventRelevantToWallet(
-        { type: 'fees_withdrawn', payload: { recipient: WALLET_B, amount: '100' } },
-        WALLET_A,
-      )).toBe(false);
+      expect(
+        isEventRelevantToWallet(
+          { type: 'fees_withdrawn', payload: { recipient: WALLET_B, amount: '100' } },
+          WALLET_A,
+        ),
+      ).toBe(false);
     });
   });
 });
@@ -201,7 +241,9 @@ describe('EventBroadcaster', () => {
       wallet,
       playerId,
       received,
-      send(event: BroadcastEvent) { received.push(event); },
+      send(event: BroadcastEvent) {
+        received.push(event);
+      },
     };
     return sub;
   }
@@ -350,7 +392,9 @@ describe('EventBroadcaster', () => {
     const throwingSub: SseSubscriber = {
       wallet: WALLET_A,
       playerId: PLAYER_1,
-      send() { throw new Error('stream closed'); },
+      send() {
+        throw new Error('stream closed');
+      },
     };
     inst.subscribe(throwingSub);
 

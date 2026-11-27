@@ -18,8 +18,9 @@ export const BASE_URL = __ENV.K6_BASE_URL || 'http://localhost:4000';
 export const ADMIN_TOKEN = __ENV.K6_ADMIN_TOKEN || __ENV.TEST_ADMIN_JWT || '';
 export const SCOUT_TOKEN = __ENV.K6_SCOUT_TOKEN || __ENV.TEST_SCOUT_JWT || '';
 
-export const PLAYER_ID   = __ENV.K6_PLAYER_ID    || 'seed-player-001';
-export const SCOUT_WALLET = __ENV.K6_SCOUT_WALLET || 'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZL8AM5KST7NKJVDKZUZ';
+export const PLAYER_ID = __ENV.K6_PLAYER_ID || 'seed-player-001';
+export const SCOUT_WALLET =
+  __ENV.K6_SCOUT_WALLET || 'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZL8AM5KST7NKJVDKZUZ';
 
 /** Abort the entire test run if the server is unreachable. */
 export function requireServer() {

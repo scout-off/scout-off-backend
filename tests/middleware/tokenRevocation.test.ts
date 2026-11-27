@@ -42,9 +42,7 @@ describe('requireAuth — blocklist check', () => {
 
   it('calls next() for a valid, non-revoked JWT', async () => {
     const token = makeToken('GTEST', 'player', 'jti-valid');
-    const res = await request(app)
-      .get('/health')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/health').set('Authorization', `Bearer ${token}`);
     // /health is not auth-protected; just ensure server is up
     expect(res.status).toBe(200);
   });
@@ -72,9 +70,7 @@ describe('requireAuth — blocklist check', () => {
     const token = makeToken('GTEST', 'player'); // no jti
     mockIsRevoked.mockResolvedValue(false);
 
-    const res = await request(app)
-      .get('/health')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/health').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
   });
 });
@@ -88,9 +84,7 @@ describe('POST /api/admin/tokens/revoke', () => {
   });
 
   it('returns 401 when no token is provided', async () => {
-    const res = await request(app)
-      .post('/api/admin/tokens/revoke')
-      .send({ jti: 'some-jti' });
+    const res = await request(app).post('/api/admin/tokens/revoke').send({ jti: 'some-jti' });
     expect(res.status).toBe(401);
   });
 

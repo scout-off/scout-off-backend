@@ -80,7 +80,7 @@ describe('requireAuth', () => {
         action: 'auth_failed',
         path: '/api/scouts/wallet/subscription',
         reason: 'Missing auth token',
-      })
+      }),
     );
     spy.mockRestore();
   });
@@ -91,7 +91,7 @@ describe('requireAuth', () => {
     requireAuth(req, res, next);
     await flushPromises();
     expect(spy).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'auth_failed', reason: 'Invalid or expired token' })
+      expect.objectContaining({ action: 'auth_failed', reason: 'Invalid or expired token' }),
     );
     spy.mockRestore();
   });
@@ -142,7 +142,9 @@ describe('requireAuth', () => {
     const token = jwt.sign({ sub: 'GTEST', role: 'player', jti }, SECRET, { expiresIn: '1h' });
     const { req, res, next } = makeReqRes(token);
 
-    jest.spyOn(tokenBlocklist, 'isTokenRevoked').mockRejectedValueOnce(new Error('store unavailable'));
+    jest
+      .spyOn(tokenBlocklist, 'isTokenRevoked')
+      .mockRejectedValueOnce(new Error('store unavailable'));
 
     requireAuth(req, res, next);
     await flushPromises();
@@ -213,7 +215,7 @@ describe('requireRole', () => {
         path: '/api/admin/stats',
         requiredRole: 'admin',
         reason: 'Insufficient permissions',
-      })
+      }),
     );
     spy.mockRestore();
   });
@@ -228,7 +230,7 @@ describe('requireRole', () => {
         action: 'auth_failed',
         requiredRole: 'admin',
         reason: 'Missing auth token',
-      })
+      }),
     );
     spy.mockRestore();
   });
@@ -251,26 +253,41 @@ describe('requireRole', () => {
 
 describe('token rejection matrix (#1220)', () => {
   const revokedJti = 'test-jti-matrix-revoked';
-  const revokedToken = jwt.sign({ sub: 'GTEST', role: 'player', jti: revokedJti }, SECRET, { expiresIn: '1h' });
+  const revokedToken = jwt.sign({ sub: 'GTEST', role: 'player', jti: revokedJti }, SECRET, {
+    expiresIn: '1h',
+  });
 
   it.each([
     ['missing token', undefined, 'Missing auth token', 'UNAUTHORIZED'],
     ['malformed token', 'not.a.valid.token', 'Invalid or expired token', 'TOKEN_INVALID'],
-    ['expired token', sign({ sub: 'GTEST' }, SECRET, -1), 'Invalid or expired token', 'TOKEN_EXPIRED'],
-    ['wrong-signature token', sign({ sub: 'GTEST' }, 'wrong-secret'), 'Invalid or expired token', 'TOKEN_INVALID'],
+    [
+      'expired token',
+      sign({ sub: 'GTEST' }, SECRET, -1),
+      'Invalid or expired token',
+      'TOKEN_EXPIRED',
+    ],
+    [
+      'wrong-signature token',
+      sign({ sub: 'GTEST' }, 'wrong-secret'),
+      'Invalid or expired token',
+      'TOKEN_INVALID',
+    ],
     ['revoked token', revokedToken, 'Token has been revoked', 'TOKEN_INVALID'],
-  ])('returns 401 with the documented error for a %s', async (_label, token, expectedError, expectedCode) => {
-    if (token === revokedToken) {
-      jest.spyOn(tokenBlocklist, 'isTokenRevoked').mockResolvedValueOnce(true);
-    }
-    const { req, res, next } = makeReqRes(token);
-    requireAuth(req, res, next);
-    await flushPromises();
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expectedError }));
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: expectedCode }));
-    expect(next).not.toHaveBeenCalled();
-  });
+  ])(
+    'returns 401 with the documented error for a %s',
+    async (_label, token, expectedError, expectedCode) => {
+      if (token === revokedToken) {
+        jest.spyOn(tokenBlocklist, 'isTokenRevoked').mockResolvedValueOnce(true);
+      }
+      const { req, res, next } = makeReqRes(token);
+      requireAuth(req, res, next);
+      await flushPromises();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expectedError }));
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: expectedCode }));
+      expect(next).not.toHaveBeenCalled();
+    },
+  );
 
   it('calls next() for a valid, non-revoked token', async () => {
     const token = sign({ sub: 'GTEST', role: 'player' });
@@ -315,7 +332,9 @@ describe('JWT key rotation (#273)', () => {
     jest.resetModules();
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { requireAuth: requireAuthFresh } = require('../../src/middleware/auth');
-    const token = jwt.sign({ sub: 'GTEST', role: 'player' }, 'completely-unknown-secret', { expiresIn: '1h' });
+    const token = jwt.sign({ sub: 'GTEST', role: 'player' }, 'completely-unknown-secret', {
+      expiresIn: '1h',
+    });
     const { req, res, next } = makeReqRes(token);
     requireAuthFresh(req, res, next);
     await flushPromises();

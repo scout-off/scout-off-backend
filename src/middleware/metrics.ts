@@ -200,7 +200,9 @@ export function getLatencyHistogram(): LatencyHistogram {
 //
 // Standard Prometheus histogram for HTTP latency uses seconds with buckets
 // suited to API latency: 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s
-export const HTTP_SECONDS_BUCKETS: ReadonlyArray<number> = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+export const HTTP_SECONDS_BUCKETS: ReadonlyArray<number> = [
+  0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10,
+];
 
 export interface HttpSecondsHistogram {
   bucketCounts: number[];
@@ -436,7 +438,11 @@ export function incrementWebhookDeadLettersTotal(): void {
   }
 }
 
-const webhookSubscriptionStatusStore: Record<string, number> = { active: 0, degraded: 0, suspended: 0 };
+const webhookSubscriptionStatusStore: Record<string, number> = {
+  active: 0,
+  degraded: 0,
+  suspended: 0,
+};
 export function setWebhookSubscriptionStatusCounts(counts: Record<string, number>): void {
   Object.assign(webhookSubscriptionStatusStore, { active: 0, degraded: 0, suspended: 0 }, counts);
 }
@@ -716,6 +722,38 @@ export function incAuthFailure(reason: string): void {
   authFailuresStore[validReason] = (authFailuresStore[validReason] ?? 0) + 1;
 }
 
+// ─── Legacy admin route usage counter ─────────────────────────────────────────
+
+const legacyAdminCallsStore: Record<string, number> = {
+  fees: 0,
+  fees_missing_key: 0,
+  indexer_reindex: 0,
+};
+
+/** Read-only view of legacy admin route call counts (exposed for tests and diagnostics). */
+export const legacyAdminCalls: Readonly<Record<string, number>> = legacyAdminCallsStore;
+
+/** Increment scout_off_legacy_admin_calls_total for a deprecated admin route. */
+export function incLegacyAdminCall(route: string): void {
+  legacyAdminCallsStore[route] = (legacyAdminCallsStore[route] ?? 0) + 1;
+}
+
+// ─── Indexer webhook dispatch queue metrics ───────────────────────────────────
+
+const webhookDispatchQueue = { pending: 0, active: 0, latencySumMs: 0, latencyCount: 0 };
+
+/** Set the current indexer webhook dispatch queue depth. */
+export function setWebhookDispatchQueueDepth(pending: number, active: number): void {
+  webhookDispatchQueue.pending = pending;
+  webhookDispatchQueue.active = active;
+}
+
+/** Record how long a webhook dispatch waited in / ran through the queue. */
+export function observeWebhookDispatchQueueLatency(durationMs: number): void {
+  webhookDispatchQueue.latencySumMs += durationMs;
+  webhookDispatchQueue.latencyCount += 1;
+}
+
 // ─── Fee withdrawal DB-write failure counter ──────────────────────────────────
 
 const feeWithdrawalDbWriteFailuresStore = { total: 0 };
@@ -870,11 +908,11 @@ export interface SerializeMetricsExtras {
 }
 
 /**
-  * Serialises all collected metrics into Prometheus text exposition format.
-  * Takes external gauges (e.g. indexer lag) as parameters so this stays free of
-  * any dependency on the indexer or the rest of the app — it is pure and unit
-  * testable on its own.
-  */
+ * Serialises all collected metrics into Prometheus text exposition format.
+ * Takes external gauges (e.g. indexer lag) as parameters so this stays free of
+ * any dependency on the indexer or the rest of the app — it is pure and unit
+ * testable on its own.
+ */
 export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   const routes = getMetrics();
   const errors = getErrorMetrics();
@@ -897,7 +935,9 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# HELP http_request_duration_seconds HTTP request latency in seconds');
   lines.push('# TYPE http_request_duration_seconds histogram');
   for (let i = 0; i < HTTP_SECONDS_BUCKETS.length; i++) {
-    lines.push(`http_request_duration_seconds_bucket{le="${HTTP_SECONDS_BUCKETS[i]}"} ${httpSecondsHist.bucketCounts[i]}`);
+    lines.push(
+      `http_request_duration_seconds_bucket{le="${HTTP_SECONDS_BUCKETS[i]}"} ${httpSecondsHist.bucketCounts[i]}`,
+    );
   }
   lines.push(`http_request_duration_seconds_bucket{le="+Inf"} ${httpSecondsHist.count}`);
   lines.push(`http_request_duration_seconds_sum ${httpSecondsHist.sum}`);
@@ -905,10 +945,14 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
 
   // LEGACY: http_request_duration_ms (deprecated, will be removed in next release)
   if (isLegacyMsMetricEnabled()) {
-    lines.push('# HELP http_request_duration_ms HTTP request latency in milliseconds (DEPRECATED: use http_request_duration_seconds)');
+    lines.push(
+      '# HELP http_request_duration_ms HTTP request latency in milliseconds (DEPRECATED: use http_request_duration_seconds)',
+    );
     lines.push('# TYPE http_request_duration_ms histogram');
     for (let i = 0; i < LATENCY_BUCKETS_MS.length; i++) {
-      lines.push(`http_request_duration_ms_bucket{le="${LATENCY_BUCKETS_MS[i]}"} ${hist.bucketCounts[i]}`);
+      lines.push(
+        `http_request_duration_ms_bucket{le="${LATENCY_BUCKETS_MS[i]}"} ${hist.bucketCounts[i]}`,
+      );
     }
     lines.push(`http_request_duration_ms_bucket{le="+Inf"} ${hist.count}`);
     lines.push(`http_request_duration_ms_sum ${hist.sum}`);
@@ -928,12 +972,16 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# HELP cache_misses_total Total number of cache misses');
   lines.push('# TYPE cache_misses_total counter');
   lines.push(`cache_misses_total ${cache.misses}`);
-  lines.push('# HELP cache_evictions_total Total number of lazy cache evictions (expired key reads)');
+  lines.push(
+    '# HELP cache_evictions_total Total number of lazy cache evictions (expired key reads)',
+  );
   lines.push('# TYPE cache_evictions_total counter');
   lines.push(`cache_evictions_total ${cache.evictions}`);
 
   // Cache invalidation counter.
-  lines.push('# HELP cache_invalidation_total Total number of player-list cache invalidations performed (local operations and received invalidate:players messages)');
+  lines.push(
+    '# HELP cache_invalidation_total Total number of player-list cache invalidations performed (local operations and received invalidate:players messages)',
+  );
   lines.push('# TYPE cache_invalidation_total counter');
   lines.push(`cache_invalidation_total ${cacheInvalidationStore.total}`);
 
@@ -942,11 +990,19 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# TYPE ipfs_operation_duration_seconds histogram');
   for (const [operation, counts] of Object.entries(ipfsHistogram.bucketCounts)) {
     for (let i = 0; i < SECONDS_HISTOGRAM_BUCKETS.length; i++) {
-      lines.push(`ipfs_operation_duration_seconds_bucket{operation="${escapeLabelValue(operation)}",le="${SECONDS_HISTOGRAM_BUCKETS[i]}"} ${counts[i]}`);
+      lines.push(
+        `ipfs_operation_duration_seconds_bucket{operation="${escapeLabelValue(operation)}",le="${SECONDS_HISTOGRAM_BUCKETS[i]}"} ${counts[i]}`,
+      );
     }
-    lines.push(`ipfs_operation_duration_seconds_bucket{operation="${escapeLabelValue(operation)}",le="+Inf"} ${ipfsHistogram.count[operation]}`);
-    lines.push(`ipfs_operation_duration_seconds_sum{operation="${escapeLabelValue(operation)}"} ${ipfsHistogram.sum[operation]}`);
-    lines.push(`ipfs_operation_duration_seconds_count{operation="${escapeLabelValue(operation)}"} ${ipfsHistogram.count[operation]}`);
+    lines.push(
+      `ipfs_operation_duration_seconds_bucket{operation="${escapeLabelValue(operation)}",le="+Inf"} ${ipfsHistogram.count[operation]}`,
+    );
+    lines.push(
+      `ipfs_operation_duration_seconds_sum{operation="${escapeLabelValue(operation)}"} ${ipfsHistogram.sum[operation]}`,
+    );
+    lines.push(
+      `ipfs_operation_duration_seconds_count{operation="${escapeLabelValue(operation)}"} ${ipfsHistogram.count[operation]}`,
+    );
   }
 
   // DB query duration histogram.
@@ -954,11 +1010,19 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# TYPE db_query_duration_seconds histogram');
   for (const [queryName, counts] of Object.entries(dbQueryHistogram.bucketCounts)) {
     for (let i = 0; i < SECONDS_HISTOGRAM_BUCKETS.length; i++) {
-      lines.push(`db_query_duration_seconds_bucket{query_name="${escapeLabelValue(queryName)}",le="${SECONDS_HISTOGRAM_BUCKETS[i]}"} ${counts[i]}`);
+      lines.push(
+        `db_query_duration_seconds_bucket{query_name="${escapeLabelValue(queryName)}",le="${SECONDS_HISTOGRAM_BUCKETS[i]}"} ${counts[i]}`,
+      );
     }
-    lines.push(`db_query_duration_seconds_bucket{query_name="${escapeLabelValue(queryName)}",le="+Inf"} ${dbQueryHistogram.count[queryName]}`);
-    lines.push(`db_query_duration_seconds_sum{query_name="${escapeLabelValue(queryName)}"} ${dbQueryHistogram.sum[queryName]}`);
-    lines.push(`db_query_duration_seconds_count{query_name="${escapeLabelValue(queryName)}"} ${dbQueryHistogram.count[queryName]}`);
+    lines.push(
+      `db_query_duration_seconds_bucket{query_name="${escapeLabelValue(queryName)}",le="+Inf"} ${dbQueryHistogram.count[queryName]}`,
+    );
+    lines.push(
+      `db_query_duration_seconds_sum{query_name="${escapeLabelValue(queryName)}"} ${dbQueryHistogram.sum[queryName]}`,
+    );
+    lines.push(
+      `db_query_duration_seconds_count{query_name="${escapeLabelValue(queryName)}"} ${dbQueryHistogram.count[queryName]}`,
+    );
   }
 
   // Soroban RPC latency histogram.
@@ -966,11 +1030,19 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# TYPE soroban_rpc_duration_seconds histogram');
   for (const [operation, counts] of Object.entries(sorobanRpcHistogram.bucketCounts)) {
     for (let i = 0; i < SECONDS_HISTOGRAM_BUCKETS.length; i++) {
-      lines.push(`soroban_rpc_duration_seconds_bucket{operation="${escapeLabelValue(operation)}",le="${SECONDS_HISTOGRAM_BUCKETS[i]}"} ${counts[i]}`);
+      lines.push(
+        `soroban_rpc_duration_seconds_bucket{operation="${escapeLabelValue(operation)}",le="${SECONDS_HISTOGRAM_BUCKETS[i]}"} ${counts[i]}`,
+      );
     }
-    lines.push(`soroban_rpc_duration_seconds_bucket{operation="${escapeLabelValue(operation)}",le="+Inf"} ${sorobanRpcHistogram.count[operation]}`);
-    lines.push(`soroban_rpc_duration_seconds_sum{operation="${escapeLabelValue(operation)}"} ${sorobanRpcHistogram.sum[operation]}`);
-    lines.push(`soroban_rpc_duration_seconds_count{operation="${escapeLabelValue(operation)}"} ${sorobanRpcHistogram.count[operation]}`);
+    lines.push(
+      `soroban_rpc_duration_seconds_bucket{operation="${escapeLabelValue(operation)}",le="+Inf"} ${sorobanRpcHistogram.count[operation]}`,
+    );
+    lines.push(
+      `soroban_rpc_duration_seconds_sum{operation="${escapeLabelValue(operation)}"} ${sorobanRpcHistogram.sum[operation]}`,
+    );
+    lines.push(
+      `soroban_rpc_duration_seconds_count{operation="${escapeLabelValue(operation)}"} ${sorobanRpcHistogram.count[operation]}`,
+    );
   }
 
   // Webhook delivery counters.
@@ -1002,23 +1074,34 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   }
 
   // Indexer last success timestamp (#1574).
-  lines.push('# HELP scout_off_indexer_last_success_timestamp_seconds Unix timestamp of the last successful indexer poll (0 = never)');
+  lines.push(
+    '# HELP scout_off_indexer_last_success_timestamp_seconds Unix timestamp of the last successful indexer poll (0 = never)',
+  );
   lines.push('# TYPE scout_off_indexer_last_success_timestamp_seconds gauge');
-  lines.push(`scout_off_indexer_last_success_timestamp_seconds ${(extras.indexerLastSuccessTimestamp ?? 0) / 1000}`);
+  lines.push(
+    `scout_off_indexer_last_success_timestamp_seconds ${(extras.indexerLastSuccessTimestamp ?? 0) / 1000}`,
+  );
 
   // Indexer poll failure counter (#1574).
-  lines.push('# HELP scout_off_indexer_poll_failures_total Total number of indexer poll failures since process start');
+  lines.push(
+    '# HELP scout_off_indexer_poll_failures_total Total number of indexer poll failures since process start',
+  );
   lines.push('# TYPE scout_off_indexer_poll_failures_total counter');
   lines.push(`scout_off_indexer_poll_failures_total ${extras.indexerPollFailuresTotal ?? 0}`);
 
   // Stuck pending IPFS pins gauge.
-  const stuckPins = extras.stuckPendingPinsCount !== undefined ? extras.stuckPendingPinsCount : getStuckPendingPinsCount();
+  const stuckPins =
+    extras.stuckPendingPinsCount !== undefined
+      ? extras.stuckPendingPinsCount
+      : getStuckPendingPinsCount();
   lines.push('# HELP stuck_pending_pins_count Current number of stuck pending IPFS pins');
   lines.push('# TYPE stuck_pending_pins_count gauge');
   lines.push(`stuck_pending_pins_count ${stuckPins}`);
 
   // Dead-letter queue depth gauge (#1131) — broken down per subscription.
-  lines.push('# HELP scout_off_webhook_dead_letters_total Current webhook dead-letter queue depth by subscription');
+  lines.push(
+    '# HELP scout_off_webhook_dead_letters_total Current webhook dead-letter queue depth by subscription',
+  );
   lines.push('# TYPE scout_off_webhook_dead_letters_total gauge');
   const dlGauge = getWebhookDeadLetterGauge();
   for (const [subscriptionId, count] of Object.entries(dlGauge)) {
@@ -1027,7 +1110,9 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
     );
   }
   // Always emit a lifetime insert counter for dashboards that prefer counters.
-  lines.push('# HELP scout_off_webhook_dead_letters_inserted_total Lifetime webhook dead-letter inserts');
+  lines.push(
+    '# HELP scout_off_webhook_dead_letters_inserted_total Lifetime webhook dead-letter inserts',
+  );
   lines.push('# TYPE scout_off_webhook_dead_letters_inserted_total counter');
   lines.push(`scout_off_webhook_dead_letters_inserted_total ${webhook.deadLettersTotal}`);
   lines.push('# HELP scout_off_webhook_subscriptions Webhook subscriptions by health status');
@@ -1035,7 +1120,9 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   for (const [status, count] of Object.entries(getWebhookSubscriptionStatusCounts())) {
     lines.push(`scout_off_webhook_subscriptions{status="${status}"} ${count}`);
   }
-  lines.push('# HELP scout_off_webhook_circuit_open_total Deliveries skipped because the subscription circuit was open');
+  lines.push(
+    '# HELP scout_off_webhook_circuit_open_total Deliveries skipped because the subscription circuit was open',
+  );
   lines.push('# TYPE scout_off_webhook_circuit_open_total counter');
   lines.push(`scout_off_webhook_circuit_open_total ${webhookCircuitOpenTotal}`);
   lines.push('# HELP scout_off_webhook_retry_success_total Successful dead-letter auto-retries');
@@ -1043,10 +1130,14 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push(`scout_off_webhook_retry_success_total ${webhook.retrySuccessTotal}`);
 
   // IP reputation counters.
-  lines.push('# HELP ip_reputation_blocked_total Total number of requests blocked by IP reputation scoring');
+  lines.push(
+    '# HELP ip_reputation_blocked_total Total number of requests blocked by IP reputation scoring',
+  );
   lines.push('# TYPE ip_reputation_blocked_total counter');
   lines.push(`ip_reputation_blocked_total ${ipReputationCounters.blocked}`);
-  lines.push('# HELP ip_reputation_penalised_total Total number of requests that received a reputation penalty (delay or rate restriction)');
+  lines.push(
+    '# HELP ip_reputation_penalised_total Total number of requests that received a reputation penalty (delay or rate restriction)',
+  );
   lines.push('# TYPE ip_reputation_penalised_total counter');
   lines.push(`ip_reputation_penalised_total ${ipReputationCounters.penalised}`);
 
@@ -1054,33 +1145,43 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   // tier and the stored progress_level detected by the reconciliation job.
   // A sustained non-zero value indicates the indexer has missed milestone_approved
   // events; run a reindex to resolve (see docs/runbook.md).
-  lines.push('# HELP scout_off_tier_divergence_total Total number of player tier divergence events detected since process start');
+  lines.push(
+    '# HELP scout_off_tier_divergence_total Total number of player tier divergence events detected since process start',
+  );
   lines.push('# TYPE scout_off_tier_divergence_total counter');
   lines.push(`scout_off_tier_divergence_total ${getTierDivergenceForMetrics()}`);
 
   // Circuit breaker state gauges and transition counters (#1573).
   // scout_off_circuit_breaker_state: 0=closed, 1=half-open, 2=open
   const cbStates = getCircuitBreakerStates();
-  lines.push('# HELP scout_off_circuit_breaker_state Circuit breaker state (0=closed, 1=half-open, 2=open)');
+  lines.push(
+    '# HELP scout_off_circuit_breaker_state Circuit breaker state (0=closed, 1=half-open, 2=open)',
+  );
   lines.push('# TYPE scout_off_circuit_breaker_state gauge');
   for (const [name, value] of Object.entries(cbStates)) {
     lines.push(`scout_off_circuit_breaker_state{breaker="${escapeLabelValue(name)}"} ${value}`);
   }
   // scout_off_circuit_breaker_transitions_total: count of state transitions labelled by target state
   const cbTransitions = getCircuitBreakerTransitions();
-  lines.push('# HELP scout_off_circuit_breaker_transitions_total Total circuit breaker state transitions by target state');
+  lines.push(
+    '# HELP scout_off_circuit_breaker_transitions_total Total circuit breaker state transitions by target state',
+  );
   lines.push('# TYPE scout_off_circuit_breaker_transitions_total counter');
   for (const [key, count] of Object.entries(cbTransitions)) {
     const colonIdx = key.lastIndexOf(':');
     const breakerName = key.slice(0, colonIdx);
     const toState = key.slice(colonIdx + 1);
-    lines.push(`scout_off_circuit_breaker_transitions_total{breaker="${escapeLabelValue(breakerName)}",to="${escapeLabelValue(toState)}"} ${count}`);
+    lines.push(
+      `scout_off_circuit_breaker_transitions_total{breaker="${escapeLabelValue(breakerName)}",to="${escapeLabelValue(toState)}"} ${count}`,
+    );
   }
 
   // Profile view recording failures (#1854) — non-fatal DB errors while
   // recording a scout's profile view. A sustained non-zero rate means views
   // are being silently dropped.
-  lines.push('# HELP profile_view_record_failures_total Total number of profile view recording failures');
+  lines.push(
+    '# HELP profile_view_record_failures_total Total number of profile view recording failures',
+  );
   lines.push('# TYPE profile_view_record_failures_total counter');
   lines.push(`profile_view_record_failures_total ${getProfileViewRecordFailuresTotal()}`);
 
@@ -1109,7 +1210,9 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   lines.push('# HELP nodejs_gc_duration_seconds Garbage collection duration in seconds');
   lines.push('# TYPE nodejs_gc_duration_seconds histogram');
   for (let i = 0; i < GC_DURATION_BUCKETS.length; i++) {
-    lines.push(`nodejs_gc_duration_seconds_bucket{le="${GC_DURATION_BUCKETS[i]}"} ${gcHist.bucketCounts[i]}`);
+    lines.push(
+      `nodejs_gc_duration_seconds_bucket{le="${GC_DURATION_BUCKETS[i]}"} ${gcHist.bucketCounts[i]}`,
+    );
   }
   lines.push(`nodejs_gc_duration_seconds_bucket{le="+Inf"} ${gcHist.count}`);
   lines.push(`nodejs_gc_duration_seconds_sum ${gcHist.sum}`);
@@ -1122,7 +1225,9 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
   // A sustained non-zero `unknown_type`/`decode_error` rate means a contract
   // upgrade renamed or reshaped an event; those rows are parked in
   // `indexer_unprocessed_events` for replay (see docs/indexer.md).
-  lines.push('# HELP scout_off_indexer_events_total Total number of contract events seen by the indexer, by type and outcome');
+  lines.push(
+    '# HELP scout_off_indexer_events_total Total number of contract events seen by the indexer, by type and outcome',
+  );
   lines.push('# TYPE scout_off_indexer_events_total counter');
   for (const [type, outcomes] of Object.entries(getIndexerEventMetrics())) {
     for (const [outcome, count] of Object.entries(outcomes)) {
@@ -1134,24 +1239,36 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
 
   // Audit chain verification (#1539). `scout_off_audit_chain_valid` is 1 when
   // the most recent scheduled verification passed, 0 after a break is found.
-  lines.push('# HELP scout_off_audit_chain_valid Whether the last audit-log hash-chain verification passed (1) or found a break (0)');
+  lines.push(
+    '# HELP scout_off_audit_chain_valid Whether the last audit-log hash-chain verification passed (1) or found a break (0)',
+  );
   lines.push('# TYPE scout_off_audit_chain_valid gauge');
   lines.push(`scout_off_audit_chain_valid ${getAuditChainValid()}`);
-  lines.push('# HELP scout_off_audit_chain_breaks_total Total number of audit-log hash-chain breaks detected since process start');
+  lines.push(
+    '# HELP scout_off_audit_chain_breaks_total Total number of audit-log hash-chain breaks detected since process start',
+  );
   lines.push('# TYPE scout_off_audit_chain_breaks_total counter');
   lines.push(`scout_off_audit_chain_breaks_total ${getAuditChainBreaksTotal()}`);
   // Unhandled promise-rejection counter (#1570).
-  lines.push('# HELP scout_off_unhandled_rejections_total Total number of unhandled promise rejections since process start');
+  lines.push(
+    '# HELP scout_off_unhandled_rejections_total Total number of unhandled promise rejections since process start',
+  );
   lines.push('# TYPE scout_off_unhandled_rejections_total counter');
   lines.push(`scout_off_unhandled_rejections_total ${unhandledRejectionsTotal}`);
 
   // Rate-limit rejection counter (#1571).
-  lines.push('# HELP scout_off_rate_limit_rejected_total Total rate-limited (429) requests by limiter namespace');
+  lines.push(
+    '# HELP scout_off_rate_limit_rejected_total Total rate-limited (429) requests by limiter namespace',
+  );
   lines.push('# TYPE scout_off_rate_limit_rejected_total counter');
   for (const [limiter, count] of Object.entries(rateLimitRejectedStore)) {
-    lines.push(`scout_off_rate_limit_rejected_total{limiter="${escapeLabelValue(limiter)}"} ${count}`);
+    lines.push(
+      `scout_off_rate_limit_rejected_total{limiter="${escapeLabelValue(limiter)}"} ${count}`,
+    );
   }
-  lines.push('# HELP scout_off_rate_limit_store_errors_total Total rate-limit store errors (fail-open path)');
+  lines.push(
+    '# HELP scout_off_rate_limit_store_errors_total Total rate-limit store errors (fail-open path)',
+  );
   lines.push('# TYPE scout_off_rate_limit_store_errors_total counter');
   lines.push(`scout_off_rate_limit_store_errors_total ${rateLimitStoreErrorsTotal}`);
 
@@ -1162,6 +1279,30 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
     lines.push(`scout_off_auth_failures_total{reason="${escapeLabelValue(reason)}"} ${count}`);
   }
 
+  lines.push('# HELP scout_off_legacy_admin_calls_total Calls to deprecated admin routes');
+  lines.push('# TYPE scout_off_legacy_admin_calls_total counter');
+  for (const [route, count] of Object.entries(legacyAdminCallsStore)) {
+    lines.push(`scout_off_legacy_admin_calls_total{route="${escapeLabelValue(route)}"} ${count}`);
+  }
+  lines.push('# HELP scout_off_webhook_dispatch_queue_depth Indexer webhook dispatch queue depth');
+  lines.push('# TYPE scout_off_webhook_dispatch_queue_depth gauge');
+  lines.push(
+    `scout_off_webhook_dispatch_queue_depth{state="pending"} ${webhookDispatchQueue.pending}`,
+  );
+  lines.push(
+    `scout_off_webhook_dispatch_queue_depth{state="active"} ${webhookDispatchQueue.active}`,
+  );
+  lines.push(
+    '# HELP scout_off_webhook_dispatch_queue_latency_ms Indexer webhook dispatch latency (ms)',
+  );
+  lines.push('# TYPE scout_off_webhook_dispatch_queue_latency_ms summary');
+  lines.push(
+    `scout_off_webhook_dispatch_queue_latency_ms_sum ${webhookDispatchQueue.latencySumMs}`,
+  );
+  lines.push(
+    `scout_off_webhook_dispatch_queue_latency_ms_count ${webhookDispatchQueue.latencyCount}`,
+  );
+
   // Soroban RPC network / protocol gauges (#1824).
   // Lazily imported to avoid a circular dependency on sorobanRpcCheck at module load.
   try {
@@ -1170,10 +1311,14 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
       getStellarRpcNetworkMatchGauge: () => number;
       getStellarRpcProtocolVersionGauge: () => number;
     };
-    lines.push('# HELP stellar_rpc_network_match Whether the Soroban RPC passphrase matches config (1=match, 0=mismatch, -1=unknown)');
+    lines.push(
+      '# HELP stellar_rpc_network_match Whether the Soroban RPC passphrase matches config (1=match, 0=mismatch, -1=unknown)',
+    );
     lines.push('# TYPE stellar_rpc_network_match gauge');
     lines.push(`stellar_rpc_network_match ${sorobanCheck.getStellarRpcNetworkMatchGauge()}`);
-    lines.push('# HELP stellar_rpc_protocol_version Soroban RPC reported protocol version (-1=unknown)');
+    lines.push(
+      '# HELP stellar_rpc_protocol_version Soroban RPC reported protocol version (-1=unknown)',
+    );
     lines.push('# TYPE stellar_rpc_protocol_version gauge');
     lines.push(`stellar_rpc_protocol_version ${sorobanCheck.getStellarRpcProtocolVersionGauge()}`);
   } catch {
@@ -1184,9 +1329,9 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
 }
 
 /**
-  * Builds the GET /metrics Express handler. The indexer-lag getter is injected so
-  * this module never imports the indexer.
-  */
+ * Builds the GET /metrics Express handler. The indexer-lag getter is injected so
+ * this module never imports the indexer.
+ */
 export function createMetricsHandler(
   getIndexerLedgerLag: () => number = () => 0,
   getSseConnectionsActive: () => number = () => 0,
@@ -1196,12 +1341,14 @@ export function createMetricsHandler(
 ) {
   return (_req: Request, res: Response): void => {
     res.set('Content-Type', PROMETHEUS_CONTENT_TYPE);
-    res.send(serializeMetrics({
-      indexerLedgerLag: getIndexerLedgerLag(),
-      sseConnectionsActive: getSseConnectionsActive(),
-      stuckPendingPinsCount: getStuckPinsCount(),
-      indexerLastSuccessTimestamp: getIndexerLastSuccessAt(),
-      indexerPollFailuresTotal: getIndexerPollFailuresTotal(),
-    }));
+    res.send(
+      serializeMetrics({
+        indexerLedgerLag: getIndexerLedgerLag(),
+        sseConnectionsActive: getSseConnectionsActive(),
+        stuckPendingPinsCount: getStuckPinsCount(),
+        indexerLastSuccessTimestamp: getIndexerLastSuccessAt(),
+        indexerPollFailuresTotal: getIndexerPollFailuresTotal(),
+      }),
+    );
   };
 }

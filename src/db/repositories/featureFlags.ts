@@ -19,7 +19,9 @@ export interface FeatureFlagRow {
 
 export async function getAllFeatureFlags(): Promise<FeatureFlagRow[]> {
   const sql = `SELECT * FROM feature_flags ORDER BY name`;
-  return timedQueryAsync(sql, async () => normalizeFeatureFlags(await getDriver().all<FeatureFlagRow>(sql)));
+  return timedQueryAsync(sql, async () =>
+    normalizeFeatureFlags(await getDriver().all<FeatureFlagRow>(sql)),
+  );
 }
 
 export async function getFeatureFlag(name: string): Promise<FeatureFlagRow | null> {
@@ -44,7 +46,9 @@ export async function upsertFeatureFlag(p: {
       updated_at = excluded.updated_at,
       updated_by = excluded.updated_by
   `;
-  await timedQueryAsync(sql, () => getDriver().run(sql, [p.name, p.enabled, p.updated_at, p.updated_by]));
+  await timedQueryAsync(sql, () =>
+    getDriver().run(sql, [p.name, p.enabled, p.updated_at, p.updated_by]),
+  );
 }
 
 /**

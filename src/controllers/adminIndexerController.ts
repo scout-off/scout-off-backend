@@ -1,18 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import {
-  fetchLastIndexedLedger,
-  persistLastIndexedLedger,
-  listUnprocessedEvents,
-} from '../db';
+import { fetchLastIndexedLedger, persistLastIndexedLedger, listUnprocessedEvents } from '../db';
 import { replayUnprocessedEvent } from '../services/indexer';
 import { ErrorCode } from '../utils/errorCodes';
 import { sendValidationError } from './adminControllerUtils';
 
-export const reindexSchema = z.object({
-  fromLedger: z.number().int().min(0),
-}).strict();
-
+export const reindexSchema = z
+  .object({
+    fromLedger: z.number().int().min(0),
+  })
+  .strict();
 
 /**
  * POST /api/admin/indexer/reindex

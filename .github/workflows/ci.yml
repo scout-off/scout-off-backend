@@ -362,7 +362,7 @@ jobs:
             -e CONTRACT_ID=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4 \
             -e JWT_SECRET=test-secret-min-32-chars-for-ci-only \
             scout-off-backend:ci
-          
+
           # Wait for the app to become healthy
           attempt=0
           max_attempts=30
@@ -413,9 +413,9 @@ jobs:
           image_size=$(docker images --no-trunc --quiet scout-off-backend:ci | xargs docker inspect -f '{{.Size}}')
           image_size_mb=$((image_size / 1024 / 1024))
           echo "Docker image size: ${image_size_mb}MB"
-          
+
           docker stop scout-off-ci
-          
+
           # Fail if image grew by >10% from a baseline (this is a soft check; adjust as needed)
           # For now just report it; future PRs can establish a baseline
           echo "::notice::Docker image: ${image_size_mb}MB (check regression vs prior builds)"

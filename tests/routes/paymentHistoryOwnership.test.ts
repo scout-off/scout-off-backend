@@ -21,7 +21,12 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 

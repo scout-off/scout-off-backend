@@ -148,11 +148,7 @@ const Query = {
    * API-key authenticated requests must carry the read:milestones scope.
    * Uses DataLoader under the hood when called as a root query too.
    */
-  async milestones(
-    _parent: unknown,
-    args: { playerId: string },
-    ctx: GraphQLContext,
-  ) {
+  async milestones(_parent: unknown, args: { playerId: string }, ctx: GraphQLContext) {
     assertApiKeyScope(ctx, 'read:milestones');
     const player = await getPlayerById(args.playerId);
     if (!player) {
@@ -171,11 +167,7 @@ const Query = {
    * Requires authentication; scout can only query their own wallet,
    * admins can query any wallet.
    */
-  async scoutSubscription(
-    _parent: unknown,
-    args: { wallet: string },
-    ctx: GraphQLContext,
-  ) {
+  async scoutSubscription(_parent: unknown, args: { wallet: string }, ctx: GraphQLContext) {
     assertAuthenticated(ctx);
     // Restricted API keys need the read:subscription scope (REST's
     // GET /scouts/:wallet/subscription enforces the same scope).

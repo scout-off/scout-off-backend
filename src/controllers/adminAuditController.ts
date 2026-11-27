@@ -104,38 +104,42 @@ export async function getAuditLog(req: Request, res: Response, _next: NextFuncti
 
 // ─── Audit trail endpoint (#832) ──────────────────────────────────────────────
 
-const auditTrailQuerySchema = z.object({
-  /** Filter by audit event type. Must be one of the known event types. */
-  eventType: z
-    .string()
-    .refine(
-      (v) => (KNOWN_AUDIT_EVENT_TYPES as readonly string[]).includes(v),
-      { error: (issue) => `Invalid eventType "${String(issue.input)}". Must be one of: ${KNOWN_AUDIT_EVENT_TYPES.join(', ')}` }
-    )
-    .optional(),
-  /** ISO 8601 start of date range (inclusive). */
-  from: z
-    .string()
-    .refine((v) => !isNaN(Date.parse(v)), { message: 'from must be a valid ISO 8601 date string' })
-    .optional(),
-  /** ISO 8601 end of date range (inclusive). */
-  to: z
-    .string()
-    .refine((v) => !isNaN(Date.parse(v)), { message: 'to must be a valid ISO 8601 date string' })
-    .optional(),
-  /** 1-based page number (default: 1). */
-  page: z.coerce.number().int().min(1).default(1),
-  /** Number of entries per page, max 100 (default: 50). */
-  pageSize: z.coerce.number().int().min(1).max(100).default(50),
-}).refine(
-  (d) => {
-    if (d.from && d.to) {
-      return new Date(d.from) <= new Date(d.to);
-    }
-    return true;
-  },
-  { message: 'from must not be after to' }
-);
+const auditTrailQuerySchema = z
+  .object({
+    /** Filter by audit event type. Must be one of the known event types. */
+    eventType: z
+      .string()
+      .refine((v) => (KNOWN_AUDIT_EVENT_TYPES as readonly string[]).includes(v), {
+        error: (issue) =>
+          `Invalid eventType "${String(issue.input)}". Must be one of: ${KNOWN_AUDIT_EVENT_TYPES.join(', ')}`,
+      })
+      .optional(),
+    /** ISO 8601 start of date range (inclusive). */
+    from: z
+      .string()
+      .refine((v) => !isNaN(Date.parse(v)), {
+        message: 'from must be a valid ISO 8601 date string',
+      })
+      .optional(),
+    /** ISO 8601 end of date range (inclusive). */
+    to: z
+      .string()
+      .refine((v) => !isNaN(Date.parse(v)), { message: 'to must be a valid ISO 8601 date string' })
+      .optional(),
+    /** 1-based page number (default: 1). */
+    page: z.coerce.number().int().min(1).default(1),
+    /** Number of entries per page, max 100 (default: 50). */
+    pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  })
+  .refine(
+    (d) => {
+      if (d.from && d.to) {
+        return new Date(d.from) <= new Date(d.to);
+      }
+      return true;
+    },
+    { message: 'from must not be after to' },
+  );
 
 /**
  * GET /api/admin/audit/trail
@@ -147,7 +151,11 @@ const auditTrailQuerySchema = z.object({
  * @response 400 { success: false, error: string } - Invalid query parameters
  * @auth Bearer (admin role required)
  */
-export async function getAuditTrail(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function getAuditTrail(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   const parsed = auditTrailQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({
@@ -193,7 +201,11 @@ export async function getAuditTrail(req: Request, res: Response, _next: NextFunc
  * total chain_length, and rows_checked. Useful for periodic compliance checks
  * and incident response.
  */
-export async function getAuditChainVerification(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function getAuditChainVerification(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   const result = await verifyAuditChainFull();
   res.json({ success: true, data: result });
 }

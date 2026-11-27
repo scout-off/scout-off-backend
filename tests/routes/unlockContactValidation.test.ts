@@ -101,7 +101,12 @@ jest.mock('../../src/services/stellar', () => ({
   submitContactPayment: (...args: unknown[]) => mockSubmitContactPayment(...args),
   isSubscribed: jest.fn().mockResolvedValue({ active: true }),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -237,11 +242,16 @@ describe('#826 POST /api/scouts/:wallet/contacts/:playerId/unlock — duplicate 
 
     // Simulate the DB insert: first call succeeds, second is a no-op (DO NOTHING)
     let insertCount = 0;
-    mockInsertContactUnlock.mockImplementation(() => { insertCount++; });
+    mockInsertContactUnlock.mockImplementation(() => {
+      insertCount++;
+    });
 
     // Simulate submitContactPayment taking a moment, then two concurrent requests
     mockSubmitContactPayment.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({ transactionId: `tx-race-${Date.now()}` }), 5))
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ transactionId: `tx-race-${Date.now()}` }), 5),
+        ),
     );
 
     const token = makeToken(WALLET, 'scout');
@@ -293,7 +303,10 @@ describe('#761 POST /api/scouts/:wallet/contacts/:playerId/unlock — idempotenc
     mockInsertContactUnlock.mockReset();
     mockSubmitContactPayment.mockReset();
     mockGetPlayerById.mockReset().mockReturnValue(PLAYER_ROW);
-    mockSubmitContactPayment.mockResolvedValue({ transactionId: 'stub-tx-idem', status: 'submitted' });
+    mockSubmitContactPayment.mockResolvedValue({
+      transactionId: 'stub-tx-idem',
+      status: 'submitted',
+    });
   });
 
   it('replays the same idempotency key from the cache without submitting a second transaction', async () => {

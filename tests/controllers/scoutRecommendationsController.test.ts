@@ -83,16 +83,18 @@ function makeRes(): Response & MockResponse {
 }
 
 /** Builds a minimal PlayerRow with sensible defaults. */
-function makePlayer(overrides: {
-  player_id?: string;
-  wallet?: string;
-  position?: string | null;
-  region?: string | null;
-  progress_level?: number;
-  created_at?: number;
-  is_active?: number;
-  metadata_uri?: string | null;
-} = {}) {
+function makePlayer(
+  overrides: {
+    player_id?: string;
+    wallet?: string;
+    position?: string | null;
+    region?: string | null;
+    progress_level?: number;
+    created_at?: number;
+    is_active?: number;
+    metadata_uri?: string | null;
+  } = {},
+) {
   return {
     player_id: overrides.player_id ?? `player-${Math.random().toString(36).slice(2)}`,
     wallet: overrides.wallet ?? 'GPLAYERWALLET1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
@@ -106,11 +108,14 @@ function makePlayer(overrides: {
 }
 
 /** Builds a SavedSearchRow with a JSON-encoded filters field. */
-function makeSavedSearch(filters: {
-  region?: string;
-  position?: string;
-  minTier?: number;
-}, id = 1) {
+function makeSavedSearch(
+  filters: {
+    region?: string;
+    position?: string;
+    minTier?: number;
+  },
+  id = 1,
+) {
   return {
     id,
     scout_wallet: WALLET,
@@ -232,7 +237,11 @@ describe('scorePlayer()', () => {
   it('scout with 3 West Africa forward searches gets high scores for those players', () => {
     // Simulate a scout with three saved searches for West Africa forwards
     const waForward = makePlayer({ region: 'West Africa', position: 'forward', progress_level: 2 });
-    const otherPlayer = makePlayer({ region: 'South America', position: 'goalkeeper', progress_level: 1 });
+    const otherPlayer = makePlayer({
+      region: 'South America',
+      position: 'goalkeeper',
+      progress_level: 1,
+    });
 
     const prefs = {
       region: 'West Africa',
@@ -299,7 +308,9 @@ describe('getScoutRecommendations handler', () => {
   });
 
   it('returns 400 for invalid query parameters', async () => {
-    const req = makeReq({ query: { pageSize: 'not-a-number' } as unknown as Record<string, string> });
+    const req = makeReq({
+      query: { pageSize: 'not-a-number' } as unknown as Record<string, string>,
+    });
     const res = makeRes();
     const next = jest.fn() as NextFunction;
 
@@ -317,9 +328,24 @@ describe('getScoutRecommendations handler', () => {
   // ── Successful path with history ──────────────────────────────────────────
 
   it('returns 200 with scored recommendations for a scout with saved searches', async () => {
-    const waForward1 = makePlayer({ player_id: 'p-waf-1', region: 'West Africa', position: 'forward', progress_level: 2 });
-    const waForward2 = makePlayer({ player_id: 'p-waf-2', region: 'West Africa', position: 'forward', progress_level: 1 });
-    const other = makePlayer({ player_id: 'p-other', region: 'South America', position: 'goalkeeper', progress_level: 1 });
+    const waForward1 = makePlayer({
+      player_id: 'p-waf-1',
+      region: 'West Africa',
+      position: 'forward',
+      progress_level: 2,
+    });
+    const waForward2 = makePlayer({
+      player_id: 'p-waf-2',
+      region: 'West Africa',
+      position: 'forward',
+      progress_level: 1,
+    });
+    const other = makePlayer({
+      player_id: 'p-other',
+      region: 'South America',
+      position: 'goalkeeper',
+      progress_level: 1,
+    });
 
     mockQueryPlayers.mockReturnValue([waForward1, waForward2, other]);
 
@@ -345,12 +371,27 @@ describe('getScoutRecommendations handler', () => {
   });
 
   it('excludes already-contacted players from results', async () => {
-    const contacted = makePlayer({ player_id: 'p-contacted', region: 'West Africa', position: 'forward', progress_level: 2 });
-    const fresh = makePlayer({ player_id: 'p-fresh', region: 'West Africa', position: 'forward', progress_level: 2 });
+    const contacted = makePlayer({
+      player_id: 'p-contacted',
+      region: 'West Africa',
+      position: 'forward',
+      progress_level: 2,
+    });
+    const fresh = makePlayer({
+      player_id: 'p-fresh',
+      region: 'West Africa',
+      position: 'forward',
+      progress_level: 2,
+    });
 
     mockQueryPlayers.mockReturnValue([contacted, fresh]);
     mockGetContacts.mockReturnValue([
-      { scout_wallet: WALLET, player_id: 'p-contacted', tx_hash: 'tx1', unlocked_at: 1_700_000_000 },
+      {
+        scout_wallet: WALLET,
+        player_id: 'p-contacted',
+        tx_hash: 'tx1',
+        unlocked_at: 1_700_000_000,
+      },
     ]);
 
     const req = makeReq();
@@ -374,9 +415,21 @@ describe('getScoutRecommendations handler', () => {
     mockGetBookmarks.mockReturnValue([]);
     mockGetContacts.mockReturnValue([]);
 
-    const topTier = makePlayer({ player_id: 'p-top', progress_level: 3, created_at: 1_700_000_002 });
-    const midTier = makePlayer({ player_id: 'p-mid', progress_level: 2, created_at: 1_700_000_001 });
-    const lowTier = makePlayer({ player_id: 'p-low', progress_level: 1, created_at: 1_700_000_000 });
+    const topTier = makePlayer({
+      player_id: 'p-top',
+      progress_level: 3,
+      created_at: 1_700_000_002,
+    });
+    const midTier = makePlayer({
+      player_id: 'p-mid',
+      progress_level: 2,
+      created_at: 1_700_000_001,
+    });
+    const lowTier = makePlayer({
+      player_id: 'p-low',
+      progress_level: 1,
+      created_at: 1_700_000_000,
+    });
 
     // queryPlayers returns them in unsorted order to verify the fallback sorts
     mockQueryPlayers.mockReturnValue([lowTier, midTier, topTier]);
@@ -394,7 +447,9 @@ describe('getScoutRecommendations handler', () => {
     };
     expect(body.success).toBe(true);
     // Fallback should return highest-tier players first
-    expect(body.data[0].progress_level).toBeGreaterThanOrEqual(body.data[body.data.length - 1].progress_level);
+    expect(body.data[0].progress_level).toBeGreaterThanOrEqual(
+      body.data[body.data.length - 1].progress_level,
+    );
   });
 
   // ── Caching ───────────────────────────────────────────────────────────────
@@ -426,7 +481,10 @@ describe('getScoutRecommendations handler', () => {
     // cacheSet should NOT be called again
     expect(mockCacheSet).not.toHaveBeenCalled();
 
-    const body = (res.json as jest.Mock).mock.calls[0][0] as { success: boolean; data: Array<{ player_id: string }> };
+    const body = (res.json as jest.Mock).mock.calls[0][0] as {
+      success: boolean;
+      data: Array<{ player_id: string }>;
+    };
     expect(body.success).toBe(true);
     expect(body.data[0].player_id).toBe('p-cached-1');
   });
@@ -451,7 +509,12 @@ describe('getScoutRecommendations handler', () => {
   it('returns nextCursor when there are more results than the page size', async () => {
     // Create 25 players to exceed the default page size of 20
     const players = Array.from({ length: 25 }, (_, i) =>
-      makePlayer({ player_id: `p-${i}`, region: 'West Africa', position: 'forward', progress_level: 2 }),
+      makePlayer({
+        player_id: `p-${i}`,
+        region: 'West Africa',
+        position: 'forward',
+        progress_level: 2,
+      }),
     );
     mockQueryPlayers.mockReturnValue(players);
 
@@ -468,9 +531,7 @@ describe('getScoutRecommendations handler', () => {
   });
 
   it('returns nextCursor=null on the last page', async () => {
-    const players = Array.from({ length: 5 }, (_, i) =>
-      makePlayer({ player_id: `p-${i}` }),
-    );
+    const players = Array.from({ length: 5 }, (_, i) => makePlayer({ player_id: `p-${i}` }));
     mockQueryPlayers.mockReturnValue(players);
 
     const req = makeReq();
@@ -485,7 +546,12 @@ describe('getScoutRecommendations handler', () => {
 
   it('advances to the second page when a valid cursor is supplied', async () => {
     const players = Array.from({ length: 25 }, (_, i) =>
-      makePlayer({ player_id: `p-page-${i}`, region: 'West Africa', position: 'forward', progress_level: 2 }),
+      makePlayer({
+        player_id: `p-page-${i}`,
+        region: 'West Africa',
+        position: 'forward',
+        progress_level: 2,
+      }),
     );
     mockQueryPlayers.mockReturnValue(players);
 
@@ -504,7 +570,13 @@ describe('getScoutRecommendations handler', () => {
     // Second page — use cached result to avoid rebuilding
     const cachedResult = {
       ranked: players.map((p, i) => ({ ...p, _score: 25 - i })),
-      prefs: { region: 'West Africa', position: 'forward', minTier: 1, contactedIds: new Set<string>(), hasHistory: true },
+      prefs: {
+        region: 'West Africa',
+        position: 'forward',
+        minTier: 1,
+        contactedIds: new Set<string>(),
+        hasHistory: true,
+      },
     };
     mockCacheGet.mockResolvedValue(cachedResult);
 
@@ -538,8 +610,18 @@ describe('getScoutRecommendations handler', () => {
       return null;
     });
 
-    const waForward = makePlayer({ player_id: 'p-waf', region: 'West Africa', position: 'forward', progress_level: 2 });
-    const other = makePlayer({ player_id: 'p-other', region: 'East Africa', position: 'midfielder', progress_level: 2 });
+    const waForward = makePlayer({
+      player_id: 'p-waf',
+      region: 'West Africa',
+      position: 'forward',
+      progress_level: 2,
+    });
+    const other = makePlayer({
+      player_id: 'p-other',
+      region: 'East Africa',
+      position: 'midfielder',
+      progress_level: 2,
+    });
     mockQueryPlayers.mockReturnValue([other, waForward]);
 
     const req = makeReq();
@@ -560,8 +642,18 @@ describe('getScoutRecommendations handler', () => {
 
   it('awards +1 bonus to players with a recently approved milestone', async () => {
     const nowSec = Math.floor(Date.now() / 1000);
-    const recentPlayer = makePlayer({ player_id: 'p-recent', region: 'West Africa', position: 'forward', progress_level: 2 });
-    const normalPlayer = makePlayer({ player_id: 'p-normal', region: 'West Africa', position: 'forward', progress_level: 2 });
+    const recentPlayer = makePlayer({
+      player_id: 'p-recent',
+      region: 'West Africa',
+      position: 'forward',
+      progress_level: 2,
+    });
+    const normalPlayer = makePlayer({
+      player_id: 'p-normal',
+      region: 'West Africa',
+      position: 'forward',
+      progress_level: 2,
+    });
 
     mockQueryPlayers.mockReturnValue([normalPlayer, recentPlayer]);
 
@@ -588,7 +680,9 @@ describe('getScoutRecommendations handler', () => {
   // ── Error handling ────────────────────────────────────────────────────────
 
   it('forwards unexpected DB errors to next()', async () => {
-    mockQueryPlayers.mockImplementation(() => { throw new Error('DB exploded'); });
+    mockQueryPlayers.mockImplementation(() => {
+      throw new Error('DB exploded');
+    });
 
     const req = makeReq();
     const res = makeRes();

@@ -69,7 +69,17 @@ describe('pending_admin_actions / admin_action_signatures — schema parity (sta
     expect(pgCols).toEqual(sqliteCols);
     // The columns #1017 explicitly required were missing from Postgres before this fix.
     expect(pgCols).toEqual(
-      expect.arrayContaining(['id', 'action_type', 'proposer', 'payload', 'required_signatures', 'collected_signatures', 'status', 'expires_at', 'created_at']),
+      expect.arrayContaining([
+        'id',
+        'action_type',
+        'proposer',
+        'payload',
+        'required_signatures',
+        'collected_signatures',
+        'status',
+        'expires_at',
+        'created_at',
+      ]),
     );
   });
 
@@ -115,7 +125,9 @@ describe('admin-action SQL — placeholder conversion', () => {
   test("the string literal 'expired' and 'pending' inside the expiry sweep survive conversion untouched", () => {
     const sql = `UPDATE pending_admin_actions SET status = 'expired' WHERE status = 'pending' AND expires_at <= ?`;
     const converted = convertPlaceholders(sql);
-    expect(converted).toBe(`UPDATE pending_admin_actions SET status = 'expired' WHERE status = 'pending' AND expires_at <= $1`);
+    expect(converted).toBe(
+      `UPDATE pending_admin_actions SET status = 'expired' WHERE status = 'pending' AND expires_at <= $1`,
+    );
   });
 });
 
@@ -139,7 +151,10 @@ describeLive('propose → duplicate-detect → quorum flow against real Postgres
     await client.end();
   });
 
-  async function run(sql: string, params: unknown[]): Promise<{ rowCount: number; rows: Record<string, unknown>[] }> {
+  async function run(
+    sql: string,
+    params: unknown[],
+  ): Promise<{ rowCount: number; rows: Record<string, unknown>[] }> {
     const result = await client.query(convertPlaceholders(sql), params);
     return { rowCount: result.rowCount ?? 0, rows: result.rows };
   }
@@ -161,7 +176,10 @@ describeLive('propose → duplicate-detect → quorum flow against real Postgres
       [actionId, proposer, now],
     );
     expect(insert1.rowCount).toBe(1);
-    await run(`UPDATE pending_admin_actions SET collected_signatures = collected_signatures + 1 WHERE id = ?`, [actionId]);
+    await run(
+      `UPDATE pending_admin_actions SET collected_signatures = collected_signatures + 1 WHERE id = ?`,
+      [actionId],
+    );
 
     // Same signer re-approving is a no-op under ON CONFLICT DO NOTHING —
     // this is the exact mechanism approveAction() relies on to detect
@@ -172,7 +190,9 @@ describeLive('propose → duplicate-detect → quorum flow against real Postgres
     );
     expect(duplicate.rowCount).toBe(0);
 
-    const afterDuplicate = await run(`SELECT * FROM pending_admin_actions WHERE id = ?`, [actionId]);
+    const afterDuplicate = await run(`SELECT * FROM pending_admin_actions WHERE id = ?`, [
+      actionId,
+    ]);
     expect(afterDuplicate.rows[0].collected_signatures).toBe(1);
 
     // A distinct second signer reaches quorum.
@@ -181,13 +201,21 @@ describeLive('propose → duplicate-detect → quorum flow against real Postgres
       [actionId, signer2, Date.now()],
     );
     expect(insert2.rowCount).toBe(1);
-    await run(`UPDATE pending_admin_actions SET collected_signatures = collected_signatures + 1 WHERE id = ?`, [actionId]);
+    await run(
+      `UPDATE pending_admin_actions SET collected_signatures = collected_signatures + 1 WHERE id = ?`,
+      [actionId],
+    );
 
     const final = await run(`SELECT * FROM pending_admin_actions WHERE id = ?`, [actionId]);
     expect(final.rows[0].collected_signatures).toBe(2);
-    expect(final.rows[0].collected_signatures).toBeGreaterThanOrEqual(final.rows[0].required_signatures as number);
+    expect(final.rows[0].collected_signatures).toBeGreaterThanOrEqual(
+      final.rows[0].required_signatures as number,
+    );
 
-    const signers = await run(`SELECT signer, signed_at FROM admin_action_signatures WHERE action_id = ? ORDER BY signed_at ASC`, [actionId]);
+    const signers = await run(
+      `SELECT signer, signed_at FROM admin_action_signatures WHERE action_id = ? ORDER BY signed_at ASC`,
+      [actionId],
+    );
     expect(signers.rows.map((r) => r.signer)).toEqual([proposer, signer2]);
 
     await run(`UPDATE pending_admin_actions SET status = ? WHERE id = ?`, ['executed', actionId]);
@@ -200,10 +228,21 @@ describeLive('propose → duplicate-detect → quorum flow against real Postgres
     const past = Date.now() - 1000;
     await run(
       `INSERT INTO pending_admin_actions (id, action_type, proposer, payload, required_signatures, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [actionId, 'pause_contract', 'GPROPOSERXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', '{}', 2, past, past],
+      [
+        actionId,
+        'pause_contract',
+        'GPROPOSERXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+        '{}',
+        2,
+        past,
+        past,
+      ],
     );
 
-    await run(`UPDATE pending_admin_actions SET status = 'expired' WHERE status = 'pending' AND expires_at <= ?`, [Date.now()]);
+    await run(
+      `UPDATE pending_admin_actions SET status = 'expired' WHERE status = 'pending' AND expires_at <= ?`,
+      [Date.now()],
+    );
 
     const result = await run(`SELECT * FROM pending_admin_actions WHERE id = ?`, [actionId]);
     expect(result.rows[0].status).toBe('expired');

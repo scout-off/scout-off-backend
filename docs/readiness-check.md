@@ -47,7 +47,7 @@ When the check is disabled (`READINESS_MAX_LAG=0`), the probe returns `{ "status
 - **Purpose**: Maximum allowable indexer lag (in ledgers) for readiness
 - **Default**: `100`
 - **Set to `0`**: Disables the lag check entirely
-- **Recommended**: 
+- **Recommended**:
   - Production: `50-100` (adjust based on your network's block time)
   - Development: `0` (disable to avoid false negatives during development)
 
@@ -57,7 +57,7 @@ When the check is disabled (`READINESS_MAX_LAG=0`), the probe returns `{ "status
 - **Default**: `300000` (5 minutes)
 - **Unit**: Milliseconds (integer >= 0)
 - **Set to `0`**: Disables the grace period (check starts immediately)
-- **Recommended**: 
+- **Recommended**:
   - Production: `300000-600000` (5-10 minutes for typical sync)
   - Development: `0` (if you want immediate feedback)
 
@@ -90,6 +90,7 @@ When the check is disabled (`READINESS_MAX_LAG=0`), the probe returns `{ "status
 ### Blue-Green Deployments
 
 When deploying a new version:
+
 1. New pods start with a fresh process or persisted cursor
 2. Indexer needs time to catch up from the last indexed ledger
 3. Grace period allows initial sync without failing readiness
@@ -99,6 +100,7 @@ When deploying a new version:
 ### Long Downtimes
 
 After a long downtime:
+
 1. Indexer resumes from persisted cursor (potentially thousands of ledgers behind)
 2. Grace period allows time to catch up
 3. If lag exceeds threshold after grace period, instance reports degraded
@@ -107,6 +109,7 @@ After a long downtime:
 ### New Empty Database
 
 For a brand-new database:
+
 1. No persisted cursor exists
 2. Indexer starts from genesis or `INDEXER_BACKFILL_FROM_LEDGER`
 3. Grace period prevents immediate readiness failure
@@ -126,6 +129,7 @@ readinessProbe:
 ```
 
 The readiness probe will:
+
 - Return `200 OK` when all services (including indexer) are ready
 - Return `503 Service Unavailable` when any service is unavailable
 - Include service status in the response body for debugging
@@ -223,7 +227,6 @@ The indexer lag check works alongside these existing indexer configuration optio
 - Configuration: `src/config.ts` `readinessMaxLag` and `readinessGracePeriodMs`
 - Tests: `tests/routes/health.test.ts` covers lagging, caught-up, and grace-period states
 
-
 The readiness check reports the indexer service status based on:
 
 1. **Configuration**: `READINESS_MAX_LAG` (default: 100 ledgers)
@@ -245,7 +248,7 @@ The readiness check reports the indexer service status based on:
 - **Purpose**: Maximum allowable indexer lag (in ledgers) for readiness
 - **Default**: `100`
 - **Set to `0`**: Disables the lag check entirely
-- **Recommended**: 
+- **Recommended**:
   - Production: `50-100` (adjust based on your network's block time)
   - Development: `0` (disable to avoid false negatives during development)
 
@@ -255,7 +258,7 @@ The readiness check reports the indexer service status based on:
 - **Default**: `300000` (5 minutes)
 - **Unit**: Milliseconds (integer >= 0)
 - **Set to `0`**: Disables the grace period (check starts immediately)
-- **Recommended**: 
+- **Recommended**:
   - Production: `300000-600000` (5-10 minutes for typical sync)
   - Development: `0` (if you want immediate feedback)
 
@@ -288,6 +291,7 @@ The readiness check reports the indexer service status based on:
 ### Blue-Green Deployments
 
 When deploying a new version:
+
 1. New pods start with a fresh process or persisted cursor
 2. Indexer needs time to catch up from the last indexed ledger
 3. Grace period allows initial sync without failing readiness
@@ -297,6 +301,7 @@ When deploying a new version:
 ### Long Downtimes
 
 After a long downtime:
+
 1. Indexer resumes from persisted cursor (potentially thousands of ledgers behind)
 2. Grace period allows time to catch up
 3. If lag exceeds threshold after grace period, instance reports degraded
@@ -305,6 +310,7 @@ After a long downtime:
 ### New Empty Database
 
 For a brand-new database:
+
 1. No persisted cursor exists
 2. Indexer starts from genesis or `INDEXER_BACKFILL_FROM_LEDGER`
 3. Grace period prevents immediate readiness failure
@@ -324,6 +330,7 @@ readinessProbe:
 ```
 
 The readiness probe will:
+
 - Return `200 OK` when all services (including indexer) are ready
 - Return `503 Service Unavailable` when any service is unavailable
 - Include service status in the response body for debugging

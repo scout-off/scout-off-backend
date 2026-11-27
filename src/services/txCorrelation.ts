@@ -14,7 +14,18 @@
  * no correlation context and no span link.
  */
 
-import { context, propagation, trace, SpanKind, isSpanContextValid, ROOT_CONTEXT, type Attributes, type Span, type Link, type SpanContext } from '@opentelemetry/api';
+import {
+  context,
+  propagation,
+  trace,
+  SpanKind,
+  isSpanContextValid,
+  ROOT_CONTEXT,
+  type Attributes,
+  type Span,
+  type Link,
+  type SpanContext,
+} from '@opentelemetry/api';
 import { injectTraceHeaders, extractTraceContext } from '../utils/traceContext';
 import { Memo } from '@stellar/stellar-sdk';
 import { getDriver } from '../db';
@@ -54,7 +65,8 @@ export async function recordTxCorrelation(txHash: string, correlationId?: string
   try {
     await getDriver().run(
       `INSERT INTO tx_correlations (tx_hash, correlation_id, created_at)
-       VALUES (?, ?, ?) ON CONFLICT(tx_hash) DO NOTHING`, [txHash, cid, Date.now()],
+       VALUES (?, ?, ?) ON CONFLICT(tx_hash) DO NOTHING`,
+      [txHash, cid, Date.now()],
     );
   } catch (err) {
     // Table may not exist yet in very old test DBs; never fail submission.
@@ -90,9 +102,12 @@ export async function lookupTxSpanContext(txHash: string): Promise<SpanContext |
       'SELECT traceparent, tracestate FROM tx_trace_context WHERE tx_hash = ?',
       [txHash],
     );
-    return row ? extractTraceContext({
-      traceparent: row.traceparent, ...(row.tracestate ? { tracestate: row.tracestate } : {}),
-    }) : undefined;
+    return row
+      ? extractTraceContext({
+          traceparent: row.traceparent,
+          ...(row.tracestate ? { tracestate: row.tracestate } : {}),
+        })
+      : undefined;
   } catch {
     return undefined;
   }
@@ -102,7 +117,8 @@ export async function lookupTxSpanContext(txHash: string): Promise<SpanContext |
 export async function lookupTxCorrelation(txHash: string): Promise<string | undefined> {
   try {
     const row = await getDriver().get<{ correlation_id: string }>(
-      'SELECT correlation_id FROM tx_correlations WHERE tx_hash = ?', [txHash],
+      'SELECT correlation_id FROM tx_correlations WHERE tx_hash = ?',
+      [txHash],
     );
     return row?.correlation_id;
   } catch {
@@ -123,7 +139,8 @@ export async function withRestoredCorrelation<T>(
   attributes: Attributes = {},
 ): Promise<T> {
   const [correlationId, origin] = await Promise.all([
-    lookupTxCorrelation(txHash), lookupTxSpanContext(txHash),
+    lookupTxCorrelation(txHash),
+    lookupTxSpanContext(txHash),
   ]);
 
   const links: Link[] = [];
@@ -150,7 +167,9 @@ export async function withRestoredCorrelation<T>(
 
   const run = async (): Promise<T> => {
     try {
-      return await context.with(trace.setSpan(context.active(), span), async () => fn(correlationId));
+      return await context.with(trace.setSpan(context.active(), span), async () =>
+        fn(correlationId),
+      );
     } catch (err) {
       span.recordException(err as Error);
       throw err;
@@ -170,7 +189,9 @@ export async function withRestoredCorrelation<T>(
 export async function purgeOldTxCorrelations(maxAgeMs: number): Promise<number> {
   const cutoff = Date.now() - maxAgeMs;
   try {
-    const info = await getDriver().run('DELETE FROM tx_correlations WHERE created_at < ?', [cutoff]);
+    const info = await getDriver().run('DELETE FROM tx_correlations WHERE created_at < ?', [
+      cutoff,
+    ]);
     await getDriver().run('DELETE FROM tx_trace_context WHERE created_at < ?', [cutoff]);
     return info.changes;
   } catch {

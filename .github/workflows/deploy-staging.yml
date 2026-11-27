@@ -136,7 +136,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write    # cosign keyless signing via GitHub OIDC
+      id-token: write # cosign keyless signing via GitHub OIDC
       attestations: write
     steps:
       - uses: actions/checkout@v4

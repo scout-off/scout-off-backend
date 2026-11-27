@@ -18,12 +18,7 @@
 export type PositionAliasMap = Record<string, string>;
 
 /** Canonical position names stored / matched in the players table. */
-export const CANONICAL_POSITIONS = [
-  'goalkeeper',
-  'defender',
-  'midfielder',
-  'forward',
-] as const;
+export const CANONICAL_POSITIONS = ['goalkeeper', 'defender', 'midfielder', 'forward'] as const;
 
 export type CanonicalPosition = (typeof CANONICAL_POSITIONS)[number];
 
@@ -51,17 +46,17 @@ export const defaultPositionAliases: PositionAliasMap = {
   cb: 'defender',
   'centre back': 'defender',
   'center back': 'defender',
-  'centreback': 'defender',
-  'centerback': 'defender',
+  centreback: 'defender',
+  centerback: 'defender',
   'central defender': 'defender',
   'central defence': 'defender',
   'central defense': 'defender',
   lb: 'defender',
   'left back': 'defender',
-  'leftback': 'defender',
+  leftback: 'defender',
   rb: 'defender',
   'right back': 'defender',
-  'rightback': 'defender',
+  rightback: 'defender',
   lwb: 'defender',
   'left wing back': 'defender',
   'left wingback': 'defender',
@@ -104,7 +99,7 @@ export const defaultPositionAliases: PositionAliasMap = {
   'central attacking midfielder': 'midfielder',
   'number 10': 'midfielder',
   'no 10': 'midfielder',
-  'playmaker': 'midfielder',
+  playmaker: 'midfielder',
   lm: 'midfielder',
   'left midfielder': 'midfielder',
   'left midfield': 'midfielder',
@@ -127,8 +122,8 @@ export const defaultPositionAliases: PositionAliasMap = {
   attacker: 'forward',
   'centre forward': 'forward',
   'center forward': 'forward',
-  'centreforward': 'forward',
-  'centerforward': 'forward',
+  centreforward: 'forward',
+  centerforward: 'forward',
   'central forward': 'forward',
   lw: 'forward',
   'left wing': 'forward',
@@ -173,7 +168,7 @@ export function canonicalizePositionKey(input: string): string {
  */
 export function normalizePosition(
   input: string,
-  aliases: PositionAliasMap = defaultPositionAliases
+  aliases: PositionAliasMap = defaultPositionAliases,
 ): string | undefined {
   if (!input) return undefined;
   const key = canonicalizePositionKey(input);
@@ -200,7 +195,7 @@ export function normalizePosition(
  */
 export function normalizePositionOrFallback(
   input: string,
-  aliases: PositionAliasMap = defaultPositionAliases
+  aliases: PositionAliasMap = defaultPositionAliases,
 ): string {
   const normalized = normalizePosition(input, aliases);
   return normalized ?? input.trim();

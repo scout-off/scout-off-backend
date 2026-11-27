@@ -62,7 +62,13 @@ jest.mock('../../src/db', () => {
     getPendingMilestones: jest.fn().mockReturnValue({ data: [], total: 0 }),
     insertOrUpdatePlayer: jest.fn(),
     insertAuditLog: jest.fn(
-      (p: { action: string; adminWallet?: string; queryParams?: Record<string, unknown>; createdAt: string; eventSource?: string }) => {
+      (p: {
+        action: string;
+        adminWallet?: string;
+        queryParams?: Record<string, unknown>;
+        createdAt: string;
+        eventSource?: string;
+      }) => {
         const row = {
           id: nextAuditId++,
           action: p.action,
@@ -75,7 +81,7 @@ jest.mock('../../src/db', () => {
         };
         auditRows.push(row);
         return row;
-      }
+      },
     ),
     getAllAuditLogRows: jest.fn(
       (filters: { eventSource?: string; actorWallet?: string; action?: string } = {}) =>
@@ -84,7 +90,7 @@ jest.mock('../../src/db', () => {
           if (filters.actorWallet && r.admin_wallet !== filters.actorWallet) return false;
           if (filters.action && r.action !== filters.action) return false;
           return true;
-        })
+        }),
     ),
     __resetAuditRows: () => {
       auditRows = [];
@@ -102,13 +108,14 @@ jest.mock('../../src/db', () => {
       all: () => [],
       value: () => undefined,
       exec: () => {},
-      transaction: (fn: (tx: unknown) => unknown) => fn({
-        run: () => ({ changes: 0, lastId: 0 }),
-        get: () => undefined,
-        all: () => [],
-        value: () => undefined,
-        exec: () => {},
-      }),
+      transaction: (fn: (tx: unknown) => unknown) =>
+        fn({
+          run: () => ({ changes: 0, lastId: 0 }),
+          get: () => undefined,
+          all: () => [],
+          value: () => undefined,
+          exec: () => {},
+        }),
       close: async () => {},
     })),
   };
@@ -178,9 +185,7 @@ describe('POST /api/players/register', () => {
   };
 
   it('returns 401 when no token is provided', async () => {
-    const res = await request(app)
-      .post('/api/players/register')
-      .send(validPlayer);
+    const res = await request(app).post('/api/players/register').send(validPlayer);
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
   });
@@ -239,9 +244,7 @@ describe('POST /api/players/register', () => {
   });
 
   it('returns 401 when no token is provided', async () => {
-    const res = await request(app)
-      .post('/api/players/register')
-      .send(validPlayer);
+    const res = await request(app).post('/api/players/register').send(validPlayer);
 
     expect(res.status).toBe(401);
   });
@@ -258,7 +261,9 @@ describe('GET /api/players/:playerId route validation', () => {
     const res = await request(app).get('/api/players/%20');
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.error).toContain('playerId may only contain letters, numbers, underscores, and hyphens');
+    expect(res.body.error).toContain(
+      'playerId may only contain letters, numbers, underscores, and hyphens',
+    );
   });
 
   it('rejects an overlong player ID with 400', async () => {
@@ -273,7 +278,9 @@ describe('GET /api/players/:playerId route validation', () => {
     const res = await request(app).get('/api/players/player%20with%20spaces');
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.error).toContain('playerId may only contain letters, numbers, underscores, and hyphens');
+    expect(res.body.error).toContain(
+      'playerId may only contain letters, numbers, underscores, and hyphens',
+    );
   });
 });
 
@@ -289,7 +296,9 @@ describe('GET /api/players/:playerId/milestones route validation', () => {
     const res = await request(app).get('/api/players/player%23123/milestones');
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.error).toContain('playerId may only contain letters, numbers, underscores, and hyphens');
+    expect(res.body.error).toContain(
+      'playerId may only contain letters, numbers, underscores, and hyphens',
+    );
   });
 });
 
@@ -335,14 +344,12 @@ describe('POST /auth/token', () => {
   it('returns JWT after client signs the challenge', async () => {
     const clientKeypair = Keypair.random();
     const challengeRes = await request(app).get(
-      `/auth/challenge?account=${clientKeypair.publicKey()}`
+      `/auth/challenge?account=${clientKeypair.publicKey()}`,
     );
     const tx = new Transaction(challengeRes.body.challenge, Networks.TESTNET);
     tx.sign(clientKeypair);
 
-    const res = await request(app)
-      .post('/auth/token')
-      .send({ transaction: tx.toXdr() });
+    const res = await request(app).post('/auth/token').send({ transaction: tx.toXdr() });
 
     expect(res.status).toBe(200);
     expect(typeof res.body.token).toBe('string');
@@ -353,7 +360,7 @@ describe('POST /auth/token', () => {
   it('returns JWT with validator role when role is specified', async () => {
     const clientKeypair = Keypair.random();
     const challengeRes = await request(app).get(
-      `/auth/challenge?account=${clientKeypair.publicKey()}`
+      `/auth/challenge?account=${clientKeypair.publicKey()}`,
     );
     const tx = new Transaction(challengeRes.body.challenge, Networks.TESTNET);
     tx.sign(clientKeypair);
@@ -370,7 +377,7 @@ describe('POST /auth/token', () => {
   it('returns 401 for unsigned challenge', async () => {
     const clientKeypair = Keypair.random();
     const challengeRes = await request(app).get(
-      `/auth/challenge?account=${clientKeypair.publicKey()}`
+      `/auth/challenge?account=${clientKeypair.publicKey()}`,
     );
 
     const res = await request(app)
@@ -408,7 +415,6 @@ async function getPlayerToken(): Promise<string> {
     .send({ transaction: tx.toXdr(), role: 'player' });
   return tokenRes.body.token;
 }
-
 
 async function getAdminToken(): Promise<string> {
   const kp = Keypair.random();
@@ -463,25 +469,19 @@ describe('GET /api/admin/events', () => {
 
   it('returns 403 when authenticated as non-admin role', async () => {
     const token = await getPlayerToken();
-    const res = await request(app)
-      .get('/api/admin/events')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/events').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('returns 403 when authenticated as validator role', async () => {
     const token = await getValidatorToken();
-    const res = await request(app)
-      .get('/api/admin/events')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/events').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('returns event list for authenticated admin', async () => {
     const token = await getAdminToken();
-    const res = await request(app)
-      .get('/api/admin/events')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/events').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.data)).toBe(true);
@@ -491,17 +491,13 @@ describe('GET /api/admin/events', () => {
 describe('GET /api/admin/fees', () => {
   it('returns 403 when authenticated as non-admin role', async () => {
     const token = await getValidatorToken();
-    const res = await request(app)
-      .get('/api/admin/fees')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/fees').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('returns fee list for authenticated admin', async () => {
     const token = await getAdminToken();
-    const res = await request(app)
-      .get('/api/admin/fees')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/fees').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.data)).toBe(true);
@@ -562,9 +558,7 @@ describe('GET /api/players — search audit logging', () => {
   it('records a player_search entry linked to the wallet when authenticated', async () => {
     const scoutWallet = 'GSCOUTABC123XYZWALLET000000000000000000000000000000000000';
     const token = jwt.sign({ sub: scoutWallet, role: 'scout' }, 'test-secret', { expiresIn: '1h' });
-    await request(app)
-      .get('/api/players?position=striker')
-      .set('Authorization', `Bearer ${token}`);
+    await request(app).get('/api/players?position=striker').set('Authorization', `Bearer ${token}`);
     const entry = (await queryAudit({ eventType: 'player_search' }))[0];
     expect(entry).toBeDefined();
     expect(entry!.actorWallet).toBe(scoutWallet);

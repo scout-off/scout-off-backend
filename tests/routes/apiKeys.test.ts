@@ -11,7 +11,11 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../../src/app';
-import { generateApiKey, verifyApiKey, resolveApiKey } from '../../src/controllers/apiKeyController';
+import {
+  generateApiKey,
+  verifyApiKey,
+  resolveApiKey,
+} from '../../src/controllers/apiKeyController';
 import { ApiKeyLimitError } from '../../src/utils/scoutResourceLimits';
 
 const SECRET = process.env.JWT_SECRET ?? 'test-secret';
@@ -59,7 +63,12 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -82,15 +91,15 @@ import {
   touchApiKeyLastUsed,
 } from '../../src/db';
 
-const mockInsertApiKey    = insertApiKey    as jest.Mock;
-const mockListApiKeys     = listApiKeysByWallet as jest.Mock;
-const mockRevokeApiKey    = revokeApiKeyById as jest.Mock;
-const mockGetApiKeyById   = getApiKeyById as jest.Mock;
-const mockScheduleRevoke  = scheduleApiKeyRevocation as jest.Mock;
-const mockGetByLookup     = getActiveApiKeyByLookupHash as jest.Mock;
-const mockGetPending      = getActiveApiKeysAwaitingLookupHash as jest.Mock;
-const mockSetLookupHash   = setApiKeyLookupHash as jest.Mock;
-const mockTouchLastUsed   = touchApiKeyLastUsed as jest.Mock;
+const mockInsertApiKey = insertApiKey as jest.Mock;
+const mockListApiKeys = listApiKeysByWallet as jest.Mock;
+const mockRevokeApiKey = revokeApiKeyById as jest.Mock;
+const mockGetApiKeyById = getApiKeyById as jest.Mock;
+const mockScheduleRevoke = scheduleApiKeyRevocation as jest.Mock;
+const mockGetByLookup = getActiveApiKeyByLookupHash as jest.Mock;
+const mockGetPending = getActiveApiKeysAwaitingLookupHash as jest.Mock;
+const mockSetLookupHash = setApiKeyLookupHash as jest.Mock;
+const mockTouchLastUsed = touchApiKeyLastUsed as jest.Mock;
 
 /**
  * Seed the indexed lookup so that only the row's own lookup_hash resolves it —
@@ -182,7 +191,18 @@ describe('resolveApiKey (unit)', () => {
 
   it('locates the candidate with one indexed query — never a full-table scan', async () => {
     const { key, keyHash, lookupHash } = generateApiKey();
-    seedIndexedKey({ id: 44, key_hash: keyHash, scout_wallet: SCOUT_A, label: '', created_at: 0, last_used_at: null, revoked_at: null, scopes: null, rate_limit_per_minute: null, lookup_hash: lookupHash });
+    seedIndexedKey({
+      id: 44,
+      key_hash: keyHash,
+      scout_wallet: SCOUT_A,
+      label: '',
+      created_at: 0,
+      last_used_at: null,
+      revoked_at: null,
+      scopes: null,
+      rate_limit_per_minute: null,
+      lookup_hash: lookupHash,
+    });
 
     expect(await resolveApiKey(key)).not.toBeNull();
 
@@ -223,7 +243,7 @@ describe('resolveApiKey (unit)', () => {
     const attacker = generateApiKey();
     mockGetByLookup.mockReturnValue({
       id: 45,
-      key_hash: other.keyHash,       // belongs to a *different* key
+      key_hash: other.keyHash, // belongs to a *different* key
       scout_wallet: SCOUT_A,
       label: '',
       created_at: 0,
@@ -257,7 +277,18 @@ describe('resolveApiKey (unit)', () => {
     const { key, keyHash, lookupHash } = generateApiKey();
     mockGetByLookup.mockReturnValue(null);
     mockGetPending.mockReturnValue([
-      { id: 46, key_hash: keyHash, scout_wallet: SCOUT_A, label: 'legacy', created_at: 0, last_used_at: null, revoked_at: null, scopes: null, rate_limit_per_minute: null, lookup_hash: null },
+      {
+        id: 46,
+        key_hash: keyHash,
+        scout_wallet: SCOUT_A,
+        label: 'legacy',
+        created_at: 0,
+        last_used_at: null,
+        revoked_at: null,
+        scopes: null,
+        rate_limit_per_minute: null,
+        lookup_hash: null,
+      },
     ]);
 
     expect(await resolveApiKey(key)).toEqual({ scout_wallet: SCOUT_A, id: 46, scopes: null });
@@ -268,9 +299,22 @@ describe('resolveApiKey (unit)', () => {
     const { key, keyHash } = generateApiKey();
     mockGetByLookup.mockReturnValue(null);
     mockGetPending.mockReturnValue([
-      { id: 47, key_hash: keyHash, scout_wallet: SCOUT_A, label: 'legacy', created_at: 0, last_used_at: null, revoked_at: null, scopes: null, rate_limit_per_minute: null, lookup_hash: null },
+      {
+        id: 47,
+        key_hash: keyHash,
+        scout_wallet: SCOUT_A,
+        label: 'legacy',
+        created_at: 0,
+        last_used_at: null,
+        revoked_at: null,
+        scopes: null,
+        rate_limit_per_minute: null,
+        lookup_hash: null,
+      },
     ]);
-    mockSetLookupHash.mockImplementationOnce(() => { throw new Error('db down'); });
+    mockSetLookupHash.mockImplementationOnce(() => {
+      throw new Error('db down');
+    });
 
     expect(await resolveApiKey(key)).toEqual({ scout_wallet: SCOUT_A, id: 47, scopes: null });
   });
@@ -393,9 +437,7 @@ describe('POST /api/scouts/:wallet/api-keys', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .post(`/api/scouts/${SCOUT_A}/api-keys`)
-      .send({ label: 'nope' });
+    const res = await request(app).post(`/api/scouts/${SCOUT_A}/api-keys`).send({ label: 'nope' });
 
     expect(res.status).toBe(401);
   });
@@ -419,7 +461,20 @@ describe('GET /api/scouts/:wallet/api-keys', () => {
   it('lists keys without exposing plaintext or full hash', async () => {
     const { keyHash } = generateApiKey();
     mockListApiKeys.mockReturnValueOnce([
-      { id: 1, key_hash: keyHash, scout_wallet: SCOUT_A, label: 'bot', created_at: 1000, last_used_at: null, revoked_at: null, expires_at: 9999, scopes: null, revoke_after: null, rate_limit_per_minute: null, lookup_hash: null },
+      {
+        id: 1,
+        key_hash: keyHash,
+        scout_wallet: SCOUT_A,
+        label: 'bot',
+        created_at: 1000,
+        last_used_at: null,
+        revoked_at: null,
+        expires_at: 9999,
+        scopes: null,
+        revoke_after: null,
+        rate_limit_per_minute: null,
+        lookup_hash: null,
+      },
     ]);
 
     const res = await request(app)
@@ -489,7 +544,15 @@ describe('DELETE /api/scouts/:wallet/api-keys/:id', () => {
 describe('POST /api/scouts/:wallet/api-keys/:id/rotate', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  function mockOldKey(overrides: Partial<{ label: string; scopes: string | null; revoked_at: number | null; expires_at: number | null; created_at: number }> = {}) {
+  function mockOldKey(
+    overrides: Partial<{
+      label: string;
+      scopes: string | null;
+      revoked_at: number | null;
+      expires_at: number | null;
+      created_at: number;
+    }> = {},
+  ) {
     const createdAt = overrides.created_at ?? 0;
     mockGetApiKeyById.mockReturnValueOnce({
       id: 3,
@@ -661,14 +724,12 @@ describe('POST /api/scouts/:wallet/api-keys/:id/rotate', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .post(`/api/scouts/${SCOUT_A}/api-keys/3/rotate`)
-      .send({});
+    const res = await request(app).post(`/api/scouts/${SCOUT_A}/api-keys/3/rotate`).send({});
 
     expect(res.status).toBe(401);
   });
 
-  it('inherits the old key\'s expiry lifetime for the new key', async () => {
+  it("inherits the old key's expiry lifetime for the new key", async () => {
     const now = Math.floor(Date.now() / 1000);
     // Old key was created 10 days ago with a 90-day lifetime → 80 days remain
     const oldCreatedAt = now - 10 * 86400;
@@ -715,12 +776,19 @@ describe('X-API-Key header authentication', () => {
 
   it('accepts a valid X-API-Key for an authenticated request', async () => {
     const { key, keyHash, lookupHash } = generateApiKey();
-    seedIndexedKey({ id: 5, key_hash: keyHash, scout_wallet: SCOUT_A, label: '', created_at: 0, last_used_at: null, revoked_at: null, lookup_hash: lookupHash });
+    seedIndexedKey({
+      id: 5,
+      key_hash: keyHash,
+      scout_wallet: SCOUT_A,
+      label: '',
+      created_at: 0,
+      last_used_at: null,
+      revoked_at: null,
+      lookup_hash: lookupHash,
+    });
     mockListApiKeys.mockReturnValue([]);
 
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/api-keys`)
-      .set('X-API-Key', key);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/api-keys`).set('X-API-Key', key);
 
     expect(res.status).toBe(200);
     expect(mockTouchLastUsed).toHaveBeenCalledWith(5);
@@ -728,12 +796,19 @@ describe('X-API-Key header authentication', () => {
 
   it('updates last_used_at when an API key is used', async () => {
     const { key, keyHash, lookupHash } = generateApiKey();
-    seedIndexedKey({ id: 9, key_hash: keyHash, scout_wallet: SCOUT_A, label: '', created_at: 0, last_used_at: null, revoked_at: null, lookup_hash: lookupHash });
+    seedIndexedKey({
+      id: 9,
+      key_hash: keyHash,
+      scout_wallet: SCOUT_A,
+      label: '',
+      created_at: 0,
+      last_used_at: null,
+      revoked_at: null,
+      lookup_hash: lookupHash,
+    });
     mockListApiKeys.mockReturnValue([]);
 
-    await request(app)
-      .get(`/api/scouts/${SCOUT_A}/api-keys`)
-      .set('X-API-Key', key);
+    await request(app).get(`/api/scouts/${SCOUT_A}/api-keys`).set('X-API-Key', key);
 
     expect(mockTouchLastUsed).toHaveBeenCalledWith(9);
   });
@@ -756,9 +831,7 @@ describe('X-API-Key header authentication', () => {
     mockGetPending.mockReturnValue([]);
 
     const { key } = generateApiKey();
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/api-keys`)
-      .set('X-API-Key', key);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/api-keys`).set('X-API-Key', key);
 
     expect(res.status).toBe(401);
   });
@@ -770,9 +843,7 @@ describe('X-API-Key header authentication', () => {
     mockGetPending.mockReturnValue([]);
 
     const { key } = generateApiKey();
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/api-keys`)
-      .set('X-API-Key', key);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/api-keys`).set('X-API-Key', key);
 
     expect(res.status).toBe(401);
   });
@@ -780,12 +851,20 @@ describe('X-API-Key header authentication', () => {
   it('accepts a valid key before its expires_at', async () => {
     const { key, keyHash, lookupHash } = generateApiKey();
     const futureExpiry = Math.floor(Date.now() / 1000) + 9999;
-    seedIndexedKey({ id: 15, key_hash: keyHash, scout_wallet: SCOUT_A, label: '', created_at: 0, last_used_at: null, revoked_at: null, expires_at: futureExpiry, lookup_hash: lookupHash });
+    seedIndexedKey({
+      id: 15,
+      key_hash: keyHash,
+      scout_wallet: SCOUT_A,
+      label: '',
+      created_at: 0,
+      last_used_at: null,
+      revoked_at: null,
+      expires_at: futureExpiry,
+      lookup_hash: lookupHash,
+    });
     mockListApiKeys.mockReturnValue([]);
 
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/api-keys`)
-      .set('X-API-Key', key);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/api-keys`).set('X-API-Key', key);
 
     expect(res.status).toBe(200);
   });

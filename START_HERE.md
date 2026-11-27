@@ -4,14 +4,14 @@ This repository is the Scout-Off backend. The primary documentation lives in `do
 
 ## Key documentation
 
-| Document | Purpose |
-|----------|---------|
-| `README.md` | Project overview, setup, and development workflow |
-| `DEPLOYMENT.md` | Deployment guide |
-| `CONTRIBUTING.md` | Contribution guidelines |
-| `.env.example` | All supported environment variables with descriptions |
-| `docs/` | Architecture, API, and runbook documentation |
-| `docs/history/` | Past PR summaries and design decisions |
+| Document          | Purpose                                               |
+| ----------------- | ----------------------------------------------------- |
+| `README.md`       | Project overview, setup, and development workflow     |
+| `DEPLOYMENT.md`   | Deployment guide                                      |
+| `CONTRIBUTING.md` | Contribution guidelines                               |
+| `.env.example`    | All supported environment variables with descriptions |
+| `docs/`           | Architecture, API, and runbook documentation          |
+| `docs/history/`   | Past PR summaries and design decisions                |
 
 ## Quickstart
 
@@ -26,45 +26,55 @@ All files are fully documented, tested, and ready to use.
 ## Where to Go Next
 
 ### 📖 For a Quick Overview (5 minutes)
+
 Read: **`QUICK_START.md`**
 
 This explains:
+
 - What was created
 - How long each task takes
 - Where to find files
 - Next steps
 
 ### 🎯 To See What Was Created (10 minutes)
+
 Read: **`FILES_CREATED.md`**
 
 This explains:
+
 - Every file and what it does
 - Where each file goes
 - Integration order (6 phases)
 - File structure
 
 ### 📋 For Complete Task Details (15 minutes)
+
 Read: **`IMPLEMENTATION_PLAN.md`**
 
 This explains:
+
 - Detailed plan for each task
 - Status and deliverables
 - Which files to update
 - Next steps for each task
 
 ### 🔧 For Integration Instructions (20 minutes)
+
 Read: **`CHANGES.md`**
 
 This explains:
+
 - File-by-file integration steps
 - Exact code changes needed
 - Configuration details
 - Rollback plan
 
 ### 🌿 For Environment Variables
+
 Read: **`.env.additions.md`**
 
 This explains:
+
 - New environment variables
 - Deprecated variables
 - Configuration examples per environment
@@ -74,14 +84,14 @@ This explains:
 
 ## Quick Reference
 
-| Document | Read Time | Purpose |
-|----------|-----------|---------|
-| This file (START_HERE.md) | 2 min | Overview, what to read next |
-| QUICK_START.md | 5 min | Executive summary |
-| FILES_CREATED.md | 10 min | What was created, integration order |
-| IMPLEMENTATION_PLAN.md | 15 min | Detailed plan for all tasks |
-| CHANGES.md | 20 min | How to integrate each change |
-| .env.additions.md | 10 min | New environment variables |
+| Document                  | Read Time | Purpose                             |
+| ------------------------- | --------- | ----------------------------------- |
+| This file (START_HERE.md) | 2 min     | Overview, what to read next         |
+| QUICK_START.md            | 5 min     | Executive summary                   |
+| FILES_CREATED.md          | 10 min    | What was created, integration order |
+| IMPLEMENTATION_PLAN.md    | 15 min    | Detailed plan for all tasks         |
+| CHANGES.md                | 20 min    | How to integrate each change        |
+| .env.additions.md         | 10 min    | New environment variables           |
 
 **Total reading time: 60 minutes to understand everything**
 
@@ -92,32 +102,38 @@ This explains:
 Once you've read the documentation, follow these phases:
 
 ### Phase 1: Preparation (15 min)
+
 - Backup current code
 - Review documentation
 - Check current status
 
 ### Phase 2: Spectral Linting (30 min)
+
 - Install @stoplight/spectral-cli
 - Add npm script
 - Run linting and fix violations
 
 ### Phase 3: Request Signals (45 min)
+
 - Wire AbortController through middleware
 - Update services to accept signal
 - Add cancellation checks to loops
 
 ### Phase 4: Cache Consolidation (30 min)
+
 - Copy unified implementation
 - Run contract tests
 - Delete old implementations
 - Update imports
 
 ### Phase 5: API Docs Control (30 min)
+
 - Add config and middleware
 - Update routes with guard middleware
 - Test each mode
 
 ### Phase 6: Verification (30 min)
+
 - Run full test suite
 - Run linting
 - Build and commit
@@ -144,9 +160,10 @@ Copy the patterns from these files into your actual code.
 ✅ Core implementation files (9)  
 ✅ Example files (4)  
 ✅ Documentation files (4)  
-✅ Test files (1)  
+✅ Test files (1)
 
 Run this to verify:
+
 ```bash
 node scripts/verify-implementation.js
 ```
@@ -182,7 +199,8 @@ All implementations follow these principles:
 A: No, they're independent. You can implement them one at a time.
 
 **Q: How long does each task take?**
-A: 
+A:
+
 - Spectral: 30 minutes
 - Request signals: 45 minutes
 - Cache: 30 minutes

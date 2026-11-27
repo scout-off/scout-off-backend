@@ -18,11 +18,19 @@ import { stellarHealth, stellarBreaker } from './services/stellar';
 import { checkHealth } from './services/ipfs';
 import { mountGraphQL } from './graphql';
 import { ErrorCode } from './utils/errorCodes';
-import { metricsMiddleware, createMetricsHandler, getStuckPendingPinsCount } from './middleware/metrics';
+import {
+  metricsMiddleware,
+  createMetricsHandler,
+  getStuckPendingPinsCount,
+} from './middleware/metrics';
 import { metricsGuard } from './middleware/metricsGuard';
 import { ipReputationMiddleware } from './middleware/ipReputation';
 import { createTimeout, requestTimeout } from './middleware/timeout';
-import { indexerLedgerLag, indexerLastSuccessAt, indexerPollFailuresTotal } from './services/indexer';
+import {
+  indexerLedgerLag,
+  indexerLastSuccessAt,
+  indexerPollFailuresTotal,
+} from './services/indexer';
 import { getDriver } from './db';
 import { withTimeout } from './utils/withTimeout';
 import { getVersionInfo } from './version';
@@ -31,10 +39,7 @@ import { versionRouting } from './middleware/versionRouting';
 import docsRouter from './routes/docs';
 import eventsRoutes from './routes/events';
 import { logger } from './utils/logger';
-import {
-  trackInFlightRequest,
-  drainAwareConnectionMiddleware,
-} from './shutdown';
+import { trackInFlightRequest, drainAwareConnectionMiddleware } from './shutdown';
 import { requireRole } from './middleware/auth';
 import { getHealthDependencies } from './controllers/healthDependenciesController';
 import {
@@ -89,7 +94,7 @@ const wildcardPatterns = config.corsWildcardPatterns;
 if (!isDevOrTest && (!allowedOrigins || allowedOrigins.length === 0)) {
   logger.warn(
     '[cors] WARNING: CORS_ALLOWED_ORIGINS is not set in production. ' +
-    'All cross-origin requests will be rejected.',
+      'All cross-origin requests will be rejected.',
   );
 }
 
@@ -174,8 +179,12 @@ const processStartTime = Date.now();
  * the pod while it is draining.
  */
 let _draining = false;
-export function setDraining(): void { _draining = true; }
-export function isDraining(): boolean { return _draining; }
+export function setDraining(): void {
+  _draining = true;
+}
+export function isDraining(): boolean {
+  return _draining;
+}
 
 // Track in-flight requests so graceful shutdown can wait for them instead of
 // waiting for every socket to close (#1538). Mounted before routing so streams
@@ -211,16 +220,18 @@ app.use((_req, res, next) => {
   }
   next();
 });
-app.use(compression({
-  threshold: config.compressionThresholdBytes,
-  filter: (req, res) => {
-    // Skip compression for SSE endpoints
-    if (/^\/api\/(v[12]\/)?events\/stream/.test(req.path)) {
-      return false;
-    }
-    return compression.filter(req, res);
-  },
-}));
+app.use(
+  compression({
+    threshold: config.compressionThresholdBytes,
+    filter: (req, res) => {
+      // Skip compression for SSE endpoints
+      if (/^\/api\/(v[12]\/)?events\/stream/.test(req.path)) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  }),
+);
 // Set Vary: Accept-Encoding header and log compressed response sizes
 app.use((req, res, next) => {
   const originalEnd = res.end;
@@ -232,7 +243,9 @@ app.use((req, res, next) => {
     if (!res.headersSent && res.getHeader('content-encoding')) {
       res.setHeader('Vary', 'Accept-Encoding');
       if (config.logLevel === 'debug') {
-        logger.debug(`[compression] ${req.method} ${req.path} - encoding: ${res.getHeader('content-encoding')}`);
+        logger.debug(
+          `[compression] ${req.method} ${req.path} - encoding: ${res.getHeader('content-encoding')}`,
+        );
       }
     }
     return originalEnd.call(this, chunk, encoding);
@@ -245,13 +258,15 @@ app.use(traceId);
 // Overlapping headers (CSP, nosniff, frame options, referrer-policy, HSTS) are
 // owned exclusively by securityHeaders below — disable those helmet modules so
 // each header has exactly one source of truth.
-app.use(helmet({
-  contentSecurityPolicy: false,
-  xContentTypeOptions: false,
-  xFrameOptions: false,
-  referrerPolicy: false,
-  strictTransportSecurity: false,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    xContentTypeOptions: false,
+    xFrameOptions: false,
+    referrerPolicy: false,
+    strictTransportSecurity: false,
+  }),
+);
 app.use(securityHeaders);
 app.use(responseTime);
 // versionRouting records the API-Version request-header override, so it must
@@ -268,9 +283,11 @@ const authJsonParser = express.json({ limit: config.bodyLimit.auth });
 const defaultJsonParser = express.json({ limit: config.bodyLimit.json });
 
 const UPLOAD_PATHS = new Set([
-  '/api/players/register', '/api/v1/players/register',
+  '/api/players/register',
+  '/api/v1/players/register',
   '/api/v2/players/register',
-  '/api/validators/milestone', '/api/v1/validators/milestone',
+  '/api/validators/milestone',
+  '/api/v1/validators/milestone',
   '/api/v2/validators/milestone',
 ]);
 const AUTH_PATHS = new Set(['/auth/token', '/auth/challenge', '/auth/refresh', '/auth/logout']);
@@ -354,12 +371,9 @@ async function checkReadiness(): Promise<Record<string, ProbeResult>> {
     // IPFS probe — Pinata connectivity
     (async (): Promise<ProbeResult> => {
       const t0 = Date.now();
-      const outcome = await withTimeout(
-        async () => {
-          await checkHealth();
-        },
-        config.readiness.timeouts.ipfsMs,
-      );
+      const outcome = await withTimeout(async () => {
+        await checkHealth();
+      }, config.readiness.timeouts.ipfsMs);
       return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
     })(),
 
@@ -372,23 +386,21 @@ async function checkReadiness(): Promise<Record<string, ProbeResult>> {
         return { status: 'unavailable', ms: 0 };
       }
       const t0 = Date.now();
-      const outcome = await withTimeout(
-        async () => {
-          const ok = await stellarHealth();
-          if (!ok) throw new Error('stellar unhealthy');
-        },
-        config.readiness.timeouts.stellarMs,
-      );
+      const outcome = await withTimeout(async () => {
+        const ok = await stellarHealth();
+        if (!ok) throw new Error('stellar unhealthy');
+      }, config.readiness.timeouts.stellarMs);
       return { status: outcome === 'ok' ? 'ok' : 'unavailable', ms: Date.now() - t0 };
     })(),
     (async (): Promise<ProbeResult> => {
       // If max lag is 0, the check is disabled
       if (config.readiness.maxLag === 0) return { status: 'disabled' };
-      
+
       // During grace period, always report ok regardless of lag
       const uptimeMs = Date.now() - processStartTime;
-      if (uptimeMs < config.readiness.gracePeriodMs) return { status: 'ok', lag: indexerLedgerLag, maxLag: config.readiness.maxLag };
-      
+      if (uptimeMs < config.readiness.gracePeriodMs)
+        return { status: 'ok', lag: indexerLedgerLag, maxLag: config.readiness.maxLag };
+
       // After grace period, check if lag is within threshold
       const status = indexerLedgerLag <= config.readiness.maxLag ? 'ok' : 'unavailable';
       return { status, lag: indexerLedgerLag, maxLag: config.readiness.maxLag };
@@ -416,17 +428,17 @@ async function readinessHandler(req: express.Request, res: express.Response): Pr
     return;
   }
   const services = await checkReadiness();
-  
+
   // Determine if pod should be ready based on critical dependencies only
   const criticalDeps = config.readinessCriticalDependencies;
-  const allCriticalOk = Array.from(criticalDeps).every(
-    (dep) => {
-      const probe = services[dep];
-      return !probe || probe.status === 'ok' || probe.status === 'disabled';
-    },
-  );
-  
-  res.status(allCriticalOk ? 200 : 503).json({ status: allCriticalOk ? 'ok' : 'degraded', services });
+  const allCriticalOk = Array.from(criticalDeps).every((dep) => {
+    const probe = services[dep];
+    return !probe || probe.status === 'ok' || probe.status === 'disabled';
+  });
+
+  res
+    .status(allCriticalOk ? 200 : 503)
+    .json({ status: allCriticalOk ? 'ok' : 'degraded', services });
 }
 
 app.get(['/ready', '/health/readiness'], createTimeout(5_000), readinessHandler);
@@ -438,7 +450,12 @@ app.get('/health/liveness', createTimeout(5_000), (_req, res) => {
 
 // Operator-facing dependency health endpoint reporting version and latency per downstream (admin-gated)
 app.get(
-  ['/health/dependencies', `${API_PREFIX}/health/dependencies`, `${API_V1_PREFIX}/health/dependencies`, `${API_V2_PREFIX}/health/dependencies`],
+  [
+    '/health/dependencies',
+    `${API_PREFIX}/health/dependencies`,
+    `${API_V1_PREFIX}/health/dependencies`,
+    `${API_V2_PREFIX}/health/dependencies`,
+  ],
   createTimeout(10_000),
   requireRole('admin'),
   getHealthDependencies,
@@ -446,13 +463,17 @@ app.get(
 
 // Prometheus scrape endpoint. Protected by optional bearer token and/or CIDR allowlist.
 // Intentionally not rate-limited (standard scrape pattern).
-app.get('/metrics', metricsGuard, createMetricsHandler(
-  () => indexerLedgerLag,
-  () => 0,
-  () => getStuckPendingPinsCount(),
-  () => indexerLastSuccessAt,
-  () => indexerPollFailuresTotal,
-));
+app.get(
+  '/metrics',
+  metricsGuard,
+  createMetricsHandler(
+    () => indexerLedgerLag,
+    () => 0,
+    () => getStuckPendingPinsCount(),
+    () => indexerLastSuccessAt,
+    () => indexerPollFailuresTotal,
+  ),
+);
 
 app.use('/auth', authRoutes);
 
@@ -511,6 +532,3 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 export default app;
-
-
-

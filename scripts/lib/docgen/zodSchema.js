@@ -263,7 +263,10 @@ function applyModifier(methodName, args, base, state, scope, seen) {
       // shape of what a client is expected to send.
       break;
     case 'refine': {
-      description = [description, 'Additional validation is applied beyond this schema — see the route handler.']
+      description = [
+        description,
+        'Additional validation is applied beyond this schema — see the route handler.',
+      ]
         .filter(Boolean)
         .join(' ');
       break;

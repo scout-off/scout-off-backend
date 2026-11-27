@@ -23,7 +23,9 @@ export interface HealthDependenciesResponse {
     ipfs: DependencyHealth;
     redis: DependencyHealth;
     db: DependencyHealth;
-    sorobanRpc: DependencyHealth & { checks?: { passphrase: string; protocolVersion: string; ledgerLiveness: string } };
+    sorobanRpc: DependencyHealth & {
+      checks?: { passphrase: string; protocolVersion: string; ledgerLiveness: string };
+    };
   };
 }
 
@@ -51,9 +53,7 @@ export function sanitizeEndpointUrl(rawUrl: string): string {
  */
 export async function probeDbDependency(): Promise<DependencyHealth> {
   const isPostgres = config.dbDriver === 'postgres';
-  const rawEndpoint = isPostgres
-    ? config.databaseUrl || 'postgres'
-    : config.dbPath || 'sqlite';
+  const rawEndpoint = isPostgres ? config.databaseUrl || 'postgres' : config.dbPath || 'sqlite';
   const endpoint = sanitizeEndpointUrl(rawEndpoint);
   const start = Date.now();
 
@@ -176,7 +176,9 @@ export async function probeStellarRpcDependency(): Promise<DependencyHealth> {
  * Probe the Soroban RPC node: passphrase match, protocol version, ledger liveness (#1824).
  */
 export async function probeSorobanRpcNetworkDependency(): Promise<
-  DependencyHealth & { checks?: { passphrase: string; protocolVersion: string; ledgerLiveness: string } }
+  DependencyHealth & {
+    checks?: { passphrase: string; protocolVersion: string; ledgerLiveness: string };
+  }
 > {
   const endpoint = config.sorobanRpcUrl;
   if (!config.stellarHealthCheckEnabled) {
@@ -193,7 +195,14 @@ export async function probeSorobanRpcNetworkDependency(): Promise<
       version,
       status,
       latencyMs,
-      ...(result.overall !== 'ok' ? { error: result.passphraseDetail || result.protocolVersionDetail || result.ledgerLivenessDetail } : {}),
+      ...(result.overall !== 'ok'
+        ? {
+            error:
+              result.passphraseDetail ||
+              result.protocolVersionDetail ||
+              result.ledgerLivenessDetail,
+          }
+        : {}),
       checks: {
         passphrase: `${result.passphrase}: ${result.passphraseDetail}`,
         protocolVersion: `${result.protocolVersion}: ${result.protocolVersionDetail}`,
@@ -221,7 +230,8 @@ export async function probeHorizonDependency(): Promise<DependencyHealth> {
   try {
     const body = await httpGet(config.horizonUrl, { timeoutMs: 5000 });
     const data = body ? JSON.parse(body) : {};
-    const versionStr = data.horizon_version ?? data.stellar_core_version ?? data.version ?? 'healthy';
+    const versionStr =
+      data.horizon_version ?? data.stellar_core_version ?? data.version ?? 'healthy';
     const latencyMs = Math.max(0, Date.now() - start);
     return { endpoint, version: versionStr, status: 'ok', latencyMs };
   } catch (err) {
@@ -243,7 +253,9 @@ export async function probeIpfsDependency(): Promise<DependencyHealth> {
   const endpoint = sanitizeEndpointUrl(config.pinata?.gateway || 'https://gateway.pinata.cloud');
   const start = Date.now();
   try {
-    const response = await httpHead(config.pinata.gateway || 'https://gateway.pinata.cloud', { timeoutMs: 5000 });
+    const response = await httpHead(config.pinata.gateway || 'https://gateway.pinata.cloud', {
+      timeoutMs: 5000,
+    });
     const serverHeader = response.headers.get('server');
     const versionStr = serverHeader ? String(serverHeader) : `HTTP ${response.status}`;
     const latencyMs = Math.max(0, Date.now() - start);

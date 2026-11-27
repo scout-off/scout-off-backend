@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { getWebhookDeliveries, getWebhookDeliverySummary } from '../db';
 import { ErrorCode } from '../utils/errorCodes';
 
-
 const webhookDeliveryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
@@ -16,7 +15,11 @@ const webhookDeliveryQuerySchema = z.object({
  * Returns paginated delivery-attempt records for a given webhook subscription.
  * `:id` is the subscription identifier (URL-encoded endpoint URL).
  */
-export async function getWebhookDeliveriesEndpoint(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getWebhookDeliveriesEndpoint(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const subscriptionId = decodeURIComponent(req.params.id as string);
     const parsed = webhookDeliveryQuerySchema.safeParse(req.query);
@@ -41,7 +44,11 @@ export async function getWebhookDeliveriesEndpoint(req: Request, res: Response, 
  *
  * Returns a rolled-up success-rate summary for a subscription over a time window.
  */
-export async function getWebhookDeliverySummaryEndpoint(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getWebhookDeliverySummaryEndpoint(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const subscriptionId = decodeURIComponent(req.params.id as string);
     const parsed = webhookDeliveryQuerySchema.safeParse(req.query);

@@ -23,8 +23,14 @@ jest.mock('../../src/db', () => ({
   countPlayers: jest.fn().mockReturnValue(0),
   searchPlayers: jest.fn().mockReturnValue({ data: [], nextCursor: null }),
   insertAuditLog: jest.fn().mockReturnValue({
-    id: 1, hash: 'aaa', prev_hash: 'bbb', action: '',
-    admin_wallet: '', query_params: '{}', created_at: '', event_source: '',
+    id: 1,
+    hash: 'aaa',
+    prev_hash: 'bbb',
+    action: '',
+    admin_wallet: '',
+    query_params: '{}',
+    created_at: '',
+    event_source: '',
   }),
   getEventsCount: jest.fn().mockReturnValue(0),
   fetchLastIndexedLedger: jest.fn().mockReturnValue(0),
@@ -89,7 +95,12 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -119,9 +130,7 @@ describe('E2E SEP-10 Authentication Flow', () => {
     const signedXdr = tx.toXdr();
 
     // Step 3: POST /auth/token
-    const tokenRes = await request(app)
-      .post('/auth/token')
-      .send({ transaction: signedXdr });
+    const tokenRes = await request(app).post('/auth/token').send({ transaction: signedXdr });
 
     expect(tokenRes.status).toBe(200);
     expect(tokenRes.body.token).toBeDefined();
@@ -172,9 +181,7 @@ describe('E2E SEP-10 Authentication Flow', () => {
     tx.sign(wrongKeypair);
     const signedXdr = tx.toXdr();
 
-    const tokenRes = await request(app)
-      .post('/auth/token')
-      .send({ transaction: signedXdr });
+    const tokenRes = await request(app).post('/auth/token').send({ transaction: signedXdr });
 
     expect(tokenRes.status).toBe(401);
     expect(tokenRes.body.success).toBe(false);

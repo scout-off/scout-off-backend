@@ -30,11 +30,7 @@ export {
 export { getPaymentHistory } from './scout/paymentsController';
 export type { PaymentRecord } from './scout/paymentsController';
 
-export {
-  listTrialOffers,
-  createTrialOffer,
-  trialOfferSchema,
-} from './scout/trialOffersController';
+export { listTrialOffers, createTrialOffer, trialOfferSchema } from './scout/trialOffersController';
 
 export { getScoutDashboard } from './scout/dashboardController';
 

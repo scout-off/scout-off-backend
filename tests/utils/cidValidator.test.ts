@@ -37,7 +37,9 @@ describe('isValidCid', () => {
   });
 
   it('rejects a plain URL', () => {
-    expect(isValidCid('https://ipfs.io/ipfs/QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG')).toBe(false);
+    expect(isValidCid('https://ipfs.io/ipfs/QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG')).toBe(
+      false,
+    );
   });
 });
 
@@ -93,7 +95,9 @@ describe('CID_REGEX', () => {
   });
 
   it('matches a valid CIDv1', () => {
-    expect(CID_REGEX.test('bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi')).toBe(true);
+    expect(CID_REGEX.test('bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi')).toBe(
+      true,
+    );
   });
 
   it('does not match an empty string', () => {

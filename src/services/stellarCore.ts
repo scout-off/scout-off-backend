@@ -48,7 +48,7 @@ const server = new Proxy(rawServer, {
       return (...args: any[]) => stellarBreaker.execute(() => value.apply(target, args));
     }
     return value;
-  }
+  },
 });
 
 export { server };
@@ -92,7 +92,6 @@ export async function sendTransactionWithCorrelation(
   }
   return sendResult;
 }
-
 
 export async function getLatestLedger(): Promise<number> {
   const ledger = await server.getLatestLedger();
@@ -172,7 +171,10 @@ export function contractErrorToPaymentError(message: string): PaymentError | nul
     return new PaymentError('Insufficient funds to unlock contact', 'INSUFFICIENT_FUNDS');
   }
   if (isContractPausedError(message)) {
-    return new PaymentError('Contract is paused; contact unlocks are unavailable', 'CONTRACT_PAUSED');
+    return new PaymentError(
+      'Contract is paused; contact unlocks are unavailable',
+      'CONTRACT_PAUSED',
+    );
   }
   if (isPlayerNotFoundError(message)) {
     return new PaymentError('Player not found on-chain', 'MISSING_PLAYER');
@@ -197,10 +199,7 @@ export async function waitForTransactionConfirmation(
   let getResult;
   try {
     getResult = await server.getTransaction(hash);
-    while (
-      getResult.status === rpc.Api.GetTransactionStatus.NOT_FOUND &&
-      Date.now() < deadline
-    ) {
+    while (getResult.status === rpc.Api.GetTransactionStatus.NOT_FOUND && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, TX_CONFIRMATION_POLL_INTERVAL_MS));
       getResult = await server.getTransaction(hash);
     }
@@ -253,19 +252,14 @@ export async function isSubscribed(
         const sourceAccount = new Account(ephemeral.publicKey(), '0');
 
         const tx = createTxBuilder(sourceAccount)
-          .addOperation(
-            contract.call('is_subscribed', Address.fromString(scoutWallet).toScVal()),
-          )
+          .addOperation(contract.call('is_subscribed', Address.fromString(scoutWallet).toScVal()))
           .setTimeout(30)
           .build();
 
         const simResult = await server.simulateTransaction(tx);
 
         if (rpc.Api.isSimulationError(simResult)) {
-          throw new PaymentError(
-            `Contract simulation failed: ${simResult.error}`,
-            'NETWORK_ERROR',
-          );
+          throw new PaymentError(`Contract simulation failed: ${simResult.error}`, 'NETWORK_ERROR');
         }
 
         const successSim = simResult as rpc.Api.SimulateTransactionSuccessResponse;
@@ -280,10 +274,7 @@ export async function isSubscribed(
         return { active, expiresAt: active ? '' : null };
       } catch (err) {
         if (err instanceof PaymentError) throw err;
-        throw new PaymentError(
-          `RPC call failed: ${(err as Error).message}`,
-          'NETWORK_ERROR',
-        );
+        throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
       }
     } catch (err) {
       span.recordException(err as Error);
@@ -327,17 +318,12 @@ export async function queryOnChainPlayerId(wallet: string): Promise<string | nul
   const sourceAccount = new Account(ephemeral.publicKey(), '0');
   const contract = new Contract(config.registerContractId);
   const tx = createTxBuilder(sourceAccount)
-    .addOperation(
-      contract.call('get_player_id', Address.fromString(wallet).toScVal()),
-    )
+    .addOperation(contract.call('get_player_id', Address.fromString(wallet).toScVal()))
     .setTimeout(30)
     .build();
   const simResult = await server.simulateTransaction(tx);
   if (rpc.Api.isSimulationError(simResult)) {
-    throw new PaymentError(
-      `Contract simulation failed: ${simResult.error ?? ''}`,
-      'NETWORK_ERROR',
-    );
+    throw new PaymentError(`Contract simulation failed: ${simResult.error ?? ''}`, 'NETWORK_ERROR');
   }
 
   const retval = (simResult as rpc.Api.SimulateTransactionSuccessResponse).result?.retval;

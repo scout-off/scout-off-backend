@@ -12,9 +12,7 @@ const CID_V0_REGEX = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/;
 const CID_V1_REGEX = /^[bBzZfFuU][2-7A-Za-z0-9+/]{10,}$/;
 
 /** Matches both CIDv0 and CIDv1 formats */
-export const CID_REGEX = new RegExp(
-  `(${CID_V0_REGEX.source})|(${CID_V1_REGEX.source})`
-);
+export const CID_REGEX = new RegExp(`(${CID_V0_REGEX.source})|(${CID_V1_REGEX.source})`);
 
 /**
  * Returns true if the given string is a valid IPFS CID (v0 or v1).

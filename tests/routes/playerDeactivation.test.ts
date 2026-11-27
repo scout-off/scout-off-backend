@@ -64,8 +64,7 @@ describe('Player Profile Deactivation & Soft-Delete', () => {
 
   describe('POST /api/players/:playerId/deactivate', () => {
     it('returns 401 when no token is provided', async () => {
-      const res = await request(app)
-        .post(`/api/players/${PLAYER_ID}/deactivate`);
+      const res = await request(app).post(`/api/players/${PLAYER_ID}/deactivate`);
       expect(res.status).toBe(401);
     });
 
@@ -112,8 +111,7 @@ describe('Player Profile Deactivation & Soft-Delete', () => {
 
   describe('POST /api/players/:playerId/reactivate', () => {
     it('returns 401 when no token is provided', async () => {
-      const res = await request(app)
-        .post(`/api/players/${PLAYER_ID}/reactivate`);
+      const res = await request(app).post(`/api/players/${PLAYER_ID}/reactivate`);
       expect(res.status).toBe(401);
     });
 

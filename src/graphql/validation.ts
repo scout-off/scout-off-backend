@@ -36,12 +36,7 @@ export const MAX_DEPTH = 5;
 export const MAX_QUERY_COST = 135;
 
 /** Fields whose resolvers perform expensive work (DB/RPC per occurrence). */
-const EXPENSIVE_FIELDS = new Set([
-  'milestones',
-  'players',
-  'player',
-  'scoutSubscription',
-]);
+const EXPENSIVE_FIELDS = new Set(['milestones', 'players', 'player', 'scoutSubscription']);
 
 const FIELD_COST = 1;
 const EXPENSIVE_COST = 5;
@@ -60,9 +55,11 @@ export function createDepthLimitRule(maxDepth: number) {
       OperationDefinition(operation: ASTNode) {
         if (operation.kind !== Kind.OPERATION_DEFINITION) return;
 
-        const fragments = context.getDocument().definitions
-          .filter((d): d is import('graphql').FragmentDefinitionNode =>
-            d.kind === Kind.FRAGMENT_DEFINITION,
+        const fragments = context
+          .getDocument()
+          .definitions.filter(
+            (d): d is import('graphql').FragmentDefinitionNode =>
+              d.kind === Kind.FRAGMENT_DEFINITION,
           )
           .reduce<Record<string, import('graphql').FragmentDefinitionNode>>((acc, frag) => {
             acc[frag.name.value] = frag;
@@ -89,11 +86,7 @@ export function createDepthLimitRule(maxDepth: number) {
               const fragName = selection.name.value;
               if (!visited.has(fragName) && fragments[fragName]) {
                 visited.add(fragName);
-                const childDepth = measureDepth(
-                  fragments[fragName].selectionSet,
-                  depth,
-                  visited,
-                );
+                const childDepth = measureDepth(fragments[fragName].selectionSet, depth, visited);
                 if (childDepth > max) max = childDepth;
               }
             }
@@ -104,10 +97,9 @@ export function createDepthLimitRule(maxDepth: number) {
         const depth = measureDepth(operation.selectionSet, 0, new Set());
         if (depth > maxDepth) {
           context.reportError(
-            new GraphQLError(
-              `Query depth ${depth} exceeds maximum allowed depth of ${maxDepth}.`,
-              { nodes: [operation] },
-            ),
+            new GraphQLError(`Query depth ${depth} exceeds maximum allowed depth of ${maxDepth}.`, {
+              nodes: [operation],
+            }),
           );
         }
       },
@@ -135,9 +127,11 @@ export function createQueryCostRule(maxCost: number) {
       OperationDefinition(operation: ASTNode) {
         if (operation.kind !== Kind.OPERATION_DEFINITION) return;
 
-        const fragments = context.getDocument().definitions
-          .filter((d): d is import('graphql').FragmentDefinitionNode =>
-            d.kind === Kind.FRAGMENT_DEFINITION,
+        const fragments = context
+          .getDocument()
+          .definitions.filter(
+            (d): d is import('graphql').FragmentDefinitionNode =>
+              d.kind === Kind.FRAGMENT_DEFINITION,
           )
           .reduce<Record<string, import('graphql').FragmentDefinitionNode>>((acc, frag) => {
             acc[frag.name.value] = frag;
@@ -175,13 +169,10 @@ export function createQueryCostRule(maxCost: number) {
         const cost = calculateCost(operation.selectionSet, new Set());
         if (cost >= maxCost) {
           context.reportError(
-            new GraphQLError(
-              `Query cost ${cost} exceeds maximum allowed cost of ${maxCost}.`,
-              {
-                nodes: [operation],
-                extensions: { code: 'QUERY_COST_EXCEEDED' },
-              },
-            ),
+            new GraphQLError(`Query cost ${cost} exceeds maximum allowed cost of ${maxCost}.`, {
+              nodes: [operation],
+              extensions: { code: 'QUERY_COST_EXCEEDED' },
+            }),
           );
         }
       },

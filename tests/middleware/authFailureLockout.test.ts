@@ -16,7 +16,13 @@ import {
 import { extractAccount } from '../../src/services/sep10';
 import { insertAuditLog } from '../../src/db';
 
-jest.mock('../../src/config', () => ({ __esModule: true, default: { rateLimit: { enabled: true } } }));
+jest.mock('../../src/config', () => ({
+  __esModule: true,
+  default: {
+    rateLimit: { enabled: true },
+    authLockout: { threshold: 5, windowMs: 15 * 60 * 1000, baseMs: 30_000, maxMs: 15 * 60 * 1000 },
+  },
+}));
 jest.mock('../../src/services/sep10', () => ({ extractAccount: jest.fn() }));
 jest.mock('../../src/services/redis', () => ({ getRedisClient: jest.fn(() => null) }));
 jest.mock('../../src/db', () => ({ insertAuditLog: jest.fn().mockResolvedValue(undefined) }));
@@ -49,8 +55,12 @@ afterEach(() => jest.useRealTimers());
 
 describe('lockout duration and store state', () => {
   it('starts at the configured duration and doubles until the cap', () => {
-    expect(computeLockoutMs(AUTH_FAIL_THRESHOLD)).toBe(Math.min(AUTH_LOCKOUT_BASE_MS, AUTH_LOCKOUT_MAX_MS));
-    expect(computeLockoutMs(AUTH_FAIL_THRESHOLD + 1)).toBe(Math.min(AUTH_LOCKOUT_BASE_MS * 2, AUTH_LOCKOUT_MAX_MS));
+    expect(computeLockoutMs(AUTH_FAIL_THRESHOLD)).toBe(
+      Math.min(AUTH_LOCKOUT_BASE_MS, AUTH_LOCKOUT_MAX_MS),
+    );
+    expect(computeLockoutMs(AUTH_FAIL_THRESHOLD + 1)).toBe(
+      Math.min(AUTH_LOCKOUT_BASE_MS * 2, AUTH_LOCKOUT_MAX_MS),
+    );
     expect(computeLockoutMs(AUTH_FAIL_THRESHOLD + 100)).toBe(AUTH_LOCKOUT_MAX_MS);
   });
 
@@ -129,7 +139,9 @@ describe('enforceAuthLockout and checkAuthLockout middleware', () => {
   });
 
   it('allows a malformed challenge to reach normal validation', () => {
-    extract.mockImplementationOnce(() => { throw new Error('bad XDR'); });
+    extract.mockImplementationOnce(() => {
+      throw new Error('bad XDR');
+    });
     const next = jest.fn();
     enforceAuthLockout(request('bad'), response() as unknown as Response, next);
     expect(next).toHaveBeenCalledTimes(1);
@@ -178,7 +190,9 @@ describe('enforceAuthLockout and checkAuthLockout middleware', () => {
   });
 
   it('passes malformed XDR through the older check middleware', () => {
-    extract.mockImplementationOnce(() => { throw new Error('bad XDR'); });
+    extract.mockImplementationOnce(() => {
+      throw new Error('bad XDR');
+    });
     const next = jest.fn();
     checkAuthLockout(request('bad'), response() as unknown as Response, next);
     expect(next).toHaveBeenCalledTimes(1);

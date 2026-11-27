@@ -30,7 +30,9 @@ jest.mock('../../src/services/indexer', () => ({
 // via mockStellarHealth without a real network call. Everything else
 // (stellarBreaker, server, …) stays real.
 jest.mock('../../src/services/stellar', () => {
-  const actual = jest.requireActual<typeof import('../../src/services/stellar')>('../../src/services/stellar');
+  const actual = jest.requireActual<typeof import('../../src/services/stellar')>(
+    '../../src/services/stellar',
+  );
   return { ...actual, stellarHealth: jest.fn().mockResolvedValue(true) };
 });
 
@@ -119,7 +121,8 @@ describe.each(READINESS_PATHS)('%s', (path) => {
 
   afterEach(() => {
     (config.readiness as { gracePeriodMs: number }).gracePeriodMs = previousGracePeriodMs;
-    (config as { readinessCriticalDependencies: Set<string> }).readinessCriticalDependencies = previousCritical;
+    (config as { readinessCriticalDependencies: Set<string> }).readinessCriticalDependencies =
+      previousCritical;
     mockCheckHealth.mockReset();
     mockStellarHealth.mockReset();
     mockStellarHealth.mockResolvedValue(true);
@@ -212,7 +215,9 @@ describe.each(READINESS_PATHS)('%s', (path) => {
       driverWith({
         run: (sql: string, params?: unknown[]) => {
           if (sql.includes('INSERT INTO indexer_state')) {
-            return Promise.reject(new Error('SQLITE_READONLY: attempt to write a readonly database'));
+            return Promise.reject(
+              new Error('SQLITE_READONLY: attempt to write a readonly database'),
+            );
           }
           return real.run(sql, params);
         },
@@ -269,8 +274,6 @@ describe.each(READINESS_PATHS)('%s', (path) => {
     expect(res.body.status).toBe('ok');
     expect(probeStatus(res.body.services.indexer)).toBe('ok');
   });
-
-
 });
 
 // ─── /health ─────────────────────────────────────────────────────────────────
@@ -335,9 +338,7 @@ describe('readiness DB probe timeout and latency', () => {
   it('uses the configured timeout and reports the DB probe duration', async () => {
     (config.readiness.timeouts as { dbMs: number }).dbMs = 30;
     mockCheckHealth.mockResolvedValue(undefined);
-    mockGetDriver.mockImplementation(() =>
-      driverWith({ run: () => new Promise(() => {}) }),
-    );
+    mockGetDriver.mockImplementation(() => driverWith({ run: () => new Promise(() => {}) }));
 
     const startedAt = Date.now();
     const res = await request(app).get('/ready');
@@ -354,7 +355,8 @@ describe('readiness DB probe timeout and latency', () => {
     mockCheckHealth.mockResolvedValue(undefined);
     mockGetDriver.mockImplementation(() =>
       driverWith({
-        run: () => new Promise((resolve) => setTimeout(() => resolve({ changes: 1, lastId: 0 }), 30)),
+        run: () =>
+          new Promise((resolve) => setTimeout(() => resolve({ changes: 1, lastId: 0 }), 30)),
       }),
     );
 
@@ -393,7 +395,10 @@ describe('GET /ready and GET /health/readiness return identical responses', () =
   // same *shape*, not the same wall-clock measurement. The indexer probe uses
   // lag/maxLag instead of ms (#1575), so those fields are also normalised.
   const normalizeTiming = (body: Record<string, unknown>): Record<string, unknown> => {
-    const services = (body.services ?? {}) as Record<string, { ms?: number; lag?: number; maxLag?: number }>;
+    const services = (body.services ?? {}) as Record<
+      string,
+      { ms?: number; lag?: number; maxLag?: number }
+    >;
     for (const probe of Object.values(services)) {
       if (probe && typeof probe === 'object') {
         if ('ms' in probe) probe.ms = 0;
@@ -435,11 +440,16 @@ describe('operational endpoints set Cache-Control: no-store', () => {
     mockCheckHealth.mockReset();
   });
 
-  it.each(['/health', '/ready', '/health/liveness', '/health/readiness', '/health/dependencies', '/metrics', '/version'])(
-    '%s responds with Cache-Control: no-store',
-    async (path) => {
-      const res = await request(app).get(path);
-      expect(res.headers['cache-control']).toBe('no-store');
-    },
-  );
+  it.each([
+    '/health',
+    '/ready',
+    '/health/liveness',
+    '/health/readiness',
+    '/health/dependencies',
+    '/metrics',
+    '/version',
+  ])('%s responds with Cache-Control: no-store', async (path) => {
+    const res = await request(app).get(path);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
 });

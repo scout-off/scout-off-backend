@@ -27,17 +27,10 @@
 
 import config from '../config';
 import { getAuditLogRowsAfterId, getDriver } from '../db';
-import {
-  auditChainContent,
-  computeChainHash,
-  GENESIS_HASH,
-} from '../utils/hashChain';
+import { auditChainContent, computeChainHash, GENESIS_HASH } from '../utils/hashChain';
 import { logger } from '../utils/logger';
 import { safeFetch } from '../utils/safeFetch';
-import {
-  recordAuditChainBreak,
-  setAuditChainValid,
-} from '../middleware/metrics';
+import { recordAuditChainBreak, setAuditChainValid } from '../middleware/metrics';
 import { logAuditEvent } from './audit';
 
 export const KEY_LAST_ID = 'audit_verify_last_id';
@@ -103,12 +96,7 @@ async function readState(keys: string[]): Promise<Map<string, string>> {
 
 /** Reads the persisted verification checkpoint (0/genesis when absent). */
 export async function getAuditVerifyCheckpoint(): Promise<AuditVerifyCheckpoint> {
-  const state = await readState([
-    KEY_LAST_ID,
-    KEY_LAST_HASH,
-    KEY_LAST_RUN,
-    KEY_LAST_FULL_RUN,
-  ]);
+  const state = await readState([KEY_LAST_ID, KEY_LAST_HASH, KEY_LAST_RUN, KEY_LAST_FULL_RUN]);
   const parsedId = Number.parseInt(state.get(KEY_LAST_ID) ?? '0', 10);
   return {
     lastId: Number.isFinite(parsedId) && parsedId > 0 ? parsedId : 0,
@@ -146,9 +134,7 @@ function decideMode(
   if (!checkpoint.lastFullRun) return 'full';
   const lastFullMs = Date.parse(checkpoint.lastFullRun);
   if (!Number.isFinite(lastFullMs)) return 'full';
-  return nowMs - lastFullMs >= config.auditVerify.fullIntervalMs
-    ? 'full'
-    : 'incremental';
+  return nowMs - lastFullMs >= config.auditVerify.fullIntervalMs ? 'full' : 'incremental';
 }
 
 /** Best-effort operator alert; never throws and never blocks verification. */
@@ -236,8 +222,15 @@ export async function runAuditChainVerification(
           reason: 'prev_hash_mismatch',
         };
         return reportBreak(
-          broken, mode, rowsChecked, batches, cursorId, startedAt, now,
-          webhookUrl, persist,
+          broken,
+          mode,
+          rowsChecked,
+          batches,
+          cursorId,
+          startedAt,
+          now,
+          webhookUrl,
+          persist,
         );
       }
 
@@ -261,8 +254,15 @@ export async function runAuditChainVerification(
           reason: 'hash_mismatch',
         };
         return reportBreak(
-          broken, mode, rowsChecked, batches, cursorId, startedAt, now,
-          webhookUrl, persist,
+          broken,
+          mode,
+          rowsChecked,
+          batches,
+          cursorId,
+          startedAt,
+          now,
+          webhookUrl,
+          persist,
         );
       }
 
@@ -380,9 +380,11 @@ async function reportBreak(
  * Scheduler entry point used by `src/index.ts`. Reads the interval/batch
  * settings from config and respects shutdown between batches.
  */
-export async function runScheduledAuditChainVerification(options: {
-  shouldStop?: () => boolean;
-} = {}): Promise<AuditChainVerifyResult> {
+export async function runScheduledAuditChainVerification(
+  options: {
+    shouldStop?: () => boolean;
+  } = {},
+): Promise<AuditChainVerifyResult> {
   return runAuditChainVerification({
     mode: 'auto',
     batchSize: config.auditVerify.batchSize,

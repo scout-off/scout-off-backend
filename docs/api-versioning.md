@@ -40,10 +40,10 @@ Every response carries **two** headers that both report the version that
 actually served the request, independent of which of the three forms the
 client used to ask for it.
 
-| Header | Status | Notes |
-|---|---|---|
-| `API-Version` | **Canonical** — read this one | e.g. `API-Version: 1` or `API-Version: 2` |
-| `X-API-Version` | **Deprecated alias** — same value | Will be removed; see below |
+| Header          | Status                            | Notes                                     |
+| --------------- | --------------------------------- | ----------------------------------------- |
+| `API-Version`   | **Canonical** — read this one     | e.g. `API-Version: 1` or `API-Version: 2` |
+| `X-API-Version` | **Deprecated alias** — same value | Will be removed; see below                |
 
 Both headers are set by `src/middleware/apiVersion.ts` in the same call, so
 they are always in agreement — a client can never see `API-Version: 1` and

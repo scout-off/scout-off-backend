@@ -39,21 +39,23 @@ export type { ResolvedApiKey } from '../services/apiKeyService';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
-export const issueKeySchema = z.object({
-  label: z.string().max(100).default(''),
-  /**
-   * Optional explicit scope list. Omitted → legacy key with unrestricted
-   * scout-level access (backward compatible). Restricted keys may only
-   * perform operations covered by their granted scopes (#1019).
-   */
-  scopes: z.array(z.string()).optional(),
-  /**
-   * Key lifetime in days from issuance (#674). Omitted → use the server
-   * default (API_KEY_DEFAULT_TTL_DAYS, default 90 days). Pass 0 to
-   * explicitly request a non-expiring key.
-   */
-  expiresInDays: z.number().int().min(0).optional(),
-}).strict();
+export const issueKeySchema = z
+  .object({
+    label: z.string().max(100).default(''),
+    /**
+     * Optional explicit scope list. Omitted → legacy key with unrestricted
+     * scout-level access (backward compatible). Restricted keys may only
+     * perform operations covered by their granted scopes (#1019).
+     */
+    scopes: z.array(z.string()).optional(),
+    /**
+     * Key lifetime in days from issuance (#674). Omitted → use the server
+     * default (API_KEY_DEFAULT_TTL_DAYS, default 90 days). Pass 0 to
+     * explicitly request a non-expiring key.
+     */
+    expiresInDays: z.number().int().min(0).optional(),
+  })
+  .strict();
 
 // ── Key rotation (#676) ─────────────────────────────────────────────────────
 
@@ -62,19 +64,22 @@ const DEFAULT_ROTATION_GRACE_PERIOD_SECONDS = 24 * 60 * 60;
 /** Upper bound on a caller-supplied grace period, to keep "grace" from becoming indefinite. */
 const MAX_ROTATION_GRACE_PERIOD_SECONDS = 7 * 24 * 60 * 60;
 
-export const rotateKeySchema = z.object({
-  /**
-   * How long the old key keeps authenticating after rotation, in seconds.
-   * Omitted → DEFAULT_ROTATION_GRACE_PERIOD_SECONDS. 0 revokes the old key
-   * immediately, same as DELETE.
-   */
-  gracePeriodSeconds: z
-    .number()
-    .int()
-    .min(0)
-    .max(MAX_ROTATION_GRACE_PERIOD_SECONDS)
-    .default(DEFAULT_ROTATION_GRACE_PERIOD_SECONDS),
-}).strict().prefault({});
+export const rotateKeySchema = z
+  .object({
+    /**
+     * How long the old key keeps authenticating after rotation, in seconds.
+     * Omitted → DEFAULT_ROTATION_GRACE_PERIOD_SECONDS. 0 revokes the old key
+     * immediately, same as DELETE.
+     */
+    gracePeriodSeconds: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_ROTATION_GRACE_PERIOD_SECONDS)
+      .default(DEFAULT_ROTATION_GRACE_PERIOD_SECONDS),
+  })
+  .strict()
+  .prefault({});
 
 // ── Key metadata updates: relabel + narrow scopes (#1329) ─────────────────────
 
@@ -84,15 +89,17 @@ export const rotateKeySchema = z.object({
  * only narrow the key's existing privileges — the handler rejects any scope
  * the key does not already hold.
  */
-export const updateKeySchema = z.object({
-  /** New human-readable label. Omitted → keep the existing label. */
-  label: z.string().max(100).optional(),
-  /**
-   * New scope list. Omitted → keep the existing scopes. When present it must
-   * be a subset of the key's current scopes (scope changes may only narrow).
-   */
-  scopes: z.array(z.string()).optional(),
-}).strict();
+export const updateKeySchema = z
+  .object({
+    /** New human-readable label. Omitted → keep the existing label. */
+    label: z.string().max(100).optional(),
+    /**
+     * New scope list. Omitted → keep the existing scopes. When present it must
+     * be a subset of the key's current scopes (scope changes may only narrow).
+     */
+    scopes: z.array(z.string()).optional(),
+  })
+  .strict();
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -105,14 +112,12 @@ export const updateKeySchema = z.object({
  *
  * @response 409 Scout API key limit reached
  */
-export async function issueApiKey(
-  req: Request,
-  res: Response,
-  _next: NextFunction,
-): Promise<void> {
+export async function issueApiKey(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const parsed = issueKeySchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+    res
+      .status(400)
+      .json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
     return;
   }
 
@@ -157,13 +162,19 @@ export async function issueApiKey(
     throw err;
   }
 
-  logger.info({ scout: req.params.wallet as string, action: 'api_key_issued', keyId: id, scopes: grantedScopes.length > 0 ? grantedScopes : null, expiresAt });
+  logger.info({
+    scout: req.params.wallet as string,
+    action: 'api_key_issued',
+    keyId: id,
+    scopes: grantedScopes.length > 0 ? grantedScopes : null,
+    expiresAt,
+  });
 
   res.status(201).json({
     success: true,
     data: {
       id,
-      key,          // plaintext — returned once only
+      key, // plaintext — returned once only
       label: parsed.data.label,
       created_at: now,
       expires_at: expiresAt,
@@ -179,11 +190,7 @@ export async function issueApiKey(
  * List existing API keys.  Returns metadata and a truncated hash prefix for
  * display purposes only — the full hash and plaintext key are never returned.
  */
-export async function listApiKeys(
-  req: Request,
-  res: Response,
-  _next: NextFunction,
-): Promise<void> {
+export async function listApiKeys(req: Request, res: Response, _next: NextFunction): Promise<void> {
   const rows: ApiKeyRow[] = await listApiKeysByWallet(req.params.wallet as string);
 
   res.json({
@@ -259,7 +266,9 @@ export async function updateApiKey(
 
   const parsed = updateKeySchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+    res
+      .status(400)
+      .json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
     return;
   }
 
@@ -379,7 +388,9 @@ export async function rotateApiKey(
 
   const parsed = rotateKeySchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+    res
+      .status(400)
+      .json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
     return;
   }
 
@@ -440,7 +451,7 @@ export async function rotateApiKey(
     data: {
       newKey: {
         id: newId,
-        key,          // plaintext — returned once only
+        key, // plaintext — returned once only
         label: oldRow.label,
         created_at: now,
         expires_at: newExpiresAt,

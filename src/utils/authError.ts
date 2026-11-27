@@ -33,7 +33,12 @@ export function sendForbidden(
   message: string,
   reason?: Record<string, unknown>,
 ): void {
-  const body: AuthErrorPayload = { success: false, errorCode: 9, error: message, code: ErrorCode.FORBIDDEN };
+  const body: AuthErrorPayload = {
+    success: false,
+    errorCode: 9,
+    error: message,
+    code: ErrorCode.FORBIDDEN,
+  };
   if (reason !== undefined) body.reason = reason;
   res.status(403).json(body);
 }

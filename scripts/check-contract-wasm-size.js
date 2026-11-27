@@ -134,7 +134,8 @@ function main() {
   let wasmFiles;
   try {
     // No npm install in the contract CI job, so avoid the `glob` dependency.
-    wasmFiles = fs.readdirSync(wasmDir)
+    wasmFiles = fs
+      .readdirSync(wasmDir)
       .filter((f) => f.endsWith('.wasm'))
       .map((f) => path.join(wasmDir, f))
       .sort();
@@ -191,9 +192,7 @@ function main() {
   }
 
   for (const result of results) {
-    const {
-      fileName, fileSize, budget, percentUsed, exceeded, baseSize,
-    } = result;
+    const { fileName, fileSize, budget, percentUsed, exceeded, baseSize } = result;
     const status = statusIndicator(percentUsed);
     const usage = `${percentUsed.toFixed(1)}%`;
     const sizeStr = formatBytes(fileSize);
@@ -202,12 +201,10 @@ function main() {
     if (IS_PR && Object.keys(baseSizes).length > 0) {
       const delta = formatDelta(fileSize, baseSize);
       summary.push(
-        `| \`${fileName}\` | ${sizeStr} | ${budgetStr} | ${usage} | ${status} | ${delta} |`
+        `| \`${fileName}\` | ${sizeStr} | ${budgetStr} | ${usage} | ${status} | ${delta} |`,
       );
     } else {
-      summary.push(
-        `| \`${fileName}\` | ${sizeStr} | ${budgetStr} | ${usage} | ${status} |`
-      );
+      summary.push(`| \`${fileName}\` | ${sizeStr} | ${budgetStr} | ${usage} | ${status} |`);
     }
   }
 
@@ -217,7 +214,9 @@ function main() {
 
   if (anyExceeded) {
     summary.push('⚠️ **One or more contracts exceed their budget.** See details above.');
-    summary.push('To raise a budget, edit `contracts/wasm-size-budgets.json` and request reviewer approval in your PR.');
+    summary.push(
+      'To raise a budget, edit `contracts/wasm-size-budgets.json` and request reviewer approval in your PR.',
+    );
   } else {
     summary.push('✓ All contracts within budget.');
   }

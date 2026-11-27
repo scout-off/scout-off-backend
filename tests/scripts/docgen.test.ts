@@ -17,9 +17,18 @@ const { docFor } = require('../../scripts/lib/docgen/jsdocTags');
 const { deriveSecurity } = require('../../scripts/lib/docgen/security');
 /* eslint-enable @typescript-eslint/no-var-requires */
 
-function parseExpression(source: string): { expr: ts.Expression; scope: Map<string, ts.Expression> } {
+function parseExpression(source: string): {
+  expr: ts.Expression;
+  scope: Map<string, ts.Expression>;
+} {
   const wrapped = `${source}\n`;
-  const sourceFile = ts.createSourceFile('fixture.ts', wrapped, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const sourceFile = ts.createSourceFile(
+    'fixture.ts',
+    wrapped,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
   const scope = new Map<string, ts.Expression>();
   let last: ts.Expression | undefined;
 
@@ -81,7 +90,9 @@ describe('zodSchema.convertZodExpression', () => {
   });
 
   it('applies .int() to switch a number schema to integer', () => {
-    const { expr, scope } = parseExpression(`const s = z.coerce.number().int().min(1).max(100).default(20);`);
+    const { expr, scope } = parseExpression(
+      `const s = z.coerce.number().int().min(1).max(100).default(20);`,
+    );
     const { schema } = convertZodExpression(expr, scope);
     expect(schema).toEqual({ type: 'integer', minimum: 1, maximum: 100, default: 20 });
   });
@@ -165,7 +176,9 @@ describe('jsdocTags.docFor', () => {
     ].join('\n');
     const doc = docFor(comment, 'GET');
     expect(doc.params).toEqual([{ name: 'id', type: 'string', description: 'The id' }]);
-    expect(doc.query).toEqual([{ name: 'verbose', type: 'boolean', description: 'Include extra fields' }]);
+    expect(doc.query).toEqual([
+      { name: 'verbose', type: 'boolean', description: 'Include extra fields' },
+    ]);
     expect(doc.authNote).toBe('Bearer (admin role required)');
   });
 });
@@ -183,7 +196,9 @@ describe('security.deriveSecurity', () => {
   });
 
   it('derives a required-bearer requirement with role from requireRole(...)', () => {
-    const { security, extensions } = deriveSecurity([{ kind: 'role', role: 'admin', raw: "requireRole('admin')" }]);
+    const { security, extensions } = deriveSecurity([
+      { kind: 'role', role: 'admin', raw: "requireRole('admin')" },
+    ]);
     expect(security).toEqual([{ bearerAuth: [] }]);
     expect(extensions['x-required-role']).toEqual(['admin']);
   });

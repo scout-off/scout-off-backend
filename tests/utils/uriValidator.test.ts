@@ -19,7 +19,7 @@ const VALID_CID_V1_BAFK = 'bafkreifjjcie6lypi6ny7amxnfftagclbuxndqonfipmb64f2km2
 describe('URI_VALIDATION_ERROR', () => {
   it('contains the required error message text', () => {
     expect(URI_VALIDATION_ERROR).toBe(
-      "metadata_uri must be a valid IPFS CID (v0 or v1) or an HTTPS URL"
+      'metadata_uri must be a valid IPFS CID (v0 or v1) or an HTTPS URL',
     );
   });
 });

@@ -18,10 +18,10 @@ const rulesetPath = path.join(__dirname, '..', '.spectral.yaml');
 try {
   // Run spectral with the project ruleset
   // Exit code: 0 = no violations, 1 = warnings only, 2 = errors
-  execSync(
-    `spectral lint "${specPath}" --ruleset "${rulesetPath}"`,
-    { stdio: 'inherit', shell: true }
-  );
+  execSync(`spectral lint "${specPath}" --ruleset "${rulesetPath}"`, {
+    stdio: 'inherit',
+    shell: true,
+  });
   console.log('\n✓ OpenAPI spec passed Spectral linting');
   process.exit(0);
 } catch (err) {

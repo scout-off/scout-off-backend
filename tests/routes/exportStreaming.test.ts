@@ -20,7 +20,9 @@ import type * as DbModule from '../../src/db';
 import type * as ExportControllerModule from '../../src/controllers/exportController';
 
 const db: typeof DbModule = require('../../src/db');
-const { exportEvents }: typeof ExportControllerModule = require('../../src/controllers/exportController');
+const {
+  exportEvents,
+}: typeof ExportControllerModule = require('../../src/controllers/exportController');
 
 beforeAll(async () => {
   await db.initDb();
@@ -100,11 +102,25 @@ function makeStreamingRes() {
   let statusCode = 200;
   let ended = false;
   const res = Object.assign(ee, {
-    setHeader: (name: string, value: string) => { headers[name.toLowerCase()] = value; },
-    status: jest.fn((code: number) => { statusCode = code; return res; }),
-    write: jest.fn((chunk: string) => { chunks.push(chunk); return true; }),
-    end: jest.fn(() => { ended = true; return res; }),
-    json: jest.fn((data: unknown) => { chunks.push(JSON.stringify(data)); return res; }),
+    setHeader: (name: string, value: string) => {
+      headers[name.toLowerCase()] = value;
+    },
+    status: jest.fn((code: number) => {
+      statusCode = code;
+      return res;
+    }),
+    write: jest.fn((chunk: string) => {
+      chunks.push(chunk);
+      return true;
+    }),
+    end: jest.fn(() => {
+      ended = true;
+      return res;
+    }),
+    json: jest.fn((data: unknown) => {
+      chunks.push(JSON.stringify(data));
+      return res;
+    }),
   });
   return {
     res,
@@ -123,12 +139,16 @@ describe('GET /api/admin/events/export — streaming (#471)', () => {
 
   beforeAll(() => {
     const baseLedger = 1_000_000;
-    const insert = db.getDb().prepare(
-      'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)'
-    );
-    const insertMany = db.getDb().transaction((rows: Array<[string, number, string, string, number]>) => {
-      for (const row of rows) insert.run(...row);
-    });
+    const insert = db
+      .getDb()
+      .prepare(
+        'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)',
+      );
+    const insertMany = db
+      .getDb()
+      .transaction((rows: Array<[string, number, string, string, number]>) => {
+        for (const row of rows) insert.run(...row);
+      });
 
     const rows: Array<[string, number, string, string, number]> = [];
     for (let i = 0; i < TOTAL_EVENTS; i++) {
@@ -240,12 +260,16 @@ describe('GET /api/admin/events/export — memory bound', () => {
   const MEMORY_TEST_SIZE = 1_000_000;
 
   beforeAll(() => {
-    const insert = db.getDb().prepare(
-      'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)'
-    );
-    const insertMany = db.getDb().transaction((rows: Array<[string, number, string, string, number]>) => {
-      for (const row of rows) insert.run(...row);
-    });
+    const insert = db
+      .getDb()
+      .prepare(
+        'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)',
+      );
+    const insertMany = db
+      .getDb()
+      .transaction((rows: Array<[string, number, string, string, number]>) => {
+        for (const row of rows) insert.run(...row);
+      });
 
     const rows: Array<[string, number, string, string, number]> = [];
     for (let i = 0; i < MEMORY_TEST_SIZE; i++) {
@@ -260,42 +284,42 @@ describe('GET /api/admin/events/export — memory bound', () => {
     insertMany(rows);
   }, 60000);
 
-  it(
-    'peak heap growth stays bounded under a few MB regardless of total row count',
-    async () => {
-      const { Writable } = await import('stream');
+  it('peak heap growth stays bounded under a few MB regardless of total row count', async () => {
+    const { Writable } = await import('stream');
 
-      // Use a discarding Writable so the test itself does not buffer the
-      // full serialised CSV in memory — we measure the export's footprint,
-      // not our own test harness.
-      const discard = new Writable({
-        write(_chunk: Buffer, _encoding: string, callback: (error?: Error | null) => void) {
-          callback();
-        },
-      }) as Writable & { setHeader: () => void; status: () => typeof discard; json: () => typeof discard };
-      discard.setHeader = () => {};
-      discard.status = () => discard;
-      discard.json = () => discard;
+    // Use a discarding Writable so the test itself does not buffer the
+    // full serialised CSV in memory — we measure the export's footprint,
+    // not our own test harness.
+    const discard = new Writable({
+      write(_chunk: Buffer, _encoding: string, callback: (error?: Error | null) => void) {
+        callback();
+      },
+    }) as Writable & {
+      setHeader: () => void;
+      status: () => typeof discard;
+      json: () => typeof discard;
+    };
+    discard.setHeader = () => {};
+    discard.status = () => discard;
+    discard.json = () => discard;
 
-      if (typeof global.gc === 'function') global.gc();
-      const memBefore = process.memoryUsage().heapUsed;
+    if (typeof global.gc === 'function') global.gc();
+    const memBefore = process.memoryUsage().heapUsed;
 
-      const req = { query: { eventType: 'milestone_approved' } } as unknown as Request;
-      const next = jest.fn() as NextFunction;
-      await exportEvents(req, discard, next);
+    const req = { query: { eventType: 'milestone_approved' } } as unknown as Request;
+    const next = jest.fn() as NextFunction;
+    await exportEvents(req, discard, next);
 
-      if (typeof global.gc === 'function') global.gc();
-      const memAfter = process.memoryUsage().heapUsed;
-      const deltaMB = Math.abs(memAfter - memBefore) / 1024 / 1024;
+    if (typeof global.gc === 'function') global.gc();
+    const memAfter = process.memoryUsage().heapUsed;
+    const deltaMB = Math.abs(memAfter - memBefore) / 1024 / 1024;
 
-      // The export of 1M rows should add no more than 50 MB of heap
-      // (the real footprint is < 1 MB of stream buffers, but GC timing
-      // jitter without --expose-gc needs some headroom).
-      expect(deltaMB).toBeLessThan(50);
-      expect(next).not.toHaveBeenCalled();
-    },
-    120000,
-  );
+    // The export of 1M rows should add no more than 50 MB of heap
+    // (the real footprint is < 1 MB of stream buffers, but GC timing
+    // jitter without --expose-gc needs some headroom).
+    expect(deltaMB).toBeLessThan(50);
+    expect(next).not.toHaveBeenCalled();
+  }, 120000);
 });
 
 describe('GET /api/admin/events/export — consistency with concurrent inserts', () => {
@@ -305,9 +329,11 @@ describe('GET /api/admin/events/export — consistency with concurrent inserts',
     db.getDb().prepare('DELETE FROM events WHERE type = ?').run('concurrent_inserted');
 
     // Insert initial batch
-    const insert = db.getDb().prepare(
-      'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)'
-    );
+    const insert = db
+      .getDb()
+      .prepare(
+        'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)',
+      );
     const initialRows: Array<[string, number, string, string, number]> = [];
     for (let i = 0; i < 100; i++) {
       initialRows.push([
@@ -571,12 +597,16 @@ describe('GET /api/admin/events/export — disconnect check without backpressure
   const DISCONNECT_AFTER_ROW = 50;
 
   beforeAll(() => {
-    const insert = db.getDb().prepare(
-      'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)'
-    );
-    const insertMany = db.getDb().transaction((rows: Array<[string, number, string, string, number]>) => {
-      for (const row of rows) insert.run(...row);
-    });
+    const insert = db
+      .getDb()
+      .prepare(
+        'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)',
+      );
+    const insertMany = db
+      .getDb()
+      .transaction((rows: Array<[string, number, string, string, number]>) => {
+        for (const row of rows) insert.run(...row);
+      });
 
     const rows: Array<[string, number, string, string, number]> = [];
     for (let i = 0; i < DISCONNECT_TOTAL; i++) {
@@ -597,14 +627,14 @@ describe('GET /api/admin/events/export — disconnect check without backpressure
     // as distinct from merely observing a shorter HTTP response body.
     let cursorAdvances = 0;
     const realGetEventsIterable = db.getEventsIterable;
-    const spy = jest
-      .spyOn(db, 'getEventsIterable')
-      .mockImplementation(function* (...args: Parameters<typeof db.getEventsIterable>) {
-        for (const row of realGetEventsIterable(...args)) {
-          cursorAdvances++;
-          yield row;
-        }
-      });
+    const spy = jest.spyOn(db, 'getEventsIterable').mockImplementation(function* (
+      ...args: Parameters<typeof db.getEventsIterable>
+    ) {
+      for (const row of realGetEventsIterable(...args)) {
+        cursorAdvances++;
+        yield row;
+      }
+    });
 
     const req = Object.assign(new EventEmitter(), {
       query: { eventType: DISCONNECT_TYPE },
@@ -619,7 +649,8 @@ describe('GET /api/admin/events/export — disconnect check without backpressure
     const originalWrite = res.write as jest.Mock;
     let dataRowsWritten = 0;
     (res as unknown as { write: jest.Mock }).write = jest.fn((chunk: string) => {
-      const isDataRow = chunk !== 'event_type,ledger,timestamp,payload\n' && !chunk.startsWith('__EOF__');
+      const isDataRow =
+        chunk !== 'event_type,ledger,timestamp,payload\n' && !chunk.startsWith('__EOF__');
       if (isDataRow) {
         dataRowsWritten++;
         if (dataRowsWritten === DISCONNECT_AFTER_ROW) {
@@ -654,14 +685,14 @@ describe('GET /api/admin/events/export — disconnect check without backpressure
   it('completes normally (no premature stop) when the client never disconnects', async () => {
     let cursorAdvances = 0;
     const realGetEventsIterable = db.getEventsIterable;
-    const spy = jest
-      .spyOn(db, 'getEventsIterable')
-      .mockImplementation(function* (...args: Parameters<typeof db.getEventsIterable>) {
-        for (const row of realGetEventsIterable(...args)) {
-          cursorAdvances++;
-          yield row;
-        }
-      });
+    const spy = jest.spyOn(db, 'getEventsIterable').mockImplementation(function* (
+      ...args: Parameters<typeof db.getEventsIterable>
+    ) {
+      for (const row of realGetEventsIterable(...args)) {
+        cursorAdvances++;
+        yield row;
+      }
+    });
 
     const req = { query: { eventType: DISCONNECT_TYPE } } as unknown as Request;
     const { res, getBody, isEnded } = makeStreamingRes();

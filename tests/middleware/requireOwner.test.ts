@@ -16,11 +16,7 @@ function makeReqRes(account: string | undefined, playerId: string) {
   return { req, res, next };
 }
 
-function makeWalletReqRes(
-  account: string | undefined,
-  wallet: string | undefined,
-  role?: string,
-) {
+function makeWalletReqRes(account: string | undefined, wallet: string | undefined, role?: string) {
   const req = {
     params: wallet !== undefined ? { wallet } : {},
     account,
@@ -82,7 +78,10 @@ describe('checkWalletOwnership', () => {
   });
 
   it('returns false and sends 403 when JWT wallet does NOT match req.params.wallet', () => {
-    const { req, res } = makeWalletReqRes(VALID_WALLET, 'GDCTMZJTRZWFS74OKS6Z2GPJ3NCLJSUBGFI6FM7L3U3GM66F5UN2W4IT');
+    const { req, res } = makeWalletReqRes(
+      VALID_WALLET,
+      'GDCTMZJTRZWFS74OKS6Z2GPJ3NCLJSUBGFI6FM7L3U3GM66F5UN2W4IT',
+    );
     expect(checkWalletOwnership(req, res)).toBe(false);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(
@@ -121,7 +120,10 @@ describe('checkWalletOwnership', () => {
   });
 
   it('sends 401 instead of 403 on mismatch when mismatchStatus is 401', () => {
-    const { req, res } = makeWalletReqRes(VALID_WALLET, 'GDCTMZJTRZWFS74OKS6Z2GPJ3NCLJSUBGFI6FM7L3U3GM66F5UN2W4IT');
+    const { req, res } = makeWalletReqRes(
+      VALID_WALLET,
+      'GDCTMZJTRZWFS74OKS6Z2GPJ3NCLJSUBGFI6FM7L3U3GM66F5UN2W4IT',
+    );
     expect(checkWalletOwnership(req, res, { mismatchStatus: 401 })).toBe(false);
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith(
@@ -139,7 +141,10 @@ describe('requireWalletOwner middleware', () => {
   });
 
   it('returns 403 when JWT wallet does NOT match req.params.wallet', () => {
-    const { req, res, next } = makeWalletReqRes(VALID_WALLET, 'GDCTMZJTRZWFS74OKS6Z2GPJ3NCLJSUBGFI6FM7L3U3GM66F5UN2W4IT');
+    const { req, res, next } = makeWalletReqRes(
+      VALID_WALLET,
+      'GDCTMZJTRZWFS74OKS6Z2GPJ3NCLJSUBGFI6FM7L3U3GM66F5UN2W4IT',
+    );
     requireWalletOwner()(req, res, next);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(
@@ -180,7 +185,10 @@ describe('requireWalletOwner middleware', () => {
   });
 
   it('returns 401 on mismatch when mismatchStatus: 401 is configured', () => {
-    const { req, res, next } = makeWalletReqRes(VALID_WALLET, 'GDCTMZJTRZWFS74OKS6Z2GPJ3NCLJSUBGFI6FM7L3U3GM66F5UN2W4IT');
+    const { req, res, next } = makeWalletReqRes(
+      VALID_WALLET,
+      'GDCTMZJTRZWFS74OKS6Z2GPJ3NCLJSUBGFI6FM7L3U3GM66F5UN2W4IT',
+    );
     requireWalletOwner({ mismatchStatus: 401 })(req, res, next);
     expect(res.status).toHaveBeenCalledWith(401);
     expect(next).not.toHaveBeenCalled();

@@ -56,9 +56,11 @@ export function parseCsvBody(text: string): ImportValidatorEntry[] {
 }
 
 /** Envelope schema for the JSON body variant of POST /api/admin/validators/import. */
-export const importValidatorsBodySchema = z.object({
-  validators: z.array(z.unknown()).min(1),
-}).strict();
+export const importValidatorsBodySchema = z
+  .object({
+    validators: z.array(z.unknown()).min(1),
+  })
+  .strict();
 
 /**
  * Process a batch of ImportValidatorEntry items and return per-entry results.
@@ -99,7 +101,9 @@ export async function processBatch(
 
     // Check if wallet address is valid
     if (!isValidStellarAddress(wallet)) {
-      logger.warn(`[admin] import_validator rejected — invalid address | admin=${adminWallet} target=${wallet}`);
+      logger.warn(
+        `[admin] import_validator rejected — invalid address | admin=${adminWallet} target=${wallet}`,
+      );
       results[i] = { wallet, status: 'invalid', reason: 'invalid Stellar address', label, region };
       continue;
     }
@@ -147,7 +151,9 @@ export async function processBatch(
             region,
           };
         } catch (err) {
-          logger.error(`[admin] import_validator_multisig error | admin=${adminWallet} target=${wallet} error=${err}`);
+          logger.error(
+            `[admin] import_validator_multisig error | admin=${adminWallet} target=${wallet} error=${err}`,
+          );
           results[index] = {
             wallet,
             status: 'invalid',
@@ -163,7 +169,9 @@ export async function processBatch(
         return async () => {
           const { wallet, label, region } = entry;
           try {
-            logger.info(`[admin] action=import_register_validator admin=${adminWallet} target=${wallet}`);
+            logger.info(
+              `[admin] action=import_register_validator admin=${adminWallet} target=${wallet}`,
+            );
             const result = await registerValidatorOnChain(wallet);
 
             // DB insert ONLY after on-chain confirmation succeeds
@@ -222,7 +230,11 @@ export async function processBatch(
  * @response 400 { success: false, error: string } - Unparseable body or no entries
  * @auth Bearer (admin role required)
  */
-export async function importValidators(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function importValidators(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   const adminWallet = req.account ?? 'unknown';
   const contentType = (req.headers['content-type'] ?? '').toLowerCase();
 
@@ -232,7 +244,9 @@ export async function importValidators(req: Request, res: Response, _next: NextF
     // ── CSV path ──────────────────────────────────────────────────────────
     const rawBody = req.body as string;
     if (typeof rawBody !== 'string' || !rawBody.trim()) {
-      res.status(400).json({ success: false, error: 'CSV body is empty', code: ErrorCode.VALIDATION_ERROR });
+      res
+        .status(400)
+        .json({ success: false, error: 'CSV body is empty', code: ErrorCode.VALIDATION_ERROR });
       return;
     }
     entries = parseCsvBody(rawBody);
@@ -264,7 +278,11 @@ export async function importValidators(req: Request, res: Response, _next: NextF
   }
 
   if (entries.length === 0) {
-    res.status(400).json({ success: false, error: 'No validator entries found in request', code: ErrorCode.VALIDATION_ERROR });
+    res.status(400).json({
+      success: false,
+      error: 'No validator entries found in request',
+      code: ErrorCode.VALIDATION_ERROR,
+    });
     return;
   }
 

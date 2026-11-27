@@ -68,7 +68,7 @@ const tracer = trace.getTracer('scout-off-backend');
 
 const PINATA_PIN_JSON_URL = 'https://api.pinata.cloud/pinning/pinJSONToIPFS';
 const PINATA_PIN_FILE_URL = 'https://api.pinata.cloud/pinning/pinFileToIPFS';
-const PINATA_TEST_URL     = 'https://api.pinata.cloud/data/testAuthentication';
+const PINATA_TEST_URL = 'https://api.pinata.cloud/data/testAuthentication';
 
 /**
  * Circuit breaker for all outbound Pinata / IPFS calls (issue #1142).
@@ -90,7 +90,7 @@ export function isPinataConfigured(): boolean {
 
 function assertPinataConfigured(): void {
   throw new Error(
-    'IPFS service unavailable: PINATA_API_KEY and PINATA_SECRET must be set in staging and production'
+    'IPFS service unavailable: PINATA_API_KEY and PINATA_SECRET must be set in staging and production',
   );
 }
 
@@ -130,7 +130,7 @@ function canonicalStringify(value: unknown): string {
   }
   const sorted = Object.keys(value as Record<string, unknown>)
     .sort()
-    .map(k => `${JSON.stringify(k)}:${canonicalStringify((value as Record<string, unknown>)[k])}`)
+    .map((k) => `${JSON.stringify(k)}:${canonicalStringify((value as Record<string, unknown>)[k])}`)
     .join(',');
   return `{${sorted}}`;
 }
@@ -142,7 +142,10 @@ function hashMetadata(body: object): string {
 /** Shared axios timeout option for all Pinata/IPFS HTTP calls (#1143). */
 const axiosTimeout = { timeout: config.ipfsHttpTimeoutMs };
 
-interface PinCacheEntry { cid: string; timestamp: number; }
+interface PinCacheEntry {
+  cid: string;
+  timestamp: number;
+}
 
 /**
  * In-memory deduplication cache and in-flight request tracker for pinJson calls.
@@ -192,7 +195,9 @@ export async function pinJson(body: object): Promise<string> {
       }
 
       if (inflightPins.has(hash)) {
-        logger.debug(`[ipfs] pinJson inflight hit — waiting for in-flight request (hash=${hash.slice(0, 8)}…)`);
+        logger.debug(
+          `[ipfs] pinJson inflight hit — waiting for in-flight request (hash=${hash.slice(0, 8)}…)`,
+        );
         return await inflightPins.get(hash)!;
       }
 
@@ -225,7 +230,9 @@ export async function pinJson(body: object): Promise<string> {
           });
 
           if (acquiredLock === false) {
-            logger.debug(`[ipfs] pinJson lock contended — polling for completion (hash=${hash.slice(0, 8)}…)`);
+            logger.debug(
+              `[ipfs] pinJson lock contended — polling for completion (hash=${hash.slice(0, 8)}…)`,
+            );
             const MAX_POLL_MS = 30000;
             while (Date.now() - start < MAX_POLL_MS) {
               await new Promise((resolve) => setTimeout(resolve, 50));
@@ -244,7 +251,9 @@ export async function pinJson(body: object): Promise<string> {
               // time the row is gone the resolved_cid is gone with it.
               const resolvedCid = await getResolvedCidByHash(hash);
               if (resolvedCid) {
-                logger.debug(`[ipfs] pinJson cross-instance dedup — using resolved CID from DB (hash=${hash.slice(0, 8)}…)`);
+                logger.debug(
+                  `[ipfs] pinJson cross-instance dedup — using resolved CID from DB (hash=${hash.slice(0, 8)}…)`,
+                );
                 pinJsonCache.set(hash, { cid: resolvedCid, timestamp: Date.now() });
                 return resolvedCid;
               }
@@ -279,9 +288,16 @@ export async function pinJson(body: object): Promise<string> {
             span.setAttribute('ipfs.cid', uploadedCid);
             return uploadedCid;
           } catch (err) {
-            logger.critical('[ipfs] Pinata unavailable — queueing payload for retry', (err as Error).message);
+            logger.critical(
+              '[ipfs] Pinata unavailable — queueing payload for retry',
+              (err as Error).message,
+            );
             const failTime = new Date().toISOString();
-            await insertPendingPin({ payload: JSON.stringify(body), created_at: failTime, last_tried: failTime });
+            await insertPendingPin({
+              payload: JSON.stringify(body),
+              created_at: failTime,
+              last_tried: failTime,
+            });
             throw err;
           } finally {
             await deletePendingPinByHash(hash);
@@ -305,7 +321,9 @@ export async function pinJson(body: object): Promise<string> {
 
 export async function pinFile(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
   const start = Date.now();
-  const span = tracer.startSpan('ipfs.pinFile', { attributes: { 'ipfs.filename': filename, 'ipfs.mime_type': mimeType } });
+  const span = tracer.startSpan('ipfs.pinFile', {
+    attributes: { 'ipfs.filename': filename, 'ipfs.mime_type': mimeType },
+  });
   try {
     if (!isPinataConfigured()) {
       if (!allowLocalPinStubs()) assertPinataConfigured();
@@ -342,7 +360,7 @@ export function gatewayUrl(cid: string): string {
 
 /** Build all public gateway URLs for a CID, in priority order. */
 export function gatewayUrls(cid: string): string[] {
-  return config.pinata.gateways.map(gateway => `${gateway}/ipfs/${cid}`);
+  return config.pinata.gateways.map((gateway) => `${gateway}/ipfs/${cid}`);
 }
 
 /** Strip ipfs:// prefix from a URI, or return the input unchanged. */
@@ -407,7 +425,10 @@ export async function retryPendingPins(): Promise<void> {
 
     try {
       const body = JSON.parse(row.payload) as object;
-      const res = await axios.post(PINATA_PIN_JSON_URL, body, { headers: pinataHeaders(), ...axiosTimeout });
+      const res = await axios.post(PINATA_PIN_JSON_URL, body, {
+        headers: pinataHeaders(),
+        ...axiosTimeout,
+      });
       logger.info(`[ipfs] retried pending pin id=${row.id} cid=${res.data.IpfsHash as string}`);
       await deletePendingPin(row.id);
     } catch {
@@ -489,27 +510,36 @@ export async function checkGatewayReachable(cid: string, timeoutMs = 5000): Prom
 /**
  * Check if a CID or hash exists on Pinata via pinList API.
  */
-export async function checkPinataPinStatus(cid?: string, hash?: string): Promise<{ isPinned: boolean; pinnedCid?: string }> {
+export async function checkPinataPinStatus(
+  cid?: string,
+  hash?: string,
+): Promise<{ isPinned: boolean; pinnedCid?: string }> {
   if (!isPinataConfigured()) {
     return { isPinned: false };
   }
 
   try {
     if (cid) {
-      const res = await axios.get<PinataPinListResponse>(`${PINATA_PIN_LIST_URL}?hashContains=${encodeURIComponent(cid)}&status=pinned`, {
-        headers: pinataHeaders(),
-      });
+      const res = await axios.get<PinataPinListResponse>(
+        `${PINATA_PIN_LIST_URL}?hashContains=${encodeURIComponent(cid)}&status=pinned`,
+        {
+          headers: pinataHeaders(),
+        },
+      );
       const rows = res.data?.rows ?? [];
-      const match = rows.find(r => r.ipfs_pin_hash === cid);
+      const match = rows.find((r) => r.ipfs_pin_hash === cid);
       if (match) {
         return { isPinned: true, pinnedCid: match.ipfs_pin_hash };
       }
     }
 
     if (hash) {
-      const res = await axios.get<PinataPinListResponse>(`${PINATA_PIN_LIST_URL}?metadata[keyvalues][hash]={"value":"${hash}","op":"eq"}&status=pinned`, {
-        headers: pinataHeaders(),
-      });
+      const res = await axios.get<PinataPinListResponse>(
+        `${PINATA_PIN_LIST_URL}?metadata[keyvalues][hash]={"value":"${hash}","op":"eq"}&status=pinned`,
+        {
+          headers: pinataHeaders(),
+        },
+      );
       if (res.data?.rows?.length > 0) {
         return { isPinned: true, pinnedCid: res.data.rows[0].ipfs_pin_hash };
       }
@@ -517,7 +547,10 @@ export async function checkPinataPinStatus(cid?: string, hash?: string): Promise
 
     return { isPinned: false };
   } catch (err) {
-    logger.warn('[ipfs] Pinata pinList query failed during reconciliation', err instanceof Error ? err.message : String(err));
+    logger.warn(
+      '[ipfs] Pinata pinList query failed during reconciliation',
+      err instanceof Error ? err.message : String(err),
+    );
     return { isPinned: false };
   }
 }
@@ -624,7 +657,9 @@ export async function reconcilePendingPins(options?: {
 
     // 3. Attempt re-pinning payload to Pinata
     try {
-      const pinRes = await axios.post(PINATA_PIN_JSON_URL, payloadObj, { headers: pinataHeaders() });
+      const pinRes = await axios.post(PINATA_PIN_JSON_URL, payloadObj, {
+        headers: pinataHeaders(),
+      });
       const newCid = pinRes.data.IpfsHash as string;
       await updatePendingPinReconciliation({
         id: row.id,
@@ -640,7 +675,9 @@ export async function reconcilePendingPins(options?: {
         status: 'pending',
         lastReconciledAt: new Date().toISOString(),
       });
-      logger.warn(`[ipfs] reconciliation re-pin attempt failed for id=${row.id}: ${(err as Error).message}`);
+      logger.warn(
+        `[ipfs] reconciliation re-pin attempt failed for id=${row.id}: ${(err as Error).message}`,
+      );
       result.requeued++;
     }
   }

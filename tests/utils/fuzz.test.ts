@@ -3,7 +3,12 @@ import { STELLAR_ADDRESS_RE } from '../../src/utils/validators';
 import { isValidStellarAddress } from '../../src/utils/stellarAddress';
 import { isValidCid } from '../../src/utils/cidValidator';
 import { validateMinTier } from '../../src/utils/minTierValidator';
-import { parseBoolean, parseU128, parseMilestones, parseSubscription } from '../../src/utils/xdrParser';
+import {
+  parseBoolean,
+  parseU128,
+  parseMilestones,
+  parseSubscription,
+} from '../../src/utils/xdrParser';
 import { withdrawFeesSchema } from '../../src/controllers/adminController';
 import { xdr } from '@stellar/stellar-sdk';
 import { CID } from 'multiformats/cid';
@@ -19,7 +24,7 @@ describe('Property-based Fuzzing', () => {
           expect(typeof STELLAR_ADDRESS_RE.test(s)).toBe('boolean');
           expect(typeof isValidStellarAddress(s)).toBe('boolean');
         }),
-        FC_OPTS
+        FC_OPTS,
       );
     });
 
@@ -30,9 +35,9 @@ describe('Property-based Fuzzing', () => {
           (s) => {
             expect(STELLAR_ADDRESS_RE.test(s)).toBe(false);
             expect(isValidStellarAddress(s)).toBe(false);
-          }
+          },
         ),
-        FC_OPTS
+        FC_OPTS,
       );
     });
   });
@@ -50,7 +55,7 @@ describe('Property-based Fuzzing', () => {
             expect(res.success).toBe(false);
           }
         }),
-        FC_OPTS
+        FC_OPTS,
       );
     });
   });
@@ -61,12 +66,12 @@ describe('Property-based Fuzzing', () => {
         fc.property(fc.string(), (s) => {
           expect(typeof isValidCid(s)).toBe('boolean');
         }),
-        FC_OPTS
+        FC_OPTS,
       );
     });
 
     // TODO: Follow-up Bug #Fuzz1: isValidCid is purely regex based and allows invalid checksums/base encodings.
-    // The invariant "any string accepted by isValidCid round-trips through the CID parser without throwing" 
+    // The invariant "any string accepted by isValidCid round-trips through the CID parser without throwing"
     // currently FAILS. Skipping this test until the follow-up bug is resolved.
     it.skip('any string accepted by isValidCid round-trips through the CID parser without throwing', () => {
       fc.assert(
@@ -75,9 +80,9 @@ describe('Property-based Fuzzing', () => {
           (s) => {
             // This should not throw if isValidCid correctly validates a CID
             CID.parse(s);
-          }
+          },
         ),
-        FC_OPTS
+        FC_OPTS,
       );
     });
   });
@@ -94,7 +99,7 @@ describe('Property-based Fuzzing', () => {
             expect(typeof res.error).toBe('string');
           }
         }),
-        FC_OPTS
+        FC_OPTS,
       );
     });
   });
@@ -110,7 +115,7 @@ describe('Property-based Fuzzing', () => {
             // Decoding failed, which is expected for random bytes
             return;
           }
-          
+
           const parsers = [parseBoolean, parseU128, parseMilestones, parseSubscription];
           for (const p of parsers) {
             try {
@@ -120,9 +125,9 @@ describe('Property-based Fuzzing', () => {
                 // Should only throw expected typed errors (like "Expected scvBool...")
                 // We assert it doesn't crash with something completely unrelated (like undefined property access)
                 expect(
-                  e.message.includes('Expected') || 
-                  e.message.includes('scv') || 
-                  e.message.includes('Cannot convert')
+                  e.message.includes('Expected') ||
+                    e.message.includes('scv') ||
+                    e.message.includes('Cannot convert'),
                 ).toBe(true);
               } else {
                 throw e; // Unexpected throw type
@@ -130,7 +135,7 @@ describe('Property-based Fuzzing', () => {
             }
           }
         }),
-        FC_OPTS
+        FC_OPTS,
       );
     });
   });

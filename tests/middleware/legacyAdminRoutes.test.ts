@@ -34,7 +34,11 @@ it('normalizes X-Idempotency-Key for the existing middleware', () => {
 it('rejects conflicting header spellings', () => {
   const response = res();
   const next = jest.fn();
-  legacyFeeIdempotencyKey(req({ 'x-idempotency-key': 'foo', 'idempotency-key': 'bar' }), response as unknown as Response, next);
+  legacyFeeIdempotencyKey(
+    req({ 'x-idempotency-key': 'foo', 'idempotency-key': 'bar' }),
+    response as unknown as Response,
+    next,
+  );
   expect(response.status).toHaveBeenCalledWith(400);
   expect(next).not.toHaveBeenCalled();
 });
@@ -59,7 +63,11 @@ it('maps legacy fromLedger to a bounded background job and preserves explicit ra
 it('rejects unsafe ledger integer overflow', () => {
   const response = res();
   const next = jest.fn();
-  normalizeLegacyReindex(req({}, { fromLedger: Number.MAX_SAFE_INTEGER }), response as unknown as Response, next);
+  normalizeLegacyReindex(
+    req({}, { fromLedger: Number.MAX_SAFE_INTEGER }),
+    response as unknown as Response,
+    next,
+  );
   expect(response.status).toHaveBeenCalledWith(400);
   expect(next).not.toHaveBeenCalled();
 });

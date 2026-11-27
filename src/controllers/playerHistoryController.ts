@@ -1,10 +1,15 @@
-import { Request, Response, NextFunction } from "express";
-import { getPlayerProfileHistory, getPlayerProfileHistoryVersioned, getPlayerById, getPlayerByWallet } from "../db";
-import { sanitizeInput } from "../utils/sanitizer";
-import { z } from "zod";
-import { ApiResponse } from "../types";
-import { ErrorCode } from "../utils/errorCodes";
-import { playerIdSchema } from "../utils/playerIdValidator";
+import { Request, Response, NextFunction } from 'express';
+import {
+  getPlayerProfileHistory,
+  getPlayerProfileHistoryVersioned,
+  getPlayerById,
+  getPlayerByWallet,
+} from '../db';
+import { sanitizeInput } from '../utils/sanitizer';
+import { z } from 'zod';
+import { ApiResponse } from '../types';
+import { ErrorCode } from '../utils/errorCodes';
+import { playerIdSchema } from '../utils/playerIdValidator';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,10 +31,7 @@ export type ProfileDiff = Record<string, FieldDiff>;
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
-const versionParamSchema = z.coerce
-  .number()
-  .int()
-  .min(1, "version must be a positive integer");
+const versionParamSchema = z.coerce.number().int().min(1, 'version must be a positive integer');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,20 +40,13 @@ const versionParamSchema = z.coerce
  * Returns only the keys whose values changed (added, removed, or updated).
  * Format: { fieldName: { from: oldValue, to: newValue } }
  */
-function diffObjects(
-  prev: Record<string, unknown>,
-  curr: Record<string, unknown>,
-): ProfileDiff {
+function diffObjects(prev: Record<string, unknown>, curr: Record<string, unknown>): ProfileDiff {
   const allKeys = new Set([...Object.keys(prev), ...Object.keys(curr)]);
   const diff: ProfileDiff = {};
 
   for (const key of allKeys) {
-    const fromVal = Object.prototype.hasOwnProperty.call(prev, key)
-      ? prev[key]
-      : undefined;
-    const toVal = Object.prototype.hasOwnProperty.call(curr, key)
-      ? curr[key]
-      : undefined;
+    const fromVal = Object.prototype.hasOwnProperty.call(prev, key) ? prev[key] : undefined;
+    const toVal = Object.prototype.hasOwnProperty.call(curr, key) ? curr[key] : undefined;
 
     // Use JSON comparison so nested objects/arrays are compared by value
     if (JSON.stringify(fromVal) !== JSON.stringify(toVal)) {
@@ -103,7 +98,7 @@ export async function getPlayerHistory(
   if (!idResult.success) {
     res.status(400).json({
       success: false,
-      error: idResult.error.issues[0]?.message ?? "Invalid playerId",
+      error: idResult.error.issues[0]?.message ?? 'Invalid playerId',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -115,7 +110,7 @@ export async function getPlayerHistory(
   if (!player) {
     res.status(404).json({
       success: false,
-      error: "Player not found",
+      error: 'Player not found',
       code: ErrorCode.PLAYER_NOT_FOUND,
     });
     return;
@@ -156,7 +151,7 @@ export async function getPlayerHistoryVersion(
   if (!idResult.success) {
     res.status(400).json({
       success: false,
-      error: idResult.error.issues[0]?.message ?? "Invalid playerId",
+      error: idResult.error.issues[0]?.message ?? 'Invalid playerId',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -166,7 +161,7 @@ export async function getPlayerHistoryVersion(
   if (!versionResult.success) {
     res.status(400).json({
       success: false,
-      error: versionResult.error.issues[0]?.message ?? "Invalid version",
+      error: versionResult.error.issues[0]?.message ?? 'Invalid version',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -179,7 +174,7 @@ export async function getPlayerHistoryVersion(
   if (!player) {
     res.status(404).json({
       success: false,
-      error: "Player not found",
+      error: 'Player not found',
       code: ErrorCode.PLAYER_NOT_FOUND,
     });
     return;
@@ -229,7 +224,7 @@ export async function getPlayerHistoryDiff(
   if (!idResult.success) {
     res.status(400).json({
       success: false,
-      error: idResult.error.issues[0]?.message ?? "Invalid playerId",
+      error: idResult.error.issues[0]?.message ?? 'Invalid playerId',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -239,7 +234,7 @@ export async function getPlayerHistoryDiff(
   if (!versionResult.success) {
     res.status(400).json({
       success: false,
-      error: versionResult.error.issues[0]?.message ?? "Invalid version",
+      error: versionResult.error.issues[0]?.message ?? 'Invalid version',
       code: ErrorCode.VALIDATION_ERROR,
     });
     return;
@@ -252,7 +247,7 @@ export async function getPlayerHistoryDiff(
   if (!player) {
     res.status(404).json({
       success: false,
-      error: "Player not found",
+      error: 'Player not found',
       code: ErrorCode.PLAYER_NOT_FOUND,
     });
     return;
@@ -273,9 +268,7 @@ export async function getPlayerHistoryDiff(
 
   const prevRow = version > 1 ? rows[version - 2] : null;
 
-  const prevSnapshot = prevRow
-    ? rowToSnapshot(prevRow.metadata_uri)
-    : {};
+  const prevSnapshot = prevRow ? rowToSnapshot(prevRow.metadata_uri) : {};
   const currSnapshot = rowToSnapshot(currRow.metadata_uri);
 
   const diff = diffObjects(prevSnapshot, currSnapshot);

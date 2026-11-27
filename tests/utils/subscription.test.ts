@@ -1,4 +1,8 @@
-import { getActiveSubscription, isActive, SUBSCRIPTION_GRACE_PERIOD_HOURS } from '../../src/utils/subscription';
+import {
+  getActiveSubscription,
+  isActive,
+  SUBSCRIPTION_GRACE_PERIOD_HOURS,
+} from '../../src/utils/subscription';
 
 jest.mock('../../src/db', () => ({
   queryEvents: jest.fn(),

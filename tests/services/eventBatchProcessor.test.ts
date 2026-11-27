@@ -100,7 +100,9 @@ describe('processEventBatches batching', () => {
       adminWallet: 'GADMIN',
       onProgress,
     });
-    const starts = mockGetEvents.mock.calls.map((c: unknown[]) => (c[0] as { startLedger: number }).startLedger);
+    const starts = mockGetEvents.mock.calls.map(
+      (c: unknown[]) => (c[0] as { startLedger: number }).startLedger,
+    );
     expect(starts).toEqual([1, 101, 201]);
     expect(result.ledgersProcessed).toBe(300);
     // Progress covers every ledger exactly once: 100 + 100 + 100.
@@ -154,9 +156,7 @@ describe('processEventBatches batching', () => {
   it('moves on to the next batch when a batch returns no events', async () => {
     // Two batches: 100-199 (empty) and 200-249 (one event).
     const later = makeRaw({ ledger: 220, txHash: uniqueTx('later'), txIndex: 0, eventIndex: 0 });
-    mockGetEvents
-      .mockResolvedValueOnce({ events: [] })
-      .mockResolvedValueOnce({ events: [later] });
+    mockGetEvents.mockResolvedValueOnce({ events: [] }).mockResolvedValueOnce({ events: [later] });
     const result = await processEventBatches({
       fromLedger: 100,
       toLedger: 249,
@@ -172,9 +172,7 @@ describe('processEventBatches batching', () => {
   it('skips a batch on RPC error and continues (per-batch failures do not propagate)', async () => {
     // Contract documented here: RPC errors are logged and the processor moves
     // to the next batch; the job still completes without `error` set.
-    mockGetEvents
-      .mockRejectedValueOnce(new Error('RPC timeout'))
-      .mockResolvedValue({ events: [] });
+    mockGetEvents.mockRejectedValueOnce(new Error('RPC timeout')).mockResolvedValue({ events: [] });
     const result = await processEventBatches({
       fromLedger: 1,
       toLedger: 200,

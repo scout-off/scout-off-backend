@@ -24,7 +24,9 @@ export async function insertContactUnlock(p: {
   unlocked_at: number;
 }): Promise<void> {
   const sql = `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?) ON CONFLICT(scout_wallet, player_id) DO NOTHING`;
-  await timedQueryAsync(sql, () => getDriver().run(sql, [p.scout_wallet, p.player_id, p.tx_hash, p.unlocked_at]));
+  await timedQueryAsync(sql, () =>
+    getDriver().run(sql, [p.scout_wallet, p.player_id, p.tx_hash, p.unlocked_at]),
+  );
 }
 
 export async function getContactUnlocksByScout(scoutWallet: string): Promise<ContactUnlockRow[]> {
@@ -44,5 +46,8 @@ export async function getContactUnlocksByPlayer(playerId: string): Promise<Conta
 
 export async function hasContactUnlock(scoutWallet: string, playerId: string): Promise<boolean> {
   const sql = `SELECT 1 FROM contact_unlocks WHERE scout_wallet = ? AND player_id = ? LIMIT 1`;
-  return timedQueryAsync(sql, async () => (await getDriver().get(sql, [scoutWallet, playerId])) !== undefined);
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get(sql, [scoutWallet, playerId])) !== undefined,
+  );
 }

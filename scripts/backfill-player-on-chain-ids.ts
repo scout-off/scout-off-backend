@@ -1,12 +1,7 @@
 #!/usr/bin/env npx ts-node
 
 import 'dotenv/config';
-import {
-  closeDb,
-  getPlayersMissingOnChainId,
-  initDb,
-  setPlayerOnChainId,
-} from '../src/db';
+import { closeDb, getPlayersMissingOnChainId, initDb, setPlayerOnChainId } from '../src/db';
 import { queryOnChainPlayerId } from '../src/services/stellar';
 
 const BATCH_SIZE = 100;

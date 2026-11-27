@@ -10,7 +10,9 @@ import {
   type RawIndexerEvent,
 } from '../../src/services/eventOrdering';
 
-function ev(partial: Partial<RawIndexerEvent> & Pick<RawIndexerEvent, 'ledger' | 'txHash'>): RawIndexerEvent {
+function ev(
+  partial: Partial<RawIndexerEvent> & Pick<RawIndexerEvent, 'ledger' | 'txHash'>,
+): RawIndexerEvent {
   return { contractId: 'C', ...partial };
 }
 
@@ -65,11 +67,7 @@ describe('eventOrdering', () => {
       ]);
 
       // Within a ledger, first-seen order after stable txHash sort: a then b.
-      expect(events.map((e) => `${e.txHash}:${e.eventIndex}`)).toEqual([
-        'a:0',
-        'a:1',
-        'b:0',
-      ]);
+      expect(events.map((e) => `${e.txHash}:${e.eventIndex}`)).toEqual(['a:0', 'a:1', 'b:0']);
     });
   });
 

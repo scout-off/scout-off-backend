@@ -36,9 +36,9 @@ import { MAX_SAVED_SEARCHES_PER_SCOUT } from '../utils/scoutResourceLimits';
  * filter fields from playerController's filterSchema.
  */
 export const savedSearchFilterSchema = z.object({
-  region:   z.string().optional(),
+  region: z.string().optional(),
   position: z.string().optional(),
-  minTier:  z.number().int().min(0).max(3).optional(),
+  minTier: z.number().int().min(0).max(3).optional(),
 });
 
 export type SavedSearchFilters = z.infer<typeof savedSearchFilterSchema>;
@@ -46,23 +46,24 @@ export type SavedSearchFilters = z.infer<typeof savedSearchFilterSchema>;
 /**
  * Schema for the POST body: name + optional filter fields.
  */
-export const createSavedSearchSchema = z.object({
-  name: z
-    .string()
-    .min(1, 'name is required')
-    .max(100, 'name must be 100 characters or fewer'),
-  filters: savedSearchFilterSchema,
-}).strict();
+export const createSavedSearchSchema = z
+  .object({
+    name: z.string().min(1, 'name is required').max(100, 'name must be 100 characters or fewer'),
+    filters: savedSearchFilterSchema,
+  })
+  .strict();
 
 export type CreateSavedSearchRequest = z.infer<typeof createSavedSearchSchema>;
 
 /**
  * Schema for the PUT body: optional name and/or filters.
  */
-export const updateSavedSearchSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  filters: savedSearchFilterSchema.optional(),
-}).strict();
+export const updateSavedSearchSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    filters: savedSearchFilterSchema.optional(),
+  })
+  .strict();
 
 export type UpdateSavedSearchRequest = z.infer<typeof updateSavedSearchSchema>;
 
@@ -151,11 +152,11 @@ export async function listSavedSearches(
   const rows = await getSavedSearchesByScout(req.params.wallet as string);
 
   const data = rows.map((row) => ({
-    id:           row.id,
+    id: row.id,
     scout_wallet: row.scout_wallet,
-    name:         row.name,
-    filters:      JSON.parse(row.filters) as SavedSearchFilters,
-    created_at:   row.created_at,
+    name: row.name,
+    filters: JSON.parse(row.filters) as SavedSearchFilters,
+    created_at: row.created_at,
   }));
 
   res.json({ success: true, data });

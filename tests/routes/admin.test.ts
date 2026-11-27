@@ -24,7 +24,8 @@ const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 // to pass the requireRole('admin') middleware) but will never satisfy that
 // wallet-identity check, so tests exercising the privileged register/revoke
 // success paths need a token issued directly for the real admin wallet.
-const ADMIN_WALLET = process.env.ADMIN_WALLET ?? 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
+const ADMIN_WALLET =
+  process.env.ADMIN_WALLET ?? 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
 
 function makeAdminToken(): string {
   return jwt.sign({ sub: ADMIN_WALLET, role: 'admin' }, SECRET, { expiresIn: '1h' });
@@ -35,9 +36,7 @@ async function getToken(role: string): Promise<string> {
   const challengeRes = await request(app).get(`/auth/challenge?account=${kp.publicKey()}`);
   const tx = new Transaction(challengeRes.body.challenge, Networks.TESTNET);
   tx.sign(kp);
-  const tokenRes = await request(app)
-    .post('/auth/token')
-    .send({ transaction: tx.toXdr(), role });
+  const tokenRes = await request(app).post('/auth/token').send({ transaction: tx.toXdr(), role });
   return tokenRes.body.token;
 }
 
@@ -114,7 +113,9 @@ describe('POST /api/admin/validators/register', () => {
     const token = makeAdminToken();
     const wallet = Keypair.random().publicKey();
 
-    const { registerValidatorOnChain, ValidatorActionError } = jest.requireMock('../../src/services/stellar') as {
+    const { registerValidatorOnChain, ValidatorActionError } = jest.requireMock(
+      '../../src/services/stellar',
+    ) as {
       registerValidatorOnChain: jest.Mock;
       ValidatorActionError: new (msg: string, code: string) => Error & { code: string };
     };
@@ -205,7 +206,9 @@ describe('POST /api/admin/validators/revoke', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ validatorWallet: wallet });
 
-    const { revokeValidatorOnChain, ValidatorActionError } = jest.requireMock('../../src/services/stellar') as {
+    const { revokeValidatorOnChain, ValidatorActionError } = jest.requireMock(
+      '../../src/services/stellar',
+    ) as {
       revokeValidatorOnChain: jest.Mock;
       ValidatorActionError: new (msg: string, code: string) => Error & { code: string };
     };

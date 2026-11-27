@@ -171,7 +171,11 @@ describe('Stellar RPC timeouts (#1143)', () => {
     jest.doMock('../../src/config', () => ({
       __esModule: true,
       default: {
-        pinata: { apiKey: 'test-key', secret: 'test-secret', gateway: 'https://gateway.pinata.cloud' },
+        pinata: {
+          apiKey: 'test-key',
+          secret: 'test-secret',
+          gateway: 'https://gateway.pinata.cloud',
+        },
         logLevel: 'warn',
         nodeEnv: 'test',
         pinJsonCacheTtlMs: 300_000,

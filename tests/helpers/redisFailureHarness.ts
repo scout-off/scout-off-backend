@@ -143,7 +143,7 @@ export class FakeRedisStore implements RedisLike {
 
     // Support `SET key value PX ttlMs`
     const pxIndex = (args as string[]).findIndex(
-      (a) => typeof a === 'string' && a.toUpperCase() === 'PX'
+      (a) => typeof a === 'string' && a.toUpperCase() === 'PX',
     );
     if (pxIndex !== -1) {
       const ttlMs = Number(args[pxIndex + 1]);
@@ -188,7 +188,7 @@ export class FakeRedisStore implements RedisLike {
     _matchKeyword: string,
     pattern: string,
     _countKeyword: string,
-    _count: number
+    _count: number,
   ): Promise<[string, string[]]> {
     const rejection = this.maybeReject<[string, string[]]>();
     if (rejection) return rejection;
@@ -258,7 +258,7 @@ export class FakeRedisClient extends EventEmitter {
     _script: string,
     _numKeys: number,
     redisKey: string,
-    windowMs: number
+    windowMs: number,
   ): Promise<[number, number]> {
     if (this.state === 'unavailable') {
       throw new RedisConnectionError();
@@ -311,7 +311,7 @@ export function sleep(ms: number): Promise<void> {
  */
 export async function withTimeout<T>(
   promise: Promise<T>,
-  ms: number
+  ms: number,
 ): Promise<{ timedOut: false; value: T } | { timedOut: true }> {
   let timer: NodeJS.Timeout;
   const timeout = new Promise<{ timedOut: true }>((resolve) => {

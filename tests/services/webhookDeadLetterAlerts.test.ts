@@ -2,9 +2,7 @@
  * Tests for dead-letter threshold alerting (#1131).
  */
 
-import {
-  evaluateDeadLetterAlerts,
-} from '../../src/services/webhookDeadLetterAlerts';
+import { evaluateDeadLetterAlerts } from '../../src/services/webhookDeadLetterAlerts';
 import * as metrics from '../../src/middleware/metrics';
 
 describe('evaluateDeadLetterAlerts', () => {
@@ -55,10 +53,7 @@ describe('evaluateDeadLetterAlerts', () => {
       '[critical]',
       expect.stringContaining('webhook_dead_letter_threshold_crossed'),
     );
-    expect(criticalSpy).toHaveBeenCalledWith(
-      '[critical]',
-      expect.stringContaining('sub=7:80'),
-    );
+    expect(criticalSpy).toHaveBeenCalledWith('[critical]', expect.stringContaining('sub=7:80'));
 
     const gauge = metrics.getWebhookDeadLetterGauge();
     expect(gauge['7']).toBe(80);

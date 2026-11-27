@@ -11,9 +11,9 @@ and the route handler in `src/routes/events.ts`.
 
 ## Endpoint
 
-| Method | Path                        | Auth          | Content-Type            |
-| ------ | --------------------------- | ------------- | ----------------------- |
-| `GET`  | `/api/events/stream`        | Bearer JWT    | `text/event-stream`     |
+| Method | Path                 | Auth       | Content-Type        |
+| ------ | -------------------- | ---------- | ------------------- |
+| `GET`  | `/api/events/stream` | Bearer JWT | `text/event-stream` |
 
 The stream is also mounted under the versioned prefixes:
 
@@ -38,13 +38,13 @@ is also accepted).
 
 Response codes:
 
-| Status | Meaning                                                                 |
-| ------ | ----------------------------------------------------------------------- |
-| `200`  | Stream opened; frames start arriving                                    |
-| `400`  | Invalid `eventType` filter (`{ success: false, error, code: "VALIDATION_ERROR", validEventTypes }`) |
-| `401`  | Missing or invalid token (`{ success: false, error }`)                  |
-| `403`  | Wallet is blocklisted — stream access revoked (`code: WALLET_BLOCKLISTED`) |
-| `429`  | Per-wallet stream limit reached (`SSE_MAX_CONNECTIONS_PER_WALLET`)       |
+| Status | Meaning                                                                                                                          |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `200`  | Stream opened; frames start arriving                                                                                             |
+| `400`  | Invalid `eventType` filter (`{ success: false, error, code: "VALIDATION_ERROR", validEventTypes }`)                              |
+| `401`  | Missing or invalid token (`{ success: false, error }`)                                                                           |
+| `403`  | Wallet is blocklisted — stream access revoked (`code: WALLET_BLOCKLISTED`)                                                       |
+| `429`  | Per-wallet stream limit reached (`SSE_MAX_CONNECTIONS_PER_WALLET`)                                                               |
 | `503`  | Process-wide stream limit reached (`SSE_MAX_CONNECTIONS`) — `code: SSE_CAPACITY`; retry after the `Retry-After` header (seconds) |
 
 ## Connecting
@@ -97,10 +97,10 @@ All query parameters are optional and combinable. **Wallet-relevance filtering
 is always applied** (see below); the query parameters only narrow the stream
 further on top of it.
 
-| Parameter   | Type   | Behaviour                                                                                                                              |
-| ----------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Parameter   | Type   | Behaviour                                                                                                                                                                                                                        |
+| ----------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `eventType` | string | Subscribe to one or more event types as a comma-separated list, e.g. `?eventType=milestone_approved,contact_unlocked`. Omitted = receive all event types that pass the relevance filter. Unknown values are rejected with `400`. |
-| `playerId`  | string | Only deliver events whose payload contains this player identifier. Omitted = no additional player-level narrowing.                       |
+| `playerId`  | string | Only deliver events whose payload contains this player identifier. Omitted = no additional player-level narrowing.                                                                                                               |
 
 Examples:
 
@@ -176,26 +176,26 @@ data: {"type":"milestone_approved","payload":{"player_id":"player-001","wallet":
 
 Other frames you may see:
 
-| Frame type     | When                                            | Payload                                   |
-| -------------- | ----------------------------------------------- | ----------------------------------------- |
-| `retry:`       | Once, immediately on connect                    | Integer milliseconds (e.g. `5234`); sets client reconnect delay |
-| `connected`    | Once, immediately after the stream opens        | `{ "wallet": "<your wallet>" }`           |
-| `session_ended`| The stream is being closed (see live auth below)| `{ "reason": "<reason>" }` |
-| `: ping`       | Keep-alive comment every `SSE_KEEPALIVE_INTERVAL_MS` (default 15 s) | — (comment only, ignored by EventSource) |
+| Frame type      | When                                                                | Payload                                                         |
+| --------------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `retry:`        | Once, immediately on connect                                        | Integer milliseconds (e.g. `5234`); sets client reconnect delay |
+| `connected`     | Once, immediately after the stream opens                            | `{ "wallet": "<your wallet>" }`                                 |
+| `session_ended` | The stream is being closed (see live auth below)                    | `{ "reason": "<reason>" }`                                      |
+| `: ping`        | Keep-alive comment every `SSE_KEEPALIVE_INTERVAL_MS` (default 15 s) | — (comment only, ignored by EventSource)                        |
 
 ### `session_ended` reasons
 
 When the server terminates a stream, it sends a final `session_ended` event with a machine-readable reason:
 
-| Reason                     | HTTP status | Trigger                                                                 |
-| -------------------------- | ----------- | ----------------------------------------------------------------------- |
-| `token_revoked`            | —           | JWT was revoked (logout or admin revocation) while stream was open     |
-| `wallet_blocklisted`       | —           | Wallet was blocklisted while stream was open                           |
-| `token_expired`            | —           | JWT expiry was reached while stream was open                           |
-| `api_key_revoked`          | —           | API key was revoked or rotated while stream was open                   |
-| `api_key_expired`          | —           | API key's `expires_at` timestamp was reached while stream was open     |
-| `max_session_exceeded`     | —           | Stream exceeded `SSE_MAX_SESSION_MS` (default 24 hours) lifetime cap   |
-| `server_shutdown`          | —           | Server is shutting down and draining all connections                   |
+| Reason                 | HTTP status | Trigger                                                              |
+| ---------------------- | ----------- | -------------------------------------------------------------------- |
+| `token_revoked`        | —           | JWT was revoked (logout or admin revocation) while stream was open   |
+| `wallet_blocklisted`   | —           | Wallet was blocklisted while stream was open                         |
+| `token_expired`        | —           | JWT expiry was reached while stream was open                         |
+| `api_key_revoked`      | —           | API key was revoked or rotated while stream was open                 |
+| `api_key_expired`      | —           | API key's `expires_at` timestamp was reached while stream was open   |
+| `max_session_exceeded` | —           | Stream exceeded `SSE_MAX_SESSION_MS` (default 24 hours) lifetime cap |
+| `server_shutdown`      | —           | Server is shutting down and draining all connections                 |
 
 Clients should treat any `session_ended` event as terminal and not attempt to
 reconnect with the same credentials. Reconnection should use fresh authentication
@@ -213,17 +213,17 @@ query parameters**. The rules (from `isEventRelevantToWallet` in
 
 | Event type             | Delivered to the wallet when…                                                       |
 | ---------------------- | ----------------------------------------------------------------------------------- |
-| `milestone_approved`   | `payload.player_id`, `payload.wallet`, or `payload.scout` matches                    |
-| `scout_subscribed`     | `payload.scout` or `payload.wallet` matches                                          |
-| `contact_unlocked`     | `payload.scout` or `payload.wallet` matches                                          |
-| `trial_offer_logged`   | `payload.scout` matches (scout) or `payload.player_id` matches (player)              |
-| `trial_offer_accepted` | `payload.scout` matches (scout who offered) or `payload.player_id` matches (player)  |
-| `trial_offer_rejected` | `payload.scout` matches (scout who offered) or `payload.player_id` matches (player)  |
-| `player_registered`    | `payload.wallet` or `payload.player_id` matches                                      |
-| `milestone_submitted`  | `payload.player_id` matches (player) or `payload.validator` matches (validator)      |
-| `fees_withdrawn`       | `payload.recipient` or `payload.wallet` matches (admin)                               |
-| `player_deactivated`   | `payload.player_id`, `payload.wallet`, or `payload.scout_wallet` matches              |
-| `player_reactivated`   | `payload.player_id` or `payload.wallet` matches                                       |
+| `milestone_approved`   | `payload.player_id`, `payload.wallet`, or `payload.scout` matches                   |
+| `scout_subscribed`     | `payload.scout` or `payload.wallet` matches                                         |
+| `contact_unlocked`     | `payload.scout` or `payload.wallet` matches                                         |
+| `trial_offer_logged`   | `payload.scout` matches (scout) or `payload.player_id` matches (player)             |
+| `trial_offer_accepted` | `payload.scout` matches (scout who offered) or `payload.player_id` matches (player) |
+| `trial_offer_rejected` | `payload.scout` matches (scout who offered) or `payload.player_id` matches (player) |
+| `player_registered`    | `payload.wallet` or `payload.player_id` matches                                     |
+| `milestone_submitted`  | `payload.player_id` matches (player) or `payload.validator` matches (validator)     |
+| `fees_withdrawn`       | `payload.recipient` or `payload.wallet` matches (admin)                             |
+| `player_deactivated`   | `payload.player_id`, `payload.wallet`, or `payload.scout_wallet` matches            |
+| `player_reactivated`   | `payload.player_id` or `payload.wallet` matches                                     |
 
 In practice most clients only need `milestone_approved`, `scout_subscribed`, and
 `contact_unlocked`, but all event types are handled so the stream is
@@ -235,7 +235,7 @@ The two filter layers compose with **AND** semantics:
 
 1. `isEventRelevantToWallet` — wallet isolation, always enforced.
 2. `isEventMatchingFilter` — the optional `eventType`
-2. `isEventMatchingFilter` — the optional `eventType` / `playerId` narrowing.
+3. `isEventMatchingFilter` — the optional `eventType` / `playerId` narrowing.
 
 A `playerId` filter matches if any payload field that carries a player identity
 (`player_id`, `wallet`, `scout`, `recipient`, `validator`) equals the value.
@@ -292,21 +292,21 @@ for the full model.
 
 ## Related configuration
 
-| Variable                    | Default | Description                                             |
-| --------------------------- | ------- | ------------------------------------------------------- |
-| `SSE_RETRY_MS`              | `5000`  | Base reconnect delay hint sent in `retry:` frame (ms)   |
-| `SSE_KEEPALIVE_INTERVAL_MS` | `15000` | Interval between keep-alive `: ping` comments (ms)      |
-| `SSE_MAX_CONNECTIONS_PER_WALLET` | `5` | Max concurrent streams per wallet; `0` = unlimited       |
-| `SSE_MAX_CONNECTIONS`       | `0`     | Max concurrent streams; `0` = unlimited                 |
-| `SSE_AUTH_SWEEP_INTERVAL_MS`| `30000` | Cross-process auth sweep interval (ms)                  |
+| Variable                         | Default | Description                                           |
+| -------------------------------- | ------- | ----------------------------------------------------- |
+| `SSE_RETRY_MS`                   | `5000`  | Base reconnect delay hint sent in `retry:` frame (ms) |
+| `SSE_KEEPALIVE_INTERVAL_MS`      | `15000` | Interval between keep-alive `: ping` comments (ms)    |
+| `SSE_MAX_CONNECTIONS_PER_WALLET` | `5`     | Max concurrent streams per wallet; `0` = unlimited    |
+| `SSE_MAX_CONNECTIONS`            | `0`     | Max concurrent streams; `0` = unlimited               |
+| `SSE_AUTH_SWEEP_INTERVAL_MS`     | `30000` | Cross-process auth sweep interval (ms)                |
 
 ## Troubleshooting
 
-| Symptom                                  | Likely cause / check                                                        |
-| ---------------------------------------- | --------------------------------------------------------------------------- |
-| `401` on connect                         | Missing/expired `Authorization: Bearer` header                              |
-| `403` on connect                         | Wallet is blocklisted                                                       |
-| `503` on connect                         | `SSE_MAX_CONNECTIONS` reached — raise it or check for leaked connections     |
-| Stream opens but no events arrive        | Filter too narrow, or the events simply aren't relevant to your wallet      |
-| Events missed after a reconnect          | Expected — there is no `Last-Event-ID` replay; re-fetch state from REST      |
-| Keep-alives stop and connection dies     | Proxy buffering — ensure `X-Accel-Buffering: no` is honoured (set by the backend) |
+| Symptom                              | Likely cause / check                                                              |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| `401` on connect                     | Missing/expired `Authorization: Bearer` header                                    |
+| `403` on connect                     | Wallet is blocklisted                                                             |
+| `503` on connect                     | `SSE_MAX_CONNECTIONS` reached — raise it or check for leaked connections          |
+| Stream opens but no events arrive    | Filter too narrow, or the events simply aren't relevant to your wallet            |
+| Events missed after a reconnect      | Expected — there is no `Last-Event-ID` replay; re-fetch state from REST           |
+| Keep-alives stop and connection dies | Proxy buffering — ensure `X-Accel-Buffering: no` is honoured (set by the backend) |

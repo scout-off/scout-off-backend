@@ -46,7 +46,9 @@ describe('validateMinTier', () => {
   it('rejects non-numeric strings', () => {
     const result = validateMinTier('elite');
     expect(result.valid).toBe(false);
-    expect(result.error).toBe('minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite');
+    expect(result.error).toBe(
+      'minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite',
+    );
   });
 
   it('rejects string float values', () => {
@@ -58,13 +60,17 @@ describe('validateMinTier', () => {
   it('rejects exponential string values', () => {
     const result = validateMinTier('1e1');
     expect(result.valid).toBe(false);
-    expect(result.error).toBe('minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite');
+    expect(result.error).toBe(
+      'minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite',
+    );
   });
 
   it('rejects hexadecimal string values', () => {
     const result = validateMinTier('0x2');
     expect(result.valid).toBe(false);
-    expect(result.error).toBe('minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite');
+    expect(result.error).toBe(
+      'minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite',
+    );
   });
 
   it('rejects float values', () => {

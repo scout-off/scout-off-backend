@@ -150,7 +150,9 @@ describe('logRedaction', () => {
         },
       };
       const redacted = redactLogArg(obj) as Record<string, unknown>;
-      expect(((redacted.level1 as Record<string, unknown>).level2 as Record<string, unknown>).level3).toEqual({});
+      expect(
+        ((redacted.level1 as Record<string, unknown>).level2 as Record<string, unknown>).level3,
+      ).toEqual({});
     });
   });
 

@@ -1,5 +1,9 @@
 import { getFeatureFlags } from '../../src/controllers/featureFlagsController';
-import { clearFeatureFlagCache, isFeatureEnabled, setFeatureFlag } from '../../src/services/featureFlags';
+import {
+  clearFeatureFlagCache,
+  isFeatureEnabled,
+  setFeatureFlag,
+} from '../../src/services/featureFlags';
 import * as db from '../../src/db';
 
 describe('FeatureFlags Controller - Cache Consistency (#677)', () => {

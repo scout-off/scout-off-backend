@@ -72,7 +72,10 @@ export async function deleteBookmark(scoutWallet: string, playerId: string): Pro
  * List all bookmarks for a scout, ordered by creation time (newest first).
  * Optionally filter by folder_id.
  */
-export async function getBookmarksByScout(scoutWallet: string, folderId?: number | null): Promise<ScoutBookmarkRow[]> {
+export async function getBookmarksByScout(
+  scoutWallet: string,
+  folderId?: number | null,
+): Promise<ScoutBookmarkRow[]> {
   let sql: string;
   let params: (string | number | null)[];
 
@@ -117,7 +120,9 @@ export async function insertBookmarkFolder(p: {
 /**
  * List all bookmark folders for a scout, ordered by creation time (newest first).
  */
-export async function getBookmarkFoldersByScout(scoutWallet: string): Promise<ScoutBookmarkFolderRow[]> {
+export async function getBookmarkFoldersByScout(
+  scoutWallet: string,
+): Promise<ScoutBookmarkFolderRow[]> {
   const sql = `
     SELECT * FROM scout_bookmark_folders
     WHERE scout_wallet = ?
@@ -127,15 +132,45 @@ export async function getBookmarkFoldersByScout(scoutWallet: string): Promise<Sc
 }
 
 /**
+ * List a scout's bookmark folders with their bookmark counts in a single
+ * grouped query (#1792), instead of one COUNT query per folder. Empty folders
+ * are included with a count of 0.
+ */
+export async function getBookmarkFoldersWithCounts(
+  scoutWallet: string,
+): Promise<Array<ScoutBookmarkFolderRow & { bookmark_count: number }>> {
+  const sql = `
+    SELECT f.id, f.scout_wallet, f.name, f.created_at, COUNT(b.folder_id) AS bookmark_count
+    FROM scout_bookmark_folders f
+    LEFT JOIN scout_bookmarks b ON b.folder_id = f.id
+    WHERE f.scout_wallet = ?
+    GROUP BY f.id, f.scout_wallet, f.name, f.created_at
+    ORDER BY f.created_at DESC
+  `;
+  return timedQueryAsync(sql, async () => {
+    const rows = await getDriver().all<
+      ScoutBookmarkFolderRow & { bookmark_count: number | string }
+    >(sql, [scoutWallet]);
+    // Postgres returns COUNT(*) as a string (bigint); normalise to a number.
+    return rows.map((row) => ({ ...row, bookmark_count: Number(row.bookmark_count) }));
+  });
+}
+
+/**
  * Get a bookmark folder by id, ensuring it belongs to the scout.
  */
-export async function getBookmarkFolderById(folderId: number, scoutWallet: string): Promise<ScoutBookmarkFolderRow | null> {
+export async function getBookmarkFolderById(
+  folderId: number,
+  scoutWallet: string,
+): Promise<ScoutBookmarkFolderRow | null> {
   const sql = `
     SELECT * FROM scout_bookmark_folders
     WHERE id = ? AND scout_wallet = ?
   `;
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<ScoutBookmarkFolderRow>(sql, [folderId, scoutWallet])) ?? null
+  return timedQueryAsync(
+    sql,
+    async () =>
+      (await getDriver().get<ScoutBookmarkFolderRow>(sql, [folderId, scoutWallet])) ?? null,
   );
 }
 
@@ -153,10 +188,12 @@ export async function renameBookmarkFolder(
   return timedQueryAsync(sql, async () => {
     const info = await getDriver().run(sql, [name, folderId, scoutWallet]);
     if (info.changes === 0) return null;
-    return (await getDriver().get<ScoutBookmarkFolderRow>(
-      `SELECT * FROM scout_bookmark_folders WHERE id = ? AND scout_wallet = ?`,
-      [folderId, scoutWallet],
-    )) ?? null;
+    return (
+      (await getDriver().get<ScoutBookmarkFolderRow>(
+        `SELECT * FROM scout_bookmark_folders WHERE id = ? AND scout_wallet = ?`,
+        [folderId, scoutWallet],
+      )) ?? null
+    );
   });
 }
 
@@ -164,7 +201,10 @@ export async function renameBookmarkFolder(
  * Delete a bookmark folder by id, ensuring it belongs to the scout.
  * Returns true when a row was deleted, false when it did not exist.
  */
-export async function deleteBookmarkFolder(folderId: number, scoutWallet: string): Promise<boolean> {
+export async function deleteBookmarkFolder(
+  folderId: number,
+  scoutWallet: string,
+): Promise<boolean> {
   const sql = `DELETE FROM scout_bookmark_folders WHERE id = ? AND scout_wallet = ?`;
   return timedQueryAsync(sql, async () => {
     const info = await getDriver().run(sql, [folderId, scoutWallet]);
@@ -258,7 +298,6 @@ export async function getBookmarkedPlayersWithDetails(
 
   return timedQueryAsync(sql, () => getDriver().all<BookmarkedPlayerRow>(sql, params));
 }
-
 
 /**
  * Count bookmarked players for a scout (JOIN variant so orphans excluded,

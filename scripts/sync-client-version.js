@@ -58,6 +58,6 @@ if (require.main === module) {
   console.log(
     changed
       ? `[sync-client-version] Set TypeScript client version to ${version}`
-      : `[sync-client-version] TypeScript client version already ${version}`
+      : `[sync-client-version] TypeScript client version already ${version}`,
   );
 }

@@ -29,14 +29,11 @@ const fs = require('fs');
 const path = require('path');
 
 const YAML_PATH =
-  process.env.OPENAPI_YAML_PATH ||
-  path.join(__dirname, '..', 'src', 'openapi.yaml');
+  process.env.OPENAPI_YAML_PATH || path.join(__dirname, '..', 'src', 'openapi.yaml');
 const JSON_PATH =
-  process.env.OPENAPI_JSON_PATH ||
-  path.join(__dirname, '..', 'src', 'openapi.json');
+  process.env.OPENAPI_JSON_PATH || path.join(__dirname, '..', 'src', 'openapi.json');
 const PACKAGE_JSON_PATH =
-  process.env.PACKAGE_JSON_PATH ||
-  path.join(__dirname, '..', 'package.json');
+  process.env.PACKAGE_JSON_PATH || path.join(__dirname, '..', 'package.json');
 
 /**
  * Read the canonical version from package.json (overridable for tests).
@@ -136,12 +133,13 @@ function main() {
   // The spec version is derived from package.json at generation time; this
   // assertion fails CI with a clear message when a version bump was not
   // followed by `npm run build:openapi` (issue #1888).
-  const packageVersion = readPackageVersion();  if (spec.info.version !== packageVersion) {
+  const packageVersion = readPackageVersion();
+  if (spec.info.version !== packageVersion) {
     console.error(
       `[validate-openapi] info.version (${spec.info.version}) does not match ` +
-      `package.json version (${packageVersion}).\n` +
-      'The OpenAPI spec version is derived from package.json.\n' +
-      'Run: npm run build:openapi   then commit the updated openapi.yaml/openapi.json',
+        `package.json version (${packageVersion}).\n` +
+        'The OpenAPI spec version is derived from package.json.\n' +
+        'Run: npm run build:openapi   then commit the updated openapi.yaml/openapi.json',
     );
     process.exit(1);
   }
@@ -165,7 +163,9 @@ function main() {
   if (duplicateOperationIds.length > 0) {
     console.error(
       '[validate-openapi] operationId values must be unique: ' +
-      duplicateOperationIds.map(([id, locations]) => `${id} (${locations.join(', ')})`).join('; '),
+        duplicateOperationIds
+          .map(([id, locations]) => `${id} (${locations.join(', ')})`)
+          .join('; '),
     );
     process.exit(1);
   }
@@ -180,17 +180,20 @@ function main() {
     try {
       regenerated = generateSpec();
     } catch (err) {
-      console.error('[validate-openapi] Failed to regenerate spec from route sources:', err.message);
+      console.error(
+        '[validate-openapi] Failed to regenerate spec from route sources:',
+        err.message,
+      );
       process.exit(1);
     }
 
     if (!specsAreEqual(spec, regenerated)) {
       console.error(
         '[validate-openapi] src/openapi.yaml is out of sync with the route source files ' +
-        '(src/routes/*.ts).\n' +
-        'A route, its auth requirement, or its request/response schema changed without ' +
-        'regenerating the spec.\n' +
-        'Run: npm run build:openapi   then commit the updated openapi.yaml/openapi.json',
+          '(src/routes/*.ts).\n' +
+          'A route, its auth requirement, or its request/response schema changed without ' +
+          'regenerating the spec.\n' +
+          'Run: npm run build:openapi   then commit the updated openapi.yaml/openapi.json',
       );
       process.exit(1);
     }
@@ -199,8 +202,7 @@ function main() {
   // ── Step 4: Check JSON is in sync with YAML ────────────────────────────────
   if (!fs.existsSync(JSON_PATH)) {
     console.error(
-      '[validate-openapi] src/openapi.json does not exist.\n' +
-      'Run: npm run build:openapi',
+      '[validate-openapi] src/openapi.json does not exist.\n' + 'Run: npm run build:openapi',
     );
     process.exit(1);
   }
@@ -209,14 +211,14 @@ function main() {
   if (!specsAreEqual(spec, jsonSpec)) {
     console.error(
       '[validate-openapi] src/openapi.json is out of sync with src/openapi.yaml.\n' +
-      'Run: npm run build:openapi  then commit the updated openapi.json',
+        'Run: npm run build:openapi  then commit the updated openapi.json',
     );
     process.exit(1);
   }
 
   console.log(
     `[validate-openapi] OK — OpenAPI ${spec.openapi} spec valid and in sync with route sources ` +
-    `(${pathCount} paths, info.version=${spec.info.version})`,
+      `(${pathCount} paths, info.version=${spec.info.version})`,
   );
   process.exit(0);
 }

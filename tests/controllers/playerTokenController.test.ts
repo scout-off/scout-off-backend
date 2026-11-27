@@ -12,7 +12,11 @@ import {
   _stubSeedTokens,
   _stubReset,
 } from '../../src/controllers/playerTokenController';
-import { clearFeatureFlagCache, setFeatureFlag, FeatureFlags } from '../../src/services/featureFlags';
+import {
+  clearFeatureFlagCache,
+  setFeatureFlag,
+  FeatureFlags,
+} from '../../src/services/featureFlags';
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 
@@ -115,9 +119,18 @@ describe('playerTokenController', () => {
       await _stubSeedTokens('player-a', 100);
 
       // Buy some tokens first so holders list is non-empty.
-      const buyReq = { params: { playerId: 'player-a' }, body: { amount: 10, buyerWallet: 'WALLET_A' }, account: 'WALLET_A' } as any;
+      const buyReq = {
+        params: { playerId: 'player-a' },
+        body: { amount: 10, buyerWallet: 'WALLET_A' },
+        account: 'WALLET_A',
+      } as any;
       let ignored: unknown;
-      const buyRes = { status: () => buyRes, json: (d: unknown) => { ignored = d; } } as any;
+      const buyRes = {
+        status: () => buyRes,
+        json: (d: unknown) => {
+          ignored = d;
+        },
+      } as any;
       await buyPlayerToken(buyReq, buyRes, jest.fn());
 
       const { req, res, getStatus, getBody } = mockReqRes('player-a');
@@ -246,9 +259,13 @@ describe('playerTokenController', () => {
     it('uses the authenticated wallet when buyerWallet is omitted from body', async () => {
       await _stubSeedTokens('player-5', 50);
 
-      const { req, res, next, getStatus, getBody } = mockReqRes('player-5', {
-        amount: 5,
-      }, 'AUTHENTICATED_BUYER');
+      const { req, res, next, getStatus, getBody } = mockReqRes(
+        'player-5',
+        {
+          amount: 5,
+        },
+        'AUTHENTICATED_BUYER',
+      );
       await buyPlayerToken(req, res, next);
 
       expect(getStatus()).toBe(200);
@@ -285,7 +302,11 @@ describe('playerTokenController', () => {
       await _stubSeedTokens('player-8', 5);
 
       // First, exhaust the supply.
-      const { req: r1, res: res1, next: n1 } = mockReqRes('player-8', {
+      const {
+        req: r1,
+        res: res1,
+        next: n1,
+      } = mockReqRes('player-8', {
         amount: 5,
         buyerWallet: 'BUYER_FIRST',
       });
@@ -293,7 +314,13 @@ describe('playerTokenController', () => {
       expect(n1).not.toHaveBeenCalled();
 
       // Now attempt to buy more than what remains (0 left).
-      const { req: r2, res: res2, next: n2, getStatus, getBody } = mockReqRes('player-8', {
+      const {
+        req: r2,
+        res: res2,
+        next: n2,
+        getStatus,
+        getBody,
+      } = mockReqRes('player-8', {
         amount: 1,
         buyerWallet: 'BUYER_SECOND',
       });

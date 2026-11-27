@@ -128,7 +128,7 @@ describe('GET /api/admin/audit/trail (#832)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.length).toBeGreaterThanOrEqual(2);
     expect(
-      res.body.data.every((e: { event_type: string }) => e.event_type === 'player_registered')
+      res.body.data.every((e: { event_type: string }) => e.event_type === 'player_registered'),
     ).toBe(true);
   });
 
@@ -139,7 +139,7 @@ describe('GET /api/admin/audit/trail (#832)', () => {
 
     expect(res.status).toBe(200);
     expect(
-      res.body.data.every((e: { event_type: string }) => e.event_type === 'validator_registration')
+      res.body.data.every((e: { event_type: string }) => e.event_type === 'validator_registration'),
     ).toBe(true);
   });
 
@@ -163,8 +163,8 @@ describe('GET /api/admin/audit/trail (#832)', () => {
     expect(res.status).toBe(200);
     expect(
       res.body.data.every(
-        (e: { created_at: string }) => e.created_at >= '2025-03-03T00:00:00.000Z'
-      )
+        (e: { created_at: string }) => e.created_at >= '2025-03-03T00:00:00.000Z',
+      ),
     ).toBe(true);
   });
 
@@ -176,16 +176,14 @@ describe('GET /api/admin/audit/trail (#832)', () => {
     expect(res.status).toBe(200);
     expect(
       res.body.data.every(
-        (e: { created_at: string }) => e.created_at <= '2025-03-02T23:59:59.999Z'
-      )
+        (e: { created_at: string }) => e.created_at <= '2025-03-02T23:59:59.999Z',
+      ),
     ).toBe(true);
   });
 
   it('?from=&to= combined restricts to the given window', async () => {
     const res = await request(app)
-      .get(
-        '/api/admin/audit/trail?from=2025-03-02T00:00:00.000Z&to=2025-03-03T23:59:59.999Z'
-      )
+      .get('/api/admin/audit/trail?from=2025-03-02T00:00:00.000Z&to=2025-03-03T23:59:59.999Z')
       .set('Authorization', `Bearer ${getAdminToken()}`);
 
     expect(res.status).toBe(200);
@@ -237,9 +235,27 @@ describe('GET /api/admin/audit/trail (#832)', () => {
 
   it('page 2 returns a different set of items than page 1', async () => {
     // Seed enough entries so that page 2 is non-empty with pageSize=2.
-    db.insertAuditLog({ action: 'player_search', adminWallet: 'GX1', queryParams: {}, createdAt: '2025-04-01T00:00:00.000Z', eventSource: 'app_event' });
-    db.insertAuditLog({ action: 'player_search', adminWallet: 'GX2', queryParams: {}, createdAt: '2025-04-02T00:00:00.000Z', eventSource: 'app_event' });
-    db.insertAuditLog({ action: 'player_search', adminWallet: 'GX3', queryParams: {}, createdAt: '2025-04-03T00:00:00.000Z', eventSource: 'app_event' });
+    db.insertAuditLog({
+      action: 'player_search',
+      adminWallet: 'GX1',
+      queryParams: {},
+      createdAt: '2025-04-01T00:00:00.000Z',
+      eventSource: 'app_event',
+    });
+    db.insertAuditLog({
+      action: 'player_search',
+      adminWallet: 'GX2',
+      queryParams: {},
+      createdAt: '2025-04-02T00:00:00.000Z',
+      eventSource: 'app_event',
+    });
+    db.insertAuditLog({
+      action: 'player_search',
+      adminWallet: 'GX3',
+      queryParams: {},
+      createdAt: '2025-04-03T00:00:00.000Z',
+      eventSource: 'app_event',
+    });
 
     const page1 = await request(app)
       .get('/api/admin/audit/trail?eventType=player_search&pageSize=2&page=1')
@@ -285,7 +301,7 @@ describe('GET /api/admin/audit/trail (#832)', () => {
   it('combines eventType and date-range filters correctly', async () => {
     const res = await request(app)
       .get(
-        '/api/admin/audit/trail?eventType=player_registered&from=2025-03-01T00:00:00.000Z&to=2025-03-02T23:59:59.999Z'
+        '/api/admin/audit/trail?eventType=player_registered&from=2025-03-01T00:00:00.000Z&to=2025-03-02T23:59:59.999Z',
       )
       .set('Authorization', `Bearer ${getAdminToken()}`);
 

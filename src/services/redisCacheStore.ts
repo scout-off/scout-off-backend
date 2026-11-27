@@ -99,7 +99,7 @@ export class RedisCacheStore implements CacheStore {
           'MATCH',
           `${prefix}*`,
           'COUNT',
-          SCAN_COUNT
+          SCAN_COUNT,
         );
         cursor = nextCursor;
         if (keys.length > 0) {

@@ -75,7 +75,12 @@ function getMaxSseConnectionsPerWallet(): number {
 }
 
 /** Maximum SSE session lifetime in milliseconds (default 24 hours). */
-const MAX_SESSION_MS = parseNumericEnv('SSE_MAX_SESSION_MS', process.env.SSE_MAX_SESSION_MS, 24 * 60 * 60 * 1000, { min: 1, integer: true });
+const MAX_SESSION_MS = parseNumericEnv(
+  'SSE_MAX_SESSION_MS',
+  process.env.SSE_MAX_SESSION_MS,
+  24 * 60 * 60 * 1000,
+  { min: 1, integer: true },
+);
 
 /** Parse a numeric environment variable with defaults and validation. */
 function parseNumericEnv(
@@ -141,9 +146,9 @@ const VALID_EVENT_TYPES = new Set<ContractEventType>([
  * `,`, trimmed, and deduped. Returns the set of requested types, or an
  * error listing the valid types when any value is unknown.
  */
-function parseEventTypes(raw: string | undefined):
-  | { ok: true; types: Set<ContractEventType> }
-  | { ok: false; invalid: string[] } {
+function parseEventTypes(
+  raw: string | undefined,
+): { ok: true; types: Set<ContractEventType> } | { ok: false; invalid: string[] } {
   const types = new Set<ContractEventType>();
   if (raw === undefined) return { ok: true, types };
 
@@ -197,7 +202,16 @@ interface ActiveSession {
   /** Unix timestamp when the session started (for max session lifetime). */
   startTime?: number;
   /** Terminate the connection; safe to call more than once. */
-  terminate: (reason: 'token_revoked' | 'wallet_blocklisted' | 'token_expired' | 'server_shutdown' | 'api_key_revoked' | 'api_key_expired' | 'max_session_exceeded') => void;
+  terminate: (
+    reason:
+      | 'token_revoked'
+      | 'wallet_blocklisted'
+      | 'token_expired'
+      | 'server_shutdown'
+      | 'api_key_revoked'
+      | 'api_key_expired'
+      | 'max_session_exceeded',
+  ) => void;
 }
 
 /** Sessions currently open in this process. */
@@ -333,8 +347,12 @@ export function terminateSessionsForWallet(wallet: string): void {
  * with 503 before server.close() drains keep-alive idle connections.
  */
 let _acceptingSseSessions = true;
-export function setAcceptingSseSessions(v: boolean): void { _acceptingSseSessions = v; }
-export function isAcceptingSseSessions(): boolean { return _acceptingSseSessions; }
+export function setAcceptingSseSessions(v: boolean): void {
+  _acceptingSseSessions = v;
+}
+export function isAcceptingSseSessions(): boolean {
+  return _acceptingSseSessions;
+}
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
@@ -503,13 +521,26 @@ const streamHandler = async (req: Request, res: Response) => {
     broadcaster.unsubscribe(subscriber);
     activeSessions.delete(session);
     for (const fn of cleanupFns) {
-      try { fn(); } catch { /* listener cleanup is best-effort */ }
+      try {
+        fn();
+      } catch {
+        /* listener cleanup is best-effort */
+      }
     }
     cleanupFns.length = 0;
     logger.info(`[sse] client disconnected wallet=${wallet} total=${broadcaster.subscriberCount}`);
   };
 
-  const terminate = (reason: 'token_revoked' | 'wallet_blocklisted' | 'token_expired' | 'server_shutdown' | 'api_key_revoked' | 'api_key_expired' | 'max_session_exceeded'): void => {
+  const terminate = (
+    reason:
+      | 'token_revoked'
+      | 'wallet_blocklisted'
+      | 'token_expired'
+      | 'server_shutdown'
+      | 'api_key_revoked'
+      | 'api_key_expired'
+      | 'max_session_exceeded',
+  ): void => {
     if (terminated || res.writableEnded) return;
     logger.warn(`[sse] terminating session wallet=${wallet} reason=${reason}`);
     try {
@@ -638,7 +669,22 @@ const streamHandler = async (req: Request, res: Response) => {
   }
 };
 
-router.route('/stream')
+/**
+ * GET /api/events/stream
+ *
+ * Server-Sent Events stream of wallet-relevant contract events (see streamHandler above).
+ *
+ * @auth Bearer token required (any role)
+ * @response 200 text/event-stream — long-lived SSE connection
+ * @response 400 { success: false, error: string, code: string, validEventTypes: string[] } — unknown eventType
+ * @response 401 { success: false, error: string } — missing or invalid token
+ * @response 403 { success: false, error: string, code: 'WALLET_BLOCKLISTED' } — wallet is blocklisted
+ * @response 405 { success: false, error: string } — unsupported method
+ * @response 429 { success: false, error: string } — per-wallet connection limit reached
+ * @response 503 { success: false, error: string, code: 'SSE_CAPACITY' } — global connection limit reached
+ */
+router
+  .route('/stream')
   .get(requireAuth, streamHandler)
   .all(methodNotAllowed(['GET']));
 

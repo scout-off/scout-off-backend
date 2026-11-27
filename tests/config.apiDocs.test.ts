@@ -65,7 +65,7 @@ describe('apiDocsConfig.mode', () => {
 
   it('throws on an invalid mode', () => {
     expect(() => loadConfig({ NODE_ENV: 'production', API_DOCS_MODE: 'private' })).toThrow(
-      /Invalid API_DOCS_MODE: "private"/
+      /Invalid API_DOCS_MODE: "private"/,
     );
   });
 });

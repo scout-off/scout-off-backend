@@ -16,3 +16,10 @@ export class SavedSearchLimitError extends Error {
     this.name = 'SavedSearchLimitError';
   }
 }
+
+export class ApiKeyLimitError extends Error {
+  constructor() {
+    super(`API key limit reached (${MAX_API_KEYS_PER_SCOUT} per scout)`);
+    this.name = 'ApiKeyLimitError';
+  }
+}

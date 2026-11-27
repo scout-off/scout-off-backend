@@ -1,11 +1,14 @@
 import { auditSecretAccess } from '../../src/secrets/audit';
 import { EnvSecretsProvider } from '../../src/secrets/envProvider';
+import { logger } from '../../src/utils/logger';
+
+// Audit events go through the shared logger as a structured object (#1853).
 
 describe('auditSecretAccess', () => {
   let infoSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    infoSpy = jest.spyOn(logger, 'info').mockImplementation(() => true);
   });
 
   afterEach(() => {
@@ -21,18 +24,14 @@ describe('auditSecretAccess', () => {
     });
 
     expect(infoSpy).toHaveBeenCalledTimes(1);
-    const [prefix, raw] = infoSpy.mock.calls[0] as [string, string];
-    expect(prefix).toBe('[secrets-audit]');
-
-    const payload = JSON.parse(raw) as Record<string, unknown>;
+    const payload = infoSpy.mock.calls[0][0] as Record<string, unknown>;
     expect(payload).toMatchObject({
+      event: 'secrets_audit',
       action: 'get',
       name: 'SOME_SECRET',
       provider: 'env',
       found: true,
     });
-    expect(typeof payload.ts).toBe('string');
-    expect(Number.isNaN(Date.parse(payload.ts as string))).toBe(false);
   });
 
   it('includes optional detail when provided', () => {
@@ -44,7 +43,7 @@ describe('auditSecretAccess', () => {
       detail: 'noop-env',
     });
 
-    const payload = JSON.parse(infoSpy.mock.calls[0][1] as string);
+    const payload = infoSpy.mock.calls[0][0] as Record<string, unknown>;
     expect(payload.detail).toBe('noop-env');
   });
 
@@ -56,9 +55,9 @@ describe('auditSecretAccess', () => {
       found: true,
     });
 
-    const raw = infoSpy.mock.calls[0][1] as string;
-    expect(Object.keys(JSON.parse(raw)).sort()).toEqual(
-      ['action', 'found', 'name', 'provider', 'ts'].sort(),
+    const payload = infoSpy.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(
+      ['action', 'event', 'found', 'name', 'provider'].sort(),
     );
   });
 });
@@ -69,10 +68,10 @@ describe('EnvSecretsProvider', () => {
   let provider: EnvSecretsProvider;
 
   const lastEvent = (): Record<string, unknown> =>
-    JSON.parse(infoSpy.mock.calls[infoSpy.mock.calls.length - 1][1] as string);
+    infoSpy.mock.calls[infoSpy.mock.calls.length - 1][0] as Record<string, unknown>;
 
   beforeEach(() => {
-    infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    infoSpy = jest.spyOn(logger, 'info').mockImplementation(() => true);
     provider = new EnvSecretsProvider();
     delete process.env[SECRET_NAME];
   });
@@ -97,7 +96,7 @@ describe('EnvSecretsProvider', () => {
       provider: 'env',
       found: true,
     });
-    expect(infoSpy.mock.calls[0][1]).not.toContain('super-secret-value');
+    expect(JSON.stringify(infoSpy.mock.calls[0])).not.toContain('super-secret-value');
   });
 
   it('returns undefined and audits found=false for a missing secret', () => {
@@ -131,7 +130,6 @@ describe('EnvSecretsProvider', () => {
 
     await expect(provider.refresh(SECRET_NAME)).resolves.toBeUndefined();
 
-    expect(provider.get(SECRET_NAME)).toBe('unchanged');
     expect(lastEvent()).toMatchObject({
       action: 'refresh',
       name: SECRET_NAME,
@@ -139,6 +137,7 @@ describe('EnvSecretsProvider', () => {
       found: true,
       detail: 'noop-env',
     });
+    expect(provider.get(SECRET_NAME)).toBe('unchanged');
   });
 
   it('refresh without a name audits a bulk refresh with name "*"', async () => {

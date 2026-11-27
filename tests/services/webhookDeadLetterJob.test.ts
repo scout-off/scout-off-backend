@@ -47,7 +47,7 @@ jest.mock('../../src/services/webhookDeadLetterAlerts', () => ({
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const OLD_DATE = new Date(Date.now() - 15 * 60 * 1000).toISOString(); // 15 min ago
-const NEW_DATE = new Date(Date.now() - 2 * 60 * 1000).toISOString();  // 2 min ago (too new)
+const NEW_DATE = new Date(Date.now() - 2 * 60 * 1000).toISOString(); // 2 min ago (too new)
 
 function makeLetter(overrides: Partial<db.WebhookDeadLetter> = {}): db.WebhookDeadLetter {
   return {
@@ -55,7 +55,11 @@ function makeLetter(overrides: Partial<db.WebhookDeadLetter> = {}): db.WebhookDe
     subscription_id: 1,
     url: 'https://example.com/webhook',
     event_type: 'player_registered',
-    payload: JSON.stringify({ deliveryId: 'del-001', eventType: 'player_registered', payload: { foo: 'bar' } }),
+    payload: JSON.stringify({
+      deliveryId: 'del-001',
+      eventType: 'player_registered',
+      payload: { foo: 'bar' },
+    }),
     delivery_id: 'del-001',
     failure_reason: 'connect ECONNREFUSED',
     attempts: 1,
@@ -85,7 +89,9 @@ describe('webhookDeadLetterJob — runDeadLetterRetryJob', () => {
     jest.clearAllMocks();
     mockCountDeadLetters.mockReturnValue(0);
     (db.countWebhookDeadLettersBySubscription as jest.Mock).mockReturnValue([]);
-    mockListSubscriptions.mockReturnValue([{ id: 1, url: 'https://example.com/webhook', secret: 'secret' }]);
+    mockListSubscriptions.mockReturnValue([
+      { id: 1, url: 'https://example.com/webhook', secret: 'secret' },
+    ]);
   });
 
   it('returns 0 when there are no eligible rows', async () => {
@@ -180,10 +186,9 @@ describe('webhookDeadLetterJob — runDeadLetterRetryJob', () => {
 
     await runDeadLetterRetryJob();
 
-    expect(evaluateDeadLetterAlerts).toHaveBeenCalledWith(
-      150,
-      [{ subscription_id: 1, count: 150 }],
-    );
+    expect(evaluateDeadLetterAlerts).toHaveBeenCalledWith(150, [
+      { subscription_id: 1, count: 150 },
+    ]);
   });
 
   it('preserves delivery_id across retry (same ID re-sent)', async () => {
@@ -217,7 +222,9 @@ describe('webhookDeadLetterJob — overlap guard (acceptance criterion)', () => 
     jest.clearAllMocks();
     (db.countWebhookDeadLetters as jest.Mock).mockReturnValue(0);
     (db.countWebhookDeadLettersBySubscription as jest.Mock).mockReturnValue([]);
-    (db.listWebhookSubscriptions as jest.Mock).mockReturnValue([{ id: 1, url: 'https://example.com/webhook', secret: 'secret' }]);
+    (db.listWebhookSubscriptions as jest.Mock).mockReturnValue([
+      { id: 1, url: 'https://example.com/webhook', secret: 'secret' },
+    ]);
   });
 
   it('two overlapping sweeps deliver a given row at most once (claim-locked)', async () => {
@@ -230,8 +237,8 @@ describe('webhookDeadLetterJob — overlap guard (acceptance criterion)', () => 
 
     // First sweep claims successfully, second sweep's claim returns null.
     mockClaimDeadLetter
-      .mockReturnValueOnce(letter)  // sweep 1 wins
-      .mockReturnValueOnce(null);   // sweep 2 loses
+      .mockReturnValueOnce(letter) // sweep 1 wins
+      .mockReturnValueOnce(null); // sweep 2 loses
 
     mockPost.mockResolvedValue(undefined);
 

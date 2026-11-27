@@ -8,17 +8,17 @@ one replica.
 
 ## Summary
 
-| Job | Interval | Config | Started in | Multi-replica safe? |
-| --- | -------- | ------ | ---------- | ------------------- |
-| [Indexer poll](#indexer-poll) | 5 s (+ once at boot) | hard-coded | `start()` in `src/index.ts` | **No.** Each replica polls independently, and the poll isn't single-flight across replicas (#1310) |
-| [IPFS pin retry](#ipfs-pin-retry) | 30 s | hard-coded | `start()` in `src/index.ts` | **No.** Replicas may retry the same pending pin |
-| [IPFS pin reconciliation](#ipfs-pin-reconciliation) | 60 s default (+ once at boot) | `IPFS_RECONCILE_INTERVAL_MS` (min 1000) | `start()` in `src/index.ts` | **No.** Replicas may reconcile the same rows |
-| [Tier divergence check](#tier-divergence-check) | 5 min default (+ once at boot) | `TIER_DIVERGENCE_INTERVAL_MS` (min 1000) | `start()` in `src/index.ts` | Yes (read-only); each replica reports its own counter |
-| [Token blocklist prune](#token-blocklist-prune) | 1 h (+ once at boot) | `PRUNE_INTERVAL_MS` constant | `initBlocklist()` in `src/services/tokenBlocklist.ts`, called from `start()` | Yes (idempotent `DELETE`) |
-| [IP reputation decay](#ip-reputation-decay) | 1 h | `DECAY_INTERVAL_MS` constant | `startDecayTimer()` in `src/services/ipReputation.ts`, called from `start()` | Yes, but scores are per-replica (in-memory) |
-| [SSE keep-alive](#sse-keep-alive-and-auth-sweep) | 15 s default | `SSE_KEEPALIVE_INTERVAL_MS` | Per connection, in `src/routes/events.ts` | Yes (per-connection) |
-| [SSE auth sweep](#sse-keep-alive-and-auth-sweep) | 30 s default | `SSE_AUTH_SWEEP_INTERVAL_MS` | Lazily on the first SSE connection, in `src/routes/events.ts` | Yes (each replica sweeps its own sessions) |
-| [Webhook DLQ retry](#webhook-dlq-retry-not-started) | 5 min | `DEAD_LETTER_JOB_INTERVAL_MS` constant | **Not started.** `startDeadLetterRetryJob()` exists but nothing calls it | Yes when started (rows are claimed atomically) |
+| Job                                                 | Interval                       | Config                                   | Started in                                                                   | Multi-replica safe?                                                                                |
+| --------------------------------------------------- | ------------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [Indexer poll](#indexer-poll)                       | 5 s (+ once at boot)           | hard-coded                               | `start()` in `src/index.ts`                                                  | **No.** Each replica polls independently, and the poll isn't single-flight across replicas (#1310) |
+| [IPFS pin retry](#ipfs-pin-retry)                   | 30 s                           | hard-coded                               | `start()` in `src/index.ts`                                                  | **No.** Replicas may retry the same pending pin                                                    |
+| [IPFS pin reconciliation](#ipfs-pin-reconciliation) | 60 s default (+ once at boot)  | `IPFS_RECONCILE_INTERVAL_MS` (min 1000)  | `start()` in `src/index.ts`                                                  | **No.** Replicas may reconcile the same rows                                                       |
+| [Tier divergence check](#tier-divergence-check)     | 5 min default (+ once at boot) | `TIER_DIVERGENCE_INTERVAL_MS` (min 1000) | `start()` in `src/index.ts`                                                  | Yes (read-only); each replica reports its own counter                                              |
+| [Token blocklist prune](#token-blocklist-prune)     | 1 h (+ once at boot)           | `PRUNE_INTERVAL_MS` constant             | `initBlocklist()` in `src/services/tokenBlocklist.ts`, called from `start()` | Yes (idempotent `DELETE`)                                                                          |
+| [IP reputation decay](#ip-reputation-decay)         | 1 h                            | `DECAY_INTERVAL_MS` constant             | `startDecayTimer()` in `src/services/ipReputation.ts`, called from `start()` | Yes, but scores are per-replica (in-memory)                                                        |
+| [SSE keep-alive](#sse-keep-alive-and-auth-sweep)    | 15 s default                   | `SSE_KEEPALIVE_INTERVAL_MS`              | Per connection, in `src/routes/events.ts`                                    | Yes (per-connection)                                                                               |
+| [SSE auth sweep](#sse-keep-alive-and-auth-sweep)    | 30 s default                   | `SSE_AUTH_SWEEP_INTERVAL_MS`             | Lazily on the first SSE connection, in `src/routes/events.ts`                | Yes (each replica sweeps its own sessions)                                                         |
+| [Webhook DLQ retry](#webhook-dlq-retry-not-started) | 5 min                          | `DEAD_LETTER_JOB_INTERVAL_MS` constant   | **Not started.** `startDeadLetterRetryJob()` exists but nothing calls it     | Yes when started (rows are claimed atomically)                                                     |
 
 ## Shared behaviour
 
@@ -84,7 +84,7 @@ reconciliation, tier divergence) are wrapped in `withJobTracking()`:
 - **Function:** `pruneExpiredTokens()` in `src/services/tokenBlocklist.ts`.
   The timer is `unref()`ed.
 - **On failure:** logs `[tokenBlocklist] scheduled prune failed` (or `initial
-  prune failed` at boot) at warn level. Expired rows are harmless until the next
+prune failed` at boot) at warn level. Expired rows are harmless until the next
   run.
 - **Multiple replicas:** safe; the delete is idempotent.
 

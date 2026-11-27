@@ -10,7 +10,7 @@ void migrateSqliteToPostgres({
     // Parent kills the process after an acknowledged commit, before the next batch.
     await new Promise<void>(() => undefined);
   },
-}).catch(error => {
+}).catch((error) => {
   process.send?.({ type: 'error', message: String(error) });
   process.exitCode = 1;
 });

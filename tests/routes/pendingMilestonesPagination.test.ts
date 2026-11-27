@@ -82,9 +82,7 @@ beforeEach(() => {
 describe('GET /api/validators/milestones/pending — pagination', () => {
   it('returns paginated results with total and hasMore', async () => {
     const all = Array.from({ length: 25 }, (_, i) => row({ milestone_id: `m${i}` }));
-    mockGetPendingMilestones.mockImplementation((opts) =>
-      paginated(all, opts.page, opts.pageSize),
-    );
+    mockGetPendingMilestones.mockImplementation((opts) => paginated(all, opts.page, opts.pageSize));
 
     const res = await request(app)
       .get('/api/validators/milestones/pending?page=1&pageSize=10')
@@ -103,9 +101,7 @@ describe('GET /api/validators/milestones/pending — pagination', () => {
 
   it('returns hasMore=false on last page', async () => {
     const all = Array.from({ length: 5 }, (_, i) => row({ milestone_id: `m${i}` }));
-    mockGetPendingMilestones.mockImplementation((opts) =>
-      paginated(all, opts.page, opts.pageSize),
-    );
+    mockGetPendingMilestones.mockImplementation((opts) => paginated(all, opts.page, opts.pageSize));
 
     const res = await request(app)
       .get('/api/validators/milestones/pending?page=1&pageSize=20')
@@ -118,9 +114,7 @@ describe('GET /api/validators/milestones/pending — pagination', () => {
 
   it('returns empty data on out-of-range page', async () => {
     const all = [row()];
-    mockGetPendingMilestones.mockImplementation((opts) =>
-      paginated(all, opts.page, opts.pageSize),
-    );
+    mockGetPendingMilestones.mockImplementation((opts) => paginated(all, opts.page, opts.pageSize));
 
     const res = await request(app)
       .get('/api/validators/milestones/pending?page=99&pageSize=20')

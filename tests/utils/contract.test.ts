@@ -102,7 +102,11 @@ describe('invokeContract', () => {
     mockServer.simulateTransaction.mockResolvedValue(makeSimResult() as any);
     jest.spyOn(rpc.Api, 'isSimulationError').mockReturnValue(false);
     // assembleTransaction needs to be skipped — mock sendTransaction to ERROR
-    mockServer.sendTransaction.mockResolvedValue({ status: 'ERROR', errorResult: 'bad op', hash: '' } as any);
+    mockServer.sendTransaction.mockResolvedValue({
+      status: 'ERROR',
+      errorResult: 'bad op',
+      hash: '',
+    } as any);
 
     await expect(invokeContract('register_player', [])).rejects.toThrow(ContractExecutionError);
   });

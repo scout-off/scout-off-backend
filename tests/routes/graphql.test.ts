@@ -95,14 +95,15 @@ describe('GraphQL rate limiting', () => {
       mockIsEnabled.mockResolvedValue(true);
       mountGraphQL(rateLimitedApp);
 
+      // extractClientIp trusts TRUSTED_PROXY_COUNT=1 hop, so each XFF carries one proxy entry.
       const ip = `198.51.100.${Math.floor(Math.random() * 200) + 1}`;
       const firstIpRequest = await request(rateLimitedApp)
         .post('/graphql')
-        .set('X-Forwarded-For', ip)
+        .set('X-Forwarded-For', `${ip}, 10.0.0.1`)
         .send({ query: '{ __typename }' });
       const secondIpRequest = await request(rateLimitedApp)
         .post('/graphql')
-        .set('X-Forwarded-For', ip)
+        .set('X-Forwarded-For', `${ip}, 10.0.0.1`)
         .send({ query: '{ __typename }' });
 
       expect(firstIpRequest.status).not.toBe(429);
@@ -120,12 +121,12 @@ describe('GraphQL rate limiting', () => {
 
       const firstWalletRequest = await request(walletLimitedApp)
         .post('/graphql')
-        .set('X-Forwarded-For', walletIp)
+        .set('X-Forwarded-For', `${walletIp}, 10.0.0.1`)
         .set('Authorization', `Bearer ${token}`)
         .send({ query: '{ __typename }' });
       const secondWalletRequest = await request(walletLimitedApp)
         .post('/graphql')
-        .set('X-Forwarded-For', `198.51.102.${Math.floor(Math.random() * 200) + 1}`)
+        .set('X-Forwarded-For', `198.51.102.${Math.floor(Math.random() * 200) + 1}, 10.0.0.1`)
         .set('Authorization', `Bearer ${token}`)
         .send({ query: '{ __typename }' });
 

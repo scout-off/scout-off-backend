@@ -55,9 +55,7 @@ describe('tierForApprovedMilestones (promotion criteria)', () => {
 
   it('is monotonic — more milestones never lowers a tier', () => {
     for (let n = 0; n < 30; n++) {
-      expect(tierForApprovedMilestones(n + 1)).toBeGreaterThanOrEqual(
-        tierForApprovedMilestones(n),
-      );
+      expect(tierForApprovedMilestones(n + 1)).toBeGreaterThanOrEqual(tierForApprovedMilestones(n));
     }
     // thresholds stay within the valid ProgressLevel range
     for (const { tier } of TIER_THRESHOLDS) {
@@ -138,7 +136,7 @@ describe('tierForApprovedMilestones (promotion criteria)', () => {
     });
 
     it('tier 0 threshold has minApprovedMilestones of 0 (always reachable)', () => {
-      const tier0 = TIER_THRESHOLDS.find(t => t.tier === 0);
+      const tier0 = TIER_THRESHOLDS.find((t) => t.tier === 0);
       expect(tier0).toBeDefined();
       expect(tier0!.minApprovedMilestones).toBe(0);
     });
@@ -160,7 +158,12 @@ describe('indexEvents — player tier in DB matches approved-milestone count (#3
     server.getEvents.mockResolvedValue({
       latestLedger: ledger,
       events: [
-        rawEvent('player_registered', { player_id: player, wallet: 'GWALLET' }, nextHash(), ledger++),
+        rawEvent(
+          'player_registered',
+          { player_id: player, wallet: 'GWALLET' },
+          nextHash(),
+          ledger++,
+        ),
       ],
     });
     await indexEvents();
@@ -186,7 +189,7 @@ describe('indexEvents — player tier in DB matches approved-milestone count (#3
     expect((await getPlayerById(player))?.progress_level).toBe(3);
   });
 
-  it('counts milestones per player — one player\'s approvals do not promote another', async () => {
+  it("counts milestones per player — one player's approvals do not promote another", async () => {
     const alice = 'tier-alice';
     const bob = 'tier-bob';
     let ledger = 800;

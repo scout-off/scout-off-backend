@@ -57,12 +57,12 @@ import {
 
 // ─── Typed mocks ──────────────────────────────────────────────────────────────
 
-const mockGetPlayerById    = getPlayerById    as jest.Mock;
-const mockQueryPlayers     = queryPlayers     as jest.Mock;
-const mockCountPlayers     = countPlayers     as jest.Mock;
-const mockGetSubscription  = getLatestSubscription as jest.Mock;
-const mockQueryEvents      = queryEvents      as jest.Mock;
-const mockQueryMilestones  = queryMilestones  as jest.Mock;
+const mockGetPlayerById = getPlayerById as jest.Mock;
+const mockQueryPlayers = queryPlayers as jest.Mock;
+const mockCountPlayers = countPlayers as jest.Mock;
+const mockGetSubscription = getLatestSubscription as jest.Mock;
+const mockQueryEvents = queryEvents as jest.Mock;
+const mockQueryMilestones = queryMilestones as jest.Mock;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -79,25 +79,27 @@ function makeAdminToken(wallet = 'GADMIN1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
   return jwt.sign({ sub: wallet, role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
 }
 
-function makePlayer(overrides: {
-  player_id?: string;
-  wallet?: string;
-  position?: string | null;
-  region?: string | null;
-  progress_level?: number;
-  created_at?: number | null;
-  is_active?: number;
-  metadata_uri?: string | null;
-} = {}) {
+function makePlayer(
+  overrides: {
+    player_id?: string;
+    wallet?: string;
+    position?: string | null;
+    region?: string | null;
+    progress_level?: number;
+    created_at?: number | null;
+    is_active?: number;
+    metadata_uri?: string | null;
+  } = {},
+) {
   return {
-    player_id:      overrides.player_id      ?? 'player-abc',
-    wallet:         overrides.wallet         ?? 'GPLAYERWALLET1AAA',
-    position:       overrides.position       ?? 'forward',
-    region:         overrides.region         ?? 'West Africa',
-    metadata_uri:   overrides.metadata_uri   ?? 'ipfs://QmTest',
+    player_id: overrides.player_id ?? 'player-abc',
+    wallet: overrides.wallet ?? 'GPLAYERWALLET1AAA',
+    position: overrides.position ?? 'forward',
+    region: overrides.region ?? 'West Africa',
+    metadata_uri: overrides.metadata_uri ?? 'ipfs://QmTest',
     progress_level: overrides.progress_level ?? 2,
-    created_at:     overrides.created_at     ?? 1_700_000_000,
-    is_active:      overrides.is_active      ?? 1,
+    created_at: overrides.created_at ?? 1_700_000_000,
+    is_active: overrides.is_active ?? 1,
   };
 }
 
@@ -139,11 +141,9 @@ describe('GraphQL — player query', () => {
   it('returns player data for a valid ID', async () => {
     mockGetPlayerById.mockReturnValue(makePlayer({ player_id: 'p-1' }));
 
-    const res = await request(app)
-      .post('/graphql')
-      .send({
-        query: `{ player(id: "p-1") { player_id wallet position region progress_level tierName } }`,
-      });
+    const res = await request(app).post('/graphql').send({
+      query: `{ player(id: "p-1") { player_id wallet position region progress_level tierName } }`,
+    });
 
     expect(res.status).toBe(200);
     expect(res.body.errors).toBeUndefined();
@@ -219,11 +219,9 @@ describe('GraphQL — players query', () => {
     mockQueryPlayers.mockReturnValue([]);
     mockCountPlayers.mockReturnValue(0);
 
-    await request(app)
-      .post('/graphql')
-      .send({
-        query: `{ players(region: "East Africa", position: "goalkeeper", minTier: 2) { nodes { player_id } pageInfo { total page pageSize pages } } }`,
-      });
+    await request(app).post('/graphql').send({
+      query: `{ players(region: "East Africa", position: "goalkeeper", minTier: 2) { nodes { player_id } pageInfo { total page pageSize pages } } }`,
+    });
 
     expect(mockQueryPlayers).toHaveBeenCalledWith(
       expect.objectContaining({ region: 'East Africa', position: 'goalkeeper', minTier: 2 }),
@@ -234,15 +232,11 @@ describe('GraphQL — players query', () => {
     mockQueryPlayers.mockReturnValue([]);
     mockCountPlayers.mockReturnValue(0);
 
-    await request(app)
-      .post('/graphql')
-      .send({
-        query: `{ players(pageSize: 500) { nodes { player_id } pageInfo { total page pageSize pages } } }`,
-      });
+    await request(app).post('/graphql').send({
+      query: `{ players(pageSize: 500) { nodes { player_id } pageInfo { total page pageSize pages } } }`,
+    });
 
-    expect(mockQueryPlayers).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 100 }),
-    );
+    expect(mockQueryPlayers).toHaveBeenCalledWith(expect.objectContaining({ limit: 100 }));
   });
 });
 
@@ -504,22 +498,29 @@ describe('GraphQL — DataLoader milestone batching', () => {
   });
 
   it('returns correct milestones for each player without mixing data', async () => {
-    const players = [
-      makePlayer({ player_id: 'p-a' }),
-      makePlayer({ player_id: 'p-b' }),
-    ];
+    const players = [makePlayer({ player_id: 'p-a' }), makePlayer({ player_id: 'p-b' })];
     mockQueryPlayers.mockReturnValue(players);
     mockCountPlayers.mockReturnValue(2);
 
     mockQueryEvents.mockReturnValue([
       {
         type: 'milestone_approved',
-        payload: { player_id: 'p-a', milestone_id: 'ms-a-1', milestone_type: 'goal', evidence_uri: 'ipfs://a' },
+        payload: {
+          player_id: 'p-a',
+          milestone_id: 'ms-a-1',
+          milestone_type: 'goal',
+          evidence_uri: 'ipfs://a',
+        },
         created_at: 1_700_000_000,
       },
       {
         type: 'milestone_approved',
-        payload: { player_id: 'p-b', milestone_id: 'ms-b-1', milestone_type: 'assist', evidence_uri: 'ipfs://b' },
+        payload: {
+          player_id: 'p-b',
+          milestone_id: 'ms-b-1',
+          milestone_type: 'assist',
+          evidence_uri: 'ipfs://b',
+        },
         created_at: 1_700_000_001,
       },
     ]);
@@ -593,9 +594,7 @@ describe('GraphQL — depth limiting', () => {
     // We need 6 deep. Since the schema doesn't allow nesting Player inside Milestone,
     // we verify that a correctly-structured 4-level query is fine and a fabricated
     // too-deep query is rejected.
-    const validRes = await request(app)
-      .post('/graphql')
-      .send({ query: deepQuery });
+    const validRes = await request(app).post('/graphql').send({ query: deepQuery });
     // 4 levels deep — should pass
     expect(validRes.status).toBe(200);
 
@@ -620,9 +619,7 @@ describe('GraphQL — depth limiting', () => {
       }
     }`;
 
-    const res = await request(app)
-      .post('/graphql')
-      .send({ query: fiveLevelQuery });
+    const res = await request(app).post('/graphql').send({ query: fiveLevelQuery });
 
     expect(res.status).toBe(200);
     // Should succeed — no depth limit error
@@ -656,15 +653,12 @@ describe('GraphQL — introspection', () => {
   ])('rejects direct and fragment-based introspection in production: %s', async (query) => {
     const app = buildApp({ production: true });
 
-    const res = await request(app)
-      .post('/graphql')
-      .send({ query });
+    const res = await request(app).post('/graphql').send({ query });
 
     // The introspection-blocking plugin stops execution and returns an error.
     // graphql-yoga may return 400/500 for execution errors — we care about the
     // error content, not the exact HTTP status code.
-    const hasErrors =
-      Array.isArray(res.body?.errors) && res.body.errors.length > 0;
+    const hasErrors = Array.isArray(res.body?.errors) && res.body.errors.length > 0;
     expect(hasErrors).toBe(true);
     const hasIntrospectionError = res.body.errors.some(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -702,11 +696,9 @@ describe('GraphQL — Player.milestones field resolver (root milestones query)',
       },
     ]);
 
-    const res = await request(app)
-      .post('/graphql')
-      .send({
-        query: `{ milestones(playerId: "p-root") { milestoneId milestoneType approved } }`,
-      });
+    const res = await request(app).post('/graphql').send({
+      query: `{ milestones(playerId: "p-root") { milestoneId milestoneType approved } }`,
+    });
 
     expect(res.status).toBe(200);
     expect(res.body.errors).toBeUndefined();

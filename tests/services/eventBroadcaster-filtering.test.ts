@@ -59,9 +59,13 @@ function createMockSubscriber(
 
 describe('EventBroadcaster: eventTypes filter', () => {
   it('delivers only milestone_approved when eventTypes filter includes only milestone_approved', () => {
-    const sub = createMockSubscriber(WALLET_A, {
-      eventTypes: new Set(['milestone_approved']),
-    }, PLAYER_1);
+    const sub = createMockSubscriber(
+      WALLET_A,
+      {
+        eventTypes: new Set(['milestone_approved']),
+      },
+      PLAYER_1,
+    );
     broadcaster.subscribe(sub);
 
     // Send events of different types
@@ -82,9 +86,13 @@ describe('EventBroadcaster: eventTypes filter', () => {
   });
 
   it('delivers only scout_subscribed and contact_unlocked when filter specifies both', () => {
-    const sub = createMockSubscriber(WALLET_A, {
-      eventTypes: new Set(['scout_subscribed', 'contact_unlocked']),
-    }, PLAYER_1);
+    const sub = createMockSubscriber(
+      WALLET_A,
+      {
+        eventTypes: new Set(['scout_subscribed', 'contact_unlocked']),
+      },
+      PLAYER_1,
+    );
     broadcaster.subscribe(sub);
 
     const milestoneEvent: BroadcastEvent = {
@@ -110,9 +118,13 @@ describe('EventBroadcaster: eventTypes filter', () => {
 
   it('filters out all events when eventTypes set is empty (backward-compatible with no type filter)', () => {
     // Empty eventTypes set means no type filtering (receives all types)
-    const sub = createMockSubscriber(WALLET_A, {
-      eventTypes: new Set([]),
-    }, PLAYER_1);
+    const sub = createMockSubscriber(
+      WALLET_A,
+      {
+        eventTypes: new Set([]),
+      },
+      PLAYER_1,
+    );
     broadcaster.subscribe(sub);
 
     const milestoneEvent: BroadcastEvent = {
@@ -133,9 +145,13 @@ describe('EventBroadcaster: eventTypes filter', () => {
   });
 
   it('respects wallet relevance even with type filter (no cross-tenant leakage)', () => {
-    const sub = createMockSubscriber(WALLET_A, {
-      eventTypes: new Set(['milestone_approved']),
-    }, PLAYER_1);
+    const sub = createMockSubscriber(
+      WALLET_A,
+      {
+        eventTypes: new Set(['milestone_approved']),
+      },
+      PLAYER_1,
+    );
     broadcaster.subscribe(sub);
 
     // Event for WALLET_A
@@ -193,10 +209,14 @@ describe('EventBroadcaster: playerId filter', () => {
     // The subscriber is PLAYER_1's own SSE connection filtering to their own
     // id, so the wallet-relevance check (always applied) passes for every
     // event that references them — the playerId filter is what's under test.
-    const sub = createMockSubscriber(PLAYER_1, {
-      eventTypes: new Set([]),
-      playerId: PLAYER_1,
-    }, PLAYER_1);
+    const sub = createMockSubscriber(
+      PLAYER_1,
+      {
+        eventTypes: new Set([]),
+        playerId: PLAYER_1,
+      },
+      PLAYER_1,
+    );
     broadcaster.subscribe(sub);
 
     // PLAYER_1 in player_id field
@@ -385,10 +405,14 @@ describe('EventBroadcaster: wildcard (no filter)', () => {
   });
 
   it('delivers all wallet-relevant events even with an empty eventTypes set', () => {
-    const sub = createMockSubscriber(WALLET_A, {
-      eventTypes: new Set([]),
-      playerId: undefined,
-    }, PLAYER_1);
+    const sub = createMockSubscriber(
+      WALLET_A,
+      {
+        eventTypes: new Set([]),
+        playerId: undefined,
+      },
+      PLAYER_1,
+    );
     broadcaster.subscribe(sub);
 
     const events: BroadcastEvent[] = [
@@ -445,9 +469,13 @@ describe('EventBroadcaster: player ownership relevance', () => {
 describe('EventBroadcaster: cross-subscriber isolation', () => {
   it('each subscriber only receives its own filtered events', () => {
     // Sub A: milestone_approved only
-    const subA = createMockSubscriber(WALLET_A, {
-      eventTypes: new Set(['milestone_approved']),
-    }, PLAYER_1);
+    const subA = createMockSubscriber(
+      WALLET_A,
+      {
+        eventTypes: new Set(['milestone_approved']),
+      },
+      PLAYER_1,
+    );
 
     // Sub B: scout_subscribed only (different wallet)
     const subB = createMockSubscriber(WALLET_B, {
@@ -479,9 +507,13 @@ describe('EventBroadcaster: cross-subscriber isolation', () => {
 
   it('same wallet with different filters get different events', () => {
     // Both subscribers are WALLET_A but with different type filters
-    const subType1 = createMockSubscriber(WALLET_A, {
-      eventTypes: new Set(['milestone_approved']),
-    }, PLAYER_1);
+    const subType1 = createMockSubscriber(
+      WALLET_A,
+      {
+        eventTypes: new Set(['milestone_approved']),
+      },
+      PLAYER_1,
+    );
 
     const subType2 = createMockSubscriber(WALLET_A, {
       eventTypes: new Set(['scout_subscribed']),

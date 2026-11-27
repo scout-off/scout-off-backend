@@ -15,10 +15,14 @@ try {
     console.log('[test-runner] better-sqlite3 native bindings usable; running full test suite');
     runJest([]);
   } catch (e) {
-    console.warn('[test-runner] better-sqlite3 module present but native bindings unusable; running the parity script test only');
+    console.warn(
+      '[test-runner] better-sqlite3 module present but native bindings unusable; running the parity script test only',
+    );
     runJest(['tests/scripts/apiVersionParity.test.ts']);
   }
 } catch (err) {
-  console.warn('[test-runner] better-sqlite3 native bindings unavailable; running the parity script test only to avoid native build failures');
+  console.warn(
+    '[test-runner] better-sqlite3 native bindings unavailable; running the parity script test only to avoid native build failures',
+  );
   runJest(['tests/scripts/apiVersionParity.test.ts']);
 }

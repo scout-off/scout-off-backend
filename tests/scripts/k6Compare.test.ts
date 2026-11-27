@@ -46,11 +46,13 @@ describe('k6 CI performance comparison', () => {
 
   it('reports latency and error-counter regressions', () => {
     const failures = compareResults(summary(100, 0), summary(140, 0.01, 1), budgets);
-    expect(failures).toEqual(expect.arrayContaining([
-      expect.stringContaining('player_list p95 exceeds'),
-      expect.stringContaining('player_list scenario check errors exceed'),
-      expect.stringContaining('player_list error-rate regression exceeds'),
-    ]));
+    expect(failures).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('player_list p95 exceeds'),
+        expect.stringContaining('player_list scenario check errors exceed'),
+        expect.stringContaining('player_list error-rate regression exceeds'),
+      ]),
+    );
   });
 
   it('fails closed when a per-scenario metric is missing', () => {

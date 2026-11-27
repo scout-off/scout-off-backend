@@ -44,27 +44,30 @@ function extractOperationInfo(document) {
  */
 function generatePersistedOperations(inputDir, outputFile) {
   console.log(`[persisted-ops] Scanning ${inputDir} for GraphQL files...`);
-  
+
   const ops = {};
   let processed = 0;
-  
+
   function scanDir(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
-      
+
       if (entry.isDirectory()) {
         scanDir(fullPath);
-      } else if (entry.isFile() && (entry.name.endsWith('.graphql') || entry.name.endsWith('.gql'))) {
+      } else if (
+        entry.isFile() &&
+        (entry.name.endsWith('.graphql') || entry.name.endsWith('.gql'))
+      ) {
         try {
           const content = fs.readFileSync(fullPath, 'utf8');
           const hash = getHash(content);
           const info = extractOperationInfo(content);
-          
+
           ops[hash] = content;
           processed++;
-          
+
           if (info) {
             console.log(`  ✓ ${info.type} ${info.name} → ${hash.substring(0, 8)}...`);
           } else {
@@ -76,15 +79,17 @@ function generatePersistedOperations(inputDir, outputFile) {
       }
     }
   }
-  
+
   scanDir(inputDir);
-  
+
   // Write output file
   fs.writeFileSync(outputFile, JSON.stringify(ops, null, 2));
-  
+
   console.log(``);
   console.log(`[persisted-ops] Generated ${processed} operation(s) in ${outputFile}`);
-  console.log(`[persisted-ops] Total hash collisions: ${Object.keys(ops).length - processed} (if any)`);
+  console.log(
+    `[persisted-ops] Total hash collisions: ${Object.keys(ops).length - processed} (if any)`,
+  );
 }
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
@@ -95,7 +100,9 @@ if (args.length < 2) {
   console.error('Usage: node scripts/generate-persisted-ops.js <input-dir> <output-file>');
   console.error('');
   console.error('Example:');
-  console.error('  node scripts/generate-persisted-ops.js src/frontend/graphql dist/graphql/persisted-operations.registry.json');
+  console.error(
+    '  node scripts/generate-persisted-ops.js src/frontend/graphql dist/graphql/persisted-operations.registry.json',
+  );
   process.exit(1);
 }
 

@@ -17,12 +17,12 @@ End-to-end against **really deployed** contracts (not mocks):
 
 ## Contracts deployed
 
-| Crate | Env var |
-| --- | --- |
-| `register` | `REGISTER_CONTRACT_ID` |
-| `progress` | `PROGRESS_CONTRACT_ID` |
-| `subscription` | `SUBSCRIPTION_CONTRACT_ID` |
-| `connection` | `CONNECTION_CONTRACT_ID` |
+| Crate          | Env var                                                                     |
+| -------------- | --------------------------------------------------------------------------- |
+| `register`     | `REGISTER_CONTRACT_ID`                                                      |
+| `progress`     | `PROGRESS_CONTRACT_ID`                                                      |
+| `subscription` | `SUBSCRIPTION_CONTRACT_ID`                                                  |
+| `connection`   | `CONNECTION_CONTRACT_ID`                                                    |
 | `player_token` | `PLAYER_TOKEN_CONTRACT_ID` (deployed for completeness; not all paths wired) |
 
 ## Local reproduction

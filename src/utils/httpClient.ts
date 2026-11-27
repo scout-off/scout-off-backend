@@ -49,7 +49,10 @@ export interface HttpClientOptions {
 }
 
 export class HttpClientError extends Error {
-  constructor(message: string, public readonly status?: number) {
+  constructor(
+    message: string,
+    public readonly status?: number,
+  ) {
     super(message);
     this.name = 'HttpClientError';
   }
@@ -60,17 +63,20 @@ export class HttpClientError extends Error {
  */
 function createTimeoutSignal(timeoutMs: number): AbortSignal {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new HttpClientError(`Request timed out after ${timeoutMs}ms`, 408)), timeoutMs);
-  
+  const timer = setTimeout(
+    () => controller.abort(new HttpClientError(`Request timed out after ${timeoutMs}ms`, 408)),
+    timeoutMs,
+  );
+
   // Clean up timer when signal is aborted
   controller.signal.addEventListener('abort', () => clearTimeout(timer));
-  
+
   return controller.signal;
 }
 
 /**
  * Unified HTTP client using native fetch.
- * 
+ *
  * @param url - The URL to fetch
  * @param options - Request options
  * @returns Response body as string
@@ -107,22 +113,19 @@ export async function httpClient(url: string, options: HttpClientOptions = {}): 
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
       throw new HttpClientError(
-        location 
-          ? `Redirect to ${location} (status ${response.status})` 
+        location
+          ? `Redirect to ${location} (status ${response.status})`
           : `Redirect without Location header (status ${response.status})`,
-        response.status
+        response.status,
       );
     }
 
     if (!response.ok) {
-      throw new HttpClientError(
-        `HTTP ${response.status}: ${response.statusText}`,
-        response.status
-      );
+      throw new HttpClientError(`HTTP ${response.status}: ${response.statusText}`, response.status);
     }
 
     const text = await response.text();
-    
+
     // Warn if response exceeds expected size
     if (text.length > maxBytes) {
       logger.warn(`[httpClient] Response size ${text.length} exceeds maxBytes ${maxBytes}`);
@@ -136,37 +139,40 @@ export async function httpClient(url: string, options: HttpClientOptions = {}): 
     if (err instanceof Error && err.name === 'AbortError') {
       throw new HttpClientError(`Request timed out`, 408);
     }
-    throw new HttpClientError(
-      err instanceof Error ? err.message : String(err),
-      0
-    );
+    throw new HttpClientError(err instanceof Error ? err.message : String(err), 0);
   }
 }
 
 /**
  * Make a GET request.
  */
-export async function httpGet(url: string, options?: Omit<HttpClientOptions, 'method'>): Promise<string> {
+export async function httpGet(
+  url: string,
+  options?: Omit<HttpClientOptions, 'method'>,
+): Promise<string> {
   return httpClient(url, { ...options, method: 'GET' });
 }
 
 /**
  * Make a POST request.
  */
-export async function httpPost(url: string, body: string | Buffer | Uint8Array, options?: Omit<HttpClientOptions, 'method' | 'body'>): Promise<string> {
+export async function httpPost(
+  url: string,
+  body: string | Buffer | Uint8Array,
+  options?: Omit<HttpClientOptions, 'method' | 'body'>,
+): Promise<string> {
   return httpClient(url, { ...options, method: 'POST', body });
 }
 
 /**
  * Make a HEAD request.
  */
-export async function httpHead(url: string, options?: Omit<HttpClientOptions, 'method' | 'body'>): Promise<Response> {
+export async function httpHead(
+  url: string,
+  options?: Omit<HttpClientOptions, 'method' | 'body'>,
+): Promise<Response> {
   const method = 'HEAD';
-  const {
-    headers = {},
-    timeoutMs = config.ipfsHttpTimeoutMs,
-    maxRedirects = 3,
-  } = options || {};
+  const { headers = {}, timeoutMs = config.ipfsHttpTimeoutMs, maxRedirects = 3 } = options || {};
 
   const signal = createTimeoutSignal(timeoutMs);
 
@@ -192,7 +198,7 @@ export async function httpHead(url: string, options?: Omit<HttpClientOptions, 'm
     }
     throw new HttpClientError(
       err instanceof Error ? err.message : String(err),
-      err instanceof HttpClientError ? err.status : 0
+      err instanceof HttpClientError ? err.status : 0,
     );
   }
 }
@@ -200,14 +206,21 @@ export async function httpHead(url: string, options?: Omit<HttpClientOptions, 'm
 /**
  * Make a DELETE request.
  */
-export async function httpDelete(url: string, options?: Omit<HttpClientOptions, 'method' | 'body'>): Promise<string> {
+export async function httpDelete(
+  url: string,
+  options?: Omit<HttpClientOptions, 'method' | 'body'>,
+): Promise<string> {
   return httpClient(url, { ...options, method: 'DELETE' });
 }
 
 /**
  * Make a PUT request.
  */
-export async function httpPut(url: string, body: string | Buffer | Uint8Array, options?: Omit<HttpClientOptions, 'method' | 'body'>): Promise<string> {
+export async function httpPut(
+  url: string,
+  body: string | Buffer | Uint8Array,
+  options?: Omit<HttpClientOptions, 'method' | 'body'>,
+): Promise<string> {
   return httpClient(url, { ...options, method: 'PUT', body });
 }
 
@@ -217,13 +230,13 @@ export async function httpPut(url: string, body: string | Buffer | Uint8Array, o
 export const httpClientUtils = {
   /** Parse JSON response */
   parseJson: <T>(text: string): T => JSON.parse(text),
-  
+
   /** Check if status is success (2xx) */
   isSuccess: (status: number): boolean => status >= 200 && status < 300,
-  
+
   /** Check if status is client error (4xx) */
   isClientError: (status: number): boolean => status >= 400 && status < 500,
-  
+
   /** Check if status is server error (5xx) */
   isServerError: (status: number): boolean => status >= 500 && status < 600,
 };

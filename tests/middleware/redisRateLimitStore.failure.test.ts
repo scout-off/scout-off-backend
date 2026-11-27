@@ -124,9 +124,7 @@ describe('rateLimit middleware — Redis unreachable (fail-open)', () => {
     const app = makeApp(store);
     // Fire more requests than max (5) — all should succeed due to fail-open
     const responses = await Promise.all(
-      Array.from({ length: 8 }, () =>
-        request(app).get('/test').set('X-Forwarded-For', '5.6.7.8')
-      )
+      Array.from({ length: 8 }, () => request(app).get('/test').set('X-Forwarded-For', '5.6.7.8')),
     );
     for (const res of responses) {
       expect(res.status).toBe(200);
@@ -211,10 +209,7 @@ describe('RedisRateLimitStore — command timeout', () => {
     // The fake 'timeout' state returns a never-resolving promise — simulate
     // the ioredis commandTimeout firing by racing with our own bound timer.
     const timeoutMs = 200;
-    const raceResult = await withTimeout(
-      store.increment('ip:1.2.3.4', 60_000),
-      timeoutMs
-    );
+    const raceResult = await withTimeout(store.increment('ip:1.2.3.4', 60_000), timeoutMs);
     // In timeout state the fake's eval never resolves, so our race wins
     expect(raceResult.timedOut).toBe(true);
   });
@@ -241,22 +236,27 @@ describe('rateLimit middleware — Redis recovery', () => {
 
     // Redis healthy — rate limiting active
     for (let i = 0; i < 5; i++) {
-      const res = await request(app).get('/test').set('X-Forwarded-For', '3.3.3.3');
+      const res = await request(app).get('/test').set('X-Forwarded-For', '3.3.3.3, 10.0.0.1');
       expect(res.status).toBe(200);
     }
 
     // 6th request should be rate-limited (max=5)
-    const overLimit = await request(app).get('/test').set('X-Forwarded-For', '3.3.3.3');
+    const overLimit = await request(app).get('/test').set('X-Forwarded-For', '3.3.3.3, 10.0.0.1');
     expect(overLimit.status).toBe(429);
 
     // Redis drops — fail open (reset client to get new key)
     client.setState('unavailable');
-    const duringOutage = await request(app).get('/test').set('X-Forwarded-For', '3.3.3.3');
+    const duringOutage = await request(app)
+      .get('/test')
+      .set('X-Forwarded-For', '3.3.3.3, 10.0.0.1');
     expect(duringOutage.status).toBe(200); // fail open
 
     // Redis recovers — rate limiting works normally for NEW keys
+    // (A trusted-proxy hop is included so TRUSTED_PROXY_COUNT=1 resolves the client IP.)
     client.setState('healthy');
-    const afterRecovery = await request(app).get('/test').set('X-Forwarded-For', '4.4.4.4');
+    const afterRecovery = await request(app)
+      .get('/test')
+      .set('X-Forwarded-For', '4.4.4.4, 10.0.0.1');
     expect(afterRecovery.status).toBe(200);
   });
 });
@@ -271,9 +271,7 @@ describe('RedisRateLimitStore — error propagation', () => {
     client.setState('unavailable');
     const store = makeRateLimitStore(client);
 
-    await expect(store.increment('ip:1.2.3.4', 60_000)).rejects.toThrow(
-      RedisConnectionError
-    );
+    await expect(store.increment('ip:1.2.3.4', 60_000)).rejects.toThrow(RedisConnectionError);
     client.flush();
   });
 

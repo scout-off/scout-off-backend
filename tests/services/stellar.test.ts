@@ -16,57 +16,57 @@
 // (clearAllMocks resets recorded calls + return values, but the same
 // jest.fn() reference is still reachable from the mock factory closure.)
 
-const mockGetAccount      = jest.fn();
-const mockSimulate        = jest.fn();
+const mockGetAccount = jest.fn();
+const mockSimulate = jest.fn();
 const mockSendTransaction = jest.fn();
-const mockGetTransaction  = jest.fn();
-const mockAssembleBuild   = jest.fn().mockReturnValue({ sign: jest.fn() });
-const mockAssemble        = jest.fn().mockReturnValue({ build: mockAssembleBuild });
+const mockGetTransaction = jest.fn();
+const mockAssembleBuild = jest.fn().mockReturnValue({ sign: jest.fn() });
+const mockAssemble = jest.fn().mockReturnValue({ build: mockAssembleBuild });
 // Shared across every Contract instance so tests can assert on the Soroban
 // function name + arguments the service passes to the contract.
-const mockContractCall    = jest.fn().mockReturnValue({ type: 'invokeHostFunction' });
+const mockContractCall = jest.fn().mockReturnValue({ type: 'invokeHostFunction' });
 
 jest.mock('@stellar/stellar-sdk', () => ({
   rpc: {
     Server: jest.fn().mockReturnValue({
-      getLatestLedger:     jest.fn().mockResolvedValue({ sequence: 1 }),
-      getAccount:          mockGetAccount,
+      getLatestLedger: jest.fn().mockResolvedValue({ sequence: 1 }),
+      getAccount: mockGetAccount,
       simulateTransaction: mockSimulate,
-      sendTransaction:     mockSendTransaction,
-      getTransaction:      mockGetTransaction,
+      sendTransaction: mockSendTransaction,
+      getTransaction: mockGetTransaction,
     }),
     Api: {
       isSimulationError: jest.fn().mockReturnValue(false),
       GetTransactionStatus: {
         NOT_FOUND: 'NOT_FOUND',
-        SUCCESS:   'SUCCESS',
-        FAILED:    'FAILED',
+        SUCCESS: 'SUCCESS',
+        FAILED: 'FAILED',
       },
     },
     assembleTransaction: mockAssemble,
   },
   Networks: {
     TESTNET: 'Test SDF Network ; September 2015',
-    PUBLIC:  'Public Global Stellar Network ; September 2015',
+    PUBLIC: 'Public Global Stellar Network ; September 2015',
   },
   Contract: jest.fn().mockImplementation(() => ({
     call: mockContractCall,
   })),
   TransactionBuilder: jest.fn().mockImplementation(() => ({
     addOperation: jest.fn().mockReturnThis(),
-    setTimeout:   jest.fn().mockReturnThis(),
-    build:        jest.fn().mockReturnValue({}),
+    setTimeout: jest.fn().mockReturnThis(),
+    build: jest.fn().mockReturnValue({}),
   })),
   BASE_FEE: '100',
   Keypair: {
-    random:     jest.fn().mockReturnValue({ publicKey: () => 'GBADUMMYACCOUNT' }),
+    random: jest.fn().mockReturnValue({ publicKey: () => 'GBADUMMYACCOUNT' }),
     fromSecret: jest.fn().mockReturnValue({
       publicKey: () => 'GPLATFORMKEYPAIR0000000000000000000000000000000000000000',
       sign: jest.fn(),
     }),
   },
-  Account:      jest.fn().mockImplementation(() => ({})),
-  Address:      { fromString: jest.fn().mockReturnValue({ toScVal: () => ({}) }) },
+  Account: jest.fn().mockImplementation(() => ({})),
+  Address: { fromString: jest.fn().mockReturnValue({ toScVal: () => ({}) }) },
   scValToNative: jest.fn().mockReturnValue(true),
   nativeToScVal: jest.fn().mockReturnValue({}),
 }));
@@ -1040,7 +1040,10 @@ describe('renewSubscription', () => {
 
   it('throws PaymentError INSUFFICIENT_FUNDS when the confirmed tx XDR reports insufficient fee', async () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'renew-fail-fee' });
-    mockGetTransaction.mockResolvedValue({ status: 'FAILED', resultMetaXdr: 'error-payload-#7-encoded' });
+    mockGetTransaction.mockResolvedValue({
+      status: 'FAILED',
+      resultMetaXdr: 'error-payload-#7-encoded',
+    });
 
     await expect(renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY)).rejects.toMatchObject({
       name: 'PaymentError',
@@ -1061,7 +1064,10 @@ describe('renewSubscription', () => {
 
   it('throws PaymentError EXPIRED_TRUSTLINE when the confirmed tx XDR reports a trustline error', async () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'renew-fail-trust' });
-    mockGetTransaction.mockResolvedValue({ status: 'FAILED', resultMetaXdr: 'TrustLineEntry missing' });
+    mockGetTransaction.mockResolvedValue({
+      status: 'FAILED',
+      resultMetaXdr: 'TrustLineEntry missing',
+    });
 
     await expect(renewSubscription(WALLET, TIER, DURATION, PREVIOUS_EXPIRY)).rejects.toMatchObject({
       name: 'PaymentError',
@@ -1234,7 +1240,11 @@ describe('submitContactPayment', () => {
   });
 
   it('throws PaymentError INSUFFICIENT_FUNDS when sendTransaction reports contract error #7', async () => {
-    mockSendTransaction.mockResolvedValue({ status: 'ERROR', errorResult: 'Contract error: #7', hash: 'x' });
+    mockSendTransaction.mockResolvedValue({
+      status: 'ERROR',
+      errorResult: 'Contract error: #7',
+      hash: 'x',
+    });
 
     await expect(submitContactPayment(WALLET, PLAYER_ID)).rejects.toMatchObject({
       name: 'PaymentError',
@@ -1245,7 +1255,10 @@ describe('submitContactPayment', () => {
 
   it('throws PaymentError INSUFFICIENT_FUNDS when the confirmed tx XDR reports insufficient fee', async () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'unlock-fail-fee' });
-    mockGetTransaction.mockResolvedValue({ status: 'FAILED', resultMetaXdr: 'error-payload-#7-encoded' });
+    mockGetTransaction.mockResolvedValue({
+      status: 'FAILED',
+      resultMetaXdr: 'error-payload-#7-encoded',
+    });
 
     await expect(submitContactPayment(WALLET, PLAYER_ID)).rejects.toMatchObject({
       name: 'PaymentError',
@@ -1305,7 +1318,11 @@ describe('submitContactPayment', () => {
   });
 
   it('throws PaymentError CONTRACT_PAUSED when sendTransaction reports contract error #10', async () => {
-    mockSendTransaction.mockResolvedValue({ status: 'ERROR', errorResult: 'Contract error: #10', hash: 'x' });
+    mockSendTransaction.mockResolvedValue({
+      status: 'ERROR',
+      errorResult: 'Contract error: #10',
+      hash: 'x',
+    });
 
     await expect(submitContactPayment(WALLET, PLAYER_ID)).rejects.toMatchObject({
       name: 'PaymentError',
@@ -1316,7 +1333,10 @@ describe('submitContactPayment', () => {
 
   it('throws PaymentError CONTRACT_PAUSED when the confirmed tx XDR reports ContractPaused', async () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'unlock-fail-paused' });
-    mockGetTransaction.mockResolvedValue({ status: 'FAILED', resultMetaXdr: 'error-payload-#10-encoded' });
+    mockGetTransaction.mockResolvedValue({
+      status: 'FAILED',
+      resultMetaXdr: 'error-payload-#10-encoded',
+    });
 
     await expect(submitContactPayment(WALLET, PLAYER_ID)).rejects.toMatchObject({
       name: 'PaymentError',
@@ -1337,7 +1357,10 @@ describe('submitContactPayment', () => {
 
   it('throws PaymentError MISSING_PLAYER when the confirmed tx XDR reports PlayerNotFound', async () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'unlock-fail-player' });
-    mockGetTransaction.mockResolvedValue({ status: 'FAILED', resultMetaXdr: 'error-payload-#3-encoded' });
+    mockGetTransaction.mockResolvedValue({
+      status: 'FAILED',
+      resultMetaXdr: 'error-payload-#3-encoded',
+    });
 
     await expect(submitContactPayment(WALLET, PLAYER_ID)).rejects.toMatchObject({
       name: 'PaymentError',
@@ -1521,7 +1544,10 @@ describe('withdrawFees', () => {
 
   it('throws INSUFFICIENT_FEES when the confirmed tx XDR reports contract error #7', async () => {
     mockSendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'fee-fail-fee' });
-    mockGetTransaction.mockResolvedValue({ status: 'FAILED', resultMetaXdr: 'error-payload-#7-encoded' });
+    mockGetTransaction.mockResolvedValue({
+      status: 'FAILED',
+      resultMetaXdr: 'error-payload-#7-encoded',
+    });
 
     await expect(withdrawFees(WALLET, '100')).rejects.toMatchObject({
       name: 'FeeWithdrawalError',

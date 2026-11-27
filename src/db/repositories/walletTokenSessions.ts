@@ -67,6 +67,7 @@ export async function revokeSessions(wallet: string, jtis: string[]): Promise<vo
   if (jtis.length === 0) return;
   const now = Math.floor(Date.now() / 1000);
   const placeholders = jtis.map(() => '?').join(',');
+  // sql-injection-ok: placeholders are generated `?` markers; jtis are bound values.
   const sql = `
     UPDATE wallet_token_sessions
     SET revoked_at = ?

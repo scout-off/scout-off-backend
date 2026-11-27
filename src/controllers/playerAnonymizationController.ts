@@ -11,11 +11,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import {
-  getPlayerById,
-  getPlayerProfileHistory,
-  getDriver,
-} from '../db';
+import { getPlayerById, getPlayerProfileHistory, getDriver } from '../db';
 import { invalidateMilestoneCache, invalidatePlayerCache } from '../services/cache';
 import { unpinCid } from '../services/ipfs';
 import { logAuditEvent } from '../services/audit';
@@ -109,8 +105,9 @@ export async function anonymizePlayer(
       // personal view history after this transaction removes it.
       await tx.lockForWrite('retention');
       await tx.run('DELETE FROM profile_view_daily WHERE player_id = ?', [playerId]);
-      summary.playersScrubbed = await countChanges(await tx.run(
-        `UPDATE players
+      summary.playersScrubbed = await countChanges(
+        await tx.run(
+          `UPDATE players
          SET wallet = ?,
              position = NULL,
              region = NULL,
@@ -118,58 +115,49 @@ export async function anonymizePlayer(
              is_active = 0,
              deactivation_reason = ?
          WHERE player_id = ?`,
-        [ANONYMIZED_PLACEHOLDER, 'GDPR anonymization request', playerId],
-      ));
+          [ANONYMIZED_PLACEHOLDER, 'GDPR anonymization request', playerId],
+        ),
+      );
 
-      summary.profileHistoryDeleted = await countChanges(await tx.run(
-        'DELETE FROM player_profile_history WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.profileHistoryDeleted = await countChanges(
+        await tx.run('DELETE FROM player_profile_history WHERE player_id = ?', [playerId]),
+      );
 
-      summary.pendingMilestonesDeleted = await countChanges(await tx.run(
-        'DELETE FROM pending_milestones WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.pendingMilestonesDeleted = await countChanges(
+        await tx.run('DELETE FROM pending_milestones WHERE player_id = ?', [playerId]),
+      );
 
-      summary.profileViewsDeleted = await countChanges(await tx.run(
-        'DELETE FROM profile_views WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.profileViewsDeleted = await countChanges(
+        await tx.run('DELETE FROM profile_views WHERE player_id = ?', [playerId]),
+      );
 
-      summary.contactUnlocksDeleted = await countChanges(await tx.run(
-        'DELETE FROM contact_unlocks WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.contactUnlocksDeleted = await countChanges(
+        await tx.run('DELETE FROM contact_unlocks WHERE player_id = ?', [playerId]),
+      );
 
-      summary.trialOffersDeleted = await countChanges(await tx.run(
-        'DELETE FROM trial_offers WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.trialOffersDeleted = await countChanges(
+        await tx.run('DELETE FROM trial_offers WHERE player_id = ?', [playerId]),
+      );
 
-      summary.scoutBookmarksDeleted = await countChanges(await tx.run(
-        'DELETE FROM scout_bookmarks WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.scoutBookmarksDeleted = await countChanges(
+        await tx.run('DELETE FROM scout_bookmarks WHERE player_id = ?', [playerId]),
+      );
 
-      summary.scoutPlayerNotesDeleted = await countChanges(await tx.run(
-        'DELETE FROM scout_player_notes WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.scoutPlayerNotesDeleted = await countChanges(
+        await tx.run('DELETE FROM scout_player_notes WHERE player_id = ?', [playerId]),
+      );
 
-      summary.scoutPlayerNotesV2Deleted = await countChanges(await tx.run(
-        'DELETE FROM scout_player_notes_v2 WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.scoutPlayerNotesV2Deleted = await countChanges(
+        await tx.run('DELETE FROM scout_player_notes_v2 WHERE player_id = ?', [playerId]),
+      );
 
-      summary.trialOfferEventsDeleted = await countChanges(await tx.run(
-        'DELETE FROM trial_offer_events WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.trialOfferEventsDeleted = await countChanges(
+        await tx.run('DELETE FROM trial_offer_events WHERE player_id = ?', [playerId]),
+      );
 
-      summary.savedSearchNotificationsDeleted = await countChanges(await tx.run(
-        'DELETE FROM saved_search_notifications WHERE player_id = ?',
-        [playerId],
-      ));
+      summary.savedSearchNotificationsDeleted = await countChanges(
+        await tx.run('DELETE FROM saved_search_notifications WHERE player_id = ?', [playerId]),
+      );
 
       const playerNeedle = `%${playerId}%`;
       const eventRows = await tx.all<{ id: number; payload: string }>(
@@ -190,26 +178,29 @@ export async function anonymizePlayer(
       for (const row of deadLetterRows) {
         const redacted = redactJsonStringPayload(row.payload, playerId);
         if (redacted === null || redacted === row.payload) continue;
-        await tx.run('UPDATE webhook_dead_letters SET payload = ? WHERE id = ?', [redacted, row.id]);
+        await tx.run('UPDATE webhook_dead_letters SET payload = ? WHERE id = ?', [
+          redacted,
+          row.id,
+        ]);
         summary.webhookDeadLettersRedacted += 1;
       }
 
-      summary.webhookDeliveriesScrubbed = await countChanges(await tx.run(
-        `UPDATE webhook_deliveries
+      summary.webhookDeliveriesScrubbed = await countChanges(
+        await tx.run(
+          `UPDATE webhook_deliveries
          SET error_message = ?
          WHERE error_message LIKE ?`,
-        [ANONYMIZED_PLACEHOLDER, playerNeedle],
-      ));
+          [ANONYMIZED_PLACEHOLDER, playerNeedle],
+        ),
+      );
 
-      summary.idempotencyKeysDeleted = await countChanges(await tx.run(
-        'DELETE FROM idempotency_keys WHERE response LIKE ?',
-        [playerNeedle],
-      ));
+      summary.idempotencyKeysDeleted = await countChanges(
+        await tx.run('DELETE FROM idempotency_keys WHERE response LIKE ?', [playerNeedle]),
+      );
 
-      summary.auditLogPiiDeleted = await countChanges(await tx.run(
-        'DELETE FROM audit_log_pii WHERE pii_json LIKE ?',
-        [playerNeedle],
-      ));
+      summary.auditLogPiiDeleted = await countChanges(
+        await tx.run('DELETE FROM audit_log_pii WHERE pii_json LIKE ?', [playerNeedle]),
+      );
     });
 
     await invalidatePlayerCache(playerId);
@@ -220,7 +211,10 @@ export async function anonymizePlayer(
       try {
         await unpinCid(cid);
       } catch (err) {
-        logger.warn('[anonymize] IPFS unpin failed', { cid, error: err instanceof Error ? err.message : String(err) });
+        logger.warn('[anonymize] IPFS unpin failed', {
+          cid,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -235,11 +229,15 @@ export async function anonymizePlayer(
       },
     }).catch(() => {});
 
-    logger.info('[anonymize] Player data anonymized', { playerId, cidsUnpinned: uniqueCids.length });
+    logger.info('[anonymize] Player data anonymized', {
+      playerId,
+      cidsUnpinned: uniqueCids.length,
+    });
 
     res.json({
       success: true,
-      message: 'Player data has been anonymized. On-chain data is immutable and cannot be erased — see docs/data-privacy.md for details.',
+      message:
+        'Player data has been anonymized. On-chain data is immutable and cannot be erased — see docs/data-privacy.md for details.',
       anonymized: {
         dbFieldsScrubbed: summary.playersScrubbed > 0 || player.wallet === ANONYMIZED_PLACEHOLDER,
         profileHistoryDeleted: summary.profileHistoryDeleted,

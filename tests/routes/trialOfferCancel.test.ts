@@ -13,10 +13,10 @@ import app from '../../src/app';
 
 const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 
-const SCOUT_WALLET  = 'GSCOUTWALLET1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const OTHER_SCOUT   = 'GOTHERSSCOUT2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const PLAYER_ID     = 'player-abc-123';
-const OFFER_ID      = 'offer-xyz-789';
+const SCOUT_WALLET = 'GSCOUTWALLET1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const OTHER_SCOUT = 'GOTHERSSCOUT2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const PLAYER_ID = 'player-abc-123';
+const OFFER_ID = 'offer-xyz-789';
 
 const CANCEL_URL = `/api/scouts/${SCOUT_WALLET}/trial-offers/${OFFER_ID}`;
 
@@ -63,7 +63,12 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -76,8 +81,8 @@ jest.mock('../../src/services/indexer', () => ({
 
 import { getTrialOfferById, cancelTrialOffer } from '../../src/db';
 
-const mockGetOffer    = getTrialOfferById as jest.Mock;
-const mockCancelOffer = cancelTrialOffer  as jest.Mock;
+const mockGetOffer = getTrialOfferById as jest.Mock;
+const mockCancelOffer = cancelTrialOffer as jest.Mock;
 
 function makeScoutToken(wallet = SCOUT_WALLET): string {
   return jwt.sign({ sub: wallet, role: 'scout' }, SECRET, { expiresIn: '1h' });

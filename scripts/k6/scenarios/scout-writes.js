@@ -33,14 +33,14 @@ import { BASE_URL, SCOUT_TOKEN } from '../config.js';
 
 // ── Custom metrics ────────────────────────────────────────────────────────────
 
-const writeErrors       = new Counter('scout_write_errors');
-const bookmarkRtt       = new Trend('scout_bookmark_rtt', true);
-const noteRtt           = new Trend('scout_note_rtt', true);
-const savedSearchRtt    = new Trend('scout_saved_search_rtt', true);
-const folderListRtt     = new Trend('scout_folder_list_rtt', true);
-const webhookRtt        = new Trend('scout_webhook_rtt', true);
+const writeErrors = new Counter('scout_write_errors');
+const bookmarkRtt = new Trend('scout_bookmark_rtt', true);
+const noteRtt = new Trend('scout_note_rtt', true);
+const savedSearchRtt = new Trend('scout_saved_search_rtt', true);
+const folderListRtt = new Trend('scout_folder_list_rtt', true);
+const webhookRtt = new Trend('scout_webhook_rtt', true);
 // Rate of unexpected 5xx responses — must stay at 0 under target load.
-const serverErrorRate   = new Rate('scout_write_5xx_rate');
+const serverErrorRate = new Rate('scout_write_5xx_rate');
 
 // ── Standalone scenario options ───────────────────────────────────────────────
 // When run via suite.js these options are ignored in favour of the suite's
@@ -50,10 +50,10 @@ export const scoutWritesOptions = {
   vus: 20,
   duration: '60s',
   thresholds: {
-    http_req_duration:        ['p(95)<300'],
-    http_req_failed:          ['rate<0.01'],
-    scout_write_errors:       ['count<5'],
-    scout_write_5xx_rate:     ['rate<0.01'],
+    http_req_duration: ['p(95)<300'],
+    http_req_failed: ['rate<0.01'],
+    scout_write_errors: ['count<5'],
+    scout_write_5xx_rate: ['rate<0.01'],
   },
 };
 
@@ -104,11 +104,10 @@ function doBookmark(headers) {
   const start = Date.now();
 
   // Add
-  const addRes = http.post(
-    `${BASE_URL}/api/v1/scouts/me/bookmarks`,
-    JSON.stringify({ playerId }),
-    { headers, tags: { scenario: 'scout_writes', action: 'bookmark_add' } },
-  );
+  const addRes = http.post(`${BASE_URL}/api/v1/scouts/me/bookmarks`, JSON.stringify({ playerId }), {
+    headers,
+    tags: { scenario: 'scout_writes', action: 'bookmark_add' },
+  });
   bookmarkRtt.add(Date.now() - start);
 
   if (!expectNoServerError(addRes, 'bookmark_add')) return;
@@ -123,17 +122,18 @@ function doBookmark(headers) {
   let bookmarkId = null;
   try {
     bookmarkId = JSON.parse(addRes.body)?.data?.id ?? JSON.parse(addRes.body)?.id ?? null;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   if (!bookmarkId) return;
 
   // Remove
   const delStart = Date.now();
-  const delRes = http.del(
-    `${BASE_URL}/api/v1/scouts/me/bookmarks/${bookmarkId}`,
-    null,
-    { headers, tags: { scenario: 'scout_writes', action: 'bookmark_remove' } },
-  );
+  const delRes = http.del(`${BASE_URL}/api/v1/scouts/me/bookmarks/${bookmarkId}`, null, {
+    headers,
+    tags: { scenario: 'scout_writes', action: 'bookmark_remove' },
+  });
   bookmarkRtt.add(Date.now() - delStart);
   expectNoServerError(delRes, 'bookmark_remove');
   check(delRes, { 'bookmark remove: no 5xx': (r) => r.status < 500 });
@@ -181,17 +181,18 @@ function doSavedSearch(headers) {
   let searchId = null;
   try {
     searchId = JSON.parse(createRes.body)?.data?.id ?? JSON.parse(createRes.body)?.id ?? null;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   if (!searchId) return;
 
   // Delete
   const delStart = Date.now();
-  const delRes = http.del(
-    `${BASE_URL}/api/v1/scouts/me/saved-searches/${searchId}`,
-    null,
-    { headers, tags: { scenario: 'scout_writes', action: 'saved_search_delete' } },
-  );
+  const delRes = http.del(`${BASE_URL}/api/v1/scouts/me/saved-searches/${searchId}`, null, {
+    headers,
+    tags: { scenario: 'scout_writes', action: 'saved_search_delete' },
+  });
   savedSearchRtt.add(Date.now() - delStart);
   expectNoServerError(delRes, 'saved_search_delete');
   check(delRes, { 'saved search delete: no 5xx': (r) => r.status < 500 });
@@ -203,10 +204,10 @@ function doSavedSearch(headers) {
  */
 function doFolderList(headers) {
   const start = Date.now();
-  const res = http.get(
-    `${BASE_URL}/api/v1/scouts/me/bookmark-folders`,
-    { headers, tags: { scenario: 'scout_writes', action: 'folder_list' } },
-  );
+  const res = http.get(`${BASE_URL}/api/v1/scouts/me/bookmark-folders`, {
+    headers,
+    tags: { scenario: 'scout_writes', action: 'folder_list' },
+  });
   folderListRtt.add(Date.now() - start);
   expectNoServerError(res, 'folder_list');
   check(res, { 'folder list: no 5xx': (r) => r.status < 500 });
@@ -243,16 +244,17 @@ function doWebhook(headers) {
   let webhookId = null;
   try {
     webhookId = JSON.parse(regRes.body)?.data?.id ?? JSON.parse(regRes.body)?.id ?? null;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   if (!webhookId) return;
 
   const delStart = Date.now();
-  const delRes = http.del(
-    `${BASE_URL}/api/v1/scouts/me/webhooks/${webhookId}`,
-    null,
-    { headers, tags: { scenario: 'scout_writes', action: 'webhook_delete' } },
-  );
+  const delRes = http.del(`${BASE_URL}/api/v1/scouts/me/webhooks/${webhookId}`, null, {
+    headers,
+    tags: { scenario: 'scout_writes', action: 'webhook_delete' },
+  });
   webhookRtt.add(Date.now() - delStart);
   expectNoServerError(delRes, 'webhook_delete');
   check(delRes, { 'webhook delete: no 5xx': (r) => r.status < 500 });
@@ -283,7 +285,7 @@ export default function scoutWritesVU() {
   const headers = authHeaders();
   const roll = Math.random();
 
-  if (roll < 0.40) {
+  if (roll < 0.4) {
     doBookmark(headers);
   } else if (roll < 0.65) {
     doNote(headers);

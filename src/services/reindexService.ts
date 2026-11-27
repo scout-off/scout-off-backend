@@ -180,11 +180,7 @@ export function cancelReindex(adminWallet: string): boolean {
  * @param toLedger    - Last ledger to replay (inclusive).
  * @param adminWallet - Wallet of the admin who triggered the reindex (for audit).
  */
-export function startReindex(
-  fromLedger: number,
-  toLedger: number,
-  adminWallet: string,
-): void {
+export function startReindex(fromLedger: number, toLedger: number, adminWallet: string): void {
   if (_state.status === 'running') {
     throw new ReindexAlreadyRunningError('A reindex job is already in progress.');
   }
@@ -211,11 +207,15 @@ export function startReindex(
     timestamp: _state.startedAt!,
   }).catch(() => {});
 
-  logger.info(`[reindex] started fromLedger=${fromLedger} toLedger=${toLedger} admin=${adminWallet}`);
+  logger.info(
+    `[reindex] started fromLedger=${fromLedger} toLedger=${toLedger} admin=${adminWallet}`,
+  );
 
   // Fire-and-forget — errors are caught inside _runReindex.
   _runReindex(fromLedger, toLedger, adminWallet).catch((err: unknown) => {
-    logger.error(`[reindex] unexpected error in background job: ${err instanceof Error ? err.message : String(err)}`);
+    logger.error(
+      `[reindex] unexpected error in background job: ${err instanceof Error ? err.message : String(err)}`,
+    );
   });
 }
 
@@ -248,7 +248,7 @@ async function _runReindex(
         if (newMode !== currentMode) {
           logger.info(
             `[reindex] mode transition: ${currentMode} -> ${newMode} ` +
-            `(remaining=${remainingLedgers}, threshold=${threshold})`,
+              `(remaining=${remainingLedgers}, threshold=${threshold})`,
           );
           currentMode = newMode;
           _state = { ..._state, mode: currentMode };

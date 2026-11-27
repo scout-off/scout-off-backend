@@ -1,28 +1,79 @@
 import {
-  getDb, closeDb, fetchLastIndexedLedger, persistLastIndexedLedger,
-  queryPlayers, countPlayers, getPlayerById, insertOrUpdatePlayer,
+  getDb,
+  closeDb,
+  fetchLastIndexedLedger,
+  persistLastIndexedLedger,
+  queryPlayers,
+  countPlayers,
+  getPlayerById,
+  insertOrUpdatePlayer,
   updatePlayerProgress,
-  queryEvents, getEventsCount,
-  insertPlayerProfileHistory, getPlayerProfileHistory,
-  incrementValidatorApproved, incrementValidatorRejected, getValidatorStats,
-  insertPendingMilestone, removePendingMilestone, getPendingMilestones,
-  getIdempotencyRecord, saveIdempotencyRecord, purgeExpiredIdempotencyKeys,
-  getLatestSubscription, insertSubscription, dbRenewSubscription, dbCancelSubscription,
-  insertContactUnlock, getContactUnlocksByScout, hasContactUnlock,
-  insertAuditLog, getAuditLogs, getAuditLogsCount, getAllAuditLogRows,
-  getTrialOfferById, insertTrialOffer, respondToTrialOffer,
-  insertPendingPin, getPendingPins, deletePendingPin, deletePendingPinByHash, isPendingPinByHash, incrementPendingPinAttempts,
-  getStalePendingPins, updatePendingPinReconciliation, countStuckPendingPins,
-  upsertScoutNote, getScoutNote, getScoutNotes,
-  insertApiKey, listApiKeysByWallet, revokeApiKeyById, getApiKeyByHash, getAllActiveApiKeys,
-  getActiveApiKeyByLookupHash, getActiveApiKeysAwaitingLookupHash, setApiKeyLookupHash,
+  queryEvents,
+  getEventsCount,
+  insertPlayerProfileHistory,
+  getPlayerProfileHistory,
+  incrementValidatorApproved,
+  incrementValidatorRejected,
+  getValidatorStats,
+  insertPendingMilestone,
+  removePendingMilestone,
+  getPendingMilestones,
+  getIdempotencyRecord,
+  saveIdempotencyRecord,
+  purgeExpiredIdempotencyKeys,
+  getLatestSubscription,
+  insertSubscription,
+  dbRenewSubscription,
+  dbCancelSubscription,
+  insertContactUnlock,
+  getContactUnlocksByScout,
+  hasContactUnlock,
+  insertAuditLog,
+  getAuditLogs,
+  getAuditLogsCount,
+  getAllAuditLogRows,
+  getTrialOfferById,
+  insertTrialOffer,
+  respondToTrialOffer,
+  insertPendingPin,
+  getPendingPins,
+  deletePendingPin,
+  deletePendingPinByHash,
+  isPendingPinByHash,
+  incrementPendingPinAttempts,
+  getStalePendingPins,
+  updatePendingPinReconciliation,
+  countStuckPendingPins,
+  upsertScoutNote,
+  getScoutNote,
+  getScoutNotes,
+  insertApiKey,
+  listApiKeysByWallet,
+  revokeApiKeyById,
+  getApiKeyByHash,
+  getAllActiveApiKeys,
+  getActiveApiKeyByLookupHash,
+  getActiveApiKeysAwaitingLookupHash,
+  setApiKeyLookupHash,
   touchApiKeyLastUsed,
-  insertBookmark, deleteBookmark, getBookmarksByScout,
-  insertSavedSearch, getSavedSearchesByScout, deleteSavedSearch,
-  getAllFeatureFlags, getFeatureFlag, upsertFeatureFlag,
-  insertPendingAdminAction, getPendingAdminActionById, getPendingAdminActionsByStatus,
-  updatePendingAdminActionStatus, incrementActionSignatures, expireStalePendingAdminActions,
-  insertAdminActionSignature, getAdminActionSignature, getAdminActionSignatures,
+  insertBookmark,
+  deleteBookmark,
+  getBookmarksByScout,
+  insertSavedSearch,
+  getSavedSearchesByScout,
+  deleteSavedSearch,
+  getAllFeatureFlags,
+  getFeatureFlag,
+  upsertFeatureFlag,
+  insertPendingAdminAction,
+  getPendingAdminActionById,
+  getPendingAdminActionsByStatus,
+  updatePendingAdminActionStatus,
+  incrementActionSignatures,
+  expireStalePendingAdminActions,
+  insertAdminActionSignature,
+  getAdminActionSignature,
+  getAdminActionSignatures,
 } from '../../src/db';
 import { ContractEventType } from '../../src/types';
 
@@ -37,7 +88,10 @@ const INJECTION_PAYLOADS = [
   "1; SELECT * FROM users WHERE '1' = '1",
 ];
 
-async function seedPlayer(id: string, extra?: Partial<Parameters<typeof insertOrUpdatePlayer>[0]>): Promise<void> {
+async function seedPlayer(
+  id: string,
+  extra?: Partial<Parameters<typeof insertOrUpdatePlayer>[0]>,
+): Promise<void> {
   await insertOrUpdatePlayer({
     player_id: id,
     wallet: 'G' + 'A'.repeat(55),
@@ -88,7 +142,10 @@ describe('queryPlayers - SQL injection resistance', () => {
   });
 
   it('queryPlayers with injection in both region and position is safe', async () => {
-    const rows = await queryPlayers({ region: "'; DROP TABLE players; --", position: "' OR '1'='1" });
+    const rows = await queryPlayers({
+      region: "'; DROP TABLE players; --",
+      position: "' OR '1'='1",
+    });
     expect(Array.isArray(rows)).toBe(true);
     expect(rows).toHaveLength(0);
   });
@@ -122,7 +179,11 @@ describe('getPlayerById - SQL injection resistance', () => {
 
 describe('getPendingMilestones - SQL injection resistance', () => {
   beforeEach(() => {
-    getDb().prepare(`INSERT INTO pending_milestones (milestone_id, player_id, validator_wallet, milestone_type, evidence_uri, submitted_at) VALUES (?, ?, ?, ?, ?, ?)`).run('m1', 'normal-player', 'G' + 'A'.repeat(55), 'performance', 'ipfs://QmTest', 1000);
+    getDb()
+      .prepare(
+        `INSERT INTO pending_milestones (milestone_id, player_id, validator_wallet, milestone_type, evidence_uri, submitted_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run('m1', 'normal-player', 'G' + 'A'.repeat(55), 'performance', 'ipfs://QmTest', 1000);
   });
 
   INJECTION_PAYLOADS.forEach((payload) => {
@@ -166,7 +227,11 @@ describe('getPendingMilestones - SQL injection resistance', () => {
 describe('queryEvents - SQL injection resistance', () => {
   // Seed a real event row
   beforeEach(() => {
-    getDb().prepare('INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)').run('player_registered', 1, 'abc123', '{}', 1000);
+    getDb()
+      .prepare(
+        'INSERT OR IGNORE INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run('player_registered', 1, 'abc123', '{}', 1000);
   });
 
   INJECTION_PAYLOADS.forEach((payload) => {
@@ -190,7 +255,13 @@ describe('queryEvents - SQL injection resistance', () => {
     ).run('milestone_approved', 2, txHash, '{"player_id":"target","validator":"wallet"}', 2000);
     db.prepare(
       'INSERT INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)',
-    ).run('milestone_approved', 3, `${txHash}-other`, '{"player_id":"other","validator":"wallet"}', 3000);
+    ).run(
+      'milestone_approved',
+      3,
+      `${txHash}-other`,
+      '{"player_id":"other","validator":"wallet"}',
+      3000,
+    );
 
     const filtered = queryEvents('milestone_approved', {
       payloadFilter: { player_id: 'target' },
@@ -284,7 +355,12 @@ describe('all DB functions - SQL injection resistance (comprehensive)', () => {
   });
 
   it('insertPlayerProfileHistory with injection payloads', async () => {
-    await insertPlayerProfileHistory({ player_id: inj, metadata_uri: inj, changed_at: 0, tx_hash: inj });
+    await insertPlayerProfileHistory({
+      player_id: inj,
+      metadata_uri: inj,
+      changed_at: 0,
+      tx_hash: inj,
+    });
   });
 
   it('getPlayerProfileHistory with injection payload', async () => {
@@ -293,7 +369,13 @@ describe('all DB functions - SQL injection resistance (comprehensive)', () => {
   });
 
   it('insertOrUpdatePlayer with injection payloads', async () => {
-    await insertOrUpdatePlayer({ player_id: inj, wallet: inj, position: inj, region: inj, metadata_uri: inj });
+    await insertOrUpdatePlayer({
+      player_id: inj,
+      wallet: inj,
+      position: inj,
+      region: inj,
+      metadata_uri: inj,
+    });
   });
 
   it('updatePlayerProgress with injection payload', async () => {
@@ -335,7 +417,14 @@ describe('all DB functions - SQL injection resistance (comprehensive)', () => {
   });
 
   it('insertSubscription with injection payloads', async () => {
-    expect(typeof (await insertSubscription({ scout_wallet: inj, tier: inj, expires_at: 0, created_at: 0 }))).toBe('number');
+    expect(
+      typeof (await insertSubscription({
+        scout_wallet: inj,
+        tier: inj,
+        expires_at: 0,
+        created_at: 0,
+      })),
+    ).toBe('number');
   });
 
   it('dbRenewSubscription with injection payloads', async () => {
@@ -360,7 +449,12 @@ describe('all DB functions - SQL injection resistance (comprehensive)', () => {
   });
 
   it('insertAuditLog with injection payloads', async () => {
-    await insertAuditLog({ action: inj, adminWallet: inj, queryParams: { [inj]: inj }, createdAt: inj });
+    await insertAuditLog({
+      action: inj,
+      adminWallet: inj,
+      queryParams: { [inj]: inj },
+      createdAt: inj,
+    });
   });
 
   it('getTrialOfferById with injection payload', async () => {
@@ -369,7 +463,13 @@ describe('all DB functions - SQL injection resistance (comprehensive)', () => {
   });
 
   it('insertTrialOffer with injection payloads', async () => {
-    await insertTrialOffer({ offer_id: inj, scout_wallet: inj, player_id: inj, details_uri: inj, created_at: 0 });
+    await insertTrialOffer({
+      offer_id: inj,
+      scout_wallet: inj,
+      player_id: inj,
+      details_uri: inj,
+      created_at: 0,
+    });
   });
 
   it('respondToTrialOffer with injection payloads', async () => {
@@ -407,7 +507,13 @@ describe('all DB functions - SQL injection resistance (comprehensive)', () => {
   });
 
   it('updatePendingPinReconciliation with injection payload', async () => {
-    await updatePendingPinReconciliation({ id: 9999, status: inj, expiredReason: inj, resolvedCid: inj, lastReconciledAt: inj });
+    await updatePendingPinReconciliation({
+      id: 9999,
+      status: inj,
+      expiredReason: inj,
+      resolvedCid: inj,
+      lastReconciledAt: inj,
+    });
   });
 
   it('countStuckPendingPins with injection payload', async () => {
@@ -511,7 +617,15 @@ describe('all DB functions - SQL injection resistance (comprehensive)', () => {
   });
 
   it('insertPendingAdminAction with injection payloads', async () => {
-    await insertPendingAdminAction({ id: 'test-' + inj, action_type: inj, proposer: inj, payload: inj, required_signatures: 1, expires_at: 0, created_at: 0 });
+    await insertPendingAdminAction({
+      id: 'test-' + inj,
+      action_type: inj,
+      proposer: inj,
+      payload: inj,
+      required_signatures: 1,
+      expires_at: 0,
+      created_at: 0,
+    });
   });
 
   it('getPendingAdminActionById with injection payload', async () => {
@@ -539,8 +653,20 @@ describe('all DB functions - SQL injection resistance (comprehensive)', () => {
   it('insertAdminActionSignature with injection payload', async () => {
     // Must insert a parent row first to satisfy the FK constraint
     const aid = 'test-action-sig-' + Date.now();
-    await insertPendingAdminAction({ id: aid, action_type: 'test', proposer: 'admin', payload: '{}', required_signatures: 2, expires_at: 9999999999999, created_at: 0 });
-    const inserted = await insertAdminActionSignature({ action_id: aid, signer: inj, signed_at: 0 });
+    await insertPendingAdminAction({
+      id: aid,
+      action_type: 'test',
+      proposer: 'admin',
+      payload: '{}',
+      required_signatures: 2,
+      expires_at: 9999999999999,
+      created_at: 0,
+    });
+    const inserted = await insertAdminActionSignature({
+      action_id: aid,
+      signer: inj,
+      signed_at: 0,
+    });
     expect(typeof inserted).toBe('boolean');
   });
 

@@ -1,6 +1,14 @@
 import { Router, type Request } from 'express';
 import { Keypair } from '@stellar/stellar-sdk';
-import { getChallenge, postToken, postRefresh, postLogout, tokenSchema, refreshSchema, logoutSchema } from '../controllers/authController';
+import {
+  getChallenge,
+  postToken,
+  postRefresh,
+  postLogout,
+  tokenSchema,
+  refreshSchema,
+  logoutSchema,
+} from '../controllers/authController';
 import { requireAuth } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
 import { methodNotAllowed } from '../middleware/methodNotAllowed';
@@ -17,21 +25,23 @@ router.use((_req, res, next) => {
   next();
 });
 
-const authIpRateLimit = (endpoint: string) => rateLimit({
-  name: `auth:${endpoint}:ip`,
-  windowMs: config.authRateLimit.windowMs,
-  max: config.authRateLimit.ipMax,
-});
+const authIpRateLimit = (endpoint: string) =>
+  rateLimit({
+    name: `auth:${endpoint}:ip`,
+    windowMs: config.authRateLimit.windowMs,
+    max: config.authRateLimit.ipMax,
+  });
 
 const authAccountRateLimit = (
   endpoint: string,
   keyGenerator: (req: Request) => string | undefined,
-) => rateLimit({
-  name: `auth:${endpoint}:account`,
-  windowMs: config.authRateLimit.windowMs,
-  max: config.authRateLimit.max,
-  keyGenerator,
-});
+) =>
+  rateLimit({
+    name: `auth:${endpoint}:account`,
+    windowMs: config.authRateLimit.windowMs,
+    max: config.authRateLimit.max,
+    keyGenerator,
+  });
 
 function challengeAccountKey(req: Request): string | undefined {
   const account = req.query.account;
@@ -78,8 +88,13 @@ function refreshAccountKey(req: Request): string | undefined {
  * @response 403 { success: false, error: string } - client_domain not on SEP10_CLIENT_DOMAIN_ALLOWLIST
  * @response 502 { success: false, error: string } - client_domain stellar.toml unreachable or has no SIGNING_KEY
  */
-router.route('/challenge')
-  .get(authIpRateLimit('challenge'), authAccountRateLimit('challenge', challengeAccountKey), getChallenge)
+router
+  .route('/challenge')
+  .get(
+    authIpRateLimit('challenge'),
+    authAccountRateLimit('challenge', challengeAccountKey),
+    getChallenge,
+  )
   .all(methodNotAllowed(['GET']));
 
 /**
@@ -95,7 +110,8 @@ router.route('/challenge')
  * @response 400 { success: false, error: string } - Invalid body or malformed XDR
  * @response 401 { success: false, error: string } - Invalid signature or expired challenge
  */
-router.route('/token')
+router
+  .route('/token')
   .post(
     authIpRateLimit('token'),
     authAccountRateLimit('token', tokenAccountKey),
@@ -115,7 +131,8 @@ router.route('/token')
  * @response 200 { accessToken, refreshToken, expiresAt }
  * @response 401 { success: false, error } — invalid, expired, or revoked refresh token
  */
-router.route('/refresh')
+router
+  .route('/refresh')
   .post(
     authIpRateLimit('refresh'),
     authAccountRateLimit('refresh', refreshAccountKey),
@@ -134,7 +151,8 @@ router.route('/refresh')
  * @response 200 { success: true }
  * @response 401 — missing/invalid bearer token
  */
-router.route('/logout')
+router
+  .route('/logout')
   .post(requireAuth, validateBody(logoutSchema), postLogout)
   .all(methodNotAllowed(['POST']));
 

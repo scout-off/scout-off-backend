@@ -27,9 +27,7 @@ export class ContractExecutionError extends Error {
     super(message);
     this.name = 'ContractExecutionError';
     this.contractErrorCode =
-      contractErrorCode !== undefined
-        ? contractErrorCode
-        : extractContractErrorCode(message);
+      contractErrorCode !== undefined ? contractErrorCode : extractContractErrorCode(message);
   }
 }
 
@@ -43,27 +41,87 @@ export interface ContractErrorMapping {
 
 export const CONTRACT_ERRORS: Readonly<Record<number, ContractErrorMapping>> = {
   1: { errorCode: ErrorCode.CONFLICT, status: 409, message: 'Contract is already initialized' },
-  2: { errorCode: ErrorCode.INTERNAL_SERVER_ERROR, status: 500, message: 'Contract is not initialized' },
+  2: {
+    errorCode: ErrorCode.INTERNAL_SERVER_ERROR,
+    status: 500,
+    message: 'Contract is not initialized',
+  },
   3: { errorCode: ErrorCode.PLAYER_NOT_FOUND, status: 404, message: 'Player not found on-chain' },
   4: { errorCode: ErrorCode.NOT_FOUND, status: 404, message: 'Contract resource not found' },
-  5: { errorCode: ErrorCode.VALIDATION_ERROR, status: 400, message: 'Contract rejected the input as invalid' },
+  5: {
+    errorCode: ErrorCode.VALIDATION_ERROR,
+    status: 400,
+    message: 'Contract rejected the input as invalid',
+  },
   6: { errorCode: ErrorCode.CONFLICT, status: 409, message: 'Resource is already verified' },
-  7: { errorCode: ErrorCode.INSUFFICIENT_FUNDS, status: 402, message: 'Insufficient funds for this contract call' },
-  8: { errorCode: ErrorCode.NOT_SUBSCRIBED, status: 402, message: 'Scout has no active subscription' },
-  9: { errorCode: ErrorCode.UNAUTHORIZED, status: 403, message: 'Caller is not authorized for this contract action' },
+  7: {
+    errorCode: ErrorCode.INSUFFICIENT_FUNDS,
+    status: 402,
+    message: 'Insufficient funds for this contract call',
+  },
+  8: {
+    errorCode: ErrorCode.NOT_SUBSCRIBED,
+    status: 402,
+    message: 'Scout has no active subscription',
+  },
+  9: {
+    errorCode: ErrorCode.UNAUTHORIZED,
+    status: 403,
+    message: 'Caller is not authorized for this contract action',
+  },
   10: { errorCode: ErrorCode.CONTRACT_PAUSED, status: 503, message: 'Contract is paused' },
-  11: { errorCode: ErrorCode.INTERNAL_SERVER_ERROR, status: 500, message: 'Contract arithmetic overflow' },
-  12: { errorCode: ErrorCode.INSUFFICIENT_SUPPLY, status: 409, message: 'Not enough unsold tokens remain' },
-  13: { errorCode: ErrorCode.VALIDATOR_NOT_REGISTERED, status: 403, message: 'Validator is not registered on-chain' },
-  14: { errorCode: ErrorCode.VALIDATOR_REVOKED, status: 403, message: 'Validator has been revoked' },
+  11: {
+    errorCode: ErrorCode.INTERNAL_SERVER_ERROR,
+    status: 500,
+    message: 'Contract arithmetic overflow',
+  },
+  12: {
+    errorCode: ErrorCode.INSUFFICIENT_SUPPLY,
+    status: 409,
+    message: 'Not enough unsold tokens remain',
+  },
+  13: {
+    errorCode: ErrorCode.VALIDATOR_NOT_REGISTERED,
+    status: 403,
+    message: 'Validator is not registered on-chain',
+  },
+  14: {
+    errorCode: ErrorCode.VALIDATOR_REVOKED,
+    status: 403,
+    message: 'Validator has been revoked',
+  },
   15: { errorCode: ErrorCode.MILESTONE_NOT_FOUND, status: 404, message: 'Milestone not found' },
-  16: { errorCode: ErrorCode.MILESTONE_ALREADY_APPROVED, status: 409, message: 'Milestone is already approved' },
-  17: { errorCode: ErrorCode.SELF_APPROVAL_FORBIDDEN, status: 403, message: 'A validator cannot approve their own milestone' },
-  18: { errorCode: ErrorCode.SUBSCRIPTION_EXPIRED, status: 402, message: 'Subscription has expired' },
-  19: { errorCode: ErrorCode.CONTACT_ALREADY_PAID, status: 409, message: 'Contact with this player is already paid' },
-  20: { errorCode: ErrorCode.FEE_BPS_OUT_OF_RANGE, status: 400, message: 'Platform fee must be between 0 and 10000 bps' },
+  16: {
+    errorCode: ErrorCode.MILESTONE_ALREADY_APPROVED,
+    status: 409,
+    message: 'Milestone is already approved',
+  },
+  17: {
+    errorCode: ErrorCode.SELF_APPROVAL_FORBIDDEN,
+    status: 403,
+    message: 'A validator cannot approve their own milestone',
+  },
+  18: {
+    errorCode: ErrorCode.SUBSCRIPTION_EXPIRED,
+    status: 402,
+    message: 'Subscription has expired',
+  },
+  19: {
+    errorCode: ErrorCode.CONTACT_ALREADY_PAID,
+    status: 409,
+    message: 'Contact with this player is already paid',
+  },
+  20: {
+    errorCode: ErrorCode.FEE_BPS_OUT_OF_RANGE,
+    status: 400,
+    message: 'Platform fee must be between 0 and 10000 bps',
+  },
   21: { errorCode: ErrorCode.CONNECTION_NOT_FOUND, status: 404, message: 'Connection not found' },
-  22: { errorCode: ErrorCode.CONNECTION_ALREADY_CLOSED, status: 409, message: 'Connection is already closed' },
+  22: {
+    errorCode: ErrorCode.CONNECTION_ALREADY_CLOSED,
+    status: 409,
+    message: 'Connection is already closed',
+  },
 };
 
 /** Backwards-compatible numeric → ErrorCode view of the table above. */

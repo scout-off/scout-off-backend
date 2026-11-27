@@ -51,18 +51,29 @@ describe('POST /api/admin/introspect', () => {
   it('returns indexed on-chain role holders independently of the JWT role', async () => {
     const txHash = 'introspect-role-grant';
     await insertEvent({
-      type: 'role_granted', ledger: 500, tx_hash: txHash, contract_id: 'introspect-contract',
+      type: 'role_granted',
+      ledger: 500,
+      tx_hash: txHash,
+      contract_id: 'introspect-contract',
       payload: JSON.stringify({ role: 'PAUSER', account: OTHER_WALLET, sender: ADMIN_WALLET }),
     });
     try {
-      const adminToken = jwt.sign({ sub: ADMIN_WALLET, role: 'admin', jti: 'introspect-active-token' }, SECRET, { expiresIn: '1h' });
-      const res = await request(app).post('/api/admin/introspect')
-        .set('Authorization', `Bearer ${adminToken}`).send({});
+      const adminToken = jwt.sign(
+        { sub: ADMIN_WALLET, role: 'admin', jti: 'introspect-active-token' },
+        SECRET,
+        { expiresIn: '1h' },
+      );
+      const res = await request(app)
+        .post('/api/admin/introspect')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
       expect(res.status).toBe(200);
       expect(res.body.data.valid).toBe(true);
-      expect(res.body.data.contractRoles).toEqual(expect.arrayContaining([
-        { contract_id: 'introspect-contract', role: 'PAUSER', account: OTHER_WALLET },
-      ]));
+      expect(res.body.data.contractRoles).toEqual(
+        expect.arrayContaining([
+          { contract_id: 'introspect-contract', role: 'PAUSER', account: OTHER_WALLET },
+        ]),
+      );
     } finally {
       await dbRun('DELETE FROM events WHERE tx_hash = ?', [txHash]);
     }

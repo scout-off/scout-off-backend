@@ -21,7 +21,9 @@ function makeReqRes(path = '/test', method = 'GET', statusCode = 200) {
   const req = { method, path, route: undefined } as unknown as Request;
   const res = {
     statusCode,
-    on: (event: string, cb: () => void) => { listeners[event] = cb; },
+    on: (event: string, cb: () => void) => {
+      listeners[event] = cb;
+    },
     emit: (event: string) => listeners[event]?.(),
   } as unknown as Response;
   const next = jest.fn() as NextFunction;

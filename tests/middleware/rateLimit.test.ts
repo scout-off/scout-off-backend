@@ -26,7 +26,7 @@ const stores = [
 
 describe.each(stores)('rateLimit middleware ($name)', ({ create }) => {
   let store: RateLimitStore;
-  
+
   beforeEach(() => {
     store = create();
   });
@@ -92,10 +92,12 @@ describe.each(stores)('rateLimit middleware ($name)', ({ create }) => {
 
     // Fire 10 requests concurrently
     const requests = Array.from({ length: 10 }, () => makeReqRes(ip));
-    await Promise.all(requests.map(r => mw(r.req, r.res, r.next)));
+    await Promise.all(requests.map((r) => mw(r.req, r.res, r.next)));
 
-    const successCount = requests.filter(r => (r.next as jest.Mock).mock.calls.length > 0).length;
-    const blockedCount = requests.filter(r => (r.res.status as jest.Mock).mock.calls.length > 0).length;
+    const successCount = requests.filter((r) => (r.next as jest.Mock).mock.calls.length > 0).length;
+    const blockedCount = requests.filter(
+      (r) => (r.res.status as jest.Mock).mock.calls.length > 0,
+    ).length;
 
     expect(successCount).toBe(5);
     expect(blockedCount).toBe(5);
@@ -164,32 +166,35 @@ describe.each(stores)('rateLimit client IP extraction ($name)', ({ create }) => 
 
 // ── Integration: POST /api/validators/milestone throttling ───────────────────
 // Confirms the middleware correctly throttles repeated requests from the same IP.
-describe.each(stores)('POST /api/validators/milestone rate limiting (middleware integration) ($name)', ({ create }) => {
-  let store: RateLimitStore;
-  
-  beforeEach(() => {
-    store = create();
-  });
+describe.each(stores)(
+  'POST /api/validators/milestone rate limiting (middleware integration) ($name)',
+  ({ create }) => {
+    let store: RateLimitStore;
 
-  it('returns 429 after exceeding the configured limit', async () => {
-    const mw = rateLimit({ windowMs: 60_000, max: 1, store });
-    const ip = '9.9.9.9';
+    beforeEach(() => {
+      store = create();
+    });
 
-    const first = makeReqRes(ip);
-    await mw(first.req, first.res, first.next);
-    expect(first.next).toHaveBeenCalledTimes(1);
+    it('returns 429 after exceeding the configured limit', async () => {
+      const mw = rateLimit({ windowMs: 60_000, max: 1, store });
+      const ip = '9.9.9.9';
 
-    const second = makeReqRes(ip);
-    await mw(second.req, second.res, second.next);
-    expect(second.res.status).toHaveBeenCalledWith(429);
-    expect(second.next).not.toHaveBeenCalled();
-  });
-});
+      const first = makeReqRes(ip);
+      await mw(first.req, first.res, first.next);
+      expect(first.next).toHaveBeenCalledTimes(1);
+
+      const second = makeReqRes(ip);
+      await mw(second.req, second.res, second.next);
+      expect(second.res.status).toHaveBeenCalledWith(429);
+      expect(second.next).not.toHaveBeenCalled();
+    });
+  },
+);
 
 // ── Unit tests for walletRateLimit middleware ────────────────────────────────
 describe.each(stores)('walletRateLimit middleware ($name)', ({ create }) => {
   let store: RateLimitStore;
-  
+
   beforeEach(() => {
     store = create();
   });

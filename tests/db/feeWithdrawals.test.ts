@@ -42,9 +42,7 @@ describe('feeWithdrawals repository (#1870)', () => {
   });
 
   it('inserts a withdrawal and returns its id', async () => {
-    const id = await insertFeeWithdrawal(
-      withdrawal({ idempotencyKey: 'idem-1', txHash: 'tx-1' }),
-    );
+    const id = await insertFeeWithdrawal(withdrawal({ idempotencyKey: 'idem-1', txHash: 'tx-1' }));
     expect(typeof id).toBe('number');
     expect(id).toBeGreaterThan(0);
 

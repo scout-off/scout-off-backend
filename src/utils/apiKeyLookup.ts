@@ -103,9 +103,6 @@ function resolveSecret(): Buffer {
  * alone, and is never sufficient to authenticate on its own.
  */
 export function deriveApiKeyLookupHash(rawKey: string): string {
-  const digest = createHmac('sha256', resolveSecret())
-    .update(DOMAIN)
-    .update(rawKey)
-    .digest('hex');
+  const digest = createHmac('sha256', resolveSecret()).update(DOMAIN).update(rawKey).digest('hex');
   return `${VERSION_PREFIX}:${digest}`;
 }

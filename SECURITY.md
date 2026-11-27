@@ -6,11 +6,11 @@ Security patches are released for the current major version line. Older
 versions are supported for a grace period after a new major release, after
 which they receive critical patches only at maintainer discretion.
 
-| Version | Status            | Support ends     |
-| ------- | ----------------- | ---------------- |
-| 2.x     | ✅ Active support  | Current          |
-| 1.x     | ⚠️ Security-only  | 2026-12-31       |
-| < 1.0   | ❌ Unsupported    | —                |
+| Version | Status            | Support ends |
+| ------- | ----------------- | ------------ |
+| 2.x     | ✅ Active support | Current      |
+| 1.x     | ⚠️ Security-only  | 2026-12-31   |
+| < 1.0   | ❌ Unsupported    | —            |
 
 ### Disclosure SLA
 
@@ -29,7 +29,7 @@ execution, unrestricted data exfiltration, or total auth bypass with no
 preconditions. **High** vulnerabilities require some preconditions (e.g. a
 valid account) but still bypass core security boundaries.
 
-These timelines are commitments to the *reporter*, not guarantees of a public
+These timelines are commitments to the _reporter_, not guarantees of a public
 fix — the complexity of a fix and the need for ecosystem coordination (e.g.
 coordinating with Stellar testnet reset windows) may extend the patch timeline.
 When a delay beyond the targeted window is needed, we will communicate the
@@ -58,12 +58,12 @@ puts all ScoutOff users at risk.
 
 ### What to Expect
 
-| Timeline     | Action                                                                    |
-| ------------ | ------------------------------------------------------------------------- |
-| 0–48 hours   | Acknowledgement of receipt                                                |
-| 0–7 days     | Initial severity assessment and resolution timeline communicated to you   |
-| 7–30 days    | Patch developed and reviewed (timeline depends on severity and complexity) |
-| After patch  | Coordinated public disclosure with credit to the reporter (if desired)    |
+| Timeline    | Action                                                                     |
+| ----------- | -------------------------------------------------------------------------- |
+| 0–48 hours  | Acknowledgement of receipt                                                 |
+| 0–7 days    | Initial severity assessment and resolution timeline communicated to you    |
+| 7–30 days   | Patch developed and reviewed (timeline depends on severity and complexity) |
+| After patch | Coordinated public disclosure with credit to the reporter (if desired)     |
 
 We follow a coordinated disclosure model. We will credit reporters in the
 release notes unless you prefer to remain anonymous.
@@ -155,19 +155,19 @@ spec:
               namespaces: [scout-off]
       verifyImages:
         - imageReferences:
-            - "ghcr.io/scout-off/scout-off-backend*"
+            - 'ghcr.io/scout-off/scout-off-backend*'
           attestors:
             - entries:
                 - keyless:
-                    subject: "https://github.com/scout-off/scout-off-backend/.github/workflows/deploy-mainnet.yml@refs/heads/main"
-                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: 'https://github.com/scout-off/scout-off-backend/.github/workflows/deploy-mainnet.yml@refs/heads/main'
+                    issuer: 'https://token.actions.githubusercontent.com'
           attestations:
             - predicateType: https://spdx.dev/Document
               attestors:
                 - entries:
                     - keyless:
-                        subject: "https://github.com/scout-off/scout-off-backend/.github/workflows/deploy-mainnet.yml@refs/heads/main"
-                        issuer: "https://token.actions.githubusercontent.com"
+                        subject: 'https://github.com/scout-off/scout-off-backend/.github/workflows/deploy-mainnet.yml@refs/heads/main'
+                        issuer: 'https://token.actions.githubusercontent.com'
 ```
 
 Sigstore's policy-controller (`ClusterImagePolicy`) can express the same rules;
@@ -179,6 +179,7 @@ requiring the SPDX attestation rather than only the signature.
 When a security incident or audit occurs, the platform provides a tamper-evident audit trail for investigation and compliance:
 
 **See [docs/audit-log.md](docs/audit-log.md)** for:
+
 - Complete audit schema and what actions are logged
 - Hash-chain verification procedures to detect tampering
 - Using `GET /api/admin/audit/verify` to validate chain integrity

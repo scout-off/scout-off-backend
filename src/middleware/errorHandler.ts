@@ -54,18 +54,18 @@ export function errorHandler(
   err: unknown,
   req: Request,
   res: Response,
-  _next: NextFunction
+  _next: NextFunction,
 ): void {
   const correlationId = req.correlationId;
 
   // Safely extract message for logging — err may be null or a plain object
   const errMessage =
     err != null && typeof (err as Record<string, unknown>).message === 'string'
-      ? (err as Record<string, unknown>).message as string
+      ? ((err as Record<string, unknown>).message as string)
       : 'Internal Server Error';
   const errStack =
     err != null && typeof (err as Record<string, unknown>).stack === 'string'
-      ? (err as Record<string, unknown>).stack as string
+      ? ((err as Record<string, unknown>).stack as string)
       : undefined;
 
   const logMessage = `[error] ${errMessage}${correlationId ? ` correlationId=${correlationId}` : ''}`;
@@ -111,10 +111,7 @@ export function errorHandler(
 
   // Contract failures carry a numeric Soroban code; map it to a specific
   // backend ErrorCode and HTTP status (#1530).
-  if (
-    err instanceof ContractExecutionError &&
-    err.contractErrorCode !== null
-  ) {
+  if (err instanceof ContractExecutionError && err.contractErrorCode !== null) {
     const mapped = mapContractError(err.contractErrorCode);
     res.status(mapped.status).json({
       success: false,
@@ -127,8 +124,7 @@ export function errorHandler(
 
   // Use the error's status code only when it is a genuine HTTP error status (4xx/5xx).
   // A status of 200 or any non-error code is treated as unexpected → 500.
-  const status =
-    httpErr != null && isValidErrorStatus(httpErr.status) ? httpErr.status : 500;
+  const status = httpErr != null && isValidErrorStatus(httpErr.status) ? httpErr.status : 500;
 
   const message = status >= 500 ? 'Internal Server Error' : errMessage || 'Internal Server Error';
 

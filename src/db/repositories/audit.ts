@@ -55,6 +55,10 @@ export async function insertAuditLog(p: {
   /** Defaults to 'admin_action' (the pre-existing caller, logAuditEvent). */
   eventSource?: string;
 }): Promise<AuditLogRow> {
+  // Never attribute a privileged action to a placeholder identity (#1789).
+  if (p.adminWallet !== undefined && p.adminWallet.trim().toLowerCase() === 'unknown') {
+    throw new Error('Audit actor unknown is forbidden: an authenticated wallet is required');
+  }
   const sql = 'INSERT INTO audit_log (hash-chained)';
   return timedQueryAsync(sql, () =>
     getDriver().transaction(async (tx) => {
@@ -69,20 +73,26 @@ export async function insertAuditLog(p: {
       await tx.lockForWrite('audit_log');
 
       const prevRow = await tx.get<{ hash: string }>(
-        'SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1'
+        'SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1',
       );
       const checkpoint = await latestAuditCheckpoint(tx);
       const prevHash = prevRow?.hash ?? checkpoint?.last_hash ?? GENESIS_HASH;
 
       const hash = computeChainHash(
-        auditChainContent({ action: p.action, adminWallet, queryParams, createdAt: p.createdAt, eventSource }),
-        prevHash
+        auditChainContent({
+          action: p.action,
+          adminWallet,
+          queryParams,
+          createdAt: p.createdAt,
+          eventSource,
+        }),
+        prevHash,
       );
 
       const info = await tx.run(
         `INSERT INTO audit_log (action, admin_wallet, query_params, created_at, prev_hash, hash, event_source)
          VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-        [p.action, adminWallet, queryParams, p.createdAt, prevHash, hash, eventSource]
+        [p.action, adminWallet, queryParams, p.createdAt, prevHash, hash, eventSource],
       );
 
       return {
@@ -95,7 +105,7 @@ export async function insertAuditLog(p: {
         hash,
         event_source: eventSource,
       };
-    })
+    }),
   );
 }
 
@@ -110,16 +120,31 @@ export async function getAuditLogs(filters: {
 }): Promise<AuditLogRow[]> {
   const conditions: string[] = [];
   const params: (string | number)[] = [];
-  if (filters.action) { conditions.push('action = ?'); params.push(filters.action); }
-  if (filters.startDate) { conditions.push('created_at >= ?'); params.push(filters.startDate); }
-  if (filters.endDate) { conditions.push('created_at <= ?'); params.push(filters.endDate); }
-  if (filters.eventSource) { conditions.push('event_source = ?'); params.push(filters.eventSource); }
-  if (filters.actorWallet) { conditions.push('admin_wallet = ?'); params.push(filters.actorWallet); }
+  if (filters.action) {
+    conditions.push('action = ?');
+    params.push(filters.action);
+  }
+  if (filters.startDate) {
+    conditions.push('created_at >= ?');
+    params.push(filters.startDate);
+  }
+  if (filters.endDate) {
+    conditions.push('created_at <= ?');
+    params.push(filters.endDate);
+  }
+  if (filters.eventSource) {
+    conditions.push('event_source = ?');
+    params.push(filters.eventSource);
+  }
+  if (filters.actorWallet) {
+    conditions.push('admin_wallet = ?');
+    params.push(filters.actorWallet);
+  }
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   const limit = filters.limit ?? 50;
   const offset = filters.offset ?? 0;
-// sql-injection-check-ignore: `where` is built from hardcoded `col = ?` conditions; values are bound via params.
-const sql = `SELECT * FROM audit_log ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+  // sql-injection-check-ignore: `where` is built from hardcoded `col = ?` conditions; values are bound via params.
+  const sql = `SELECT * FROM audit_log ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
   return timedQueryAsync(sql, () => getDriver().all<AuditLogRow>(sql, [...params, limit, offset]));
 }
 
@@ -132,12 +157,27 @@ export async function getAuditLogsCount(filters: {
 }): Promise<number> {
   const conditions: string[] = [];
   const params: (string | number)[] = [];
-  if (filters.action) { conditions.push('action = ?'); params.push(filters.action); }
-  if (filters.startDate) { conditions.push('created_at >= ?'); params.push(filters.startDate); }
-  if (filters.endDate) { conditions.push('created_at <= ?'); params.push(filters.endDate); }
-  if (filters.eventSource) { conditions.push('event_source = ?'); params.push(filters.eventSource); }
-  if (filters.actorWallet) { conditions.push('admin_wallet = ?'); params.push(filters.actorWallet); }
-const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  if (filters.action) {
+    conditions.push('action = ?');
+    params.push(filters.action);
+  }
+  if (filters.startDate) {
+    conditions.push('created_at >= ?');
+    params.push(filters.startDate);
+  }
+  if (filters.endDate) {
+    conditions.push('created_at <= ?');
+    params.push(filters.endDate);
+  }
+  if (filters.eventSource) {
+    conditions.push('event_source = ?');
+    params.push(filters.eventSource);
+  }
+  if (filters.actorWallet) {
+    conditions.push('admin_wallet = ?');
+    params.push(filters.actorWallet);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   // sql-injection-check-ignore: `where` is built from hardcoded `col = ?` conditions; values are bound via params.
   const sql = `SELECT COUNT(*) AS count FROM audit_log ${where}`;
   return timedQueryAsync(sql, async () => {
@@ -153,22 +193,32 @@ const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
  * chain) and queryAudit() (the old in-memory auditStore had no pagination,
  * so this preserves that "just give me everything" contract).
  */
-export async function getAllAuditLogRows(filters: {
-  eventSource?: string;
-  actorWallet?: string;
-  action?: string;
-} = {}): Promise<AuditLogRow[]> {
+export async function getAllAuditLogRows(
+  filters: {
+    eventSource?: string;
+    actorWallet?: string;
+    action?: string;
+  } = {},
+): Promise<AuditLogRow[]> {
   const conditions: string[] = [];
   const params: string[] = [];
-  if (filters.action) { conditions.push('action = ?'); params.push(filters.action); }
-  if (filters.eventSource) { conditions.push('event_source = ?'); params.push(filters.eventSource); }
-  if (filters.actorWallet) { conditions.push('admin_wallet = ?'); params.push(filters.actorWallet); }
-const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  if (filters.action) {
+    conditions.push('action = ?');
+    params.push(filters.action);
+  }
+  if (filters.eventSource) {
+    conditions.push('event_source = ?');
+    params.push(filters.eventSource);
+  }
+  if (filters.actorWallet) {
+    conditions.push('admin_wallet = ?');
+    params.push(filters.actorWallet);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   // sql-injection-check-ignore: `where` is built from hardcoded `col = ?` conditions; values are bound via params.
   const sql = `SELECT * FROM audit_log ${where} ORDER BY id ASC`;
   return timedQueryAsync(sql, () => getDriver().all<AuditLogRow>(sql, params));
 }
-
 
 /**
  * Returns at most `limit` audit_log rows with `id > afterId`, in chain order.

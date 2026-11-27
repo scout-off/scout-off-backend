@@ -158,13 +158,21 @@ export async function dispatchIndexerWebhooks(
   webhookEvents: WebhookEvent[],
   span: Span,
 ): Promise<void> {
-  await Promise.all(webhookEvents.map(({ type, payload, txHash, ledger }) =>
-    withRestoredCorrelation(txHash, 'indexer.webhookDispatch', async () => {
-      await dispatchEventWebhook(type, payload);
-    }, span, { 'stellar.ledger': ledger, 'scoutoff.event_type': type }).catch((err: unknown) => {
-      logger.warn(
-        `[indexer] webhook dispatch failed for ${type}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }),
-  ));
+  await Promise.all(
+    webhookEvents.map(({ type, payload, txHash, ledger }) =>
+      withRestoredCorrelation(
+        txHash,
+        'indexer.webhookDispatch',
+        async () => {
+          await dispatchEventWebhook(type, payload);
+        },
+        span,
+        { 'stellar.ledger': ledger, 'scoutoff.event_type': type },
+      ).catch((err: unknown) => {
+        logger.warn(
+          `[indexer] webhook dispatch failed for ${type}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }),
+    ),
+  );
 }

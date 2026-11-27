@@ -17,10 +17,7 @@ import { Request, Response, NextFunction } from 'express';
 import { metricsGuard } from '../../src/middleware/metricsGuard';
 import config from '../../src/config';
 
-function makeReqRes(
-  authToken?: string,
-  remoteAddress?: string,
-) {
+function makeReqRes(authToken?: string, remoteAddress?: string) {
   const req = {
     headers: {
       authorization: authToken ? `Bearer ${authToken}` : undefined,

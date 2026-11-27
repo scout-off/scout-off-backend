@@ -26,13 +26,11 @@ jest.mock('../../src/db', () => ({
     if (type === 'milestone_approved') return mockApprovedEvents;
     return [];
   }),
-  getEventsCount: jest.fn(
-    (type: string, filters?: { payloadFilter?: { player_id?: string } }) => {
-      if (type !== 'milestone_approved') return 0;
-      const playerId = filters?.payloadFilter?.player_id;
-      return mockApprovedEvents.filter((e) => e.payload.player_id === playerId).length;
-    },
-  ),
+  getEventsCount: jest.fn((type: string, filters?: { payloadFilter?: { player_id?: string } }) => {
+    if (type !== 'milestone_approved') return 0;
+    const playerId = filters?.payloadFilter?.player_id;
+    return mockApprovedEvents.filter((e) => e.payload.player_id === playerId).length;
+  }),
   getPlayerById: jest.fn(),
 }));
 

@@ -34,15 +34,24 @@ it('replaying the same key returns the first response without a second withdrawa
   });
   const app = express();
   app.use(express.json());
-  app.post('/admin/fees', (req, _res, next) => {
-    req.account = 'GADMIN';
-    next();
-  }, legacyFeeIdempotencyKey,
-  idempotency({ requestFingerprint: (req) => `legacy-fees:${req.account}:${JSON.stringify(req.body)}` }), withdraw);
+  app.post(
+    '/admin/fees',
+    (req, _res, next) => {
+      req.account = 'GADMIN';
+      next();
+    },
+    legacyFeeIdempotencyKey,
+    idempotency({
+      requestFingerprint: (req) => `legacy-fees:${req.account}:${JSON.stringify(req.body)}`,
+    }),
+    withdraw,
+  );
 
-  const send = () => request(app).post('/admin/fees')
-    .set('X-Idempotency-Key', 'same-key')
-    .send({ recipient: 'GRECIPIENT' });
+  const send = () =>
+    request(app)
+      .post('/admin/fees')
+      .set('X-Idempotency-Key', 'same-key')
+      .send({ recipient: 'GRECIPIENT' });
   const first = await send();
   // The idempotency cache update is fire-and-forget after res.json().
   await new Promise<void>((resolve) => setImmediate(resolve));

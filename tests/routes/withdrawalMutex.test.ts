@@ -131,9 +131,7 @@ describe('POST /api/admin/fees — concurrent withdrawal mutex', () => {
 
   it('releases lock after failed withdrawal — next request is not blocked', async () => {
     const adminToken = makeAdminToken();
-    mockWithdrawFees.mockRejectedValueOnce(
-      new stellar.FeeWithdrawalError('No fees', 'NO_FEES'),
-    );
+    mockWithdrawFees.mockRejectedValueOnce(new stellar.FeeWithdrawalError('No fees', 'NO_FEES'));
 
     const first = await request(app)
       .post('/api/admin/fees')

@@ -77,9 +77,7 @@ export function ipReputationMiddleware(req: Request, res: Response, next: NextFu
 
   if (tier === 'blocked') {
     ipReputationCounters.blocked += 1;
-    logger.warn(
-      `[ipReputation] blocked ip=${ip} score=${score}`
-    );
+    logger.warn(`[ipReputation] blocked ip=${ip} score=${score}`);
     res.status(429).json({
       success: false,
       error: 'Too many requests — your IP has been temporarily blocked.',
@@ -93,21 +91,19 @@ export function ipReputationMiddleware(req: Request, res: Response, next: NextFu
     // can back off. The actual enforcement is still the existing rateLimit
     // middleware — this is guidance only.
     res.setHeader('X-RateLimit-Reputation-Limit', String(RESTRICTED_RATE_LIMIT));
-    logger.debug(
-      `[ipReputation] restricted ip=${ip} score=${score}`
-    );
+    logger.debug(`[ipReputation] restricted ip=${ip} score=${score}`);
     next();
     return;
   }
 
   if (tier === 'degraded') {
     ipReputationCounters.penalised += 1;
-    logger.debug(
-      `[ipReputation] degraded (delay=${DELAY_MS}ms) ip=${ip} score=${score}`
-    );
+    logger.debug(`[ipReputation] degraded (delay=${DELAY_MS}ms) ip=${ip} score=${score}`);
     // Asynchronous delay — call next() after the sleep so we don't block
     // the Node.js event loop while waiting.
-    sleep(DELAY_MS).then(() => next()).catch(() => next());
+    sleep(DELAY_MS)
+      .then(() => next())
+      .catch(() => next());
     return;
   }
 

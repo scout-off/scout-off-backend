@@ -6,7 +6,9 @@ describe('withTimeout', () => {
   });
 
   it("resolves 'error' when the thunk rejects", async () => {
-    await expect(withTimeout(() => Promise.reject(new Error('boom')), 1_000)).resolves.toBe('error');
+    await expect(withTimeout(() => Promise.reject(new Error('boom')), 1_000)).resolves.toBe(
+      'error',
+    );
   });
 
   it("resolves 'error' when the thunk throws synchronously", async () => {

@@ -1,4 +1,9 @@
-import { canonicalJSON, computeChainHash, auditChainContent, GENESIS_HASH } from '../../src/utils/hashChain';
+import {
+  canonicalJSON,
+  computeChainHash,
+  auditChainContent,
+  GENESIS_HASH,
+} from '../../src/utils/hashChain';
 
 describe('canonicalJSON', () => {
   it('produces the same string regardless of key insertion order', () => {
@@ -8,8 +13,18 @@ describe('canonicalJSON', () => {
   });
 
   it('sorts keys recursively inside arrays too', () => {
-    const a = { list: [{ b: 1, a: 2 }, { d: 1, c: 2 }] };
-    const b = { list: [{ a: 2, b: 1 }, { c: 2, d: 1 }] };
+    const a = {
+      list: [
+        { b: 1, a: 2 },
+        { d: 1, c: 2 },
+      ],
+    };
+    const b = {
+      list: [
+        { a: 2, b: 1 },
+        { c: 2, d: 1 },
+      ],
+    };
     expect(canonicalJSON(a)).toBe(canonicalJSON(b));
   });
 
@@ -106,7 +121,7 @@ describe('computeChainHash edge cases', () => {
     expect(first).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('chains hashes: each entry\'s output becomes the next entry\'s prevHash input', () => {
+  it("chains hashes: each entry's output becomes the next entry's prevHash input", () => {
     const entry1Content = { action: 'entry-1' };
     const entry2Content = { action: 'entry-2' };
     const entry3Content = { action: 'entry-3' };
@@ -126,7 +141,11 @@ describe('computeChainHash edge cases', () => {
   });
 
   it('is fully deterministic: identical (content, prevHash) pairs always produce the same output', () => {
-    const content = { action: 'contract_state_change', admin_wallet: 'GADMIN', nested: { a: 1, b: [1, 2, 3] } };
+    const content = {
+      action: 'contract_state_change',
+      admin_wallet: 'GADMIN',
+      nested: { a: 1, b: [1, 2, 3] },
+    };
     const prevHash = 'f'.repeat(64);
     const results = Array.from({ length: 5 }, () => computeChainHash(content, prevHash));
     expect(new Set(results).size).toBe(1);

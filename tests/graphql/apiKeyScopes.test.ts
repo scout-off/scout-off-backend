@@ -43,7 +43,12 @@ import { generateApiKey } from '../../src/controllers/apiKeyController';
 import { typeDefs } from '../../src/graphql/schema';
 import { resolvers } from '../../src/graphql/resolvers';
 import { createContext } from '../../src/graphql/context';
-import { createDepthLimitRule, createQueryCostRule, MAX_DEPTH, MAX_QUERY_COST } from '../../src/graphql/validation';
+import {
+  createDepthLimitRule,
+  createQueryCostRule,
+  MAX_DEPTH,
+  MAX_QUERY_COST,
+} from '../../src/graphql/validation';
 
 const mockGetPlayerById = getPlayerById as jest.Mock;
 const mockGetByLookup = getActiveApiKeyByLookupHash as jest.Mock;
@@ -160,9 +165,7 @@ describe('GraphQL — milestones + API-key read:milestones scope', () => {
   it('allows anonymous requests (public read unaffected by scopes)', async () => {
     const app = buildApp();
 
-    const res = await request(app)
-      .post('/graphql')
-      .send({ query: MILESTONE_QUERY });
+    const res = await request(app).post('/graphql').send({ query: MILESTONE_QUERY });
 
     expect(res.body.errors).toBeUndefined();
   });

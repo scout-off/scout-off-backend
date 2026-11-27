@@ -9,7 +9,12 @@ function makeReq(headers: Record<string, string> = {}): Request {
 
 function makeRes(): { headers: Record<string, string>; setHeader: jest.Mock } {
   const headers: Record<string, string> = {};
-  return { headers, setHeader: jest.fn((k, v) => { headers[k] = v; }) };
+  return {
+    headers,
+    setHeader: jest.fn((k, v) => {
+      headers[k] = v;
+    }),
+  };
 }
 
 describe('correlationId middleware', () => {
@@ -137,10 +142,7 @@ describe('logger correlationId injection', () => {
         const { logger } = require('../../src/utils/logger');
         logger.info('[ipfs] pin completed');
       });
-      expect(spy).toHaveBeenCalledWith(
-        '[info]',
-        '[cid=logger-cid] [ipfs] pin completed',
-      );
+      expect(spy).toHaveBeenCalledWith('[info]', '[cid=logger-cid] [ipfs] pin completed');
     } finally {
       spy.mockRestore();
       config.logLevel = originalLevel;

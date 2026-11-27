@@ -45,7 +45,10 @@ export interface CacheStore {
  * NOTE: The default cap of 1000 is documented in .env.example as CACHE_MAX_SIZE.
  */
 export class InMemoryCacheStore implements CacheStore {
-  private readonly cache = new Map<string, { value: unknown; expiresAt: number | null; lastAccess: number }>();
+  private readonly cache = new Map<
+    string,
+    { value: unknown; expiresAt: number | null; lastAccess: number }
+  >();
   private readonly maxSize: number;
 
   constructor() {

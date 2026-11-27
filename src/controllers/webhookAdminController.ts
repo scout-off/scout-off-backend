@@ -74,7 +74,7 @@ const deadLetterIdSchema = z.object({
  * Re-signs the payload with the subscription's current secret.
  */
 export async function requeueDeadLetter(req: Request, res: Response, next: NextFunction) {
-try {
+  try {
     const parsedParams = deadLetterIdSchema.safeParse(req.params);
     if (!parsedParams.success) {
       res.status(400).json({

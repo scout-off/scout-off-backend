@@ -56,7 +56,7 @@ export async function recordAudit(
   actorWallet: string,
   eventType: AuditEventType,
   payload: Record<string, unknown>,
-  notes?: string
+  notes?: string,
 ): Promise<AuditEntry> {
   // Strip log injection characters from optional notes
   const sanitizedNotes = notes?.replace(/[\r\n]+/g, ' ');
@@ -64,7 +64,10 @@ export async function recordAudit(
   const row = await insertAuditLog({
     action: eventType,
     adminWallet: actorWallet,
-    queryParams: { payloadHash, ...(sanitizedNotes !== undefined ? { notes: sanitizedNotes } : {}) },
+    queryParams: {
+      payloadHash,
+      ...(sanitizedNotes !== undefined ? { notes: sanitizedNotes } : {}),
+    },
     createdAt: new Date().toISOString(),
     eventSource: APP_EVENT_SOURCE,
   });
@@ -77,7 +80,10 @@ export async function recordAudit(
  * audit_log table — restricted to event_source='app_event' rows so this
  * doesn't surface unrelated admin actions logged via logAuditEvent.
  */
-export async function queryAudit(filter?: { eventType?: AuditEventType; actorWallet?: string }): Promise<AuditEntry[]> {
+export async function queryAudit(filter?: {
+  eventType?: AuditEventType;
+  actorWallet?: string;
+}): Promise<AuditEntry[]> {
   const rows = await getAllAuditLogRows({
     eventSource: APP_EVENT_SOURCE,
     action: filter?.eventType,

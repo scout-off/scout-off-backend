@@ -14,9 +14,14 @@ import { logger } from '../utils/logger';
 
 // ─── Validation ────────────────────────────────────────────────────────────────
 
-export const upsertNoteSchema = z.object({
-  note: z.string().min(1, 'Note text is required').max(10_000, 'Note must be 10 000 characters or fewer'),
-}).strict();
+export const upsertNoteSchema = z
+  .object({
+    note: z
+      .string()
+      .min(1, 'Note text is required')
+      .max(10_000, 'Note must be 10 000 characters or fewer'),
+  })
+  .strict();
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -33,7 +38,7 @@ export async function putScoutNote(
   res: Response,
   _next: NextFunction,
 ): Promise<void> {
-  const {playerId} = req.params as {playerId: string};
+  const { playerId } = req.params as { playerId: string };
   const parsed = upsertNoteSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
@@ -79,7 +84,7 @@ export async function getScoutNoteHandler(
   res: Response,
   _next: NextFunction,
 ): Promise<void> {
-  const {playerId} = req.params as {playerId: string};
+  const { playerId } = req.params as { playerId: string };
   const row = await getScoutNote(req.params.wallet as string, playerId);
 
   if (!row) {
@@ -130,12 +135,17 @@ const MAX_NOTE_CONTENT_LENGTH = 2_000;
 /**
  * Zod schema for the note content field used by POST and PUT.
  */
-export const noteContentSchema = z.object({
-  content: z
-    .string()
-    .min(1, 'content is required')
-    .max(MAX_NOTE_CONTENT_LENGTH, `content must be ${MAX_NOTE_CONTENT_LENGTH} characters or fewer`),
-}).strict();
+export const noteContentSchema = z
+  .object({
+    content: z
+      .string()
+      .min(1, 'content is required')
+      .max(
+        MAX_NOTE_CONTENT_LENGTH,
+        `content must be ${MAX_NOTE_CONTENT_LENGTH} characters or fewer`,
+      ),
+  })
+  .strict();
 
 /**
  * POST /api/scouts/:wallet/players/:playerId/notes
@@ -163,7 +173,7 @@ export async function createPlayerNote(
     return;
   }
 
-  const {playerId} = req.params as {playerId: string};
+  const { playerId } = req.params as { playerId: string };
   const sanitized = sanitizeInput(parsed.data.content);
   const now = Math.floor(Date.now() / 1000);
 
@@ -175,7 +185,12 @@ export async function createPlayerNote(
     updated_at: now,
   });
 
-  logger.info({ scout: req.params.wallet as string, playerId, noteId: id, action: 'player_note_created' });
+  logger.info({
+    scout: req.params.wallet as string,
+    playerId,
+    noteId: id,
+    action: 'player_note_created',
+  });
 
   res.status(201).json({
     success: true,
@@ -205,7 +220,7 @@ export async function listPlayerNotes(
   res: Response,
   _next: NextFunction,
 ): Promise<void> {
-  const {playerId} = req.params as {playerId: string};
+  const { playerId } = req.params as { playerId: string };
   const rows = await getScoutPlayerNotes(req.params.wallet as string, playerId);
 
   res.json({
@@ -239,7 +254,7 @@ export async function updatePlayerNote(
   res: Response,
   _next: NextFunction,
 ): Promise<void> {
-  const {playerId, noteId} = req.params as {playerId: string, noteId: string};
+  const { playerId, noteId } = req.params as { playerId: string; noteId: string };
   const id = parseInt(noteId, 10);
   if (isNaN(id)) {
     res.status(400).json({ success: false, error: 'Invalid note id' });
@@ -270,7 +285,12 @@ export async function updatePlayerNote(
     return;
   }
 
-  logger.info({ scout: req.params.wallet as string, playerId, noteId: id, action: 'player_note_updated' });
+  logger.info({
+    scout: req.params.wallet as string,
+    playerId,
+    noteId: id,
+    action: 'player_note_updated',
+  });
 
   res.json({
     success: true,
@@ -300,7 +320,7 @@ export async function deletePlayerNote(
   res: Response,
   _next: NextFunction,
 ): Promise<void> {
-  const {playerId, noteId} = req.params as {playerId: string, noteId: string};
+  const { playerId, noteId } = req.params as { playerId: string; noteId: string };
   const id = parseInt(noteId, 10);
   if (isNaN(id)) {
     res.status(400).json({ success: false, error: 'Invalid note id' });
@@ -314,7 +334,12 @@ export async function deletePlayerNote(
     return;
   }
 
-  logger.info({ scout: req.params.wallet as string, playerId, noteId: id, action: 'player_note_deleted' });
+  logger.info({
+    scout: req.params.wallet as string,
+    playerId,
+    noteId: id,
+    action: 'player_note_deleted',
+  });
 
   res.json({ success: true, data: { removed: true, id } });
 }

@@ -15,8 +15,8 @@ import { Request, Response, NextFunction } from 'express';
 // ─── Mock logger so we can assert on calls without real output ────────────────
 jest.mock('../../src/utils/logger', () => ({
   logger: {
-    info:  jest.fn(),
-    warn:  jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
     debug: jest.fn(),
     error: jest.fn(),
   },
@@ -49,13 +49,7 @@ beforeEach(() => {
 // ─── Health / metrics probe paths ─────────────────────────────────────────────
 
 describe('requestLogger — skipped paths produce no log output', () => {
-  const probePaths = [
-    '/health',
-    '/health/liveness',
-    '/health/readiness',
-    '/ready',
-    '/metrics',
-  ];
+  const probePaths = ['/health', '/health/liveness', '/health/readiness', '/ready', '/metrics'];
 
   test.each(probePaths)('does not log %s', (path) => {
     // Ensure the path is in the skip list (uses real config defaults).

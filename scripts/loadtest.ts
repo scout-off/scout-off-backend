@@ -102,9 +102,7 @@ function checkServer(): void {
     process.stderr.write(
       `\nERROR: Cannot reach ${TARGET}/health — ensure the server is running.\n`,
     );
-    process.stderr.write(
-      '  Start it with: npm start\n\n',
-    );
+    process.stderr.write('  Start it with: npm start\n\n');
     process.exit(1);
   }
 }

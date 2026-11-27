@@ -43,7 +43,7 @@ describe('Admin Controller - Time-series Stats', () => {
         expect.objectContaining({
           success: false,
           error: expect.any(String),
-        })
+        }),
       );
     });
 
@@ -88,7 +88,7 @@ describe('Admin Controller - Time-series Stats', () => {
       expect(require('../../src/services/cache').cacheSet).toHaveBeenCalledWith(
         'admin:stats:7d:none',
         expect.any(Object),
-        300000
+        300000,
       );
     });
 
@@ -136,7 +136,9 @@ describe('Admin Controller - Time-series Stats', () => {
         subscriptionsStarted: [{ date: '2026-07-22', count: 1 }],
       };
 
-      jest.spyOn(require('../../src/services/cache'), 'cacheGet').mockResolvedValue({ data: cachedData });
+      jest
+        .spyOn(require('../../src/services/cache'), 'cacheGet')
+        .mockResolvedValue({ data: cachedData });
       jest.spyOn(db, 'getNewPlayersTimeSeries').mockReturnValue([]);
 
       const req = { query: { window: '7d' } } as any;
@@ -271,7 +273,7 @@ describe('Admin Controller - Fee Withdrawal v2 (#1045)', () => {
 
     const req = makeReq({ treasuryAddress: TREASURY, amountStroops: '100' });
     const res = makeRes();
-    await withdrawFeesV2Controller(req, res, { } as any);
+    await withdrawFeesV2Controller(req, res, {} as any);
 
     // The amount must reach the on-chain call — the core #1045 regression.
     expect(mockWithdrawFees).toHaveBeenCalledWith(TREASURY, '100');
@@ -279,7 +281,11 @@ describe('Admin Controller - Fee Withdrawal v2 (#1045)', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
-        data: expect.objectContaining({ transactionId: 'tx-1', amountStroops: '100', amount: '100' }),
+        data: expect.objectContaining({
+          transactionId: 'tx-1',
+          amountStroops: '100',
+          amount: '100',
+        }),
       }),
     );
     // The balance was checked first.
@@ -302,7 +308,11 @@ describe('Admin Controller - Fee Withdrawal v2 (#1045)', () => {
     });
     const insertSpy = jest.spyOn(db, 'insertFeeWithdrawal').mockReturnValue(1);
 
-    await withdrawFeesV2Controller(makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }), makeRes(), { } as any);
+    await withdrawFeesV2Controller(
+      makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }),
+      makeRes(),
+      {} as any,
+    );
 
     // The DB row reflects what actually left the contract, not the request.
     expect(insertSpy).toHaveBeenCalledWith(expect.objectContaining({ amountStroops: '99' }));
@@ -316,7 +326,11 @@ describe('Admin Controller - Fee Withdrawal v2 (#1045)', () => {
     mockGetFeeBalance.mockResolvedValue(50n);
 
     const res = makeRes();
-    await withdrawFeesV2Controller(makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }), res, { } as any);
+    await withdrawFeesV2Controller(
+      makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }),
+      res,
+      {} as any,
+    );
 
     expect(res.status).toHaveBeenCalledWith(422);
     expect(res.json).toHaveBeenCalledWith(
@@ -328,22 +342,35 @@ describe('Admin Controller - Fee Withdrawal v2 (#1045)', () => {
 
   it('returns 400 for a non-positive amountStroops', async () => {
     const res = makeRes();
-    await withdrawFeesV2Controller(makeReq({ treasuryAddress: TREASURY, amountStroops: '0' }), res, { } as any);
+    await withdrawFeesV2Controller(
+      makeReq({ treasuryAddress: TREASURY, amountStroops: '0' }),
+      res,
+      {} as any,
+    );
     expect(res.status).toHaveBeenCalledWith(400);
     expect(mockWithdrawFees).not.toHaveBeenCalled();
   });
 
   it('returns 400 for an invalid treasuryAddress', async () => {
     const res = makeRes();
-    await withdrawFeesV2Controller(makeReq({ treasuryAddress: 'not-an-address', amountStroops: '100' }), res, { } as any);
+    await withdrawFeesV2Controller(
+      makeReq({ treasuryAddress: 'not-an-address', amountStroops: '100' }),
+      res,
+      {} as any,
+    );
     expect(res.status).toHaveBeenCalledWith(400);
     expect(mockWithdrawFees).not.toHaveBeenCalled();
   });
 
   it('returns 403 when the caller is not an admin', async () => {
-    const req = { role: 'scout', account: ADMIN_WALLET, body: { treasuryAddress: TREASURY, amountStroops: '100' }, headers: {} } as any;
+    const req = {
+      role: 'scout',
+      account: ADMIN_WALLET,
+      body: { treasuryAddress: TREASURY, amountStroops: '100' },
+      headers: {},
+    } as any;
     const res = makeRes();
-    await withdrawFeesV2Controller(req, res, { } as any);
+    await withdrawFeesV2Controller(req, res, {} as any);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(mockWithdrawFees).not.toHaveBeenCalled();
   });
@@ -358,7 +385,11 @@ describe('Admin Controller - Fee Withdrawal v2 (#1045)', () => {
     );
 
     const res = makeRes();
-    await withdrawFeesV2Controller(makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }), res, { } as any);
+    await withdrawFeesV2Controller(
+      makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }),
+      res,
+      {} as any,
+    );
 
     expect(res.status).toHaveBeenCalledWith(422);
   });
@@ -370,7 +401,11 @@ describe('Admin Controller - Fee Withdrawal v2 (#1045)', () => {
     );
 
     const res = makeRes();
-    await withdrawFeesV2Controller(makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }), res, { } as any);
+    await withdrawFeesV2Controller(
+      makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }),
+      res,
+      {} as any,
+    );
 
     expect(res.status).toHaveBeenCalledWith(503);
   });
@@ -381,7 +416,11 @@ describe('Admin Controller - Fee Withdrawal v2 (#1045)', () => {
     setWithdrawalLockForTesting();
 
     const res = makeRes();
-    await withdrawFeesV2Controller(makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }), res, { } as any);
+    await withdrawFeesV2Controller(
+      makeReq({ treasuryAddress: TREASURY, amountStroops: '100' }),
+      res,
+      {} as any,
+    );
 
     expect(res.status).toHaveBeenCalledWith(409);
     expect(mockWithdrawFees).not.toHaveBeenCalled();

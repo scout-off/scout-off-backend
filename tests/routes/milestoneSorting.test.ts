@@ -35,11 +35,21 @@ jest.mock('../../src/db', () => ({
       return [
         {
           type: 'milestone_rejected',
-          payload: { player_id: 'player-1', submittedAt: 700, approvedAt: null, reason: 'insufficient evidence' },
+          payload: {
+            player_id: 'player-1',
+            submittedAt: 700,
+            approvedAt: null,
+            reason: 'insufficient evidence',
+          },
         },
         {
           type: 'milestone_rejected',
-          payload: { player_id: 'player-1', submittedAt: 900, approvedAt: null, reason: 'duplicate' },
+          payload: {
+            player_id: 'player-1',
+            submittedAt: 900,
+            approvedAt: null,
+            reason: 'duplicate',
+          },
         },
       ];
     }
@@ -123,7 +133,6 @@ const mixedOnChain = [
   },
 ];
 
-
 describe('GET /api/players/:playerId/milestones - sorting', () => {
   it('returns milestones with default sort (asc by submittedAt)', async () => {
     const res = await request(app).get('/api/players/player-1/milestones');
@@ -133,28 +142,36 @@ describe('GET /api/players/:playerId/milestones - sorting', () => {
   });
 
   it('sorts by submittedAt ascending', async () => {
-    const res = await request(app).get('/api/players/player-1/milestones?status=approved&sortBy=submittedAt&order=asc');
+    const res = await request(app).get(
+      '/api/players/player-1/milestones?status=approved&sortBy=submittedAt&order=asc',
+    );
     expect(res.status).toBe(200);
     const timestamps = res.body.data.map((m: any) => m.submittedAt);
     expect(timestamps).toEqual([1000, 2000, 3000]);
   });
 
   it('sorts by submittedAt descending', async () => {
-    const res = await request(app).get('/api/players/player-1/milestones?status=approved&sortBy=submittedAt&order=desc');
+    const res = await request(app).get(
+      '/api/players/player-1/milestones?status=approved&sortBy=submittedAt&order=desc',
+    );
     expect(res.status).toBe(200);
     const timestamps = res.body.data.map((m: any) => m.submittedAt);
     expect(timestamps).toEqual([3000, 2000, 1000]);
   });
 
   it('sorts by approvedAt ascending', async () => {
-    const res = await request(app).get('/api/players/player-1/milestones?status=approved&sortBy=approvedAt&order=asc');
+    const res = await request(app).get(
+      '/api/players/player-1/milestones?status=approved&sortBy=approvedAt&order=asc',
+    );
     expect(res.status).toBe(200);
     const timestamps = res.body.data.map((m: any) => m.approvedAt);
     expect(timestamps).toEqual([1000, 2000, 3000]);
   });
 
   it('sorts by approvedAt descending', async () => {
-    const res = await request(app).get('/api/players/player-1/milestones?status=approved&sortBy=approvedAt&order=desc');
+    const res = await request(app).get(
+      '/api/players/player-1/milestones?status=approved&sortBy=approvedAt&order=desc',
+    );
     expect(res.status).toBe(200);
     const timestamps = res.body.data.map((m: any) => m.approvedAt);
     expect(timestamps).toEqual([3000, 2000, 1000]);
@@ -353,4 +370,3 @@ describe('GET /api/players/:playerId/milestones - combined params', () => {
     expect(timestamps[0]).toBeGreaterThanOrEqual(timestamps[1]);
   });
 });
-

@@ -35,16 +35,51 @@ import {
   retryUnprocessed,
   listUnprocessedQuerySchema,
 } from '../controllers/adminIndexerController';
-import { bulkValidatorImportSchema, updatePlatformFeeSchema } from '../controllers/adminActionsController';
+import {
+  bulkValidatorImportSchema,
+  updatePlatformFeeSchema,
+} from '../controllers/adminActionsController';
 import { importPlayers, importPlayersBodySchema } from '../controllers/adminPlayerImportController';
-import { adminDeactivatePlayer, adminReactivatePlayer, deactivateBodySchema } from '../controllers/adminPlayerDeactivationController';
-import { getFeatureFlags, updateFeatureFlag, toggleFeatureFlag, updateFeatureFlagBodySchema, toggleFlagBodySchema } from '../controllers/featureFlagsController';
+import {
+  adminDeactivatePlayer,
+  adminReactivatePlayer,
+  deactivateBodySchema,
+} from '../controllers/adminPlayerDeactivationController';
+import {
+  getFeatureFlags,
+  updateFeatureFlag,
+  toggleFeatureFlag,
+  updateFeatureFlagBodySchema,
+  toggleFlagBodySchema,
+} from '../controllers/featureFlagsController';
 import { exportEvents } from '../controllers/exportController';
-import { listWalletSessions, revokeAllWalletSessions } from '../controllers/adminWalletSessionsController';
-import { listDeadLetters, replayDeadLetter, purgeOldDeadLetters, requeueDeadLetter, purgeDeadLetter } from '../controllers/webhookAdminController';
-import { setIpReputationController, getIpReputationController, setIpReputationSchema } from '../controllers/ipReputationController';
-import { triggerReindex, reindexStatusHandler, reindexBodyShapeSchema, cancelReindexHandler } from '../controllers/reindexController';
-import { triggerReplay, replayStatusHandler, replayBodyShapeSchema } from '../controllers/replayController';
+import {
+  listWalletSessions,
+  revokeAllWalletSessions,
+} from '../controllers/adminWalletSessionsController';
+import {
+  listDeadLetters,
+  replayDeadLetter,
+  purgeOldDeadLetters,
+  requeueDeadLetter,
+  purgeDeadLetter,
+} from '../controllers/webhookAdminController';
+import {
+  setIpReputationController,
+  getIpReputationController,
+  setIpReputationSchema,
+} from '../controllers/ipReputationController';
+import {
+  triggerReindex,
+  reindexStatusHandler,
+  reindexBodyShapeSchema,
+  cancelReindexHandler,
+} from '../controllers/reindexController';
+import {
+  triggerReplay,
+  replayStatusHandler,
+  replayBodyShapeSchema,
+} from '../controllers/replayController';
 import { requireRole } from '../middleware/auth';
 import { auditRead } from '../middleware/auditRead';
 import { idempotency } from '../middleware/idempotency';
@@ -52,8 +87,17 @@ import { ipAllowlistMiddleware, noStoreMiddleware } from '../middleware/ipAllowl
 import { methodNotAllowed } from '../middleware/methodNotAllowed';
 import { rateLimit } from '../middleware/rateLimit';
 import { createTimeout } from '../middleware/timeout';
-import { validateBody, validateJsonBodyOrPassThrough, validateQuery, validateParams } from '../middleware/validate';
-import { validatorWalletSchema, validatorStatsRangeSchema, walletAddressSchema } from '../validators/admin';
+import {
+  validateBody,
+  validateJsonBodyOrPassThrough,
+  validateQuery,
+  validateParams,
+} from '../middleware/validate';
+import {
+  validatorWalletSchema,
+  validatorStatsRangeSchema,
+  walletAddressSchema,
+} from '../validators/admin';
 import { emptyBodySchema, ignoredBodySchema } from '../validators/emptyBody';
 import config from '../config';
 import { getRetentionDryRun } from '../controllers/retentionController';
@@ -85,7 +129,8 @@ router.use(ipAllowlistMiddleware);
  * @response 200 { success: true, data: { players, milestones, subscriptions, events } }
  * @auth Bearer (admin role required)
  */
-router.route('/stats')
+router
+  .route('/stats')
   .get(requireRole('admin'), getStats)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -99,7 +144,8 @@ router.route('/stats')
  * @response 400 { success: false, error: string } - Invalid date range
  * @auth Bearer (admin role required)
  */
-router.route('/events')
+router
+  .route('/events')
   .get(requireRole('admin'), getAllEvents)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -121,13 +167,9 @@ router.route('/events')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/events/export')
-  .get(
-    createTimeout(120_000),
-    requireRole('admin'),
-    auditRead('admin_events_export'),
-    exportEvents,
-  )
+router
+  .route('/events/export')
+  .get(createTimeout(120_000), requireRole('admin'), auditRead('admin_events_export'), exportEvents)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -151,7 +193,8 @@ router.route('/events/export')
  * @response 409 { success: false, error: string } - No fees available
  * @auth Bearer (admin role required)
  */
-router.route('/fees')
+router
+  .route('/fees')
   .get(requireRole('admin'), getFeeSummary)
   .post(requireRole('admin'), validateBody(withdrawFeesSchema), withdrawFeesController)
   .all(methodNotAllowed(['GET', 'POST', 'HEAD']));
@@ -179,8 +222,14 @@ router.route('/fees')
  * @response 503 { success: false, error } — transient network error (retryable)
  * @auth Bearer (admin role required)
  */
-router.route('/fees/withdraw')
-  .post(requireRole('admin'), idempotency, validateBody(withdrawFeesV2Schema), withdrawFeesV2Controller)
+router
+  .route('/fees/withdraw')
+  .post(
+    requireRole('admin'),
+    idempotency,
+    validateBody(withdrawFeesV2Schema),
+    withdrawFeesV2Controller,
+  )
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -192,7 +241,8 @@ router.route('/fees/withdraw')
  * @response 200 { success: true, data: AuditLogRow[], total, limit, offset }
  * @auth Bearer (admin role required)
  */
-router.route('/audit')
+router
+  .route('/audit')
   .get(requireRole('admin'), auditRead('admin_audit_log'), getAuditLog)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -209,7 +259,8 @@ router.route('/audit')
  * @response 400 { success: false, error: string } - Invalid eventType or date range
  * @auth Bearer (admin role required)
  */
-router.route('/audit/trail')
+router
+  .route('/audit/trail')
   .get(requireRole('admin'), auditRead('admin_audit_trail'), getAuditTrail)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -221,7 +272,8 @@ router.route('/audit/trail')
  * @response 200 { success: true, data: { valid, brokenAtId, reason?, rowsChecked } }
  * @auth Bearer (admin role required)
  */
-router.route('/audit/verify')
+router
+  .route('/audit/verify')
   .get(requireRole('admin'), getAuditChainVerification)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -235,7 +287,8 @@ router.route('/audit/verify')
  * @response 200 { success: true, data: ValidatorRow[] }
  * @auth Bearer (admin role required)
  */
-router.route('/validators')
+router
+  .route('/validators')
   .get(requireRole('admin'), listValidators)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -252,7 +305,8 @@ router.route('/validators')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/validators/register')
+router
+  .route('/validators/register')
   .post(requireRole('admin'), validateBody(validatorWalletSchema), registerValidator)
   .all(methodNotAllowed(['POST']));
 
@@ -269,7 +323,8 @@ router.route('/validators/register')
  * @response 400 { success: false, error: string } - Validation error
  * @auth Bearer (admin role required)
  */
-router.route('/validators/bulk-import')
+router
+  .route('/validators/bulk-import')
   .post(requireRole('admin'), validateBody(bulkValidatorImportSchema), bulkValidatorImport)
   .all(methodNotAllowed(['POST']));
 
@@ -286,7 +341,8 @@ router.route('/validators/bulk-import')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/validators/revoke')
+router
+  .route('/validators/revoke')
   .post(requireRole('admin'), validateBody(validatorWalletSchema), revokeValidator)
   .all(methodNotAllowed(['POST']));
 
@@ -309,7 +365,8 @@ router.route('/validators/revoke')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/validators/import')
+router
+  .route('/validators/import')
   .post(
     requireRole('admin'),
     // Parse text/csv and text/plain bodies as raw strings so the controller
@@ -342,7 +399,8 @@ router.route('/validators/import')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/players/import')
+router
+  .route('/players/import')
   .post(
     importRateLimit,
     requireRole('admin'),
@@ -366,7 +424,8 @@ router.route('/players/import')
  * @response 409 { success: false, error } — player already deactivated
  * @auth Bearer (admin role required)
  */
-router.route('/players/:playerId/deactivate')
+router
+  .route('/players/:playerId/deactivate')
   .post(requireRole('admin'), validateBody(deactivateBodySchema), adminDeactivatePlayer)
   .all(methodNotAllowed(['POST']));
 
@@ -382,7 +441,8 @@ router.route('/players/:playerId/deactivate')
  * @response 409 { success: false, error } — player already active
  * @auth Bearer (admin role required)
  */
-router.route('/players/:playerId/reactivate')
+router
+  .route('/players/:playerId/reactivate')
   .post(requireRole('admin'), validateBody(emptyBodySchema), adminReactivatePlayer)
   .all(methodNotAllowed(['POST']));
 
@@ -397,7 +457,8 @@ router.route('/players/:playerId/reactivate')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/contract/pause')
+router
+  .route('/contract/pause')
   .post(requireRole('admin'), validateBody(emptyBodySchema), pauseContract)
   .all(methodNotAllowed(['POST']));
 
@@ -412,7 +473,8 @@ router.route('/contract/pause')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/contract/unpause')
+router
+  .route('/contract/unpause')
   .post(requireRole('admin'), validateBody(emptyBodySchema), unpauseContract)
   .all(methodNotAllowed(['POST']));
 
@@ -430,7 +492,8 @@ router.route('/contract/unpause')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/introspect')
+router
+  .route('/introspect')
   .post(
     requireRole('admin'),
     auditRead('token_introspection'),
@@ -454,7 +517,8 @@ router.route('/introspect')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/tokens/revoke')
+router
+  .route('/tokens/revoke')
   .post(requireRole('admin'), validateBody(revokeTokenSchema), revokeTokenController)
   .all(methodNotAllowed(['POST']));
 
@@ -471,7 +535,13 @@ router.route('/tokens/revoke')
  * @response 401 { success: false, error: string } - Missing token
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
- *
+ */
+router
+  .route('/wallets/:wallet/sessions')
+  .get(requireRole('admin'), validateParams(walletAddressSchema), listWalletSessions)
+  .all(methodNotAllowed(['GET', 'HEAD']));
+
+/**
  * POST /api/admin/wallets/:wallet/sessions/revoke-all
  *
  * Revokes every active refresh-token session for a wallet: blocks every
@@ -487,12 +557,14 @@ router.route('/tokens/revoke')
  * @response 403 { success: false, error: string } - Non-admin role
  * @auth Bearer (admin role required)
  */
-router.route('/wallets/:wallet/sessions')
-  .get(requireRole('admin'), validateParams(walletAddressSchema), listWalletSessions)
-  .all(methodNotAllowed(['GET', 'HEAD']));
-
-router.route('/wallets/:wallet/sessions/revoke-all')
-  .post(requireRole('admin'), validateParams(walletAddressSchema), revokeAllWalletSessions)
+router
+  .route('/wallets/:wallet/sessions/revoke-all')
+  .post(
+    requireRole('admin'),
+    validateParams(walletAddressSchema),
+    validateBody(emptyBodySchema),
+    revokeAllWalletSessions,
+  )
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -507,7 +579,8 @@ router.route('/wallets/:wallet/sessions/revoke-all')
  * @response 400 { success: false, error: string } - Invalid fromLedger
  * @auth Bearer (admin role required)
  */
-router.route('/indexer/reindex')
+router
+  .route('/indexer/reindex')
   .post(requireRole('admin'), validateBody(reindexSchema), reindex)
   .all(methodNotAllowed(['POST']));
 
@@ -526,7 +599,8 @@ router.route('/indexer/reindex')
  * @response 400 { success: false, error: string } - Invalid query parameters
  * @auth Bearer (admin role required)
  */
-router.route('/indexer/unprocessed')
+router
+  .route('/indexer/unprocessed')
   .get(requireRole('admin'), validateQuery(listUnprocessedQuerySchema), listUnprocessed)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -543,7 +617,8 @@ router.route('/indexer/unprocessed')
  * @response 404 { success: false, error: string } - Unknown id
  * @auth Bearer (admin role required)
  */
-router.route('/indexer/unprocessed/:id/retry')
+router
+  .route('/indexer/unprocessed/:id/retry')
   .post(requireRole('admin'), validateBody(emptyBodySchema), retryUnprocessed)
   .all(methodNotAllowed(['POST']));
 
@@ -564,7 +639,8 @@ router.route('/indexer/unprocessed/:id/retry')
  * @response 404 { success: false, error: string } - Wallet was never registered as a validator
  * @auth Bearer (admin role required)
  */
-router.route('/validators/:wallet/stats')
+router
+  .route('/validators/:wallet/stats')
   .get(requireRole('admin'), validateQuery(validatorStatsRangeSchema), getValidatorStatsEndpoint)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -586,7 +662,8 @@ router.route('/validators/:wallet/stats')
  * @response 200 { success: true, data: FeatureFlag }
  * @auth Bearer (admin role required)
  */
-router.route('/feature-flags')
+router
+  .route('/feature-flags')
   .get(requireRole('admin'), getFeatureFlags)
   .put(requireRole('admin'), validateBody(updateFeatureFlagBodySchema), updateFeatureFlag)
   .all(methodNotAllowed(['GET', 'PUT', 'HEAD']));
@@ -605,7 +682,8 @@ router.route('/feature-flags')
  * @response 404 Flag not found
  * @auth Bearer (admin role required)
  */
-router.route('/feature-flags/:name')
+router
+  .route('/feature-flags/:name')
   .put(requireRole('admin'), validateBody(toggleFlagBodySchema), toggleFeatureFlag)
   .all(methodNotAllowed(['PUT']));
 
@@ -619,7 +697,8 @@ router.route('/feature-flags/:name')
  * @response 200 { success: true, data: PendingAction[] }
  * @auth Bearer (admin role required)
  */
-router.route('/actions/pending')
+router
+  .route('/actions/pending')
   .get(requireRole('admin'), getPendingActions)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -633,7 +712,8 @@ router.route('/actions/pending')
  * @response 404 { success: false, error: string } - Action not found
  * @auth Bearer (admin role required)
  */
-router.route('/actions/:id')
+router
+  .route('/actions/:id')
   .get(requireRole('admin'), getPendingActionById)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -653,7 +733,8 @@ router.route('/actions/:id')
  * @response 410 { success: false, error } - Action expired
  * @auth Bearer (admin role required)
  */
-router.route('/actions/:id/approve')
+router
+  .route('/actions/:id/approve')
   .post(requireRole('admin'), validateBody(emptyBodySchema), approvePendingAction)
   .all(methodNotAllowed(['POST']));
 
@@ -674,8 +755,14 @@ router.route('/actions/:id/approve')
  * @response 422 { success: false, error: string } - range > 10 000 ledgers or invalid range
  * @auth Bearer (admin role required)
  */
-router.route('/reindex')
-  .post(createTimeout(0), requireRole('admin'), validateBody(reindexBodyShapeSchema), triggerReindex)
+router
+  .route('/reindex')
+  .post(
+    createTimeout(0),
+    requireRole('admin'),
+    validateBody(reindexBodyShapeSchema),
+    triggerReindex,
+  )
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -695,7 +782,8 @@ router.route('/reindex')
  * }
  * @auth Bearer (admin role required)
  */
-router.route('/reindex/status')
+router
+  .route('/reindex/status')
   .get(requireRole('admin'), reindexStatusHandler)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -715,7 +803,8 @@ router.route('/reindex/status')
  * @response 409 { success: false, error: string } - no job running
  * @auth Bearer (admin role required)
  */
-router.route('/reindex/cancel')
+router
+  .route('/reindex/cancel')
   .post(requireRole('admin'), validateBody(emptyBodySchema), cancelReindexHandler)
   .all(methodNotAllowed(['POST']));
 
@@ -736,7 +825,8 @@ router.route('/reindex/cancel')
  * @response 422 { success: false, error: string } - range ≥ 200 or invalid range
  * @auth Bearer (admin role required)
  */
-router.route('/events/replay')
+router
+  .route('/events/replay')
   .post(requireRole('admin'), validateBody(replayBodyShapeSchema), triggerReplay)
   .all(methodNotAllowed(['POST']));
 
@@ -761,7 +851,8 @@ router.route('/events/replay')
  * }
  * @auth Bearer (admin role required)
  */
-router.route('/events/replay/status')
+router
+  .route('/events/replay/status')
   .get(requireRole('admin'), replayStatusHandler)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -784,12 +875,9 @@ router.route('/events/replay/status')
  * @response 400 { success: false, error: string } - Invalid olderThanDays
  * @auth Bearer (admin role required)
  */
-router.route('/webhooks/dead-letters')
-  .get(
-    requireRole('admin'),
-    auditRead('webhook_dead_letters'),
-    listDeadLetters,
-  )
+router
+  .route('/webhooks/dead-letters')
+  .get(requireRole('admin'), auditRead('webhook_dead_letters'), listDeadLetters)
   .delete(requireRole('admin'), purgeOldDeadLetters)
   .all(methodNotAllowed(['GET', 'DELETE', 'HEAD']));
 
@@ -807,7 +895,8 @@ router.route('/webhooks/dead-letters')
  * @response 502 { success: false, message, error, data: { id, status: 'pending', retryCount } } - Delivery failed
  * @auth Bearer (admin role required)
  */
-router.route('/webhooks/dead-letters/:id/requeue')
+router
+  .route('/webhooks/dead-letters/:id/requeue')
   .post(requireRole('admin'), validateBody(emptyBodySchema), requeueDeadLetter)
   .all(methodNotAllowed(['POST']));
 
@@ -822,7 +911,8 @@ router.route('/webhooks/dead-letters/:id/requeue')
  * @response 404 { success: false, error: string } - Not found
  * @auth Bearer (admin role required)
  */
-router.route('/webhooks/dead-letters/:id')
+router
+  .route('/webhooks/dead-letters/:id')
   .delete(requireRole('admin'), purgeDeadLetter)
   .all(methodNotAllowed(['DELETE']));
 
@@ -841,7 +931,8 @@ router.route('/webhooks/dead-letters/:id')
  * @response 502 { success: false, message, error, data: { id, status: 'pending', retryCount } } - Delivery failed
  * @auth Bearer (admin role required)
  */
-router.route('/webhooks/:id/replay')
+router
+  .route('/webhooks/:id/replay')
   .post(requireRole('admin'), validateBody(emptyBodySchema), replayDeadLetter)
   .all(methodNotAllowed(['POST']));
 
@@ -857,7 +948,8 @@ router.route('/webhooks/:id/replay')
  * @response 502 { success: false, error: string } - Test ping failed
  * @auth Bearer (admin role required)
  */
-router.route('/webhooks/:id/reactivate')
+router
+  .route('/webhooks/:id/reactivate')
   .post(requireRole('admin'), validateBody(emptyBodySchema), adminReactivateWebhook)
   .all(methodNotAllowed(['POST']));
 
@@ -874,7 +966,8 @@ router.route('/webhooks/:id/reactivate')
  * @response 400 { success: false, error: string } - Validation error
  * @auth Bearer (admin role required)
  */
-router.route('/ip-allowlist')
+router
+  .route('/ip-allowlist')
   .post(requireRole('admin'), validateBody(setIpReputationSchema), setIpReputationController)
   .all(methodNotAllowed(['POST']));
 
@@ -887,7 +980,8 @@ router.route('/ip-allowlist')
  * @response 400 { success: false, error: string } - :ip is not a valid IPv4/IPv6 address
  * @auth Bearer (admin role required)
  */
-router.route('/ip-reputation/:ip')
+router
+  .route('/ip-reputation/:ip')
   .get(
     requireRole('admin'),
     auditRead('ip_reputation', (req) => String(req.params.ip)),
@@ -907,7 +1001,8 @@ router.route('/ip-reputation/:ip')
  * @response 200 { success: true, data: WebhookDeliveryRow[], total, limit, offset }
  * @auth Bearer (admin role required)
  */
-router.route('/webhooks/:id/deliveries')
+router
+  .route('/webhooks/:id/deliveries')
   .get(
     requireRole('admin'),
     auditRead('webhook_deliveries', (req) => String(req.params.id)),
@@ -925,7 +1020,8 @@ router.route('/webhooks/:id/deliveries')
  * @response 200 { success: true, data: WebhookDeliverySummary }
  * @auth Bearer (admin role required)
  */
-router.route('/webhooks/:id/summary')
+router
+  .route('/webhooks/:id/summary')
   .get(requireRole('admin'), getWebhookDeliverySummaryEndpoint)
   .all(methodNotAllowed(['GET', 'HEAD']));
 
@@ -941,7 +1037,8 @@ router.route('/webhooks/:id/summary')
  * @response 400 { success: false, error: string }
  * @auth Bearer (admin role required)
  */
-router.route('/fees/config')
+router
+  .route('/fees/config')
   .post(requireRole('admin'), validateBody(updatePlatformFeeSchema), updatePlatformFeeController)
   .all(methodNotAllowed(['POST']));
 
@@ -950,7 +1047,8 @@ router.route('/fees/config')
  * Preview retention candidate counts without deleting rows or writing archives.
  * @response 200 { success: true, dryRun: true, data: RetentionResult[] }
  */
-router.route('/retention/dry-run')
+router
+  .route('/retention/dry-run')
   .get(requireRole('admin'), getRetentionDryRun)
   .all(methodNotAllowed(['GET']));
 
@@ -961,7 +1059,8 @@ router.route('/retention/dry-run')
  * @response 200 { success: true, data: { notes, webhook } }
  * @auth Bearer (admin role required)
  */
-router.route('/encryption/status')
+router
+  .route('/encryption/status')
   .get(requireRole('admin'), getEncryptionStatusEndpoint)
   .all(methodNotAllowed(['GET']));
 

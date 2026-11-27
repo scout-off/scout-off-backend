@@ -133,7 +133,11 @@ export async function getScoutDashboard(
       id: s.id,
       name: s.name,
       filters: (() => {
-        try { return JSON.parse(s.filters); } catch { return s.filters; }
+        try {
+          return JSON.parse(s.filters);
+        } catch {
+          return s.filters;
+        }
       })(),
       createdAt: s.created_at,
     }));

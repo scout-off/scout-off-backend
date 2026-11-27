@@ -22,41 +22,80 @@ jest.mock('../../src/db', () => {
 
   // Five synthetic events with descending (ledger, id) values
   const EVENTS = [
-    { id: 5, type: 'player_registered', ledger: 500, created_at: 5000, payload: JSON.stringify({ player_id: 'p5' }) },
-    { id: 4, type: 'milestone_approved', ledger: 400, created_at: 4000, payload: JSON.stringify({ player_id: 'p4' }) },
-    { id: 3, type: 'player_registered', ledger: 300, created_at: 3000, payload: JSON.stringify({ player_id: 'p3' }) },
-    { id: 2, type: 'milestone_submitted', ledger: 200, created_at: 2000, payload: JSON.stringify({ player_id: 'p2' }) },
-    { id: 1, type: 'scout_subscribed', ledger: 100, created_at: 1000, payload: JSON.stringify({ scout: 's1' }) },
+    {
+      id: 5,
+      type: 'player_registered',
+      ledger: 500,
+      created_at: 5000,
+      payload: JSON.stringify({ player_id: 'p5' }),
+    },
+    {
+      id: 4,
+      type: 'milestone_approved',
+      ledger: 400,
+      created_at: 4000,
+      payload: JSON.stringify({ player_id: 'p4' }),
+    },
+    {
+      id: 3,
+      type: 'player_registered',
+      ledger: 300,
+      created_at: 3000,
+      payload: JSON.stringify({ player_id: 'p3' }),
+    },
+    {
+      id: 2,
+      type: 'milestone_submitted',
+      ledger: 200,
+      created_at: 2000,
+      payload: JSON.stringify({ player_id: 'p2' }),
+    },
+    {
+      id: 1,
+      type: 'scout_subscribed',
+      ledger: 100,
+      created_at: 1000,
+      payload: JSON.stringify({ scout: 's1' }),
+    },
   ];
 
   return {
     ...actual,
     // Keyset implementation (new)
-    getEventsPageKeyset: jest.fn((filter: { type?: string; startDate?: Date; endDate?: Date }, limit: number, afterCursor: { ledger: number; id: number } | null) => {
-      let rows = [...EVENTS];
-      if (filter.type) rows = rows.filter((r) => r.type === filter.type);
-      if (filter.startDate) rows = rows.filter((r) => r.created_at >= filter.startDate!.getTime());
-      if (filter.endDate) rows = rows.filter((r) => r.created_at <= filter.endDate!.getTime());
-      if (afterCursor) {
-        rows = rows.filter(
-          (r) => r.ledger < afterCursor.ledger || (r.ledger === afterCursor.ledger && r.id < afterCursor.id),
-        );
-      }
-      // Already sorted DESC in the mock array
-      const hasMore = rows.length > limit;
-      const pageRows = rows.slice(0, limit);
-      const lastRow = pageRows[pageRows.length - 1];
-      const nextCursor = hasMore && lastRow ? { ledger: lastRow.ledger, id: lastRow.id } : null;
-      return {
-        rows: pageRows.map((r) => ({
-          type: r.type,
-          ledger: r.ledger,
-          createdAt: r.created_at,
-          payload: JSON.parse(r.payload),
-        })),
-        nextCursor,
-      };
-    }),
+    getEventsPageKeyset: jest.fn(
+      (
+        filter: { type?: string; startDate?: Date; endDate?: Date },
+        limit: number,
+        afterCursor: { ledger: number; id: number } | null,
+      ) => {
+        let rows = [...EVENTS];
+        if (filter.type) rows = rows.filter((r) => r.type === filter.type);
+        if (filter.startDate)
+          rows = rows.filter((r) => r.created_at >= filter.startDate!.getTime());
+        if (filter.endDate) rows = rows.filter((r) => r.created_at <= filter.endDate!.getTime());
+        if (afterCursor) {
+          rows = rows.filter(
+            (r) =>
+              r.ledger < afterCursor.ledger ||
+              (r.ledger === afterCursor.ledger && r.id < afterCursor.id),
+          );
+        }
+        // Already sorted DESC in the mock array
+        const hasMore = rows.length > limit;
+        const pageRows = rows.slice(0, limit);
+        const lastRow = pageRows[pageRows.length - 1];
+        const nextCursor = hasMore && lastRow ? { ledger: lastRow.ledger, id: lastRow.id } : null;
+        return {
+          rows: pageRows.map((r) => ({
+            type: r.type,
+            ledger: r.ledger,
+            createdAt: r.created_at,
+            payload: JSON.parse(r.payload),
+          })),
+          nextCursor,
+        };
+      },
+    ),
     // Legacy offset (existing)
     getEventsPage: jest.fn(() => []),
     countEventsFiltered: jest.fn(() => 0),
@@ -82,14 +121,42 @@ jest.mock('../../src/db', () => {
   };
 });
 
-jest.mock('../../src/services/indexer', () => ({ indexEvents: jest.fn(), normalizeEventId: jest.fn(), getAllValidators: jest.fn().mockReturnValue([]), insertValidator: jest.fn(), revokeValidatorRow: jest.fn(), getValidatorByWallet: jest.fn() }));
-jest.mock('../../src/services/stellar', () => ({ queryMilestones: jest.fn().mockResolvedValue([]), pauseContractOnChain: jest.fn(), unpauseContractOnChain: jest.fn(), registerValidatorOnChain: jest.fn(), revokeValidatorOnChain: jest.fn(), withdrawFees: jest.fn(), getFeeBalance: jest.fn().mockResolvedValue(0) }));
-jest.mock('../../src/services/ipfs', () => ({ pinJson: jest.fn(), checkHealth: jest.fn().mockResolvedValue(undefined), gatewayUrl: jest.fn() }));
-jest.mock('../../src/services/webhooks', () => ({ dispatchEventWebhook: jest.fn().mockResolvedValue(undefined) }));
-jest.mock('../../src/services/tokenBlocklist', () => ({ revokeToken: jest.fn(), isTokenRevoked: jest.fn().mockResolvedValue(false) }));
+jest.mock('../../src/services/indexer', () => ({
+  indexEvents: jest.fn(),
+  normalizeEventId: jest.fn(),
+  getAllValidators: jest.fn().mockReturnValue([]),
+  insertValidator: jest.fn(),
+  revokeValidatorRow: jest.fn(),
+  getValidatorByWallet: jest.fn(),
+}));
+jest.mock('../../src/services/stellar', () => ({
+  queryMilestones: jest.fn().mockResolvedValue([]),
+  pauseContractOnChain: jest.fn(),
+  unpauseContractOnChain: jest.fn(),
+  registerValidatorOnChain: jest.fn(),
+  revokeValidatorOnChain: jest.fn(),
+  withdrawFees: jest.fn(),
+  getFeeBalance: jest.fn().mockResolvedValue(0),
+}));
+jest.mock('../../src/services/ipfs', () => ({
+  pinJson: jest.fn(),
+  checkHealth: jest.fn().mockResolvedValue(undefined),
+  gatewayUrl: jest.fn(),
+}));
+jest.mock('../../src/services/webhooks', () => ({
+  dispatchEventWebhook: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../src/services/tokenBlocklist', () => ({
+  revokeToken: jest.fn(),
+  isTokenRevoked: jest.fn().mockResolvedValue(false),
+}));
 jest.mock('../../src/services/cache', () => ({
   getPlayerListLastModified: jest.fn(() => 0),
-  __setPlayerListLastModifiedForTests: jest.fn(), cacheGet: jest.fn().mockResolvedValue(null), cacheSet: jest.fn().mockResolvedValue(undefined), invalidatePlayerCache: jest.fn().mockResolvedValue(undefined) }));
+  __setPlayerListLastModifiedForTests: jest.fn(),
+  cacheGet: jest.fn().mockResolvedValue(null),
+  cacheSet: jest.fn().mockResolvedValue(undefined),
+  invalidatePlayerCache: jest.fn().mockResolvedValue(undefined),
+}));
 
 describe('GET /api/admin/events — keyset cursor pagination (#1140)', () => {
   it('returns first page with nextCursor when more rows exist', async () => {
@@ -121,8 +188,12 @@ describe('GET /api/admin/events — keyset cursor pagination (#1140)', () => {
     expect(second.body.data.length).toBeGreaterThan(0);
 
     // No overlap between first and second page
-    const firstIds = (first.body.data as Array<{ payload: { player_id?: string } }>).map((e) => e.payload.player_id);
-    const secondIds = (second.body.data as Array<{ payload: { player_id?: string } }>).map((e) => e.payload.player_id);
+    const firstIds = (first.body.data as Array<{ payload: { player_id?: string } }>).map(
+      (e) => e.payload.player_id,
+    );
+    const secondIds = (second.body.data as Array<{ payload: { player_id?: string } }>).map(
+      (e) => e.payload.player_id,
+    );
     const overlap = firstIds.filter((id) => secondIds.includes(id));
     expect(overlap).toHaveLength(0);
   });

@@ -1,15 +1,24 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { getTrialOfferById, respondToTrialOffer, insertTrialOffer, cancelTrialOffer, TrialOfferRow, queryEvents } from '../db';
+import {
+  getTrialOfferById,
+  respondToTrialOffer,
+  insertTrialOffer,
+  cancelTrialOffer,
+  TrialOfferRow,
+  queryEvents,
+} from '../db';
 import { logger } from '../utils/logger';
 import { broadcaster } from '../services/eventBroadcaster';
 import config from '../config';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
-export const rejectOfferSchema = z.object({
-  reason: z.string().max(500).optional(),
-}).strict();
+export const rejectOfferSchema = z
+  .object({
+    reason: z.string().max(500).optional(),
+  })
+  .strict();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +70,9 @@ async function resolveOwnedPendingOffer(
     logger.warn(
       `[trialOffer] ${action}_denied offerId=${offerId} playerId=${playerId} reason=not_owner account=${req.account}`,
     );
-    res.status(403).json({ success: false, error: 'Forbidden: you do not own this player profile' });
+    res
+      .status(403)
+      .json({ success: false, error: 'Forbidden: you do not own this player profile' });
     return null;
   }
 
@@ -81,9 +92,8 @@ async function resolveOwnedPendingOffer(
     }
     // Insert the offer from on-chain data so we can record the response
     const now = Math.floor(Date.now() / 1000);
-    const expiresAt = config.trialOfferTtlMs > 0
-      ? now + Math.floor(config.trialOfferTtlMs / 1000)
-      : null;
+    const expiresAt =
+      config.trialOfferTtlMs > 0 ? now + Math.floor(config.trialOfferTtlMs / 1000) : null;
     await insertTrialOffer({
       offer_id: offerId,
       scout_wallet: event.payload.scout as string,
@@ -101,7 +111,9 @@ async function resolveOwnedPendingOffer(
   }
 
   if (offer.player_id !== playerId) {
-    res.status(403).json({ success: false, error: 'Forbidden: offer does not belong to this player' });
+    res
+      .status(403)
+      .json({ success: false, error: 'Forbidden: offer does not belong to this player' });
     return null;
   }
 
@@ -148,8 +160,12 @@ async function resolveOwnedPendingOffer(
  * - 404: offer not found
  * - 409: offer already responded to
  */
-export async function acceptTrialOffer(req: Request, res: Response, _next: NextFunction): Promise<void> {
-  const {playerId, offerId} = req.params as {playerId: string, offerId: string};
+export async function acceptTrialOffer(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const { playerId, offerId } = req.params as { playerId: string; offerId: string };
 
   const offer = await resolveOwnedPendingOffer(playerId, offerId, req, res, 'accept');
   if (!offer) return;
@@ -194,15 +210,22 @@ export async function acceptTrialOffer(req: Request, res: Response, _next: NextF
  * - 404: offer not found
  * - 409: offer already responded to
  */
-export async function rejectTrialOffer(req: Request, res: Response, _next: NextFunction): Promise<void> {
-  const {playerId, offerId} = req.params as {playerId: string, offerId: string};
+export async function rejectTrialOffer(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const { playerId, offerId } = req.params as { playerId: string; offerId: string };
 
   // Reject-specific: parse the optional reason before any lookup or seeding,
   // so an invalid body can never reach a side effect. The route also applies
   // validateBody(rejectOfferSchema), so this is the direct-invocation guard.
   const bodyParsed = rejectOfferSchema.safeParse(req.body);
   if (!bodyParsed.success) {
-    res.status(400).json({ success: false, error: bodyParsed.error.issues[0]?.message ?? 'Invalid request body' });
+    res.status(400).json({
+      success: false,
+      error: bodyParsed.error.issues[0]?.message ?? 'Invalid request body',
+    });
     return;
   }
   const reason = bodyParsed.data.reason;
@@ -211,9 +234,16 @@ export async function rejectTrialOffer(req: Request, res: Response, _next: NextF
   if (!offer) return;
 
   const now = Math.floor(Date.now() / 1000);
-  await respondToTrialOffer({ offer_id: offerId, status: 'rejected', reject_reason: reason, responded_at: now });
+  await respondToTrialOffer({
+    offer_id: offerId,
+    status: 'rejected',
+    reject_reason: reason,
+    responded_at: now,
+  });
 
-  logger.info(`[trialOffer] rejected offerId=${offerId} playerId=${playerId} reason=${reason ?? 'none'}`);
+  logger.info(
+    `[trialOffer] rejected offerId=${offerId} playerId=${playerId} reason=${reason ?? 'none'}`,
+  );
 
   // Notify the scout via SSE that their trial offer was rejected.
   broadcaster.broadcast({
@@ -256,7 +286,11 @@ export async function rejectTrialOffer(req: Request, res: Response, _next: NextF
  * - 404: offer not found
  * - 409: offer already responded to (accepted/rejected) or already cancelled
  */
-export async function cancelTrialOfferHandler(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function cancelTrialOfferHandler(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   const { offerId } = req.params as { offerId: string };
   const scoutWallet = req.params.wallet as string;
 
@@ -271,7 +305,9 @@ export async function cancelTrialOfferHandler(req: Request, res: Response, _next
     logger.warn(
       `[trialOffer] cancel_denied offerId=${offerId} reason=not_owner account=${req.account}`,
     );
-    res.status(403).json({ success: false, error: 'Forbidden: you did not submit this trial offer' });
+    res
+      .status(403)
+      .json({ success: false, error: 'Forbidden: you did not submit this trial offer' });
     return;
   }
 

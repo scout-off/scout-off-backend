@@ -8,7 +8,10 @@ function escapeLabelValue(value: string): string {
 
 export function recordRetentionRun(table: string, deleted: number, completed = true): void {
   const previous = totals.get(table) ?? { deleted: 0, lastRun: 0 };
-  totals.set(table, { deleted: previous.deleted + deleted, lastRun: completed ? Date.now() / 1000 : previous.lastRun });
+  totals.set(table, {
+    deleted: previous.deleted + deleted,
+    lastRun: completed ? Date.now() / 1000 : previous.lastRun,
+  });
 }
 export function retentionMetrics(): string[] {
   const lines = [
@@ -20,7 +23,9 @@ export function retentionMetrics(): string[] {
   for (const [table, metrics] of totals) {
     const label = escapeLabelValue(table);
     lines.push(`scout_off_retention_rows_deleted_total{table="${label}"} ${metrics.deleted}`);
-    lines.push(`scout_off_retention_last_run_timestamp_seconds{table="${label}"} ${metrics.lastRun}`);
+    lines.push(
+      `scout_off_retention_last_run_timestamp_seconds{table="${label}"} ${metrics.lastRun}`,
+    );
   }
   return lines;
 }

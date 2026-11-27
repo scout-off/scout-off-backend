@@ -37,11 +37,11 @@ metrics and the DB, form a hypothesis, then act.
 
 Start every investigation with the health and metrics endpoints:
 
-| Endpoint | What it tells you |
-| -------- | ----------------- |
-| `GET /health` | Process liveness, Stellar RPC reachability (`healthStatus.stellar`), DB probe (`healthStatus.db`) |
-| `GET /ready`  | Readiness: `ipfs`, `db`, `stellar` — returns `503`/`degraded` when any dependency is down |
-| `GET /metrics`| Prometheus metrics: `indexer_ledger_lag`, `scout_off_indexer_last_success_timestamp_seconds`, `scout_off_indexer_poll_failures_total`, `scout_off_circuit_breaker_state`, `scout_off_circuit_breaker_transitions_total`, `http_requests_total`, `http_errors_total`, `db_query_duration_seconds`, `soroban_rpc_duration_seconds`, `webhook_delivery_total`, `scout_off_webhook_dead_letters_total`, `ip_reputation_blocked_total`, `sse_connections_active`, … |
+| Endpoint       | What it tells you                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`  | Process liveness, Stellar RPC reachability (`healthStatus.stellar`), DB probe (`healthStatus.db`)                                                                                                                                                                                                                                                                                                                                                              |
+| `GET /ready`   | Readiness: `ipfs`, `db`, `stellar` — returns `503`/`degraded` when any dependency is down                                                                                                                                                                                                                                                                                                                                                                      |
+| `GET /metrics` | Prometheus metrics: `indexer_ledger_lag`, `scout_off_indexer_last_success_timestamp_seconds`, `scout_off_indexer_poll_failures_total`, `scout_off_circuit_breaker_state`, `scout_off_circuit_breaker_transitions_total`, `http_requests_total`, `http_errors_total`, `db_query_duration_seconds`, `soroban_rpc_duration_seconds`, `webhook_delivery_total`, `scout_off_webhook_dead_letters_total`, `ip_reputation_blocked_total`, `sse_connections_active`, … |
 
 **`indexer_ledger_lag`** is the single most useful indexer signal: ledgers
 behind the chain tip after the last poll. It is exposed as
@@ -74,14 +74,14 @@ see [DEPLOYMENT.md → Monitoring](../DEPLOYMENT.md#6a-monitoring-prometheus-ope
 Every alert below references metrics the backend actually exports and can be
 tuned or disabled under `metrics.prometheusRule.rules.<name>`.
 
-| Alert | Signal | First response |
-| ----- | ------ | -------------- |
-| `ScoutOffIndexerLagHigh` | `indexer_ledger_lag > 100` for 10m | Check `GET /health` → `healthStatus.stellar` and the RPC provider. If RPC is healthy, check indexer poll errors and [replay](#targeted-replay-vs-full-reindex) the gap. |
-| `ScoutOffWebhookDLQGrowing` | `sum(scout_off_webhook_dead_letters_total) > 100` for 15m | Inspect `GET /api/admin/webhooks/dead-letters`, then [drain the dead-letter queue](#draining-the-dead-letter-queue). A permanently failing subscriber must be fixed or removed, not replayed forever. |
-| `ScoutOffTierDivergence` | `increase(scout_off_tier_divergence_total[1h]) > 0` | A `milestone_approved` event was missed. Compare the player's milestones with the stored tier and run a [targeted replay](#targeted-replay-vs-full-reindex) over the approval range. |
-| `ScoutOffStuckPins` | `stuck_pending_pins_count > 0` for 30m | Check `PINATA_API_KEY`/`PINATA_SECRET` and Pinata status. Pending pins past their retry budget need a manual retry once IPFS is reachable (see [docs/ipfs-pinata-gateway.md](ipfs-pinata-gateway.md)). |
-| `ScoutOffHigh5xxRate` | 5xx ratio > 5% for 5m | Check `http_errors_total{range="5xx"}` by route, the structured error logs (with `X-Correlation-ID`), `/health` and `/ready`. Most 5xx bursts are a dependency outage (RPC, DB, IPFS) or a bad deploy — roll back if the rate started at rollout. |
-| `ScoutOffNotReady` | pod unready for 10m (kube-state-metrics; disabled by default) | `GET /ready` on the pod: `db`, `ipfs` or `stellar` is failing. Readiness also fails while the pod is draining, so check whether a rollout is in progress before restarting anything. |
+| Alert                       | Signal                                                        | First response                                                                                                                                                                                                                                    |
+| --------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ScoutOffIndexerLagHigh`    | `indexer_ledger_lag > 100` for 10m                            | Check `GET /health` → `healthStatus.stellar` and the RPC provider. If RPC is healthy, check indexer poll errors and [replay](#targeted-replay-vs-full-reindex) the gap.                                                                           |
+| `ScoutOffWebhookDLQGrowing` | `sum(scout_off_webhook_dead_letters_total) > 100` for 15m     | Inspect `GET /api/admin/webhooks/dead-letters`, then [drain the dead-letter queue](#draining-the-dead-letter-queue). A permanently failing subscriber must be fixed or removed, not replayed forever.                                             |
+| `ScoutOffTierDivergence`    | `increase(scout_off_tier_divergence_total[1h]) > 0`           | A `milestone_approved` event was missed. Compare the player's milestones with the stored tier and run a [targeted replay](#targeted-replay-vs-full-reindex) over the approval range.                                                              |
+| `ScoutOffStuckPins`         | `stuck_pending_pins_count > 0` for 30m                        | Check `PINATA_API_KEY`/`PINATA_SECRET` and Pinata status. Pending pins past their retry budget need a manual retry once IPFS is reachable (see [docs/ipfs-pinata-gateway.md](ipfs-pinata-gateway.md)).                                            |
+| `ScoutOffHigh5xxRate`       | 5xx ratio > 5% for 5m                                         | Check `http_errors_total{range="5xx"}` by route, the structured error logs (with `X-Correlation-ID`), `/health` and `/ready`. Most 5xx bursts are a dependency outage (RPC, DB, IPFS) or a bad deploy — roll back if the rate started at rollout. |
+| `ScoutOffNotReady`          | pod unready for 10m (kube-state-metrics; disabled by default) | `GET /ready` on the pod: `db`, `ipfs` or `stellar` is failing. Readiness also fails while the pod is draining, so check whether a rollout is in progress before restarting anything.                                                              |
 
 To silence or retune an alert during an incident, change its `enabled`,
 `threshold`, `for` or `severity` under `metrics.prometheusRule.rules` and run
@@ -94,24 +94,24 @@ ServiceMonitor's scrapes return `401` and no alerts can fire.
 
 ## Incident → action
 
-| Incident | Symptoms | Diagnosis | Action |
-| -------- | -------- | --------- | ------ |
-| **Indexer stalled** | `indexer_ledger_lag` climbing; `player_registered`/`milestone_approved` events missing from the API; webhooks/SSE quiet | `GET /metrics` → `indexer_ledger_lag`; `GET /health` → `healthStatus.stellar` | If Stellar RPC is down, fix RPC first (below). If RPC is fine, check the indexer log for poll errors, then [replay](#targeted-replay-vs-full-reindex) from where it stopped. |
-| **Tiers wrong** | A player's tier (0–3) doesn't match their approved milestones; scouts report stale tiers | Compare `GET /api/players/:playerId/milestones` against the tier thresholds in [docs/tier-promotion.md](tier-promotion.md) | The tier is derived from `milestone_approved` events — if events were indexed twice or never, run a [targeted replay](#targeted-replay-vs-full-reindex) over the range containing the approvals, then verify with the player endpoint. Cache may also be stale (see [cache flush](#cache-flush)). |
-| **Webhooks not arriving** | Subscriber gets nothing; `webhook_delivery_total` flat or erroring | `GET /api/admin/webhooks/dead-letters` — see [Draining the dead-letter queue](#draining-the-dead-letter-queue) | Requeue the affected deliveries. If they fail again, check the subscriber (docs/webhooks.md) — a permanently broken subscriber should be fixed or removed, not replayed forever. |
-| **RPC down** | `/health` → `healthStatus.stellar: error`; `/ready` → `stellar: unavailable`; `soroban_rpc_duration_seconds` spiking then failing | Check the circuit breaker (below) and the RPC provider status page | Fix/replace `SOROBAN_RPC_URL`. The circuit breaker opens after 3 consecutive failures and recovers automatically after its 10 s reset window — no manual reset needed. Once RPC is back, watch `indexer_ledger_lag` and [replay](#targeted-replay-vs-full-reindex) if the gap grew large. |
-| **IPFS down** | `/ready` → `ipfs: unavailable`; player registration/milestone uploads fail | Check `PINATA_API_KEY`/`PINATA_SECRET`, Pinata status | Restore Pinata credentials/connectivity. Reads degrade to DB/cache; nothing to replay — uploads retry when it recovers. |
-| **DB slow / locked** | `db_query_duration_seconds` p95 climbing; `SLOW_QUERY_THRESHOLD_MS` (default 50) warnings in logs; `/ready` → `db: unavailable` | `GET /health` → `healthStatus.db`; check slow-query logs; check SQLite lock contention or Postgres pool | SQLite: `VACUUM`/WAL settings, stop long `GET /api/admin/events/export` runs during peak. Postgres: see [docs/postgres-migration.md](postgres-migration.md). The cache absorbs read load — confirm `REDIS_URL` is set and cache metrics show hits. |
+| Incident                  | Symptoms                                                                                                                          | Diagnosis                                                                                                                  | Action                                                                                                                                                                                                                                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Indexer stalled**       | `indexer_ledger_lag` climbing; `player_registered`/`milestone_approved` events missing from the API; webhooks/SSE quiet           | `GET /metrics` → `indexer_ledger_lag`; `GET /health` → `healthStatus.stellar`                                              | If Stellar RPC is down, fix RPC first (below). If RPC is fine, check the indexer log for poll errors, then [replay](#targeted-replay-vs-full-reindex) from where it stopped.                                                                                                                      |
+| **Tiers wrong**           | A player's tier (0–3) doesn't match their approved milestones; scouts report stale tiers                                          | Compare `GET /api/players/:playerId/milestones` against the tier thresholds in [docs/tier-promotion.md](tier-promotion.md) | The tier is derived from `milestone_approved` events — if events were indexed twice or never, run a [targeted replay](#targeted-replay-vs-full-reindex) over the range containing the approvals, then verify with the player endpoint. Cache may also be stale (see [cache flush](#cache-flush)). |
+| **Webhooks not arriving** | Subscriber gets nothing; `webhook_delivery_total` flat or erroring                                                                | `GET /api/admin/webhooks/dead-letters` — see [Draining the dead-letter queue](#draining-the-dead-letter-queue)             | Requeue the affected deliveries. If they fail again, check the subscriber (docs/webhooks.md) — a permanently broken subscriber should be fixed or removed, not replayed forever.                                                                                                                  |
+| **RPC down**              | `/health` → `healthStatus.stellar: error`; `/ready` → `stellar: unavailable`; `soroban_rpc_duration_seconds` spiking then failing | Check the circuit breaker (below) and the RPC provider status page                                                         | Fix/replace `SOROBAN_RPC_URL`. The circuit breaker opens after 3 consecutive failures and recovers automatically after its 10 s reset window — no manual reset needed. Once RPC is back, watch `indexer_ledger_lag` and [replay](#targeted-replay-vs-full-reindex) if the gap grew large.         |
+| **IPFS down**             | `/ready` → `ipfs: unavailable`; player registration/milestone uploads fail                                                        | Check `PINATA_API_KEY`/`PINATA_SECRET`, Pinata status                                                                      | Restore Pinata credentials/connectivity. Reads degrade to DB/cache; nothing to replay — uploads retry when it recovers.                                                                                                                                                                           |
+| **DB slow / locked**      | `db_query_duration_seconds` p95 climbing; `SLOW_QUERY_THRESHOLD_MS` (default 50) warnings in logs; `/ready` → `db: unavailable`   | `GET /health` → `healthStatus.db`; check slow-query logs; check SQLite lock contention or Postgres pool                    | SQLite: `VACUUM`/WAL settings, stop long `GET /api/admin/events/export` runs during peak. Postgres: see [docs/postgres-migration.md](postgres-migration.md). The cache absorbs read load — confirm `REDIS_URL` is set and cache metrics show hits.                                                |
 
 ## Targeted replay vs full reindex
 
 There are three ways to re-fetch events. Choose by how much history you need:
 
-| Tool | Scope | When to use |
-| ---- | ----- | ----------- |
-| `POST /api/admin/reindex` | Arbitrary `[fromLedger, toLedger]` range (≤ 10 000 ledgers), background job with live status | Most precise: replay the exact range where events were missed or corrupted. |
-| `POST /api/admin/indexer/reindex` | Resets stored `last_ledger` to `fromLedger`; the normal poll loop replays from there onward | "From here to the tip" — e.g. after an RPC outage. |
-| `npm run backfill -- --backfill <fromLedger>` | CLI equivalent of the above (operates on `dist/`, so run `npm run build` first) | When you have shell access and no admin token handy. |
+| Tool                                          | Scope                                                                                        | When to use                                                                 |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `POST /api/admin/reindex`                     | Arbitrary `[fromLedger, toLedger]` range (≤ 10 000 ledgers), background job with live status | Most precise: replay the exact range where events were missed or corrupted. |
+| `POST /api/admin/indexer/reindex`             | Resets stored `last_ledger` to `fromLedger`; the normal poll loop replays from there onward  | "From here to the tip" — e.g. after an RPC outage.                          |
+| `npm run backfill -- --backfill <fromLedger>` | CLI equivalent of the above (operates on `dist/`, so run `npm run build` first)              | When you have shell access and no admin token handy.                        |
 
 ### Full reindex (background job)
 
@@ -332,21 +332,21 @@ default 5 min) should log zero mismatches.
 
 **Configuration:**
 
-| Variable | Default | Description |
-| -------- | ------- | ----------- |
+| Variable                      | Default          | Description                              |
+| ----------------------------- | ---------------- | ---------------------------------------- |
 | `TIER_DIVERGENCE_INTERVAL_MS` | `300000` (5 min) | How often to run the reconciliation pass |
-| `TIER_DIVERGENCE_SAMPLE_SIZE` | `100` | Max players sampled per pass |
+| `TIER_DIVERGENCE_SAMPLE_SIZE` | `100`            | Max players sampled per pass             |
 
 ## Circuit breaker tuning
 
 The backend maintains circuit breakers to fail fast when downstream dependencies degrade:
 
-| Variable | Default | Unit | Effect |
-| -------- | ------- | ---- | ------ |
-| `CIRCUIT_BREAKER_FAILURE_THRESHOLD` | `5` | count | Consecutive failures before generic circuit breaker trips open |
-| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | `30000` (30 s) | ms | Cooldown duration before generic breaker tests dependency recovery |
-| `IPFS_BREAKER_FAILURE_THRESHOLD` | `5` | count | Consecutive failures before Pinata IPFS circuit breaker trips open |
-| `IPFS_BREAKER_RESET_TIMEOUT_MS` | `30000` (30 s) | ms | Cooldown duration before IPFS breaker tests Pinata recovery |
+| Variable                            | Default        | Unit  | Effect                                                             |
+| ----------------------------------- | -------------- | ----- | ------------------------------------------------------------------ |
+| `CIRCUIT_BREAKER_FAILURE_THRESHOLD` | `5`            | count | Consecutive failures before generic circuit breaker trips open     |
+| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS`  | `30000` (30 s) | ms    | Cooldown duration before generic breaker tests dependency recovery |
+| `IPFS_BREAKER_FAILURE_THRESHOLD`    | `5`            | count | Consecutive failures before Pinata IPFS circuit breaker trips open |
+| `IPFS_BREAKER_RESET_TIMEOUT_MS`     | `30000` (30 s) | ms    | Cooldown duration before IPFS breaker tests Pinata recovery        |
 
 When open, calls fail immediately with `CircuitBreakerOpenError` rather than consuming sockets while waiting on network timeouts. See [docs/degradation-contracts.md](degradation-contracts.md#circuit-breakers) for degradation contracts and behavior under failure.
 
@@ -364,9 +364,9 @@ The contract-event indexer polls Soroban RPC on a schedule driven by
 close time: polling faster than that usually returns the same ledger again and
 only spends RPC quota.
 
-| Variable | Default | Range | Effect |
-| -------- | ------- | ----- | ------ |
-| `INDEXER_POLL_INTERVAL_MS` | `5000` | `1000`–`300000` ms | How often the indexer asks RPC for new ledgers |
+| Variable                   | Default | Range              | Effect                                         |
+| -------------------------- | ------- | ------------------ | ---------------------------------------------- |
+| `INDEXER_POLL_INTERVAL_MS` | `5000`  | `1000`–`300000` ms | How often the indexer asks RPC for new ledgers |
 
 Guidance:
 
@@ -399,13 +399,13 @@ The server implements a deadline-driven drain sequence on `SIGTERM`/`SIGINT`
 
 **Configuration:**
 
-| Variable | Default | Description |
-| -------- | ------- | ----------- |
-| `SHUTDOWN_TIMEOUT_MS` | `10000` | Overall shutdown budget. Every wait below is clamped to it. |
-| `SHUTDOWN_PRESTOP_DELAY_MS` | `0` | Pre-stop sleep to let load balancers observe the `503` before traffic stops. |
-| `SHUTDOWN_REQUEST_DRAIN_MS` | 50 % of timeout (`5000`) | How long in-flight requests may finish before connections are force-closed. |
-| `SHUTDOWN_JOB_DRAIN_MS` | 30 % of timeout (`3000`) | How long in-flight background jobs may finish before they are abandoned. |
-| `SHUTDOWN_CLEANUP_RESERVE_MS` | `2000` | Slice at the end of the budget reserved for Redis, DB and tracing cleanup (clamped to half the budget). |
+| Variable                      | Default                  | Description                                                                                             |
+| ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `SHUTDOWN_TIMEOUT_MS`         | `10000`                  | Overall shutdown budget. Every wait below is clamped to it.                                             |
+| `SHUTDOWN_PRESTOP_DELAY_MS`   | `0`                      | Pre-stop sleep to let load balancers observe the `503` before traffic stops.                            |
+| `SHUTDOWN_REQUEST_DRAIN_MS`   | 50 % of timeout (`5000`) | How long in-flight requests may finish before connections are force-closed.                             |
+| `SHUTDOWN_JOB_DRAIN_MS`       | 30 % of timeout (`3000`) | How long in-flight background jobs may finish before they are abandoned.                                |
+| `SHUTDOWN_CLEANUP_RESERVE_MS` | `2000`                   | Slice at the end of the budget reserved for Redis, DB and tracing cleanup (clamped to half the budget). |
 
 **Kubernetes alignment:**
 
@@ -456,24 +456,29 @@ least one day. Null timestamps are retained for operator investigation.
 
 Environment settings:
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `RETENTION_ENABLED` | `false` | Enable scheduled sweeps |
-| `RETENTION_INTERVAL_MS` | `86400000` | Delay before first and between completed sweeps |
-| `RETENTION_BATCH_SIZE` | `1000` | Maximum rows per mutation transaction, 1–1000 |
-| `RETENTION_PAUSE_MS` | `100` | Yield between batches, 1–60000 ms |
-| `RETENTION_MAX_BATCHES` | `100` | Per-table budget per sweep |
-| `RETENTION_ARCHIVE_DIR` | `./data/audit-archives` | Durable restricted audit archive volume |
-| `RETENTION_CHECKPOINT_KEY` | unset | Independent 32-byte hex HMAC signing key; required when enabling audit retention |
-| `DATA_EXPORT_ARCHIVE_DIR` | `./data/exports` | Only root within which export files can be deleted |
-| `RETENTION_POLICIES` | defaults above | JSON array replacing all policies; `[]` disables all table policies |
+| Variable                   | Default                 | Purpose                                                                          |
+| -------------------------- | ----------------------- | -------------------------------------------------------------------------------- |
+| `RETENTION_ENABLED`        | `false`                 | Enable scheduled sweeps                                                          |
+| `RETENTION_INTERVAL_MS`    | `86400000`              | Delay before first and between completed sweeps                                  |
+| `RETENTION_BATCH_SIZE`     | `1000`                  | Maximum rows per mutation transaction, 1–1000                                    |
+| `RETENTION_PAUSE_MS`       | `100`                   | Yield between batches, 1–60000 ms                                                |
+| `RETENTION_MAX_BATCHES`    | `100`                   | Per-table budget per sweep                                                       |
+| `RETENTION_ARCHIVE_DIR`    | `./data/audit-archives` | Durable restricted audit archive volume                                          |
+| `RETENTION_CHECKPOINT_KEY` | unset                   | Independent 32-byte hex HMAC signing key; required when enabling audit retention |
+| `DATA_EXPORT_ARCHIVE_DIR`  | `./data/exports`        | Only root within which export files can be deleted                               |
+| `RETENTION_POLICIES`       | defaults above          | JSON array replacing all policies; `[]` disables all table policies              |
 
 For example, retain only webhook history and roll up profile views:
 
 ```json
 [
   { "table": "webhook_deliveries", "column": "created_at", "days": 30, "strategy": "delete" },
-  { "table": "profile_views", "column": "viewed_at", "days": 180, "strategy": "aggregate-then-delete" }
+  {
+    "table": "profile_views",
+    "column": "viewed_at",
+    "days": 180,
+    "strategy": "aggregate-then-delete"
+  }
 ]
 ```
 

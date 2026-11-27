@@ -113,7 +113,7 @@ async function processUpMigrations(
   migrationFiles: string[],
   allFiles: string[],
   steps?: number,
-  dryRun: boolean = false
+  dryRun: boolean = false,
 ): Promise<MigrationResult[]> {
   const results: MigrationResult[] = [];
   const isPostgres = isPostgresDriver(driver);
@@ -138,10 +138,10 @@ async function processUpMigrations(
         results.push({ filename, sql: '', applied: true });
         continue;
       }
-      await driver.run(
-        'INSERT INTO migrations (id, applied_at) VALUES (?, ?)',
-        [filename, Date.now()]
-      );
+      await driver.run('INSERT INTO migrations (id, applied_at) VALUES (?, ?)', [
+        filename,
+        Date.now(),
+      ]);
       results.push({ filename, sql: '', applied: true });
       continue;
     }
@@ -170,10 +170,10 @@ async function processUpMigrations(
     try {
       await driver.transaction(async (tx: DbTxHandle) => {
         await tx.exec(finalSql);
-        await tx.run(
-          'INSERT INTO migrations (id, applied_at) VALUES (?, ?)',
-          [filename, Date.now()]
-        );
+        await tx.run('INSERT INTO migrations (id, applied_at) VALUES (?, ?)', [
+          filename,
+          Date.now(),
+        ]);
       });
 
       results.push({
@@ -195,10 +195,10 @@ async function processUpMigrations(
       const isDuplicateColumn = /duplicate column name|already exists/i.test(message);
       const isCrossDriverFile = isPostgresFile && !isPostgres;
       if (isCrossDriverFile || isDuplicateColumn) {
-        await driver.run(
-          'INSERT INTO migrations (id, applied_at) VALUES (?, ?)',
-          [filename, Date.now()]
-        );
+        await driver.run('INSERT INTO migrations (id, applied_at) VALUES (?, ?)', [
+          filename,
+          Date.now(),
+        ]);
         results.push({
           filename,
           sql: finalSql,
@@ -223,7 +223,7 @@ async function processDownMigrations(
   migrationFiles: string[],
   allFiles: string[],
   steps?: number,
-  dryRun: boolean = false
+  dryRun: boolean = false,
 ): Promise<MigrationResult[]> {
   const results: MigrationResult[] = [];
   const isPostgres = isPostgresDriver(driver);
@@ -316,7 +316,7 @@ export async function getAppliedMigrations(driver: DbDriver): Promise<Map<string
 
   try {
     const rows = await driver.all<{ id: string; applied_at: number }>(
-      'SELECT id, applied_at FROM migrations'
+      'SELECT id, applied_at FROM migrations',
     );
 
     for (const row of rows) {
@@ -356,29 +356,20 @@ function isNoSuchTableError(error: unknown): boolean {
 function convertSqlToPostgres(sql: string): string {
   let converted = sql;
 
-  converted = converted.replace(
-    /INTEGER PRIMARY KEY AUTOINCREMENT/gi,
-    'SERIAL PRIMARY KEY'
-  );
+  converted = converted.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, 'SERIAL PRIMARY KEY');
 
-  converted = converted.replace(
-    /INSERT OR IGNORE INTO/gi,
-    'INSERT INTO'
-  );
+  converted = converted.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO');
 
   if (!converted.includes('ON CONFLICT')) {
-    converted = converted.replace(
-      /INSERT INTO ([a-z_]+) \(([^)]+)\) VALUES/gi,
-      (match) => {
-        if (sql.includes('INSERT OR IGNORE')) {
-          return match + ' ON CONFLICT DO NOTHING ';
-        }
-        return match;
+    converted = converted.replace(/INSERT INTO ([a-z_]+) \(([^)]+)\) VALUES/gi, (match) => {
+      if (sql.includes('INSERT OR IGNORE')) {
+        return match + ' ON CONFLICT DO NOTHING ';
       }
-    );
+      return match;
+    });
   }
 
-  converted = converted.replace(/datetime\('now'\)/gi, "now()");
+  converted = converted.replace(/datetime\('now'\)/gi, 'now()');
 
   return converted;
 }
@@ -386,10 +377,7 @@ function convertSqlToPostgres(sql: string): string {
 function convertPostgresToSqlite(sql: string): string {
   let converted = sql;
 
-  converted = converted.replace(
-    /SERIAL\s+PRIMARY\s+KEY/gi,
-    'INTEGER PRIMARY KEY AUTOINCREMENT'
-  );
+  converted = converted.replace(/SERIAL\s+PRIMARY\s+KEY/gi, 'INTEGER PRIMARY KEY AUTOINCREMENT');
 
   converted = converted.replace(/\bBIGINT\b/gi, 'INTEGER');
 

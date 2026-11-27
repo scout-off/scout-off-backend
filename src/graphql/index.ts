@@ -84,7 +84,7 @@ export function mountGraphQL(app: Application): void {
     createPersistedOperationsPlugin(),
     ...(isProduction ? [createBlockIntrospectionPlugin()] : []),
   ];
-  
+
   const yoga = createYoga({
     schema: createSchema({
       typeDefs,

@@ -82,10 +82,16 @@ function openSseConnection(
     const req = http.request(options, (res) => {
       const conn: SseConnection = {
         chunks,
-        destroy: () => { req.destroy(); res.destroy(); },
+        destroy: () => {
+          req.destroy();
+          res.destroy();
+        },
         waitForChunks(count, timeoutMs = 1000) {
           return new Promise<void>((res2, rej2) => {
-            const deadline = setTimeout(() => rej2(new Error(`Timeout waiting for ${count} chunk(s)`)), timeoutMs);
+            const deadline = setTimeout(
+              () => rej2(new Error(`Timeout waiting for ${count} chunk(s)`)),
+              timeoutMs,
+            );
             const check = () => {
               if (chunks.length >= count) {
                 clearTimeout(deadline);
@@ -95,11 +101,13 @@ function openSseConnection(
             // Already have enough
             check();
             // Poll
-            const interval = setInterval(() => { check(); }, 20);
+            const interval = setInterval(() => {
+              check();
+            }, 20);
             // Clean up interval once resolved
-            Promise.race([
-              new Promise<void>((r) => setTimeout(r, timeoutMs)),
-            ]).finally(() => clearInterval(interval));
+            Promise.race([new Promise<void>((r) => setTimeout(r, timeoutMs))]).finally(() =>
+              clearInterval(interval),
+            );
           });
         },
       };
@@ -204,11 +212,7 @@ describe('GET /api/events/stream — response headers', () => {
 
 describe('GET /api/events/stream — connected event', () => {
   it('sends an initial "connected" event immediately on connection', async () => {
-    const { conn } = await openSseConnection(
-      server,
-      '/api/events/stream',
-      makeToken(WALLET_A),
-    );
+    const { conn } = await openSseConnection(server, '/api/events/stream', makeToken(WALLET_A));
 
     // Wait for the "connected" frame
     await conn.waitForChunks(1, 1000).catch(() => {});
@@ -220,11 +224,7 @@ describe('GET /api/events/stream — connected event', () => {
   });
 
   it('sends a retry: frame with sensible delay on connection', async () => {
-    const { conn } = await openSseConnection(
-      server,
-      '/api/events/stream',
-      makeToken(WALLET_A),
-    );
+    const { conn } = await openSseConnection(server, '/api/events/stream', makeToken(WALLET_A));
 
     await conn.waitForChunks(1, 1000).catch(() => {});
     conn.destroy();
@@ -243,11 +243,7 @@ describe('GET /api/events/stream — connected event', () => {
     const originalRetry = config.sse.retryMs;
     try {
       config.sse.retryMs = 2500;
-      const { conn } = await openSseConnection(
-        server,
-        '/api/events/stream',
-        makeToken(WALLET_A),
-      );
+      const { conn } = await openSseConnection(server, '/api/events/stream', makeToken(WALLET_A));
 
       await conn.waitForChunks(1, 1000).catch(() => {});
       conn.destroy();
@@ -282,11 +278,7 @@ describe('GET /api/events/stream — connected event', () => {
 
 describe('GET /api/events/stream — event delivery', () => {
   it('delivers a broadcast event relevant to the connected wallet', async () => {
-    const { conn } = await openSseConnection(
-      server,
-      '/api/events/stream',
-      makeToken(WALLET_A),
-    );
+    const { conn } = await openSseConnection(server, '/api/events/stream', makeToken(WALLET_A));
 
     // Wait for the "connected" frame before broadcasting
     await conn.waitForChunks(1, 500).catch(() => {});
@@ -353,11 +345,7 @@ describe('GET /api/events/stream — event delivery', () => {
 
 describe('GET /api/events/stream — filtering (no cross-tenant leakage)', () => {
   it('does NOT deliver events meant for a different wallet', async () => {
-    const { conn } = await openSseConnection(
-      server,
-      '/api/events/stream',
-      makeToken(WALLET_B),
-    );
+    const { conn } = await openSseConnection(server, '/api/events/stream', makeToken(WALLET_B));
 
     await conn.waitForChunks(1, 500).catch(() => {});
 
@@ -717,11 +705,7 @@ describe('GET /api/v1/events/stream — versioned alias', () => {
 
 describe('GET /api/events/stream — disconnect cleanup', () => {
   it('decrements subscriberCount when client disconnects', async () => {
-    const { conn } = await openSseConnection(
-      server,
-      '/api/events/stream',
-      makeToken(WALLET_A),
-    );
+    const { conn } = await openSseConnection(server, '/api/events/stream', makeToken(WALLET_A));
 
     await conn.waitForChunks(1, 500).catch(() => {});
     const countWhileConnected = broadcaster.subscriberCount;
@@ -735,11 +719,7 @@ describe('GET /api/events/stream — disconnect cleanup', () => {
   });
 
   it('does not deliver events to a disconnected client', async () => {
-    const { conn } = await openSseConnection(
-      server,
-      '/api/events/stream',
-      makeToken(WALLET_A),
-    );
+    const { conn } = await openSseConnection(server, '/api/events/stream', makeToken(WALLET_A));
 
     await conn.waitForChunks(1, 500).catch(() => {});
     conn.destroy();

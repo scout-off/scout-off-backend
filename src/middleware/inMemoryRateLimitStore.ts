@@ -1,6 +1,6 @@
-import { RateLimitStore } from './rateLimitStore';
+import { ReadableRateLimitStore } from './rateLimitStore';
 
-export class InMemoryRateLimitStore implements RateLimitStore {
+export class InMemoryRateLimitStore implements ReadableRateLimitStore {
   private hits = new Map<string, { count: number; resetAt: number }>();
 
   async increment(key: string, windowMs: number): Promise<{ count: number; resetAt: number }> {
@@ -15,5 +15,19 @@ export class InMemoryRateLimitStore implements RateLimitStore {
 
     entry.count += 1;
     return { ...entry };
+  }
+
+  async get(key: string): Promise<{ count: number; resetAt: number } | null> {
+    const entry = this.hits.get(key);
+    if (!entry) return null;
+    if (Date.now() >= entry.resetAt) {
+      this.hits.delete(key);
+      return null;
+    }
+    return { ...entry };
+  }
+
+  async reset(key: string): Promise<void> {
+    this.hits.delete(key);
   }
 }

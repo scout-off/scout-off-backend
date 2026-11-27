@@ -54,4 +54,4 @@ Security notes
 - This design prevents in-contract replay and fabrication when operators provide correct `transfer_id` values.
 - If an attacker can fabricate `transfer_id` values and is allowed to submit distributions (access-control issue), they could create fake `TransferInfo` records; therefore this should be combined with access control (separately tracked) or with operator-attestation (signed transfer assertions) depending on your threat model.
 
-**_ End of document _**
+**\_ End of document _**

@@ -36,7 +36,8 @@ export function validateMinTier(raw: unknown): TierValidationResult {
   if (typeof normalizedRaw === 'string' && !/^-?\d+$/.test(normalizedRaw)) {
     return {
       valid: false,
-      error: 'minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite',
+      error:
+        'minTier must be a number; valid values are 0=Unverified, 1=Verified, 2=Performance, 3=Elite',
     };
   }
 

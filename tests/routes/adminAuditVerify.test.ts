@@ -55,8 +55,18 @@ describe('GET /api/admin/audit/verify (#464)', () => {
   });
 
   it('reports a valid chain for an admin caller', async () => {
-    await db.insertAuditLog({ action: 'fee_history_query', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
-    await db.insertAuditLog({ action: 'contract_state_change', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-02T00:00:00.000Z' });
+    await db.insertAuditLog({
+      action: 'fee_history_query',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
+    await db.insertAuditLog({
+      action: 'contract_state_change',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-02T00:00:00.000Z',
+    });
 
     const token = await getAdminToken();
     const res = await request(app)
@@ -73,10 +83,22 @@ describe('GET /api/admin/audit/verify (#464)', () => {
   });
 
   it('reports the broken row id after a row is tampered with', async () => {
-    await db.insertAuditLog({ action: 'fee_history_query', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
-    const second = await db.insertAuditLog({ action: 'contract_state_change', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-02T00:00:00.000Z' });
+    await db.insertAuditLog({
+      action: 'fee_history_query',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
+    const second = await db.insertAuditLog({
+      action: 'contract_state_change',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-02T00:00:00.000Z',
+    });
 
-    await db.getDriver().run('UPDATE audit_log SET action = ? WHERE id = ?', ['tampered', second.id]);
+    await db
+      .getDriver()
+      .run('UPDATE audit_log SET action = ? WHERE id = ?', ['tampered', second.id]);
 
     const token = await getAdminToken();
     const res = await request(app)
@@ -104,9 +126,24 @@ describe('GET /api/admin/audit/verify (#464)', () => {
   });
 
   it('returns chain_length matching number of rows', async () => {
-    await db.insertAuditLog({ action: 'fee_history_query', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
-    await db.insertAuditLog({ action: 'contract_state_change', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-02T00:00:00.000Z' });
-    await db.insertAuditLog({ action: 'validator_registration', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-03T00:00:00.000Z' });
+    await db.insertAuditLog({
+      action: 'fee_history_query',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
+    await db.insertAuditLog({
+      action: 'contract_state_change',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-02T00:00:00.000Z',
+    });
+    await db.insertAuditLog({
+      action: 'validator_registration',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-03T00:00:00.000Z',
+    });
 
     const token = await getAdminToken();
     const res = await request(app)
@@ -124,8 +161,18 @@ describe('GET /api/admin/audit/verify — new response shape (#764)', () => {
   });
 
   it('returns status ok for untampered chain', async () => {
-    await db.insertAuditLog({ action: 'fee_history_query', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
-    await db.insertAuditLog({ action: 'contract_state_change', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-02T00:00:00.000Z' });
+    await db.insertAuditLog({
+      action: 'fee_history_query',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
+    await db.insertAuditLog({
+      action: 'contract_state_change',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-02T00:00:00.000Z',
+    });
 
     const token = await getAdminToken();
     const res = await request(app)
@@ -141,11 +188,23 @@ describe('GET /api/admin/audit/verify — new response shape (#764)', () => {
   });
 
   it('returns status tampered with violations array when row is corrupted', async () => {
-    await db.insertAuditLog({ action: 'fee_history_query', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
-    const second = await db.insertAuditLog({ action: 'contract_state_change', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-02T00:00:00.000Z' });
+    await db.insertAuditLog({
+      action: 'fee_history_query',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
+    const second = await db.insertAuditLog({
+      action: 'contract_state_change',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-02T00:00:00.000Z',
+    });
 
     // Tamper with the second row's action column so its stored hash is wrong
-    await db.getDriver().run('UPDATE audit_log SET action = ? WHERE id = ?', ['tampered_action', second.id]);
+    await db
+      .getDriver()
+      .run('UPDATE audit_log SET action = ? WHERE id = ?', ['tampered_action', second.id]);
 
     const token = await getAdminToken();
     const res = await request(app)
@@ -167,7 +226,12 @@ describe('GET /api/admin/audit/verify — new response shape (#764)', () => {
   });
 
   it('returns empty violations array for ok chain', async () => {
-    await db.insertAuditLog({ action: 'validator_registration', adminWallet: 'GADMIN1', queryParams: { wallet: 'GXYZ' }, createdAt: '2025-01-05T00:00:00.000Z' });
+    await db.insertAuditLog({
+      action: 'validator_registration',
+      adminWallet: 'GADMIN1',
+      queryParams: { wallet: 'GXYZ' },
+      createdAt: '2025-01-05T00:00:00.000Z',
+    });
 
     const token = await getAdminToken();
     const res = await request(app)
@@ -198,12 +262,15 @@ describe('GET /api/admin/audit — includes hash chain columns', () => {
   });
 
   it('returns hash/prev_hash/event_source alongside each row', async () => {
-    await db.insertAuditLog({ action: 'fee_history_query', adminWallet: 'GADMIN1', queryParams: {}, createdAt: '2025-01-01T00:00:00.000Z' });
+    await db.insertAuditLog({
+      action: 'fee_history_query',
+      adminWallet: 'GADMIN1',
+      queryParams: {},
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
 
     const token = await getAdminToken();
-    const res = await request(app)
-      .get('/api/admin/audit')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/audit').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);

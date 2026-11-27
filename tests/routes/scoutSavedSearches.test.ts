@@ -61,7 +61,12 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -89,15 +94,15 @@ import {
 } from '../../src/db';
 import { isFeatureEnabled } from '../../src/services/featureFlags';
 
-const mockInsertSavedSearch     = insertSavedSearch     as jest.Mock;
-const mockGetSavedSearches      = getSavedSearchesByScout as jest.Mock;
-const mockDeleteSavedSearch     = deleteSavedSearch     as jest.Mock;
-const mockGetSavedSearchById    = getSavedSearchById    as jest.Mock;
-const mockUpdateSavedSearch    = updateSavedSearch    as jest.Mock;
-const mockCountSavedSearches    = countSavedSearchesByScout as jest.Mock;
-const mockQueryPlayers         = queryPlayers         as jest.Mock;
-const mockCountPlayers         = countPlayers         as jest.Mock;
-const mockIsFeatureEnabled      = isFeatureEnabled      as jest.Mock;
+const mockInsertSavedSearch = insertSavedSearch as jest.Mock;
+const mockGetSavedSearches = getSavedSearchesByScout as jest.Mock;
+const mockDeleteSavedSearch = deleteSavedSearch as jest.Mock;
+const mockGetSavedSearchById = getSavedSearchById as jest.Mock;
+const mockUpdateSavedSearch = updateSavedSearch as jest.Mock;
+const mockCountSavedSearches = countSavedSearchesByScout as jest.Mock;
+const mockQueryPlayers = queryPlayers as jest.Mock;
+const mockCountPlayers = countPlayers as jest.Mock;
+const mockIsFeatureEnabled = isFeatureEnabled as jest.Mock;
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -354,8 +359,7 @@ describe('GET /api/scouts/:wallet/saved-searches', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/saved-searches`);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/saved-searches`);
 
     expect(res.status).toBe(401);
   });
@@ -411,7 +415,7 @@ describe('DELETE /api/scouts/:wallet/saved-searches/:id', () => {
     expect(mockDeleteSavedSearch).not.toHaveBeenCalled();
   });
 
-  it('cannot delete another scout\'s saved search even with a valid own token', async () => {
+  it("cannot delete another scout's saved search even with a valid own token", async () => {
     // SCOUT_B tries to delete search id=1 which belongs to SCOUT_A.
     // The route /:wallet path means SCOUT_B must use their own wallet in the URL.
     // The DB helper scopes the DELETE to scout_wallet, so even if SCOUT_B somehow
@@ -437,8 +441,7 @@ describe('DELETE /api/scouts/:wallet/saved-searches/:id', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .delete(`/api/scouts/${SCOUT_A}/saved-searches/1`);
+    const res = await request(app).delete(`/api/scouts/${SCOUT_A}/saved-searches/1`);
 
     expect(res.status).toBe(401);
   });
@@ -719,7 +722,7 @@ describe('GET /api/scouts/:wallet/saved-searches/:id/run', () => {
       expect.objectContaining({
         limit: 50,
         offset: 50,
-      })
+      }),
     );
   });
 

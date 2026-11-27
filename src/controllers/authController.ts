@@ -32,20 +32,31 @@ const VALID_ROLES = new Set(['player', 'scout', 'validator', 'admin']);
 
 const challengeSchema = z.object({
   account: z.string().refine(
-    (val) => { try { Keypair.fromPublicKey(val); return true; } catch { return false; } },
-    { message: 'Invalid Stellar public key' }
+    (val) => {
+      try {
+        Keypair.fromPublicKey(val);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Invalid Stellar public key' },
   ),
   client_domain: z.string().min(1).max(253).optional(),
 });
 
-export const tokenSchema = z.object({
-  transaction: z.string().min(1),
-  role: z.enum(['player', 'scout', 'validator', 'admin']).optional(),
-}).strict();
+export const tokenSchema = z
+  .object({
+    transaction: z.string().min(1),
+    role: z.enum(['player', 'scout', 'validator', 'admin']).optional(),
+  })
+  .strict();
 
-export const refreshSchema = z.object({
-  refreshToken: z.string().min(1),
-}).strict();
+export const refreshSchema = z
+  .object({
+    refreshToken: z.string().min(1),
+  })
+  .strict();
 
 // ─── Role resolution ──────────────────────────────────────────────────────────
 
@@ -68,8 +79,7 @@ export async function resolveEffectiveRole(
 ): Promise<string> {
   // Admin check (synchronous, config-based — no DB required)
   const isAdmin =
-    (config.adminWallet && account === config.adminWallet) ||
-    config.adminWallets.includes(account);
+    (config.adminWallet && account === config.adminWallet) || config.adminWallets.includes(account);
   if (isAdmin) return 'admin';
 
   // Validator check (async, DB-backed)
@@ -103,11 +113,20 @@ export async function resolveEffectiveRole(
  * Includes a unique jti so the token can be individually revoked.
  * Always signed with the *current* JWT_SECRET (never the previous rotation key).
  */
-function issueAccessToken(account: string, role: string, clientDomain?: string): { token: string; expiresAt: number } {
+function issueAccessToken(
+  account: string,
+  role: string,
+  clientDomain?: string,
+): { token: string; expiresAt: number } {
   const ttl = config.jwtAccessTtlSeconds;
   const expiresAt = Math.floor(Date.now() / 1000) + ttl;
   const token = signJwt(
-    { sub: account, role, jti: crypto.randomUUID(), ...(clientDomain ? { client_domain: clientDomain } : {}) },
+    {
+      sub: account,
+      role,
+      jti: crypto.randomUUID(),
+      ...(clientDomain ? { client_domain: clientDomain } : {}),
+    },
     { expiresIn: ttl },
   );
   return { token, expiresAt };
@@ -120,10 +139,20 @@ function issueAccessToken(account: string, role: string, clientDomain?: string):
  * The jti is stored in the revocation blocklist on rotation / logout.
  * Always signed with the *current* JWT_SECRET.
  */
-function issueRefreshToken(account: string, role: string, clientDomain?: string): { token: string; jti: string } {
+function issueRefreshToken(
+  account: string,
+  role: string,
+  clientDomain?: string,
+): { token: string; jti: string } {
   const jti = crypto.randomUUID();
   const token = signJwt(
-    { sub: account, role, type: 'refresh', jti, ...(clientDomain ? { client_domain: clientDomain } : {}) },
+    {
+      sub: account,
+      role,
+      type: 'refresh',
+      jti,
+      ...(clientDomain ? { client_domain: clientDomain } : {}),
+    },
     { expiresIn: config.jwtRefreshTtlSeconds },
   );
   return { token, jti };
@@ -141,7 +170,11 @@ export async function getChallenge(req: Request, res: Response, next: NextFuncti
       attemptedAccount: (req.query.account as string) ?? null,
       reason: parsed.error.issues[0]?.message,
     });
-    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request', code: ErrorCode.VALIDATION_ERROR });
+    res.status(400).json({
+      success: false,
+      error: parsed.error.issues[0]?.message ?? 'Invalid request',
+      code: ErrorCode.VALIDATION_ERROR,
+    });
     return;
   }
   let clientDomain: { domain: string; signingKey: string } | undefined;
@@ -161,7 +194,11 @@ export async function getChallenge(req: Request, res: Response, next: NextFuncti
         sep10ErrorCode: err.code,
         reason: err.message,
       });
-      res.status(mapping.httpStatus).json({ success: false, error: mapping.clientMessage, code: mapping.errorCode as ErrorCode });
+      res.status(mapping.httpStatus).json({
+        success: false,
+        error: mapping.clientMessage,
+        code: mapping.errorCode as ErrorCode,
+      });
       return;
     }
     next(err);
@@ -180,7 +217,7 @@ export async function getChallenge(req: Request, res: Response, next: NextFuncti
 
 /** POST /auth/token  { transaction: "<signed XDR>", role?: "validator" } */
 export async function postToken(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
+  try {
     const parsed = tokenSchema.safeParse(req.body);
     if (!parsed.success) {
       logger.warn('[auth] failed_token_request invalid_body', {
@@ -188,7 +225,11 @@ try {
         origin: extractClientIp(req),
         reason: parsed.error.issues[0]?.message,
       });
-      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request', code: ErrorCode.VALIDATION_ERROR });
+      res.status(400).json({
+        success: false,
+        error: parsed.error.issues[0]?.message ?? 'Invalid request',
+        code: ErrorCode.VALIDATION_ERROR,
+      });
       return;
     }
     const { transaction, role } = parsed.data;
@@ -205,8 +246,16 @@ try {
 
     // Step 3: issue access token + refresh token pair.
     const now = Math.floor(Date.now() / 1000);
-    const { token: accessToken, expiresAt } = issueAccessToken(account, effectiveRole, clientDomain);
-    const { token: refreshToken, jti: refreshJti } = issueRefreshToken(account, effectiveRole, clientDomain);
+    const { token: accessToken, expiresAt } = issueAccessToken(
+      account,
+      effectiveRole,
+      clientDomain,
+    );
+    const { token: refreshToken, jti: refreshJti } = issueRefreshToken(
+      account,
+      effectiveRole,
+      clientDomain,
+    );
 
     // Persist the refresh-token session so an admin can enumerate/revoke it later.
     void trackTokenSession({
@@ -243,7 +292,11 @@ try {
     if (err instanceof Sep10Error) {
       const mapping = getErrorMapping(err.code);
       let attemptedWallet: string | null = null;
-      try { attemptedWallet = extractAccount((req.body as { transaction?: string }).transaction ?? ''); } catch { /* not extractable */ }
+      try {
+        attemptedWallet = extractAccount((req.body as { transaction?: string }).transaction ?? '');
+      } catch {
+        /* not extractable */
+      }
       logger.warn('[auth] failed_token_exchange', {
         correlationId: req.correlationId,
         origin: extractClientIp(req),
@@ -282,7 +335,7 @@ try {
  * issues a new access + refresh token pair, and revokes the old refresh jti.
  */
 export async function postRefresh(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
+  try {
     const parsed = refreshSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
@@ -300,11 +353,14 @@ try {
     try {
       payload = verifyJwt(refreshToken);
     } catch (err) {
-      logger.warn('[auth] refresh_token_invalid', { reason: err instanceof Error ? err.message : String(err) });
+      logger.warn('[auth] refresh_token_invalid', {
+        reason: err instanceof Error ? err.message : String(err),
+      });
       res.status(401).json({
         success: false,
         error: 'Invalid or expired refresh token',
-        code: err instanceof jwt.TokenExpiredError ? ErrorCode.TOKEN_EXPIRED : ErrorCode.TOKEN_INVALID,
+        code:
+          err instanceof jwt.TokenExpiredError ? ErrorCode.TOKEN_EXPIRED : ErrorCode.TOKEN_INVALID,
       });
       return;
     }
@@ -322,7 +378,8 @@ try {
     const jti = payload.jti;
     const account = payload.sub;
     const role = payload.role as string | undefined;
-    const clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
+    const clientDomain =
+      typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
 
     // Every refresh token we issue carries a known role; one without it is
     // malformed and must not be silently upgraded to a fresh session.
@@ -352,7 +409,8 @@ try {
     }
 
     // Rotate: revoke old refresh token jti immediately and mark it superseded.
-    const expiresAtSeconds = payload.exp ?? Math.floor(Date.now() / 1000) + config.jwtRefreshTtlSeconds;
+    const expiresAtSeconds =
+      payload.exp ?? Math.floor(Date.now() / 1000) + config.jwtRefreshTtlSeconds;
     await revokeToken(jti, expiresAtSeconds);
     await markSuperseded(jti);
 
@@ -385,8 +443,16 @@ try {
 
     // Issue new pair with the re-derived (potentially downgraded) role.
     const now = Math.floor(Date.now() / 1000);
-    const { token: newAccessToken, expiresAt } = issueAccessToken(account, effectiveRole, clientDomain);
-    const { token: newRefreshToken, jti: newRefreshJti } = issueRefreshToken(account, effectiveRole, clientDomain);
+    const { token: newAccessToken, expiresAt } = issueAccessToken(
+      account,
+      effectiveRole,
+      clientDomain,
+    );
+    const { token: newRefreshToken, jti: newRefreshJti } = issueRefreshToken(
+      account,
+      effectiveRole,
+      clientDomain,
+    );
 
     // Persist the rotated refresh-token session.
     void trackTokenSession({
@@ -411,9 +477,12 @@ try {
 
 // ─── POST /auth/logout ─────────────────────────────────────────────────────────
 
-export const logoutSchema = z.object({
-  refreshToken: z.string().min(1).optional(),
-}).strict().default({});
+export const logoutSchema = z
+  .object({
+    refreshToken: z.string().min(1).optional(),
+  })
+  .strict()
+  .default({});
 
 /**
  * POST /auth/logout
@@ -422,7 +491,7 @@ export const logoutSchema = z.object({
  * if a refreshToken body param is provided, its jti too.
  */
 export async function postLogout(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
+  try {
     // The access token is already verified by requireAuth middleware.
     // We need to revoke its jti.
     const header = req.headers.authorization ?? '';

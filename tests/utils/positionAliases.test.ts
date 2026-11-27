@@ -43,12 +43,9 @@ describe('positionAliases', () => {
       }
     });
 
-    test.each(entries)(
-      'normalizePosition("%s") === "%s"',
-      (alias, canonical) => {
-        expect(normalizePosition(alias)).toBe(canonical);
-      },
-    );
+    test.each(entries)('normalizePosition("%s") === "%s"', (alias, canonical) => {
+      expect(normalizePosition(alias)).toBe(canonical);
+    });
 
     test.each(entries)(
       'normalizePosition("%s" uppercased) still resolves to "%s" (case-insensitive)',
@@ -69,7 +66,15 @@ describe('positionAliases', () => {
 
   describe('alias groups', () => {
     it('goalkeeper group', () => {
-      for (const alias of ['gk', 'GK', 'goalkeeper', 'goalie', 'keeper', 'goal keeper', 'Goal-Keeper']) {
+      for (const alias of [
+        'gk',
+        'GK',
+        'goalkeeper',
+        'goalie',
+        'keeper',
+        'goal keeper',
+        'Goal-Keeper',
+      ]) {
         expect(normalizePosition(alias)).toBe('goalkeeper');
       }
     });

@@ -15,11 +15,7 @@
 
 import express, { Request, Response } from 'express';
 import request from 'supertest';
-import {
-  FakeRedisStore,
-  FakeRedisClient,
-  withTimeout,
-} from '../helpers/redisFailureHarness';
+import { FakeRedisStore, FakeRedisClient, withTimeout } from '../helpers/redisFailureHarness';
 import { RedisCacheStore } from '../../src/services/redisCacheStore';
 import { RedisRateLimitStore } from '../../src/middleware/redisRateLimitStore';
 import { rateLimit } from '../../src/middleware/rateLimit';
@@ -131,10 +127,7 @@ describe('HTTP cache flow — Redis failure', () => {
 
     fakeStore.setState('unavailable');
 
-    const result = await withTimeout(
-      request(app).get('/data'),
-      HTTP_BOUND_MS
-    );
+    const result = await withTimeout(request(app).get('/data'), HTTP_BOUND_MS);
 
     expect(result.timedOut).toBe(false);
     if (!result.timedOut) {
@@ -207,7 +200,7 @@ describe('HTTP rate-limit flow — Redis failure (fail-open)', () => {
 
     const result = await withTimeout(
       request(app).get('/api').set('X-Forwarded-For', '10.0.0.1'),
-      HTTP_BOUND_MS
+      HTTP_BOUND_MS,
     );
 
     expect(result.timedOut).toBe(false);
@@ -254,9 +247,7 @@ describe('HTTP — both cache and rate-limit Redis unavailable', () => {
 
     const fakeRateLimitClient = new FakeRedisClient();
     fakeRateLimitClient.setState('unavailable');
-    const rateLimitStore = new RedisRateLimitStore(
-      fakeRateLimitClient as unknown as Redis
-    );
+    const rateLimitStore = new RedisRateLimitStore(fakeRateLimitClient as unknown as Redis);
 
     const app = express();
     app.use(rateLimit({ windowMs: 60_000, max: 10, store: rateLimitStore }));

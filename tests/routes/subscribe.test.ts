@@ -26,7 +26,10 @@ jest.mock('../../src/services/stellar', () => ({
   submitContactPayment: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) {
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
       super(message);
     }
   },
@@ -139,9 +142,7 @@ describe('POST /api/scouts/:wallet/subscribe', () => {
   });
 
   it('returns 401 when no token is provided', async () => {
-    const res = await request(app)
-      .post(`/api/scouts/${WALLET}/subscribe`)
-      .send(VALID_BODY);
+    const res = await request(app).post(`/api/scouts/${WALLET}/subscribe`).send(VALID_BODY);
     expect(res.status).toBe(401);
   });
 

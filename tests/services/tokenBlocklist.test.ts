@@ -25,23 +25,18 @@ process.env.DB_DRIVER = 'sqlite';
 // ─── Module imports ───────────────────────────────────────────────────────────
 
 import { getDriver } from '../../src/db';
-import {
-  revokeToken,
-  isTokenRevoked,
-  pruneExpiredTokens,
-} from '../../src/services/tokenBlocklist';
+import { revokeToken, isTokenRevoked, pruneExpiredTokens } from '../../src/services/tokenBlocklist';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const FUTURE_EXP = Math.floor(Date.now() / 1000) + 3600; // 1 h from now
-const PAST_EXP   = Math.floor(Date.now() / 1000) - 1;    // already expired
+const PAST_EXP = Math.floor(Date.now() / 1000) - 1; // already expired
 
 async function jtiExists(jti: string): Promise<boolean> {
   const driver = getDriver();
-  const row = await driver.get<{ jti: string }>(
-    'SELECT jti FROM revoked_tokens WHERE jti = ?',
-    [jti],
-  );
+  const row = await driver.get<{ jti: string }>('SELECT jti FROM revoked_tokens WHERE jti = ?', [
+    jti,
+  ]);
   return row !== undefined;
 }
 
@@ -105,10 +100,11 @@ describe('tokenBlocklist — DB-only (no Redis)', () => {
   it('pruneExpiredTokens removes rows with expired timestamps', async () => {
     const driver = getDriver();
     const jti = 'unit-test-jti-prune';
-    await driver.run(
-      'INSERT INTO revoked_tokens (jti, revoked_at, expires_at) VALUES (?, ?, ?)',
-      [jti, Math.floor(Date.now() / 1000), PAST_EXP],
-    );
+    await driver.run('INSERT INTO revoked_tokens (jti, revoked_at, expires_at) VALUES (?, ?, ?)', [
+      jti,
+      Math.floor(Date.now() / 1000),
+      PAST_EXP,
+    ]);
 
     expect(await jtiExists(jti)).toBe(true);
     await pruneExpiredTokens();
@@ -146,7 +142,9 @@ describe('tokenBlocklist — Redis-down failover', () => {
   beforeEach(async () => {
     try {
       await getDriver().run('DELETE FROM revoked_tokens', []);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   });
 
   /**
@@ -218,10 +216,9 @@ describe('tokenBlocklist — Redis-down failover', () => {
     await expect(freshTokenBlocklist.revokeToken(jti, FUTURE_EXP)).resolves.toBeUndefined();
 
     // DB row must exist — read back through the same fresh instance that wrote it
-    const row = await freshDb.getDriver().get<{ jti: string }>(
-      'SELECT jti FROM revoked_tokens WHERE jti = ?',
-      [jti],
-    );
+    const row = await freshDb
+      .getDriver()
+      .get<{ jti: string }>('SELECT jti FROM revoked_tokens WHERE jti = ?', [jti]);
     expect(row).not.toBeUndefined();
 
     unloadRedisDown();
@@ -230,7 +227,10 @@ describe('tokenBlocklist — Redis-down failover', () => {
 
 describe('tokenBlocklist — pipelined startup warm-up (#1592)', () => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { warmRevocationsIntoRedis, WARMUP_PIPELINE_CHUNK } = require('../../src/services/tokenBlocklist');
+  const {
+    warmRevocationsIntoRedis,
+    WARMUP_PIPELINE_CHUNK,
+  } = require('../../src/services/tokenBlocklist');
 
   function makePipelineClient(store: Map<string, number>) {
     let execCalls = 0;

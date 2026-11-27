@@ -52,7 +52,10 @@ jest.mock('../../src/services/stellar', () => ({
   submitContactPayment: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) {
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
       super(message);
     }
   },
@@ -142,13 +145,19 @@ describe.each(ROUTES)('%s route — POST /api/scouts/:wallet/%s', (_label, segme
 
   it('returns 403 when token role is not scout', async () => {
     const token = makeToken(WALLET, 'player');
-    const res = await request(app).post(URL).set('Authorization', `Bearer ${token}`).send(VALID_BODY);
+    const res = await request(app)
+      .post(URL)
+      .set('Authorization', `Bearer ${token}`)
+      .send(VALID_BODY);
     expect(res.status).toBe(403);
   });
 
   it('returns 403 when JWT wallet does not match path wallet', async () => {
     const token = makeToken(OTHER);
-    const res = await request(app).post(URL).set('Authorization', `Bearer ${token}`).send(VALID_BODY);
+    const res = await request(app)
+      .post(URL)
+      .set('Authorization', `Bearer ${token}`)
+      .send(VALID_BODY);
     expect(res.status).toBe(403);
     expect(res.body.success).toBe(false);
     expect(res.body.error).toMatch(/wallet/i);
@@ -157,7 +166,10 @@ describe.each(ROUTES)('%s route — POST /api/scouts/:wallet/%s', (_label, segme
 
   it('returns 404 when player is not found', async () => {
     const token = makeToken(WALLET);
-    const res = await request(app).post(URL).set('Authorization', `Bearer ${token}`).send(VALID_BODY);
+    const res = await request(app)
+      .post(URL)
+      .set('Authorization', `Bearer ${token}`)
+      .send(VALID_BODY);
     expect(res.status).toBe(404);
     expect(res.body.success).toBe(false);
     expect(res.body.error).toMatch(/player not found/i);
@@ -167,7 +179,10 @@ describe.each(ROUTES)('%s route — POST /api/scouts/:wallet/%s', (_label, segme
   it('returns 402 when scout lacks access (no subscription or unlock)', async () => {
     registerPlayer();
     const token = makeToken(WALLET);
-    const res = await request(app).post(URL).set('Authorization', `Bearer ${token}`).send(VALID_BODY);
+    const res = await request(app)
+      .post(URL)
+      .set('Authorization', `Bearer ${token}`)
+      .send(VALID_BODY);
     expect(res.status).toBe(402);
     expect(res.body.success).toBe(false);
     expect(res.body.error).toMatch(/subscribed|contact fee/i);
@@ -215,7 +230,10 @@ describe.each(ROUTES)('%s route — POST /api/scouts/:wallet/%s', (_label, segme
     });
 
     const token = makeToken(WALLET);
-    const res = await request(app).post(URL).set('Authorization', `Bearer ${token}`).send(VALID_BODY);
+    const res = await request(app)
+      .post(URL)
+      .set('Authorization', `Bearer ${token}`)
+      .send(VALID_BODY);
 
     // Response
     expect(res.status).toBe(201);
@@ -260,7 +278,9 @@ describe.each(ROUTES)('%s route — POST /api/scouts/:wallet/%s', (_label, segme
 
     // SSE broadcasts
     const broadcastTypes = broadcastSpy.mock.calls.map(([evt]) => evt.type);
-    expect(broadcastTypes).toEqual(expect.arrayContaining(['trial_offer_logged', 'milestone_approved']));
+    expect(broadcastTypes).toEqual(
+      expect.arrayContaining(['trial_offer_logged', 'milestone_approved']),
+    );
     expect(broadcastSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'trial_offer_logged',
@@ -276,7 +296,10 @@ describe.each(ROUTES)('%s route — POST /api/scouts/:wallet/%s', (_label, segme
 
   it('performs the complete submission flow when the scout has an active subscription', async () => {
     registerPlayer();
-    mockIsSubscribed.mockResolvedValue({ active: true, expiresAt: Math.floor(Date.now() / 1000) + 86400 });
+    mockIsSubscribed.mockResolvedValue({
+      active: true,
+      expiresAt: Math.floor(Date.now() / 1000) + 86400,
+    });
     mockLogTrialOffer.mockResolvedValue({
       transactionId: 'tx-offer-2',
       playerId: PLAYER_ID,
@@ -285,7 +308,10 @@ describe.each(ROUTES)('%s route — POST /api/scouts/:wallet/%s', (_label, segme
     });
 
     const token = makeToken(WALLET);
-    const res = await request(app).post(URL).set('Authorization', `Bearer ${token}`).send(VALID_BODY);
+    const res = await request(app)
+      .post(URL)
+      .set('Authorization', `Bearer ${token}`)
+      .send(VALID_BODY);
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -298,9 +324,7 @@ describe.each(ROUTES)('%s route — POST /api/scouts/:wallet/%s', (_label, segme
 
 describe('deprecated trial-offer alias response headers', () => {
   it('includes the RFC 9745 Deprecation header on error responses', async () => {
-    const res = await request(app)
-      .post(`/api/scouts/${WALLET}/trial-offer`)
-      .send(VALID_BODY);
+    const res = await request(app).post(`/api/scouts/${WALLET}/trial-offer`).send(VALID_BODY);
 
     expect(res.status).toBe(401);
     expect(res.headers.deprecation).toBe('@1787011200');
@@ -339,7 +363,11 @@ describe('trial-offer submission routes are equivalent', () => {
       body,
       onChain: mockLogTrialOffer.mock.calls,
       offerEvent: mockInsertOfferEvent.mock.calls.map((c) => c.slice(0, 4)),
-      offerRow: mockInsertOfferRow.mock.calls.map(([row]) => ({ ...row, offer_id: undefined, created_at: undefined })),
+      offerRow: mockInsertOfferRow.mock.calls.map(([row]) => ({
+        ...row,
+        offer_id: undefined,
+        created_at: undefined,
+      })),
       tierPromotion: mockUpdateProgress.mock.calls,
       broadcastTypes: broadcastSpy.mock.calls.map(([evt]) => evt.type),
     };

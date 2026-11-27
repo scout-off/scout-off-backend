@@ -22,7 +22,9 @@ import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk';
 const mockGetEvents = jest.fn();
 
 // Stub out the parts that admin.test.ts doesn't need to hit the real DB
-jest.mock('../../src/services/audit', () => ({ logAuditEvent: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../../src/services/audit', () => ({
+  logAuditEvent: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../../src/services/stellar', () => ({
   ...jest.requireActual('../../src/services/stellar'),
   server: {
@@ -199,7 +201,11 @@ describe('POST /api/admin/reindex — triggers background job', () => {
 
   it('returns 409 when a job is already running', async () => {
     // Keep the first job perpetually "in progress" by never resolving the mock.
-    mockGetEvents.mockReturnValue(new Promise(() => { /* intentionally pending */ }));
+    mockGetEvents.mockReturnValue(
+      new Promise(() => {
+        /* intentionally pending */
+      }),
+    );
 
     await request(app)
       .post('/api/admin/reindex')
@@ -239,7 +245,11 @@ describe('GET /api/admin/reindex/status', () => {
   });
 
   it('returns running status while a job is in progress', async () => {
-    mockGetEvents.mockReturnValue(new Promise(() => { /* intentionally pending */ }));
+    mockGetEvents.mockReturnValue(
+      new Promise(() => {
+        /* intentionally pending */
+      }),
+    );
 
     await request(app)
       .post('/api/admin/reindex')
@@ -387,7 +397,11 @@ describe('POST /api/admin/reindex/cancel — cancel-mid-run', () => {
 
   it('returns 200 and transitions to cancelled when a job is running', async () => {
     // Keep the job alive by never resolving the first batch.
-    mockGetEvents.mockReturnValue(new Promise(() => { /* intentionally pending */ }));
+    mockGetEvents.mockReturnValue(
+      new Promise(() => {
+        /* intentionally pending */
+      }),
+    );
 
     // Start a reindex job
     const startRes = await request(app)
@@ -407,7 +421,11 @@ describe('POST /api/admin/reindex/cancel — cancel-mid-run', () => {
   });
 
   it('second cancel on an already-cancelling job returns 409', async () => {
-    mockGetEvents.mockReturnValue(new Promise(() => { /* pending */ }));
+    mockGetEvents.mockReturnValue(
+      new Promise(() => {
+        /* pending */
+      }),
+    );
 
     await request(app)
       .post('/api/admin/reindex')
@@ -438,7 +456,9 @@ describe('POST /api/admin/reindex/cancel — state transition', () => {
     // This test uses a fast-resolving mock so the batch loop runs at least once
     // before we cancel; the cancel flag makes it stop after the first batch.
     let resolveFirstBatch!: () => void;
-    const firstBatchDone = new Promise<void>((r) => { resolveFirstBatch = r; });
+    const firstBatchDone = new Promise<void>((r) => {
+      resolveFirstBatch = r;
+    });
 
     mockGetEvents
       .mockImplementationOnce(async () => {
@@ -446,7 +466,11 @@ describe('POST /api/admin/reindex/cancel — state transition', () => {
         resolveFirstBatch();
         return { latestLedger: 9_999_999, events: [] };
       })
-      .mockReturnValue(new Promise(() => { /* second batch never resolves */ }));
+      .mockReturnValue(
+        new Promise(() => {
+          /* second batch never resolves */
+        }),
+      );
 
     // Start job over a large range so it won't finish before we cancel
     await request(app)

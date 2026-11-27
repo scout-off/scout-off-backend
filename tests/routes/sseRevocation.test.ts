@@ -20,7 +20,11 @@ import jwt from 'jsonwebtoken';
 import app from '../../src/app';
 import { EventBroadcaster, broadcaster } from '../../src/services/eventBroadcaster';
 import { revokeToken } from '../../src/services/tokenBlocklist';
-import { blocklistWallet, unblocklistWallet, _resetWalletBlocklistForTests } from '../../src/services/walletBlocklist';
+import {
+  blocklistWallet,
+  unblocklistWallet,
+  _resetWalletBlocklistForTests,
+} from '../../src/services/walletBlocklist';
 
 // The stream resolves the connecting wallet's player (cuid2) and matches
 // player-scoped events on payload.player_id. These tests broadcast payloads
@@ -36,11 +40,7 @@ const WALLET_A = 'GAWALLETAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const WALLET_B = 'GAWALLETBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 
 function makeToken(wallet: string, role = 'scout', jti?: string): string {
-  return jwt.sign(
-    { sub: wallet, role, ...(jti ? { jti } : {}) },
-    SECRET,
-    { expiresIn: '1h' },
-  );
+  return jwt.sign({ sub: wallet, role, ...(jti ? { jti } : {}) }, SECRET, { expiresIn: '1h' });
 }
 
 // ─── SSE HTTP helper (same as sseStream.test.ts) ─────────────────────────────
@@ -75,10 +75,16 @@ function openSseConnection(
     const req = http.request(options, (res) => {
       const conn: SseConnection = {
         chunks,
-        destroy: () => { req.destroy(); res.destroy(); },
+        destroy: () => {
+          req.destroy();
+          res.destroy();
+        },
         waitForChunks(count, timeoutMs = 1000) {
           return new Promise<void>((res2, rej2) => {
-            const deadline = setTimeout(() => rej2(new Error(`Timeout waiting for ${count} chunk(s)`)), timeoutMs);
+            const deadline = setTimeout(
+              () => rej2(new Error(`Timeout waiting for ${count} chunk(s)`)),
+              timeoutMs,
+            );
             const check = () => {
               if (chunks.length >= count) {
                 clearTimeout(deadline);
@@ -87,9 +93,9 @@ function openSseConnection(
             };
             check();
             const interval = setInterval(check, 20);
-            Promise.race([
-              new Promise<void>((r) => setTimeout(r, timeoutMs)),
-            ]).finally(() => clearInterval(interval));
+            Promise.race([new Promise<void>((r) => setTimeout(r, timeoutMs))]).finally(() =>
+              clearInterval(interval),
+            );
           });
         },
       };
@@ -134,10 +140,7 @@ afterEach(async () => {
 });
 
 /** Wait until the connection's collected frames contain `session_ended`. */
-async function waitForSessionEnded(
-  conn: SseConnection,
-  timeoutMs = 1500,
-): Promise<void> {
+async function waitForSessionEnded(conn: SseConnection, timeoutMs = 1500): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (conn.chunks.join('').includes('event: session_ended')) return;
@@ -238,11 +241,7 @@ describe('SSE — token revocation terminates the stream', () => {
 
 describe('SSE — wallet blocklisting terminates the stream', () => {
   it('terminates an established stream when the wallet is blocklisted', async () => {
-    const { conn } = await openSseConnection(
-      server,
-      '/api/events/stream',
-      makeToken(WALLET_A),
-    );
+    const { conn } = await openSseConnection(server, '/api/events/stream', makeToken(WALLET_A));
     await conn.waitForChunks(1, 1000).catch(() => {});
 
     // Wallet-scoped event delivered before the block.

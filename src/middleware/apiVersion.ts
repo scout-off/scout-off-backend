@@ -46,11 +46,7 @@ function resolveServedVersion(req: Request): number {
   return 1;
 }
 
-export function apiVersion(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
+export function apiVersion(req: Request, res: Response, next: NextFunction): void {
   const version = String(resolveServedVersion(req));
   // Canonical header — clients should read this one.
   res.setHeader('API-Version', version);

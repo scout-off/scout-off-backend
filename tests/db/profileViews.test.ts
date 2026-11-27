@@ -21,9 +21,18 @@ const SCOUT_B = 'GBBB-scout-b';
 const DAY_MS = 86_400_000;
 
 async function clear(): Promise<void> {
-  await getDriver().run('DELETE FROM profile_views WHERE player_id IN (?, ?)', [PLAYER, OTHER_PLAYER]);
-  await getDriver().run('DELETE FROM profile_view_daily WHERE player_id IN (?, ?)', [PLAYER, OTHER_PLAYER]);
-  await getDriver().run('DELETE FROM contact_unlocks WHERE player_id IN (?, ?)', [PLAYER, OTHER_PLAYER]);
+  await getDriver().run('DELETE FROM profile_views WHERE player_id IN (?, ?)', [
+    PLAYER,
+    OTHER_PLAYER,
+  ]);
+  await getDriver().run('DELETE FROM profile_view_daily WHERE player_id IN (?, ?)', [
+    PLAYER,
+    OTHER_PLAYER,
+  ]);
+  await getDriver().run('DELETE FROM contact_unlocks WHERE player_id IN (?, ?)', [
+    PLAYER,
+    OTHER_PLAYER,
+  ]);
 }
 
 describe('profileViews repository', () => {
@@ -32,7 +41,12 @@ describe('profileViews repository', () => {
 
   describe('recordProfileView', () => {
     it('inserts a row readable through getLastProfileView', async () => {
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: 1_000, created_at: 1_000 });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: 1_000,
+        created_at: 1_000,
+      });
       await expect(getLastProfileView(SCOUT_A, PLAYER)).resolves.toBe(1_000);
     });
 
@@ -41,9 +55,24 @@ describe('profileViews repository', () => {
     });
 
     it('scopes the last view to the given scout and player', async () => {
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: 1_000, created_at: 1_000 });
-      await recordProfileView({ scout_wallet: SCOUT_B, player_id: PLAYER, viewed_at: 2_000, created_at: 2_000 });
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: OTHER_PLAYER, viewed_at: 3_000, created_at: 3_000 });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: 1_000,
+        created_at: 1_000,
+      });
+      await recordProfileView({
+        scout_wallet: SCOUT_B,
+        player_id: PLAYER,
+        viewed_at: 2_000,
+        created_at: 2_000,
+      });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: OTHER_PLAYER,
+        viewed_at: 3_000,
+        created_at: 3_000,
+      });
 
       await expect(getLastProfileView(SCOUT_A, PLAYER)).resolves.toBe(1_000);
       await expect(getLastProfileView(SCOUT_B, PLAYER)).resolves.toBe(2_000);
@@ -54,18 +83,38 @@ describe('profileViews repository', () => {
   describe('de-duplication window', () => {
     it('reports the newest view so callers can apply the 5-minute window', async () => {
       const base = 10_000_000;
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: base, created_at: base });
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: base + 60_000, created_at: base + 60_000 });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: base,
+        created_at: base,
+      });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: base + 60_000,
+        created_at: base + 60_000,
+      });
 
       const last = await getLastProfileView(SCOUT_A, PLAYER);
       expect(last).toBe(base + 60_000);
       // A view inside the window is suppressed by the caller.
-      expect((base + 60_000) - (last as number) < 5 * 60_000).toBe(true);
+      expect(base + 60_000 - (last as number) < 5 * 60_000).toBe(true);
     });
 
     it('does not aggregate duplicate rows on insert (raw rows are preserved)', async () => {
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: 1_000, created_at: 1_000 });
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: 1_000, created_at: 1_000 });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: 1_000,
+        created_at: 1_000,
+      });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: 1_000,
+        created_at: 1_000,
+      });
       await expect(getProfileViewCount(PLAYER)).resolves.toBe(2);
     });
   });
@@ -76,23 +125,43 @@ describe('profileViews repository', () => {
     });
 
     it('counts raw rows for the player only', async () => {
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: 1_000, created_at: 1_000 });
-      await recordProfileView({ scout_wallet: SCOUT_B, player_id: PLAYER, viewed_at: 2_000, created_at: 2_000 });
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: OTHER_PLAYER, viewed_at: 3_000, created_at: 3_000 });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: 1_000,
+        created_at: 1_000,
+      });
+      await recordProfileView({
+        scout_wallet: SCOUT_B,
+        player_id: PLAYER,
+        viewed_at: 2_000,
+        created_at: 2_000,
+      });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: OTHER_PLAYER,
+        viewed_at: 3_000,
+        created_at: 3_000,
+      });
 
       await expect(getProfileViewCount(PLAYER)).resolves.toBe(2);
       await expect(getProfileViewCount(OTHER_PLAYER)).resolves.toBe(1);
     });
 
     it('adds the daily rollup view_count to the raw row count', async () => {
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: 1_000, created_at: 1_000 });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: 1_000,
+        created_at: 1_000,
+      });
       await getDriver().run(
         'INSERT INTO profile_view_daily (player_id, scout_wallet, day, view_count) VALUES (?, ?, ?, ?)',
-        [PLAYER, SCOUT_A, 1, 4]
+        [PLAYER, SCOUT_A, 1, 4],
       );
       await getDriver().run(
         'INSERT INTO profile_view_daily (player_id, scout_wallet, day, view_count) VALUES (?, ?, ?, ?)',
-        [PLAYER, SCOUT_B, 2, 3]
+        [PLAYER, SCOUT_B, 2, 3],
       );
 
       await expect(getProfileViewCount(PLAYER)).resolves.toBe(8);
@@ -101,7 +170,7 @@ describe('profileViews repository', () => {
     it('returns a number (not a driver-specific string) for large counts', async () => {
       await getDriver().run(
         'INSERT INTO profile_view_daily (player_id, scout_wallet, day, view_count) VALUES (?, ?, ?, ?)',
-        [PLAYER, SCOUT_A, 1, 1_000_000]
+        [PLAYER, SCOUT_A, 1, 1_000_000],
       );
       const count = await getProfileViewCount(PLAYER);
       expect(typeof count).toBe('number');
@@ -115,24 +184,44 @@ describe('profileViews repository', () => {
     });
 
     it('counts distinct scouts across raw rows and the daily rollup', async () => {
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: 1_000, created_at: 1_000 });
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: PLAYER, viewed_at: 2_000, created_at: 2_000 });
-      await recordProfileView({ scout_wallet: SCOUT_B, player_id: PLAYER, viewed_at: 3_000, created_at: 3_000 });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: 1_000,
+        created_at: 1_000,
+      });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: PLAYER,
+        viewed_at: 2_000,
+        created_at: 2_000,
+      });
+      await recordProfileView({
+        scout_wallet: SCOUT_B,
+        player_id: PLAYER,
+        viewed_at: 3_000,
+        created_at: 3_000,
+      });
       // SCOUT_A also appears in the rollup — must not be double counted.
       await getDriver().run(
         'INSERT INTO profile_view_daily (player_id, scout_wallet, day, view_count) VALUES (?, ?, ?, ?)',
-        [PLAYER, SCOUT_A, 1, 2]
+        [PLAYER, SCOUT_A, 1, 2],
       );
       await getDriver().run(
         'INSERT INTO profile_view_daily (player_id, scout_wallet, day, view_count) VALUES (?, ?, ?, ?)',
-        [PLAYER, 'GCCC-scout-c', 1, 1]
+        [PLAYER, 'GCCC-scout-c', 1, 1],
       );
 
       await expect(getUniqueViewerCount(PLAYER)).resolves.toBe(3);
     });
 
     it('ignores views belonging to other players', async () => {
-      await recordProfileView({ scout_wallet: SCOUT_A, player_id: OTHER_PLAYER, viewed_at: 1_000, created_at: 1_000 });
+      await recordProfileView({
+        scout_wallet: SCOUT_A,
+        player_id: OTHER_PLAYER,
+        viewed_at: 1_000,
+        created_at: 1_000,
+      });
       await expect(getUniqueViewerCount(PLAYER)).resolves.toBe(0);
     });
   });
@@ -151,13 +240,13 @@ describe('profileViews repository', () => {
         await getDriver().run(
           `INSERT INTO profile_view_daily (player_id, scout_wallet, day, view_count) VALUES (?, ?, ?, 1)
            ON CONFLICT (player_id, scout_wallet, day) DO UPDATE SET view_count = profile_view_daily.view_count + 1`,
-          [PLAYER, SCOUT_A, day]
+          [PLAYER, SCOUT_A, day],
         );
       }
 
       const rows = await getDriver().all<{ day: number | string; view_count: number | string }>(
         'SELECT day, view_count FROM profile_view_daily WHERE player_id = ? ORDER BY day ASC',
-        [PLAYER]
+        [PLAYER],
       );
       expect(rows).toHaveLength(2);
       expect(Number(rows[0].day)).toBe(day1);

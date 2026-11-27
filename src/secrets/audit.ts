@@ -8,8 +8,15 @@
  * prefix, redaction and correlation ID.
  */
 
-import { logger } from '../utils/logger';
 import { getCorrelationId } from '../utils/requestContext';
+
+// The logger is loaded lazily: it imports src/config.ts, which itself reads
+// secrets through this package. A static import would create the cycle
+// config -> secrets/provider -> audit -> logger -> config.
+function getLogger(): typeof import('../utils/logger').logger {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require('../utils/logger') as typeof import('../utils/logger')).logger;
+}
 
 export type SecretsAuditAction = 'get' | 'refresh' | 'watch' | 'apply';
 
@@ -34,5 +41,5 @@ export function auditSecretAccess(event: SecretsAuditEvent): void {
   if (event.detail !== undefined) payload.detail = event.detail;
   const correlationId = getCorrelationId();
   if (correlationId) payload.correlationId = correlationId;
-  logger.info(payload);
+  getLogger().info(payload);
 }

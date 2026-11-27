@@ -1,6 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { countEventsFiltered, getEventsPage, getEventsPageKeyset, encodeEventsCursor, decodeEventsCursor } from '../db';
+import {
+  countEventsFiltered,
+  getEventsPage,
+  getEventsPageKeyset,
+  encodeEventsCursor,
+  decodeEventsCursor,
+} from '../db';
 import type { ContractEventType } from '../types';
 import { ErrorCode } from '../utils/errorCodes';
 import { sendValidationError } from './adminControllerUtils';
@@ -11,14 +17,15 @@ const isoDateString = z
   .transform((v) => new Date(v));
 
 /** Exported so routes can apply validateQuery(adminDateRangeSchema) */
-export const adminDateRangeSchema = z.object({
-  startDate: isoDateString.optional(),
-  endDate: isoDateString.optional(),
-  eventType: z.string().optional(),
-}).refine(
-  (d) => !(d.startDate && d.endDate && d.startDate > d.endDate),
-  { message: 'startDate must not be after endDate' }
-);
+export const adminDateRangeSchema = z
+  .object({
+    startDate: isoDateString.optional(),
+    endDate: isoDateString.optional(),
+    eventType: z.string().optional(),
+  })
+  .refine((d) => !(d.startDate && d.endDate && d.startDate > d.endDate), {
+    message: 'startDate must not be after endDate',
+  });
 
 /**
  * Zod schema for all query parameters accepted by GET /api/admin/events.
@@ -89,14 +96,19 @@ const eventsQuerySchema = z
   );
 
 /** GET /api/admin/events */
-export async function getAllEvents(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function getAllEvents(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   const parsed = eventsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
   }
 
-  const { startDate, endDate, from, to, eventType, limit, offset, page, pageSize, cursor } = parsed.data;
+  const { startDate, endDate, from, to, eventType, limit, offset, page, pageSize, cursor } =
+    parsed.data;
 
   // Resolve date range — ?from/?to are aliases for ?startDate/?endDate
   const resolvedStart = startDate ?? from;
@@ -117,7 +129,9 @@ export async function getAllEvents(req: Request, res: Response, _next: NextFunct
   if (cursor !== undefined) {
     const afterCursor = decodeEventsCursor(cursor || undefined);
     if (cursor !== '' && afterCursor === null) {
-      res.status(400).json({ success: false, error: 'Invalid cursor value', code: ErrorCode.VALIDATION_ERROR });
+      res
+        .status(400)
+        .json({ success: false, error: 'Invalid cursor value', code: ErrorCode.VALIDATION_ERROR });
       return;
     }
     const resolvedLimit = limit ?? pageSize ?? 20;

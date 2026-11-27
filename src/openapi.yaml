@@ -29,8 +29,6 @@ tags:
     description: Server-Sent Events streams and event feeds
   - name: docs
     description: This documentation surface (self-describing)
-  - name: v2
-    description: v2
 components:
   securitySchemes:
     bearerAuth:
@@ -1058,9 +1056,13 @@ paths:
                   type: string
                   minLength: 1
                 score:
-                  type: integer
-                  minimum: 0
-                  maximum: 100
+                  oneOf:
+                    - type: number
+                      enum:
+                        - 0
+                    - type: number
+                      enum:
+                        - 100
               required:
                 - ip
                 - score
@@ -1239,7 +1241,7 @@ paths:
               additionalProperties: false
       responses:
         '202':
-          description: '{ success: true, data: { fromLedger, toLedger, status: ''running'' } }'
+          description: "{ success: true, data: { fromLedger, toLedger, status: 'running' } }"
         '409':
           description: '{ success: false, error: string } - job already running'
         '422':
@@ -1273,7 +1275,7 @@ paths:
               additionalProperties: false
       responses:
         '200':
-          description: '{ success: true, data: { status: ''cancel_requested'', message } }'
+          description: "{ success: true, data: { status: 'cancel_requested', message } }"
         '409':
           description: '{ success: false, error: string } - no job running'
       security:
@@ -1571,6 +1573,80 @@ paths:
         - bearerAuth: []
       x-required-role:
         - admin
+  /admin/wallets/{wallet}/sessions:
+    get:
+      tags:
+        - admin
+      summary: >-
+        Lists every active (not superseded, not revoked, not expired) refresh-token session for a
+        wallet: jti, issuedAt, expiresAt, userAgent/IP ...
+      operationId: listWalletSessions
+      description: |-
+        Lists every active (not superseded, not revoked, not expired)
+        refresh-token session for a wallet: jti, issuedAt, expiresAt,
+        userAgent/IP hash.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Stellar public key of the wallet
+      responses:
+        '200':
+          description: '{ success: true, data: { wallet, sessions: SessionView[], count } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid wallet address'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
+  /admin/wallets/{wallet}/sessions/revoke-all:
+    post:
+      tags:
+        - admin
+      summary: >-
+        Revokes every active refresh-token session for a wallet: blocks every active jti in the
+        token blocklist (Redis pipeline), sets the per-wa...
+      operationId: revokeAllWalletSessions
+      description: |-
+        Revokes every active refresh-token session for a wallet: blocks every
+        active jti in the token blocklist (Redis pipeline), sets the per-wallet
+        `tokens_valid_after` cutoff so access tokens issued before it are rejected
+        by requireAuth even before they expire, terminates the wallet's open SSE
+        streams, and audit-logs the action.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Stellar public key of the wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        '200':
+          description: '{ success: true, data: { wallet, revokedCount, tokensValidAfter, message } }'
+        '400':
+          description: '{ success: false, error: string } - Invalid wallet address'
+        '401':
+          description: '{ success: false, error: string } - Missing token'
+        '403':
+          description: '{ success: false, error: string } - Non-admin role'
+      security:
+        - bearerAuth: []
+      x-required-role:
+        - admin
   /admin/webhooks/dead-letters:
     get:
       tags:
@@ -1664,7 +1740,7 @@ paths:
               additionalProperties: false
       responses:
         '200':
-          description: '{ success: true, message, data: { id, status: ''replayed'' } }'
+          description: "{ success: true, message, data: { id, status: 'replayed' } }"
         '400':
           description: '{ success: false, error: string } - Invalid id'
         '404':
@@ -1740,7 +1816,7 @@ paths:
               additionalProperties: false
       responses:
         '200':
-          description: '{ success: true, data: { id, url, status: ''active'' } }'
+          description: "{ success: true, data: { id, url, status: 'active' } }"
         '404':
           description: '{ success: false, error: string } - Subscription not found'
         '502':
@@ -1778,7 +1854,7 @@ paths:
               additionalProperties: false
       responses:
         '200':
-          description: '{ success: true, message, data: { id, status: ''replayed'' } }'
+          description: "{ success: true, message, data: { id, status: 'replayed' } }"
         '400':
           description: '{ success: false, error: string } - Invalid id'
         '404':
@@ -1934,7 +2010,7 @@ paths:
         `player`) is used.
       requestBody:
         required: true
-        description: '{ transaction: string, role?: ''validator'' | ''player'' | ''scout'' } - Signed challenge XDR'
+        description: "{ transaction: string, role?: 'validator' | 'player' | 'scout' } - Signed challenge XDR"
         content:
           application/json:
             schema:
@@ -1972,26 +2048,28 @@ paths:
         '200':
           description: OpenAPI 3.0 document (application/json)
         '500':
-          description: '{ success: false, error: string } - Spec file missing or unparsable'
+          description: >-
+            { success: false, error: string, code: string, correlationId?: string } - Spec file
+            missing or unparsable
       security: []
   /docs/swagger-ui-bundle.js:
     get:
       tags:
         - docs
-      summary: Serves the Swagger UI JavaScript bundle from swagger-ui-dist for the /ui page.
-      operationId: getDocsSwagger-ui-bundle.js
-      description: Serves the Swagger UI JavaScript bundle from swagger-ui-dist for the /ui page.
+      summary: Serves the bundled Swagger UI script.
+      operationId: getDocsSwaggerUiBundleJs
+      description: Serves the bundled Swagger UI script.
       responses:
         '200':
-          description: Swagger UI JavaScript bundle (text/javascript)
+          description: Swagger UI script (application/javascript)
       security: []
   /docs/swagger-ui.css:
     get:
       tags:
         - docs
-      summary: Serves the Swagger UI stylesheet from swagger-ui-dist for the /ui page.
-      operationId: getDocsSwagger-ui.css
-      description: Serves the Swagger UI stylesheet from swagger-ui-dist for the /ui page.
+      summary: Serves the bundled Swagger UI stylesheet.
+      operationId: getDocsSwaggerUiCss
+      description: Serves the bundled Swagger UI stylesheet.
       responses:
         '200':
           description: Swagger UI stylesheet (text/css)
@@ -2000,88 +2078,33 @@ paths:
     get:
       tags:
         - docs
-      summary: Serves embedded Swagger UI.
+      summary: Serves the Swagger UI page for the OpenAPI specification.
       operationId: getDocsUi
-      description: |-
-        Serves embedded Swagger UI.
-        Requires `swagger-ui-dist` to be installed:
-          npm install swagger-ui-dist
+      description: Serves the Swagger UI page for the OpenAPI specification.
       responses:
         '200':
           description: Swagger UI HTML page (text/html)
-        '501':
-          description: '{ success: false, error: string } - swagger-ui-dist not installed'
       security: []
   /docs/yaml:
     get:
       tags:
         - docs
-      summary: Returns the raw OpenAPI YAML source.
+      summary: Returns the visible OpenAPI specification as YAML.
       operationId: getDocsYaml
-      description: Returns the raw OpenAPI YAML source.
+      description: Returns the visible OpenAPI specification as YAML.
       responses:
         '200':
-          description: Raw OpenAPI YAML (text/yaml)
+          description: OpenAPI 3.0 document (application/yaml)
         '500':
-          description: '{ success: false, error: string } - Spec file missing'
+          description: '{ success: false, error: string } - Spec file missing or unparsable'
       security: []
   /events/stream:
     get:
       tags:
         - events
-      summary: Server-Sent Events endpoint.
-      operationId: getEventsStream
-      description: |-
-        Server-Sent Events endpoint. Opens a long-lived HTTP connection and pushes
-        relevant contract events to the authenticated client as they are indexed.
-
-        Authentication: Bearer JWT (same as all other protected routes).
-
-        Query parameters (all optional, combinable):
-          - eventType  One or more event type names to subscribe to, comma-separated
-                       (e.g. "milestone_approved" or
-                       "milestone_approved,scout_subscribed"). When omitted the
-                       client receives all event types that pass the
-                       wallet-relevance filter. Unknown values are rejected with 400.
-          - playerId   Only deliver events whose payload contains this player identifier.
-                       When omitted no additional player-level filtering is applied.
-
-        Filtering: only events relevant to the authenticated wallet are sent (wallet
-        isolation is always enforced regardless of query params). Player events are
-        matched through the authenticated wallet's player record, since their payload
-        carries a player ID rather than a wallet address. Optional query params add
-        further narrowing on top.
-
-        SSE event types sent:
-          - milestone_approved  (player: their own milestone approvals)
-          - scout_subscribed    (scout: their own subscription changes)
-          - contact_unlocked    (scout: their own contact unlocks)
-          - trial_offer_logged  (scout/player: trial offers involving them)
-          - player_registered   (player: their own registration)
-          - milestone_submitted (player/validator)
-          - fees_withdrawn      (admin)
-
-        Live authorization enforcement (#1019):
-          - If the authenticated JWT is revoked (via POST /auth/logout or admin
-            token revocation) while the stream is open, the connection emits a
-            terminal `session_ended` event (reason "token_revoked") and closes;
-            no further protected events are delivered.
-          - If the wallet is blocklisted while the stream is open, the same
-            termination happens with reason "wallet_blocklisted".
-          - When the access JWT expires, the stream closes with reason "token_expired".
-          - Detection bound: immediate for revocations/blocklists processed in
-            this process; ≤ SSE_AUTH_SWEEP_INTERVAL_MS (default 30 s) for changes
-            persisted by another instance (one sweep query per process, never a
-            DB query per keep-alive tick).
-          - Blocklisted wallets cannot open a new connection (403).
-          - Concurrent streams are limited per wallet by
-            SSE_MAX_CONNECTIONS_PER_WALLET (default 5; 0 = unlimited).
-
-        Reconnection: initial `retry:` hint is sent on connect (configured via
-        SSE_RETRY_MS, default 5000 ms + up to 20% random jitter) to prevent reconnect storms.
-
-        Keep-alive: a `: ping` comment is sent every SSE_KEEPALIVE_INTERVAL_MS ms
-        (default 15 s) to prevent idle-connection timeouts.
+      summary: Server-Sent Events stream of wallet-relevant contract events (see streamHandler above).
+      operationId: streamHandler
+      description: Server-Sent Events stream of wallet-relevant contract events (see streamHandler above).
       responses:
         '200':
           description: text/event-stream — long-lived SSE connection
@@ -2092,13 +2115,15 @@ paths:
         '401':
           description: '{ success: false, error: string } — missing or invalid token'
         '403':
-          description: '{ success: false, error: string, code: ''WALLET_BLOCKLISTED'' } — wallet is blocklisted'
+          description: "{ success: false, error: string, code: 'WALLET_BLOCKLISTED' } — wallet is blocklisted"
+        '405':
+          description: '{ success: false, error: string } — unsupported method'
         '429':
           description: '{ success: false, error: string } — per-wallet connection limit reached'
         '503':
           description: >-
             { success: false, error: string, code: 'SSE_CAPACITY' } — global connection limit
-            reached (sets Retry-After)
+            reached
       security:
         - bearerAuth: []
   /players:
@@ -2735,9 +2760,9 @@ paths:
               additionalProperties: false
       responses:
         '200':
-          description: '{ success: true, data: { offerId, playerId, status: ''accepted'', respondedAt } }'
+          description: "{ success: true, data: { offerId, playerId, status: 'accepted', respondedAt } }"
         '403':
-          description: '{ success: false, error: string } - Not the offer''s target player'
+          description: "{ success: false, error: string } - Not the offer's target player"
         '404':
           description: '{ success: false, error: string } - Offer not found'
         '409':
@@ -2782,9 +2807,9 @@ paths:
               additionalProperties: false
       responses:
         '200':
-          description: '{ success: true, data: { offerId, playerId, status: ''rejected'', reason, respondedAt } }'
+          description: "{ success: true, data: { offerId, playerId, status: 'rejected', reason, respondedAt } }"
         '403':
-          description: '{ success: false, error: string } - Not the offer''s target player'
+          description: "{ success: false, error: string } - Not the offer's target player"
         '404':
           description: '{ success: false, error: string } - Offer not found'
         '409':
@@ -2911,7 +2936,9 @@ paths:
         '200':
           description: '{ success: true, data: { id, label, scopes } }'
         '400':
-          description: '{ success: false, error: string } - Invalid body, unknown scope, or a scope that would widen access'
+          description: >-
+            { success: false, error: string } - Invalid body, unknown scope, or a scope that would
+            widen access
         '404':
           description: '{ success: false, error: string } - API key not found'
       security:
@@ -3308,7 +3335,7 @@ paths:
           description: Optional — restrict to a single player
       responses:
         '200':
-          description: '{ success: true, data: Array<{ playerId, contact_status: ''unlocked'', unlockedAt }> }'
+          description: "{ success: true, data: Array<{ playerId, contact_status: 'unlocked', unlockedAt }> }"
         '401':
           description: '{ success: false, error: string } - Wallet mismatch or missing token'
       security:
@@ -3587,7 +3614,7 @@ paths:
           required: false
           schema:
             type: string
-          description: 'Optional filter: ''contact_unlock'' | ''subscription'''
+          description: "Optional filter: 'contact_unlock' | 'subscription'"
         - name: page
           in: query
           required: false
@@ -3605,7 +3632,7 @@ paths:
           required: false
           schema:
             type: string
-          description: '''json'' (default) | ''csv'''
+          description: "'json' (default) | 'csv'"
       responses:
         '200':
           description: >-
@@ -4357,7 +4384,7 @@ paths:
           description: Trial offer ID to cancel
       responses:
         '200':
-          description: '{ success: true, data: { offerId, status: ''cancelled'', cancelledAt } }'
+          description: "{ success: true, data: { offerId, status: 'cancelled', cancelledAt } }"
         '403':
           description: '{ success: false, error: string } - Wallet mismatch or offer belongs to another scout'
         '404':
@@ -4597,6 +4624,63 @@ paths:
         - scout
       x-api-key-scope: write:webhooks
       x-owner-only: true
+  /scouts/{wallet}/webhooks/{id}/deliveries:
+    get:
+      tags:
+        - scouts
+      summary: Paginated delivery history for a scout's own webhook subscription.
+      operationId: getScoutWebhookDeliveries
+      description: |-
+        Paginated delivery history for a scout's own webhook subscription.
+        Scoped to the owning wallet; no payload or secret data is returned.
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scout's Stellar public key
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Webhook subscription row ID
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional. Filter by 'failed' or 'succeeded'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Default 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Default 20, max 100
+      responses:
+        '200':
+          description: '{ success: true, data: DeliveryItem[], total, page, pageSize }'
+        '400':
+          description: '{ success: false, error: string } - Invalid params'
+        '403':
+          description: '{ success: false, error: string } - Subscription belongs to another scout'
+        '404':
+          description: '{ success: false, error: string } - Subscription not found'
+      security:
+        - bearerAuth: []
+        - apiKeyAuth:
+            - read:webhooks
+      x-required-role:
+        - scout
+      x-api-key-scope: read:webhooks
+      x-owner-only: true
   /scouts/{wallet}/webhooks/{id}/reactivate:
     post:
       tags:
@@ -4630,7 +4714,7 @@ paths:
               additionalProperties: false
       responses:
         '200':
-          description: '{ success: true, data: { id, url, status: ''active'' } }'
+          description: "{ success: true, data: { id, url, status: 'active' } }"
         '403':
           description: >-
             { success: false, error: string } - Wallet mismatch or subscription belongs to another
@@ -4708,119 +4792,6 @@ paths:
         - scout
       x-api-key-scope: write:webhooks
       x-owner-only: true
-  /scouts/{wallet}/webhooks/{id}/deliveries:
-    get:
-      tags:
-        - Webhooks
-      summary: Paginated delivery-attempt history for a scout's own webhook subscription.
-      operationId: getScoutWebhookDeliveries
-      description: |-
-        Returns paginated delivery-attempt records for one of the authenticated
-        scout's own webhook subscriptions. Secrets, request headers, signatures,
-        and payload content are never included in the response.
-
-        IDOR protection: the subscription's scout_wallet is verified against the
-        :wallet path parameter before any records are returned.
-      parameters:
-        - name: wallet
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Scout's Stellar public key
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-          description: Webhook subscription row ID
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - failed
-              - succeeded
-          description: Filter by delivery outcome
-        - name: page
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-          description: 1-based page number
-        - name: pageSize
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-          description: Results per page (max 100)
-      responses:
-        '200':
-          description: Paginated delivery history
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        deliveryId:
-                          type: string
-                        eventType:
-                          type: string
-                        createdAt:
-                          type: number
-                        attempts:
-                          type: number
-                        lastStatusCode:
-                          type: number
-                          nullable: true
-                        lastLatencyMs:
-                          type: number
-                          nullable: true
-                        lastError:
-                          type: string
-                          nullable: true
-                          description: Error message truncated to 200 chars; internal IPs and hostnames redacted
-                        nextRetryAt:
-                          type: string
-                          nullable: true
-                          example: null
-                        deadLettered:
-                          type: boolean
-                          example: false
-                  total:
-                    type: integer
-                  page:
-                    type: integer
-                  pageSize:
-                    type: integer
-        '400':
-          description: '{ success: false, error: string } - Invalid subscription id or status'
-        '403':
-          description: '{ success: false, error: string } - Subscription belongs to another scout'
-        '404':
-          description: '{ success: false, error: string } - Subscription not found'
-      security:
-        - bearerAuth: []
-        - apiKeyAuth:
-            - read:webhooks
-      x-required-role:
-        - scout
-      x-api-key-scope: read:webhooks
-      x-owner-only: true
   /validators/milestone:
     post:
       tags:
@@ -4846,6 +4817,7 @@ paths:
                 playerId:
                   type: string
                   minLength: 1
+                  description: Additional validation is applied beyond this schema — see the route handler.
                 milestoneType:
                   type: string
                   enum:
@@ -4923,7 +4895,6 @@ paths:
                     maxLength: 200
                     pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]*$
                   minItems: 1
-                  maxItems: 50
               required:
                 - milestoneIds
               additionalProperties: false

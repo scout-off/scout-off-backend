@@ -83,7 +83,11 @@ describe('POST /api/validators/milestone schema validation (#29)', () => {
     const res = await request(app)
       .post('/api/validators/milestone')
       .set('Authorization', `Bearer ${token}`)
-      .send({ playerId: 'player1', milestoneType: 'performance', evidenceUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG' });
+      .send({
+        playerId: 'player1',
+        milestoneType: 'performance',
+        evidenceUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+      });
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
   });

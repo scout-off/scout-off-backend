@@ -113,10 +113,9 @@ describe('Admin feature flags (#494/#805)', () => {
 
     it('always reflects DB state (cache is cleared before responding)', async () => {
       // Write directly to DB bypassing the cache
-      await getDriver().run(
-        `UPDATE feature_flags SET enabled = 0 WHERE name = ?`,
-        [FeatureFlags.SAVED_SEARCHES],
-      );
+      await getDriver().run(`UPDATE feature_flags SET enabled = 0 WHERE name = ?`, [
+        FeatureFlags.SAVED_SEARCHES,
+      ]);
 
       const res = await request(app)
         .get('/api/admin/feature-flags')
@@ -194,10 +193,9 @@ describe('Admin feature flags (#494/#805)', () => {
 
       clearFeatureFlagCache();
 
-      const row = (await getDriver().get(
-        'SELECT enabled FROM feature_flags WHERE name = ?',
-        [FeatureFlags.SAVED_SEARCHES],
-      )) as { enabled: number };
+      const row = (await getDriver().get('SELECT enabled FROM feature_flags WHERE name = ?', [
+        FeatureFlags.SAVED_SEARCHES,
+      ])) as { enabled: number };
 
       expect(row.enabled).toBe(0);
       expect(await isFeatureEnabled(FeatureFlags.SAVED_SEARCHES)).toBe(false);
@@ -289,10 +287,9 @@ describe('Admin feature flags (#494/#805)', () => {
 
       clearFeatureFlagCache();
 
-      const row = (await getDriver().get(
-        'SELECT enabled FROM feature_flags WHERE name = ?',
-        [FeatureFlags.SAVED_SEARCHES],
-      )) as { enabled: number };
+      const row = (await getDriver().get('SELECT enabled FROM feature_flags WHERE name = ?', [
+        FeatureFlags.SAVED_SEARCHES,
+      ])) as { enabled: number };
 
       expect(row.enabled).toBe(0);
     });

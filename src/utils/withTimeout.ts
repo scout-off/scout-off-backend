@@ -7,7 +7,10 @@
  * promise argument can't protect against a throw that happens before the
  * promise even exists.
  */
-export function withTimeout(fn: () => Promise<unknown>, timeoutMs: number): Promise<'ok' | 'error'> {
+export function withTimeout(
+  fn: () => Promise<unknown>,
+  timeoutMs: number,
+): Promise<'ok' | 'error'> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve('error'), timeoutMs);
     try {
@@ -70,10 +73,12 @@ export async function withTimeoutAndSignal<T>(
 
   // Use AbortSignal.any() to race multiple signals (available in Node 20.3+)
   // For older Node versions, fall back to manual race
-  const anySignal = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  const anySignal = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal })
+    .any;
   const combinedSignal = anySignal ? anySignal(signals) : signals[0];
 
-  const timeoutId = timeoutMs > 0 ? setTimeout(() => timeoutController?.abort(), timeoutMs) : undefined;
+  const timeoutId =
+    timeoutMs > 0 ? setTimeout(() => timeoutController?.abort(), timeoutMs) : undefined;
 
   try {
     // Throw if the combined signal is already aborted
@@ -85,9 +90,13 @@ export async function withTimeoutAndSignal<T>(
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        combinedSignal.addEventListener('abort', () => {
-          reject(combinedSignal.reason || new Error('Aborted'));
-        }, { once: true });
+        combinedSignal.addEventListener(
+          'abort',
+          () => {
+            reject(combinedSignal.reason || new Error('Aborted'));
+          },
+          { once: true },
+        );
       }),
     ]);
   } finally {

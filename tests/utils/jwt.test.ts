@@ -4,7 +4,8 @@ const CURRENT_SECRET = 'test-secret';
 const PREVIOUS_SECRET = 'old-test-secret';
 
 process.env.JWT_SECRET = CURRENT_SECRET;
-process.env.CONTRACT_ID = process.env.CONTRACT_ID ?? 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
+process.env.CONTRACT_ID =
+  process.env.CONTRACT_ID ?? 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
 
 describe('JWT dual-key verification (src/utils/jwt.ts)', () => {
   afterEach(() => {

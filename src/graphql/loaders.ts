@@ -40,9 +40,7 @@ export interface GqlMilestone {
  * This runs once per request tick regardless of how many players were
  * requested, satisfying the DataLoader contract.
  */
-async function batchLoadMilestones(
-  playerIds: readonly string[],
-): Promise<GqlMilestone[][]> {
+async function batchLoadMilestones(playerIds: readonly string[]): Promise<GqlMilestone[][]> {
   // ── Step 1: index-based milestones (synchronous, very cheap) ──────────────
   const allIndexed = queryEvents('milestone_approved', {
     payloadIn: { player_id: [...playerIds] },
@@ -87,7 +85,7 @@ async function batchLoadMilestones(
     const onChainRaw = onChainResults[idx];
     const onChain: GqlMilestone[] =
       onChainRaw.status === 'fulfilled'
-        ? ((onChainRaw.value as unknown) as Record<string, unknown>[]).map((m) => ({
+        ? (onChainRaw.value as unknown as Record<string, unknown>[]).map((m) => ({
             milestoneId: String(m.milestoneId ?? ''),
             playerId: pid,
             milestoneType: String(m.milestoneType ?? ''),

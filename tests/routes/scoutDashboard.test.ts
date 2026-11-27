@@ -40,10 +40,20 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
   SubscriptionError: class SubscriptionError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -331,7 +341,9 @@ describe('GET /api/scouts/:wallet/dashboard — response shape', () => {
 
     expect(res.body.data.contacts._links.full).toBe(`/api/scouts/${SCOUT_WALLET}/contacts`);
     expect(res.body.data.bookmarks._links.full).toBe(`/api/scouts/${SCOUT_WALLET}/bookmarks`);
-    expect(res.body.data.savedSearches._links.full).toBe(`/api/scouts/${SCOUT_WALLET}/saved-searches`);
+    expect(res.body.data.savedSearches._links.full).toBe(
+      `/api/scouts/${SCOUT_WALLET}/saved-searches`,
+    );
   });
 
   it('uses existing service functions (getContactUnlocksByScout is called with wallet)', async () => {

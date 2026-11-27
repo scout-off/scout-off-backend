@@ -30,10 +30,12 @@ export async function _stubReset(): Promise<void> {
 
 // ── Validation schemas ────────────────────────────────────────────────────────
 
-export const buyTokenSchema = z.object({
-  amount: z.number().int().min(1, 'amount must be at least 1').max(Number.MAX_SAFE_INTEGER),
-  buyerWallet: z.string().min(1).optional(),
-}).strict();
+export const buyTokenSchema = z
+  .object({
+    amount: z.number().int().min(1, 'amount must be at least 1').max(Number.MAX_SAFE_INTEGER),
+    buyerWallet: z.string().min(1).optional(),
+  })
+  .strict();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -60,11 +62,13 @@ export async function getPlayerTokenHolders(
 ): Promise<void> {
   if (!(await featureFlagGuard(res))) return;
 
-  const {playerId} = req.params as {playerId: string};
+  const { playerId } = req.params as { playerId: string };
   try {
     const inventory = await getPlayerTokenInventory(playerId);
     if (!inventory) {
-      res.status(404).json({ success: false, error: 'No tokens have been issued for this player.' });
+      res
+        .status(404)
+        .json({ success: false, error: 'No tokens have been issued for this player.' });
       return;
     }
 
@@ -95,7 +99,7 @@ export async function buyPlayerToken(
 ): Promise<void> {
   if (!(await featureFlagGuard(res))) return;
 
-  const {playerId} = req.params as {playerId: string};
+  const { playerId } = req.params as { playerId: string };
   const buyerWallet = req.account;
   if (!buyerWallet) {
     res.status(401).json({ success: false, error: 'Authenticated account is required.' });
@@ -113,14 +117,18 @@ export async function buyPlayerToken(
 
   const { amount } = parsed.data;
   if (parsed.data.buyerWallet && parsed.data.buyerWallet !== buyerWallet) {
-    res.status(403).json({ success: false, error: 'buyerWallet must match the authenticated account.' });
+    res
+      .status(403)
+      .json({ success: false, error: 'buyerWallet must match the authenticated account.' });
     return;
   }
 
   try {
     const result = await purchasePlayerTokens(playerId, buyerWallet, amount);
     if (result.status === 'not_found') {
-      res.status(404).json({ success: false, error: 'No tokens have been issued for this player.' });
+      res
+        .status(404)
+        .json({ success: false, error: 'No tokens have been issued for this player.' });
       return;
     }
 
@@ -133,7 +141,9 @@ export async function buyPlayerToken(
       return;
     }
 
-    logger.info(`[playerToken] playerId=${playerId} buyer=${buyerWallet} amount=${amount} newBalance=${result.newBalance}`);
+    logger.info(
+      `[playerToken] playerId=${playerId} buyer=${buyerWallet} amount=${amount} newBalance=${result.newBalance}`,
+    );
 
     res.json({
       success: true,

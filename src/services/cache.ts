@@ -42,11 +42,7 @@ import config from '../config';
 import { CacheStore } from './cacheStore';
 import { InMemoryCacheStore } from './inMemoryCacheStore';
 import { RedisCacheStore } from './redisCacheStore';
-import {
-  recordCacheHit,
-  recordCacheMiss,
-  recordCacheInvalidation,
-} from '../middleware/metrics';
+import { recordCacheHit, recordCacheMiss, recordCacheInvalidation } from '../middleware/metrics';
 import { logger } from '../utils/logger';
 import { encodeTracedMessage, consumeTracedMessage } from '../utils/traceContext';
 
@@ -199,14 +195,16 @@ export async function cacheGet<T>(key: string): Promise<T | undefined> {
 export async function cacheSet<T>(
   key: string,
   value: T,
-  ttlMs: number = config.playerCacheTtlMs
+  ttlMs: number = config.playerCacheTtlMs,
 ): Promise<void> {
   try {
     await store.set(namespacedKey(key), value, ttlMs);
   } catch (err) {
     // Best-effort write: a Redis failure must not break the request that
     // produced the value.
-    logger.warn(`[cache] cacheSet failed for key "${key}"; continuing without caching: ${errMessage(err)}`);
+    logger.warn(
+      `[cache] cacheSet failed for key "${key}"; continuing without caching: ${errMessage(err)}`,
+    );
   }
 }
 
@@ -260,7 +258,9 @@ export async function invalidateMilestoneCache(playerId: string): Promise<void> 
   try {
     await store.del(namespacedKey(`milestones:${playerId}`));
   } catch (err) {
-    logger.warn(`[cache] milestone cache invalidation failed for "${playerId}": ${errMessage(err)}`);
+    logger.warn(
+      `[cache] milestone cache invalidation failed for "${playerId}": ${errMessage(err)}`,
+    );
   }
   // Also bust the player list so updated progress tier is reflected
   await invalidatePlayerCache(playerId);
@@ -291,20 +291,32 @@ async function publishInvalidation(): Promise<void> {
  * fake subscriber connections and verify fanout semantics per store.
  */
 export function createInvalidationHandler(
-  storeToUse: CacheStore
+  storeToUse: CacheStore,
 ): (channel: string, message: string) => Promise<void> {
   return async (channel: string, message: string): Promise<void> => {
     if (channel !== INVALIDATION_CHANNEL) return;
     try {
       // Any legacy message invalidates, including non-JSON informational payloads.
-      const validJson = (() => { try { JSON.parse(message); return message; } catch { return 'null'; } })();
-      await consumeTracedMessage(validJson, 'redis.cache.invalidate', async () => {
-        playerListLastModifiedMs = Date.now();
-        await storeToUse.deleteByPrefix(namespacedKey('players:list'));
-      }, { 'messaging.destination.name': channel });
+      const validJson = (() => {
+        try {
+          JSON.parse(message);
+          return message;
+        } catch {
+          return 'null';
+        }
+      })();
+      await consumeTracedMessage(
+        validJson,
+        'redis.cache.invalidate',
+        async () => {
+          playerListLastModifiedMs = Date.now();
+          await storeToUse.deleteByPrefix(namespacedKey('players:list'));
+        },
+        { 'messaging.destination.name': channel },
+      );
     } catch (err) {
       logger.warn(
-        `[cache] failed to clear local player-list cache after "${INVALIDATION_CHANNEL}" message: ${errMessage(err)}`
+        `[cache] failed to clear local player-list cache after "${INVALIDATION_CHANNEL}" message: ${errMessage(err)}`,
       );
     } finally {
       recordCacheInvalidation();
@@ -333,7 +345,9 @@ export async function initCacheInvalidationSubscriber(): Promise<void> {
   client.subscribe(INVALIDATION_CHANNEL).catch((err: unknown) => {
     logger.warn(`[cache] failed to subscribe to "${INVALIDATION_CHANNEL}": ${errMessage(err)}`);
   });
-  logger.info(`[cache] listening on "${INVALIDATION_CHANNEL}" for cross-instance cache invalidation`);
+  logger.info(
+    `[cache] listening on "${INVALIDATION_CHANNEL}" for cross-instance cache invalidation`,
+  );
 }
 
 /**

@@ -25,11 +25,11 @@ All endpoints are served from the base URL configured via `PORT` (default: `4000
 
 The platform supports two stable API versions. All routes are available under multiple prefixes:
 
-| Prefix     | Description                                  |
-| ---------- | -------------------------------------------- |
-| `/api`     | Unversioned alias (maps to v1; **deprecated** in production) |
-| `/api/v1`  | Stable v1 — use this for all new integrations |
-| `/api/v2`  | Stable v2 — currently identical to v1; new v2-only behaviour will be introduced here |
+| Prefix    | Description                                                                          |
+| --------- | ------------------------------------------------------------------------------------ |
+| `/api`    | Unversioned alias (maps to v1; **deprecated** in production)                         |
+| `/api/v1` | Stable v1 — use this for all new integrations                                        |
+| `/api/v2` | Stable v2 — currently identical to v1; new v2-only behaviour will be introduced here |
 
 ### Selecting a version
 
@@ -55,18 +55,20 @@ curl -H "API-Version: 2" http://localhost:4000/api/players
 
 Every response includes two headers that both report the version that actually handled the request:
 
-| Header | Status |
-|---|---|
-| `API-Version` | **Canonical** — use this one |
+| Header          | Status                                                          |
+| --------------- | --------------------------------------------------------------- |
+| `API-Version`   | **Canonical** — use this one                                    |
 | `X-API-Version` | **Deprecated alias** — same value; will be removed at v1 sunset |
 
 Example (v1 request):
+
 ```
 API-Version: 1
 X-API-Version: 1
 ```
 
 Example (v2 request):
+
 ```
 API-Version: 2
 X-API-Version: 2
@@ -119,22 +121,22 @@ enforcement. Keys issued with an explicit `scopes` list are **restricted**:
 mutating endpoints require the matching scope and return `403` with
 `reason.requiredScope` otherwise.
 
-| Scope | Enforced on |
-|-------|-------------|
-| `read:players` | `GET /players` ( paginated list) |
-| `read:milestones` | `GET /players/:playerId/milestones`, `GET /validators/milestones/pending`, GraphQL milestones queries |
-| `read:subscription` | `GET /scouts/:wallet/subscription` |
-| `read:contacts` | `GET /scouts/:wallet/contacts`, `GET /scouts/:wallet/contacts/:playerId` |
-| `read:trial_offers` | `GET /scouts/:wallet/trial-offers` |
-| `write:contacts` | `POST /scouts/:wallet/contacts/:playerId/unlock` |
-| `write:subscriptions` | `POST/PUT/DELETE /scouts/:wallet/subscribe` |
-| `write:trial_offers` | `POST /scouts/:wallet/trial-offers` (and its deprecated alias `/trial-offer`); `DELETE /scouts/:wallet/trial-offers/:offerId` |
-| `write:webhooks` | `POST /scouts/:wallet/webhooks`, `DELETE .../:id`, `POST .../:id/test` |
-| `write:api_keys` | `POST /scouts/:wallet/api-keys`, `DELETE .../:id` |
-| `write:bookmarks` | bookmark & bookmark-folder mutations |
-| `write:notes` | scout-note mutations |
-| `write:saved_searches` | saved-search mutations |
-| `write:player_tokens` | `POST /players/:playerId/tokens/buy` |
+| Scope                  | Enforced on                                                                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `read:players`         | `GET /players` ( paginated list)                                                                                              |
+| `read:milestones`      | `GET /players/:playerId/milestones`, `GET /validators/milestones/pending`, GraphQL milestones queries                         |
+| `read:subscription`    | `GET /scouts/:wallet/subscription`                                                                                            |
+| `read:contacts`        | `GET /scouts/:wallet/contacts`, `GET /scouts/:wallet/contacts/:playerId`                                                      |
+| `read:trial_offers`    | `GET /scouts/:wallet/trial-offers`                                                                                            |
+| `write:contacts`       | `POST /scouts/:wallet/contacts/:playerId/unlock`                                                                              |
+| `write:subscriptions`  | `POST/PUT/DELETE /scouts/:wallet/subscribe`                                                                                   |
+| `write:trial_offers`   | `POST /scouts/:wallet/trial-offers` (and its deprecated alias `/trial-offer`); `DELETE /scouts/:wallet/trial-offers/:offerId` |
+| `write:webhooks`       | `POST /scouts/:wallet/webhooks`, `DELETE .../:id`, `POST .../:id/test`                                                        |
+| `write:api_keys`       | `POST /scouts/:wallet/api-keys`, `DELETE .../:id`                                                                             |
+| `write:bookmarks`      | bookmark & bookmark-folder mutations                                                                                          |
+| `write:notes`          | scout-note mutations                                                                                                          |
+| `write:saved_searches` | saved-search mutations                                                                                                        |
+| `write:player_tokens`  | `POST /players/:playerId/tokens/buy`                                                                                          |
 
 REST and GraphQL share the same scope contract (`src/utils/apiKeyScopes.ts`).
 See `docs/auth.md` for the full vocabulary and legacy-compatibility rules.
@@ -202,16 +204,16 @@ curl -X POST http://localhost:4000/api/scouts/GSCOUT.../subscribe \
 
 The following endpoints accept and honour the `Idempotency-Key` header:
 
-| Endpoint | Description |
-|---|---|
-| `POST /api/scouts/:wallet/subscribe` | Scout subscription purchase |
-| `POST /api/scouts/:wallet/contacts/:playerId/unlock` | Pay-to-contact fee |
-| `POST /api/scouts/:wallet/trial-offers` | Trial offer creation |
-| `DELETE /api/scouts/:wallet/trial-offers/:offerId` | Trial offer cancellation |
-| `POST /api/admin/fees/withdraw` | Fee withdrawal (admin) |
-| Any `POST /api/scouts/:wallet/webhooks/:id/test` | Webhook delivery test (admin) |
+| Endpoint                                             | Description                   |
+| ---------------------------------------------------- | ----------------------------- |
+| `POST /api/scouts/:wallet/subscribe`                 | Scout subscription purchase   |
+| `POST /api/scouts/:wallet/contacts/:playerId/unlock` | Pay-to-contact fee            |
+| `POST /api/scouts/:wallet/trial-offers`              | Trial offer creation          |
+| `DELETE /api/scouts/:wallet/trial-offers/:offerId`   | Trial offer cancellation      |
+| `POST /api/admin/fees/withdraw`                      | Fee withdrawal (admin)        |
+| Any `POST /api/scouts/:wallet/webhooks/:id/test`     | Webhook delivery test (admin) |
 
-**Note:** Endpoints *without* an `Idempotency-Key` header in the request are processed independently on each call — no caching is applied.
+**Note:** Endpoints _without_ an `Idempotency-Key` header in the request are processed independently on each call — no caching is applied.
 
 ### Behavior
 
@@ -263,10 +265,14 @@ This prevents silent data corruption from typos or accidental parameter changes.
 
 #### In-flight duplicate (409 with wait)
 
-If a second request arrives with the same `Idempotency-Key` *while the first is still being processed*, the second request waits for the first to complete (up to 5 seconds). If the first completes within that window, the second receives the same response. If it times out or the lease expires:
+If a second request arrives with the same `Idempotency-Key` _while the first is still being processed_, the second request waits for the first to complete (up to 5 seconds). If the first completes within that window, the second receives the same response. If it times out or the lease expires:
 
 ```json
-{ "success": false, "error": "Request already in progress for this idempotency key", "code": "IN_PROGRESS" }
+{
+  "success": false,
+  "error": "Request already in progress for this idempotency key",
+  "code": "IN_PROGRESS"
+}
 ```
 
 with HTTP status `409`.
@@ -293,6 +299,7 @@ Idempotency cache entries expire after **24 hours** (configured via `IDEMPOTENCY
 ### Best practices
 
 1. **Generate a stable key per logical operation**, not per request attempt. A UUID known to your client is ideal:
+
    ```typescript
    const idempotencyKey = generateUUID(); // Once per user action
    for (let attempt = 0; attempt < 3; attempt++) {
@@ -352,9 +359,9 @@ curl -X GET http://localhost:4000/api/players/player-001 \
 
 Every response carries both headers with the same value:
 
-| Header | Status |
-|---|---|
-| `API-Version` | **Canonical** — use this one |
+| Header          | Status                                                          |
+| --------------- | --------------------------------------------------------------- |
+| `API-Version`   | **Canonical** — use this one                                    |
 | `X-API-Version` | **Deprecated alias** — same value; will be removed at v1 sunset |
 
 ```
@@ -388,6 +395,7 @@ X-Response-Time: 142ms
 ```
 
 Use this to:
+
 - Monitor endpoint performance
 - Detect slow routes that may need optimization
 - Correlate with alerting thresholds
@@ -402,11 +410,11 @@ That table has been replaced by a **generated OpenAPI 3.0 spec** that is produce
 
 **Browse the full, current endpoint reference:**
 
-| Surface | URL |
-| --- | --- |
-| Swagger UI (interactive) | `GET /api/docs/ui` |
-| OpenAPI spec (JSON) | `GET /api/docs` |
-| OpenAPI spec (YAML) | `GET /api/docs/yaml` |
+| Surface                   | URL                                  |
+| ------------------------- | ------------------------------------ |
+| Swagger UI (interactive)  | `GET /api/docs/ui`                   |
+| OpenAPI spec (JSON)       | `GET /api/docs`                      |
+| OpenAPI spec (YAML)       | `GET /api/docs/yaml`                 |
 | Source of truth (in-repo) | [src/openapi.yaml](src/openapi.yaml) |
 
 Regenerate it locally after changing a route:
@@ -425,10 +433,10 @@ High-value admin operations require M-of-N approval when `ADMIN_THRESHOLD > 1`. 
 
 #### Configuration
 
-| Environment Variable | Description | Default |
-|---------------------|-------------|---------|
-| `ADMIN_THRESHOLD` | Minimum signatures required | `1` |
-| `ADMIN_WALLETS` | Comma-separated list of authorized admin wallets | Required |
+| Environment Variable | Description                                      | Default  |
+| -------------------- | ------------------------------------------------ | -------- |
+| `ADMIN_THRESHOLD`    | Minimum signatures required                      | `1`      |
+| `ADMIN_WALLETS`      | Comma-separated list of authorized admin wallets | Required |
 
 `pending_admin_actions` and `admin_action_signatures` (the tables backing this subsystem) work under both `DB_DRIVER=sqlite` and `DB_DRIVER=postgres` — the two migrations (`db/011_pending_admin_actions.sql` / `db/011_pending_admin_actions_postgres.sql`) declare equivalent columns, including `proposer` and the signer-uniqueness table. Duplicate-signature detection uses `INSERT OR IGNORE` on SQLite and `INSERT ... ON CONFLICT(action_id, signer) DO NOTHING` on Postgres, both driven by a single atomic statement rather than a racy check-then-insert.
 
@@ -437,12 +445,12 @@ High-value admin operations require M-of-N approval when `ADMIN_THRESHOLD > 1`. 
 The following admin operations support multi-signature approval:
 
 - `pause_contract` — Emergency pause of platform contracts
-- `unpause_contract` — Resume platform operations  
+- `unpause_contract` — Resume platform operations
 - `withdraw_fees` — Withdraw accumulated platform fees
 - `register_validator` — Add new validator to authorized list
 - `revoke_validator` — Remove validator from authorized list
 - `bulk_validator_import` — Import multiple validators (individual actions per validator)
-- `update_platform_fee` — Modify platform fee structure *(future)*
+- `update_platform_fee` — Modify platform fee structure _(future)_
 
 #### Multi-Signature Flow
 
@@ -505,9 +513,7 @@ Get detailed information about a specific action, including all signers collecte
     "requiredSignatures": 2,
     "expiresAt": 1735689600000,
     "createdAt": 1735603200000,
-    "signers": [
-      { "wallet": "GADMIN1...", "signedAt": 1735603200000 }
-    ]
+    "signers": [{ "wallet": "GADMIN1...", "signedAt": 1735603200000 }]
   }
 }
 ```
@@ -656,12 +662,12 @@ Executes a stored saved-search preset against the live player index, returning p
 GET /api/scouts/:wallet/saved-searches/:id/run
 ```
 
-| Parameter | In | Type | Required | Description |
-|-----------|-----|------|----------|-------------|
-| `wallet` | path | string | ✓ | Scout's Stellar public key |
-| `id` | path | integer | ✓ | Row ID of the saved search to run |
-| `page` | query | integer | — | Page number (default: `1`) |
-| `pageSize` | query | integer | — | Results per page (default: `20`, max: `100`) |
+| Parameter  | In    | Type    | Required | Description                                  |
+| ---------- | ----- | ------- | -------- | -------------------------------------------- |
+| `wallet`   | path  | string  | ✓        | Scout's Stellar public key                   |
+| `id`       | path  | integer | ✓        | Row ID of the saved search to run            |
+| `page`     | query | integer | —        | Page number (default: `1`)                   |
+| `pageSize` | query | integer | —        | Results per page (default: `20`, max: `100`) |
 
 The stored filter parameters (`region`, `position`, `minTier`) are loaded from the saved search row and merged with any pagination parameters supplied in the query string. Pagination params in the query string always take precedence over any pagination fields that might be present in the stored filters (which are excluded at creation time by `savedSearchFilterSchema`).
 
@@ -693,11 +699,11 @@ The stored filter parameters (`region`, `position`, `minTier`) are loaded from t
 
 ### Error responses
 
-| Status | Condition |
-|--------|-----------|
-| `400` | `id` is not a valid integer |
-| `403` | Wallet mismatch or not the scout role |
-| `404` | Saved search not found (or belongs to another scout) |
+| Status | Condition                                            |
+| ------ | ---------------------------------------------------- |
+| `400`  | `id` is not a valid integer                          |
+| `403`  | Wallet mismatch or not the scout role                |
+| `404`  | Saved search not found (or belongs to another scout) |
 
 ### Example
 
@@ -721,6 +727,7 @@ curl "http://localhost:4000/api/scouts/${WALLET}/saved-searches/7/run?page=2&pag
 Propose and execute an `update_platform_fee` multi-sig action to update the on-chain platform fee. **Requires Bearer auth (admin role).**
 
 **Request body**
+
 ```json
 {
   "actionId": "action-uuid-001",
@@ -728,12 +735,13 @@ Propose and execute an `update_platform_fee` multi-sig action to update the on-c
 }
 ```
 
-| Field       | Type    | Required | Description                            |
-|-------------|---------|----------|----------------------------------------|
-| `actionId`  | string  | ✅       | Unique identifier for this action      |
-| `newFeeBps` | integer | ✅       | New fee in basis points (0–10000)      |
+| Field       | Type    | Required | Description                       |
+| ----------- | ------- | -------- | --------------------------------- |
+| `actionId`  | string  | ✅       | Unique identifier for this action |
+| `newFeeBps` | integer | ✅       | New fee in basis points (0–10000) |
 
 **Response `202`**
+
 ```json
 {
   "success": true,
@@ -746,6 +754,7 @@ Propose and execute an `update_platform_fee` multi-sig action to update the on-c
 ```
 
 **Error `400`** — out-of-range value
+
 ```json
 { "success": false, "error": "newFeeBps must be between 0 and 10000" }
 ```
@@ -783,8 +792,8 @@ with HTTP status **429**.
 
 ### Per-route overrides
 
-| Route | Limit | Reason |
-|-------|-------|--------|
+| Route                                        | Limit                                                                                                                                         | Reason                                                                                                                                                                                                                                             |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /api/scouts/:wallet/webhooks/:id/test` | **5 requests/minute** per wallet (`WEBHOOK_TEST_RATE_LIMIT_MAX` / `WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS`), isolated from the shared default pool | Unlike a normal write, each call makes the backend issue an outbound HTTP request to a caller-supplied URL — an abuse surface a shared 60/min pool doesn't adequately bound (#1037). The 429 is returned before the outbound request is attempted. |
 
 ## Request Timeouts
@@ -805,12 +814,12 @@ with HTTP status **503**.
 
 Certain routes override the default timeout because their expected duration differs significantly:
 
-| Route | Timeout | Reason |
-|-------|---------|--------|
-| `GET /api/admin/events/export` | **120 s** | Streaming CSV export of large tables can take up to 60 s; the longer window prevents a spurious 503 on a slow-but-healthy export. |
-| `POST /api/admin/reindex` | **none (0)** | Returns 202 immediately — the actual ledger backfill runs as a background job and must never be killed by a network timeout. |
-| `GET /health/liveness` | **5 s** | Kubernetes liveness probe — if the process cannot respond in 5 s it should be restarted. |
-| `GET /health/readiness` | **5 s** | Kubernetes readiness probe — if the DB is unresponsive for more than 5 s the pod should be removed from the load-balancer. |
+| Route                          | Timeout      | Reason                                                                                                                            |
+| ------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/admin/events/export` | **120 s**    | Streaming CSV export of large tables can take up to 60 s; the longer window prevents a spurious 503 on a slow-but-healthy export. |
+| `POST /api/admin/reindex`      | **none (0)** | Returns 202 immediately — the actual ledger backfill runs as a background job and must never be killed by a network timeout.      |
+| `GET /health/liveness`         | **5 s**      | Kubernetes liveness probe — if the process cannot respond in 5 s it should be restarted.                                          |
+| `GET /health/readiness`        | **5 s**      | Kubernetes readiness probe — if the DB is unresponsive for more than 5 s the pod should be removed from the load-balancer.        |
 
 ### Using `createTimeout` in new routes
 
@@ -830,19 +839,21 @@ Paginated list endpoints consistently cap page size to prevent resource exhausti
 
 ### Limits
 
-| Setting | Value | Description |
-|---------|-------|-------------|
-| **Default page size** | `20` | Results returned when `pageSize` is omitted |
+| Setting               | Value | Description                                                                 |
+| --------------------- | ----- | --------------------------------------------------------------------------- |
+| **Default page size** | `20`  | Results returned when `pageSize` is omitted                                 |
 | **Maximum page size** | `100` | Hard cap applied to all list endpoints; requests exceeding this are clamped |
 
 ### Behavior
 
 When a client requests a `pageSize` greater than the maximum:
+
 - The request is **clamped** to `100` results
 - The response includes the actual `pageSize` used (not the requested value)
 - No error is returned — the clamp is silent (by design, to simplify client retry logic)
 
 **Example:**
+
 ```bash
 # Request 500 results
 curl "http://localhost:4000/api/v1/players?pageSize=500"
@@ -862,10 +873,12 @@ curl "http://localhost:4000/api/v1/players?pageSize=500"
 ### Affected endpoints
 
 **REST endpoints:**
+
 - `GET /api/players` (filter/search)
 - `GET /api/scouts/:wallet/saved-searches/:id/run`
 
 **GraphQL queries:**
+
 - `players(region, position, minTier, page, pageSize)`
 
 All of these use the shared `MAX_PAGE_SIZE = 100` constant defined in `src/utils/pagination.ts`. The clamp is applied consistently whether the endpoint is called via REST query parameters or GraphQL arguments.
@@ -891,16 +904,16 @@ All error responses follow this shape:
 
 The `code` field provides a machine-readable error classification for programmatic error handling. The mapping from HTTP status to error code is:
 
-| HTTP Status | Error Code                | Meaning                       |
-| ----------- | ------------------------- | ----------------------------- |
-| 400         | `VALIDATION_ERROR`        | Invalid input data            |
-| 401         | `UNAUTHORIZED`            | Missing or invalid auth token |
-| 403         | `FORBIDDEN`               | Insufficient permissions      |
-| 404         | `NOT_FOUND`               | Resource not found            |
-| 409         | `CONFLICT`                | Resource conflict             |
-| 413         | `PAYLOAD_TOO_LARGE`       | Request body exceeds limits   |
-| 415         | `UNSUPPORTED_MEDIA_TYPE`  | Invalid content type          |
-| 500         | `INTERNAL_SERVER_ERROR`   | Server error                  |
+| HTTP Status | Error Code               | Meaning                       |
+| ----------- | ------------------------ | ----------------------------- |
+| 400         | `VALIDATION_ERROR`       | Invalid input data            |
+| 401         | `UNAUTHORIZED`           | Missing or invalid auth token |
+| 403         | `FORBIDDEN`              | Insufficient permissions      |
+| 404         | `NOT_FOUND`              | Resource not found            |
+| 409         | `CONFLICT`               | Resource conflict             |
+| 413         | `PAYLOAD_TOO_LARGE`      | Request body exceeds limits   |
+| 415         | `UNSUPPORTED_MEDIA_TYPE` | Invalid content type          |
+| 500         | `INTERNAL_SERVER_ERROR`  | Server error                  |
 
 **Note:** When an error is thrown with an explicit `code` property already set, that code takes precedence over the status-based mapping.
 
@@ -910,73 +923,72 @@ All error codes used in REST and GraphQL responses are defined in `src/utils/err
 
 #### Generic Errors
 
-| Code | HTTP Status | When It Occurs | Client Action |
-|------|------------|-------------|--------------|
-| `INTERNAL_SERVER_ERROR` | 500 | Unexpected server error | Retry with exponential backoff; contact support if persists |
-| `NOT_FOUND` | 404 | Requested resource does not exist | Verify the resource ID/path is correct; check if it was deleted |
-| `VALIDATION_ERROR` | 400 | Request validation failed (Zod schema, required fields, etc.) | Fix the request payload; check field names and types against API docs |
-| `MALFORMED_JSON` | 400 | Request body contains invalid JSON syntax | Verify JSON syntax; ensure Content-Type is application/json |
-| `PAYLOAD_TOO_LARGE` | 413 | Request body size exceeds the server limit | Reduce payload size; split into multiple requests if needed |
-| `UNSUPPORTED_MEDIA_TYPE` | 415 | Request Content-Type is not supported | Set Content-Type: application/json in request headers |
+| Code                     | HTTP Status | When It Occurs                                                | Client Action                                                         |
+| ------------------------ | ----------- | ------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `INTERNAL_SERVER_ERROR`  | 500         | Unexpected server error                                       | Retry with exponential backoff; contact support if persists           |
+| `NOT_FOUND`              | 404         | Requested resource does not exist                             | Verify the resource ID/path is correct; check if it was deleted       |
+| `VALIDATION_ERROR`       | 400         | Request validation failed (Zod schema, required fields, etc.) | Fix the request payload; check field names and types against API docs |
+| `MALFORMED_JSON`         | 400         | Request body contains invalid JSON syntax                     | Verify JSON syntax; ensure Content-Type is application/json           |
+| `PAYLOAD_TOO_LARGE`      | 413         | Request body size exceeds the server limit                    | Reduce payload size; split into multiple requests if needed           |
+| `UNSUPPORTED_MEDIA_TYPE` | 415         | Request Content-Type is not supported                         | Set Content-Type: application/json in request headers                 |
 
 #### Authentication & Authorization
 
-| Code | HTTP Status | When It Occurs | Client Action |
-|------|------------|-------------|--------------|
-| `UNAUTHORIZED` | 401 | Request lacks valid authentication (missing/invalid JWT or API key) | Provide a valid Bearer token or X-API-Key header; refresh expired tokens |
-| `FORBIDDEN` | 403 | Request is authenticated but lacks permission | Verify your account role/scope; contact support to request access |
-| `TOKEN_INVALID` | 401 | JWT token is invalid (malformed, signed with wrong key) | Re-authenticate and obtain a fresh token |
-| `TOKEN_EXPIRED` | 401 | JWT token has expired | Refresh the token or re-authenticate |
+| Code            | HTTP Status | When It Occurs                                                      | Client Action                                                            |
+| --------------- | ----------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `UNAUTHORIZED`  | 401         | Request lacks valid authentication (missing/invalid JWT or API key) | Provide a valid Bearer token or X-API-Key header; refresh expired tokens |
+| `FORBIDDEN`     | 403         | Request is authenticated but lacks permission                       | Verify your account role/scope; contact support to request access        |
+| `TOKEN_INVALID` | 401         | JWT token is invalid (malformed, signed with wrong key)             | Re-authenticate and obtain a fresh token                                 |
+| `TOKEN_EXPIRED` | 401         | JWT token has expired                                               | Refresh the token or re-authenticate                                     |
 
 #### Resource-Specific Errors
 
-| Code | HTTP Status | When It Occurs | Client Action |
-|------|------------|-------------|--------------|
-| `PLAYER_NOT_FOUND` | 404 | The specified player was not found or is hidden from this user | Verify the player_id is correct; check if the player is deactivated |
-| `WALLET_MISMATCH` | 400 | The wallet/account in the request does not match the authenticated user | Use your own wallet address in the request path |
-| `FEATURE_DISABLED` | 403 | A requested feature is disabled (feature flag not enabled) | Contact support to enable the feature; check docs for availability |
+| Code               | HTTP Status | When It Occurs                                                          | Client Action                                                       |
+| ------------------ | ----------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `PLAYER_NOT_FOUND` | 404         | The specified player was not found or is hidden from this user          | Verify the player_id is correct; check if the player is deactivated |
+| `WALLET_MISMATCH`  | 400         | The wallet/account in the request does not match the authenticated user | Use your own wallet address in the request path                     |
+| `FEATURE_DISABLED` | 403         | A requested feature is disabled (feature flag not enabled)              | Contact support to enable the feature; check docs for availability  |
 
 #### Subscription & Access Control
 
-| Code | HTTP Status | When It Occurs | Client Action |
-|------|------------|-------------|--------------|
-| `NOT_SUBSCRIBED` | 402 | Scout has no active subscription (required for this operation) | Subscribe first via /api/scouts/:wallet/subscribe |
-| `SUBSCRIPTION_REQUIRED` | 403 | An active subscription is required to perform this action | Subscribe first via /api/scouts/:wallet/subscribe |
+| Code                    | HTTP Status | When It Occurs                                                 | Client Action                                     |
+| ----------------------- | ----------- | -------------------------------------------------------------- | ------------------------------------------------- |
+| `NOT_SUBSCRIBED`        | 402         | Scout has no active subscription (required for this operation) | Subscribe first via /api/scouts/:wallet/subscribe |
+| `SUBSCRIPTION_REQUIRED` | 403         | An active subscription is required to perform this action      | Subscribe first via /api/scouts/:wallet/subscribe |
 
 #### Payment & Blockchain Errors
 
-| Code | HTTP Status | When It Occurs | Client Action |
-|------|------------|-------------|--------------|
-| `INSUFFICIENT_FUNDS` | 402 | Account balance is insufficient to complete the payment | Check account balance; deposit funds or reduce transaction amount |
-| `INVALID_ACCOUNT` | 400 | The specified account does not exist or is invalid | Verify the account identifier is valid and exists |
-| `NETWORK_ERROR` | 503 | A network error occurred (blockchain RPC unreachable, etc.) | Retry after a short delay; check if the blockchain is operational |
-| `PAYMENT_UNKNOWN` | 500 | A payment operation failed for an unknown reason | Retry; if it persists, contact support with transaction details |
-| `NO_FEES` | 400 | No accumulated fees are available to withdraw | Check again after platform fees accrue from transactions |
-| `INVALID_RECIPIENT` | 400 | The withdrawal recipient address is invalid or not supported | Verify the recipient wallet/account format |
-| `CONTRACT_PAUSED` | 503 | The subscription contract is paused (emergency maintenance) | Retry after a delay; operations will resume when unpaused |
+| Code                 | HTTP Status | When It Occurs                                               | Client Action                                                     |
+| -------------------- | ----------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `INSUFFICIENT_FUNDS` | 402         | Account balance is insufficient to complete the payment      | Check account balance; deposit funds or reduce transaction amount |
+| `INVALID_ACCOUNT`    | 400         | The specified account does not exist or is invalid           | Verify the account identifier is valid and exists                 |
+| `NETWORK_ERROR`      | 503         | A network error occurred (blockchain RPC unreachable, etc.)  | Retry after a short delay; check if the blockchain is operational |
+| `PAYMENT_UNKNOWN`    | 500         | A payment operation failed for an unknown reason             | Retry; if it persists, contact support with transaction details   |
+| `NO_FEES`            | 400         | No accumulated fees are available to withdraw                | Check again after platform fees accrue from transactions          |
+| `INVALID_RECIPIENT`  | 400         | The withdrawal recipient address is invalid or not supported | Verify the recipient wallet/account format                        |
+| `CONTRACT_PAUSED`    | 503         | The subscription contract is paused (emergency maintenance)  | Retry after a delay; operations will resume when unpaused         |
 
 #### Conflict & Concurrency Errors
 
-| Code | HTTP Status | When It Occurs | Client Action |
-|------|------------|-------------|--------------|
-| `CONFLICT` | 409 | A resource conflict occurred (duplicate key, state mismatch, etc.) | Check the current state; retry with updated data or a different key |
-| `PRECONDITION_FAILED` | 412 | If-Match header supplied but does not match current resource version | Fetch the current resource, get the new ETag, and retry with new ETag |
-| `PRECONDITION_REQUIRED` | 428 | Request requires an If-Match header (conditional request) that was not supplied | Include the If-Match header with the current ETag from a prior GET request |
+| Code                    | HTTP Status | When It Occurs                                                                  | Client Action                                                              |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `CONFLICT`              | 409         | A resource conflict occurred (duplicate key, state mismatch, etc.)              | Check the current state; retry with updated data or a different key        |
+| `PRECONDITION_FAILED`   | 412         | If-Match header supplied but does not match current resource version            | Fetch the current resource, get the new ETag, and retry with new ETag      |
+| `PRECONDITION_REQUIRED` | 428         | Request requires an If-Match header (conditional request) that was not supplied | Include the If-Match header with the current ETag from a prior GET request |
 
 #### Administrative Actions
 
-| Code | HTTP Status | When It Occurs | Client Action |
-|------|------------|-------------|--------------|
-| `EXPIRED_ACTION` | 410 | A multi-sig admin action has expired and can no longer be approved | Propose the action again to create a fresh request |
-| `ACTION_EXECUTED` | 409 | A multi-sig admin action has already been executed | Check the action status; cannot re-approve completed actions |
-| `WALLET_BLOCKLISTED` | 403 | The authenticated wallet is blocklisted and may not open an SSE stream | Do not reconnect; contact support if you believe this is an error |
-| `SSE_CAPACITY` | 503 | The server has reached its SSE connection limit (`SSE_MAX_CONNECTIONS`) | Reconnect after the number of seconds given in the `Retry-After` header |
+| Code                 | HTTP Status | When It Occurs                                                          | Client Action                                                           |
+| -------------------- | ----------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `EXPIRED_ACTION`     | 410         | A multi-sig admin action has expired and can no longer be approved      | Propose the action again to create a fresh request                      |
+| `ACTION_EXECUTED`    | 409         | A multi-sig admin action has already been executed                      | Check the action status; cannot re-approve completed actions            |
+| `WALLET_BLOCKLISTED` | 403         | The authenticated wallet is blocklisted and may not open an SSE stream  | Do not reconnect; contact support if you believe this is an error       |
+| `SSE_CAPACITY`       | 503         | The server has reached its SSE connection limit (`SSE_MAX_CONNECTIONS`) | Reconnect after the number of seconds given in the `Retry-After` header |
 
 ---
 
-
-
 **On-chain semantics:**
+
 - The `cancel_subscription(scout)` entrypoint on the `subscription` contract marks the subscription as expired at the current ledger (no refund).
 - Returns HTTP `402` with error code `NOT_SUBSCRIBED` (contract code 8) when:
   - the scout has never subscribed, or
@@ -986,11 +998,13 @@ All error codes used in REST and GraphQL responses are defined in `src/utils/err
 - After cancellation `is_subscribed(scout)` returns `false` immediately.
 
 **Response (success):**
+
 ```json
 { "success": true, "transactionId": "abc123..." }
 ```
 
 **Response (no subscription):**
+
 ```json
 { "success": false, "error": "Scout has no active on-chain subscription", "code": "NOT_SUBSCRIBED" }
 ```
@@ -1002,6 +1016,7 @@ All error codes used in REST and GraphQL responses are defined in `src/utils/err
 These endpoints invoke `pause(admin)` / `unpause(admin)` on the **subscription** contract via the platform keypair. The subscription contract's pause flag gates `subscribe`, `pay_to_contact`, and `withdraw_fees`. The `register` and `connection` contracts each have their own `pause`/`unpause` entrypoints that must be called separately if a full platform pause is needed.
 
 **Behavior:**
+
 - Calling `pause` when already paused is a no-op (returns success).
 - Calling `unpause` when already active is a no-op (returns success).
 - Only the admin address configured at contract initialization may call these.
@@ -1014,6 +1029,7 @@ These endpoints invoke `pause(admin)` / `unpause(admin)` on the **subscription**
 The underlying call is `get_fee_balance() → i128` on the `subscription` contract, which is a read-only simulation (no transaction submitted, no keypair required). The balance represents total fees accumulated from `subscribe` and `pay_to_contact` calls since the last `withdraw_fees`.
 
 **Response:**
+
 ```json
 { "balanceStroops": "5000000", "balanceXLM": "0.5" }
 ```

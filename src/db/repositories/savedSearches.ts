@@ -24,18 +24,27 @@ export async function getAllActiveSavedSearches(): Promise<SavedSearchRow[]> {
   return timedQueryAsync(sql, () => getDriver().all<SavedSearchRow>(sql));
 }
 
-export async function getSavedSearchNotification(scoutWallet: string, playerId: string): Promise<number | null> {
-  const sql = 'SELECT notified_at FROM saved_search_notifications WHERE scout_wallet = ? AND player_id = ?';
+export async function getSavedSearchNotification(
+  scoutWallet: string,
+  playerId: string,
+): Promise<number | null> {
+  const sql =
+    'SELECT notified_at FROM saved_search_notifications WHERE scout_wallet = ? AND player_id = ?';
   return timedQueryAsync(sql, async () => {
     const row = await getDriver().get<{ notified_at: number }>(sql, [scoutWallet, playerId]);
     return row ? row.notified_at : null;
   });
 }
 
-export async function recordSavedSearchNotification(scoutWallet: string, playerId: string, notifiedAt: number): Promise<void> {
-  const sql = 'INSERT INTO saved_search_notifications (scout_wallet, player_id, notified_at) ' +
-              'VALUES (?, ?, ?) ' +
-              'ON CONFLICT(scout_wallet, player_id) DO UPDATE SET notified_at = excluded.notified_at';
+export async function recordSavedSearchNotification(
+  scoutWallet: string,
+  playerId: string,
+  notifiedAt: number,
+): Promise<void> {
+  const sql =
+    'INSERT INTO saved_search_notifications (scout_wallet, player_id, notified_at) ' +
+    'VALUES (?, ?, ?) ' +
+    'ON CONFLICT(scout_wallet, player_id) DO UPDATE SET notified_at = excluded.notified_at';
   await timedQueryAsync(sql, () => getDriver().run(sql, [scoutWallet, playerId, notifiedAt]));
 }
 
@@ -56,7 +65,13 @@ export async function insertSavedSearch(p: {
     RETURNING id
   `;
   return timedQueryAsync(sql, async () => {
-    const info = await getDriver().run(sql, [p.scout_wallet, p.name, p.filters, p.created_at, p.notify_enabled ?? 1]);
+    const info = await getDriver().run(sql, [
+      p.scout_wallet,
+      p.name,
+      p.filters,
+      p.created_at,
+      p.notify_enabled ?? 1,
+    ]);
     return info.lastId;
   });
 }
@@ -70,9 +85,7 @@ export async function getSavedSearchesByScout(scoutWallet: string): Promise<Save
     WHERE scout_wallet = ?
     ORDER BY created_at DESC
   `;
-  return timedQueryAsync(sql, () =>
-    getDriver().all<SavedSearchRow>(sql, [scoutWallet]),
-  );
+  return timedQueryAsync(sql, () => getDriver().all<SavedSearchRow>(sql, [scoutWallet]));
 }
 
 /**
@@ -93,10 +106,14 @@ export async function deleteSavedSearch(id: number, scoutWallet: string): Promis
  * Only returns rows belonging to the given scout wallet for security.
  * Returns null when not found.
  */
-export async function getSavedSearchById(id: number, scoutWallet: string): Promise<SavedSearchRow | null> {
+export async function getSavedSearchById(
+  id: number,
+  scoutWallet: string,
+): Promise<SavedSearchRow | null> {
   const sql = `SELECT * FROM scout_saved_searches WHERE id = ? AND scout_wallet = ?`;
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<SavedSearchRow>(sql, [id, scoutWallet])) ?? null
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<SavedSearchRow>(sql, [id, scoutWallet])) ?? null,
   );
 }
 
@@ -108,7 +125,7 @@ export async function getSavedSearchById(id: number, scoutWallet: string): Promi
 export async function updateSavedSearch(
   id: number,
   scoutWallet: string,
-  updates: { name?: string; filters?: string }
+  updates: { name?: string; filters?: string },
 ): Promise<boolean> {
   const fields: string[] = [];
   const params: (string | number)[] = [];
@@ -142,7 +159,7 @@ export async function updateSavedSearch(
 export async function countSavedSearchesByScout(scoutWallet: string): Promise<number> {
   const sql = `SELECT COUNT(*) as count FROM scout_saved_searches WHERE scout_wallet = ?`;
   const row = await timedQueryAsync(sql, () =>
-    getDriver().get<{ count: number | string }>(sql, [scoutWallet])
+    getDriver().get<{ count: number | string }>(sql, [scoutWallet]),
   );
   return Number(row?.count ?? 0);
 }

@@ -8,9 +8,13 @@ import type { SecretsProvider } from './types';
 export class EnvSecretsProvider implements SecretsProvider {
   readonly kind = 'env' as const;
 
-  get(name: string): string | undefined {
+  peek(name: string): string | undefined {
     const raw = process.env[name];
-    const value = raw && raw.length > 0 ? raw : undefined;
+    return raw && raw.length > 0 ? raw : undefined;
+  }
+
+  get(name: string): string | undefined {
+    const value = this.peek(name);
     auditSecretAccess({
       action: 'get',
       name,

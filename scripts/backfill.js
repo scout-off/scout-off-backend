@@ -27,8 +27,9 @@ if (isNaN(fromLedger) || fromLedger < 0) {
 }
 
 // Ensure required env vars are set before requiring config
-if (!process.env.CONTRACT_ID) process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
-if (!process.env.JWT_SECRET)   process.env.JWT_SECRET  = 'backfill-script';
+if (!process.env.CONTRACT_ID)
+  process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
+if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'backfill-script';
 
 // Guard: check that the compiled output exists before attempting to require it.
 // A raw MODULE_NOT_FOUND error gives no hint that 'npm run build' is the fix.
@@ -37,15 +38,22 @@ const fs = require('fs');
 if (!fs.existsSync(distDbPath)) {
   console.error(
     'Error: compiled output not found at dist/db.\n' +
-    'Run "npm run build" first, then re-run this script.'
+      'Run "npm run build" first, then re-run this script.',
   );
   process.exit(1);
 }
 
 const { initDb, getLastLedger, setLastLedger } = require('../dist/db');
 
-initDb();
-const previous = getLastLedger();
-setLastLedger(fromLedger);
-console.log(`Backfill: reset last_ledger from ${previous} to ${fromLedger}`);
-console.log('The next indexer poll will replay events from ledger', fromLedger);
+// initDb() is async; the schema must exist before reading/writing state.
+initDb()
+  .then(() => {
+    const previous = getLastLedger();
+    setLastLedger(fromLedger);
+    console.log(`Backfill: reset last_ledger from ${previous} to ${fromLedger}`);
+    console.log('The next indexer poll will replay events from ledger', fromLedger);
+  })
+  .catch((err) => {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  });

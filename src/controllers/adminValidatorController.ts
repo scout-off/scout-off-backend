@@ -1,16 +1,29 @@
 import { Request, Response, NextFunction } from 'express';
 import { getValidatorStatsSummary } from '../db';
-import { getAllValidators, insertValidator, revokeValidatorRow, getValidatorByWallet } from '../services/indexer';
+import {
+  getAllValidators,
+  insertValidator,
+  revokeValidatorRow,
+  getValidatorByWallet,
+} from '../services/indexer';
 import { isValidStellarAddress } from '../utils/stellarAddress';
 import { logAuditEvent } from '../services/audit';
-import { registerValidatorOnChain, revokeValidatorOnChain, ValidatorActionError } from '../services/stellar';
+import {
+  registerValidatorOnChain,
+  revokeValidatorOnChain,
+  ValidatorActionError,
+} from '../services/stellar';
 import config from '../config';
 import { logger } from '../utils/logger';
 import { ErrorCode } from '../utils/errorCodes';
 import { proposeAction } from '../services/adminMultiSig';
 
 /** GET /api/admin/validators */
-export async function listValidators(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function listValidators(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   res.json({ success: true, data: await getAllValidators() });
 }
 
@@ -21,12 +34,18 @@ export async function listValidators(req: Request, res: Response, _next: NextFun
  * on-chain confirmation, so a failed/rejected chain call never leaves a
  * local row that doesn't reflect contract state.
  */
-export async function registerValidator(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function registerValidator(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   const adminWallet = req.account ?? 'unknown';
   const { validatorWallet } = req.body as { validatorWallet?: string };
 
   if (!validatorWallet || !isValidStellarAddress(validatorWallet)) {
-    logger.warn(`[admin] register_validator rejected — invalid address | admin=${adminWallet} target=${validatorWallet}`);
+    logger.warn(
+      `[admin] register_validator rejected — invalid address | admin=${adminWallet} target=${validatorWallet}`,
+    );
     res.status(400).json({
       success: false,
       error: 'Validation Error',
@@ -42,7 +61,11 @@ export async function registerValidator(req: Request, res: Response, next: NextF
     return;
   }
 
-  const proposal = await proposeAction('register_validator', { validatorWallet, action: 'register_validator' }, adminWallet);
+  const proposal = await proposeAction(
+    'register_validator',
+    { validatorWallet, action: 'register_validator' },
+    adminWallet,
+  );
   if (proposal.status === 'proposed') {
     await logAuditEvent({
       action: 'validator_registration',
@@ -54,7 +77,11 @@ export async function registerValidator(req: Request, res: Response, next: NextF
     res.status(202).json({
       success: true,
       message: `Validator registration proposed, awaiting ${config.adminThreshold - 1} more admin signature(s)`,
-      data: { actionId: proposal.actionId, collectedSignatures: 1, requiredSignatures: config.adminThreshold },
+      data: {
+        actionId: proposal.actionId,
+        collectedSignatures: 1,
+        requiredSignatures: config.adminThreshold,
+      },
     });
     return;
   }
@@ -106,13 +133,25 @@ export async function registerValidator(req: Request, res: Response, next: NextF
     if (err instanceof ValidatorActionError) {
       switch (err.code) {
         case 'ALREADY_REGISTERED':
-          res.status(409).json({ success: false, error: 'Validator is already registered on-chain', code: ErrorCode.CONFLICT });
+          res.status(409).json({
+            success: false,
+            error: 'Validator is already registered on-chain',
+            code: ErrorCode.CONFLICT,
+          });
           return;
         case 'UNAUTHORIZED':
-          res.status(403).json({ success: false, error: 'Unauthorized to register this validator', code: ErrorCode.FORBIDDEN });
+          res.status(403).json({
+            success: false,
+            error: 'Unauthorized to register this validator',
+            code: ErrorCode.FORBIDDEN,
+          });
           return;
         case 'NETWORK_ERROR':
-          res.status(503).json({ success: false, error: 'Network error; please retry', code: ErrorCode.NETWORK_ERROR });
+          res.status(503).json({
+            success: false,
+            error: 'Network error; please retry',
+            code: ErrorCode.NETWORK_ERROR,
+          });
           return;
       }
     }
@@ -127,13 +166,23 @@ export async function registerValidator(req: Request, res: Response, next: NextF
  * on-chain confirmation, so a failed/rejected chain call never leaves the
  * local row out of sync with contract state.
  */
-export async function revokeValidator(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function revokeValidator(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   const adminWallet = req.account ?? 'unknown';
   const { validatorWallet } = req.body as { validatorWallet?: string };
 
   if (!validatorWallet || !isValidStellarAddress(validatorWallet)) {
-    logger.warn(`[admin] revoke_validator rejected — invalid address | admin=${adminWallet} target=${validatorWallet}`);
-    res.status(400).json({ success: false, error: 'validatorWallet must be a valid Stellar address', code: ErrorCode.VALIDATION_ERROR });
+    logger.warn(
+      `[admin] revoke_validator rejected — invalid address | admin=${adminWallet} target=${validatorWallet}`,
+    );
+    res.status(400).json({
+      success: false,
+      error: 'validatorWallet must be a valid Stellar address',
+      code: ErrorCode.VALIDATION_ERROR,
+    });
     return;
   }
 
@@ -154,7 +203,11 @@ export async function revokeValidator(req: Request, res: Response, next: NextFun
     return;
   }
 
-  const proposal = await proposeAction('revoke_validator', { validatorWallet, action: 'revoke_validator' }, adminWallet);
+  const proposal = await proposeAction(
+    'revoke_validator',
+    { validatorWallet, action: 'revoke_validator' },
+    adminWallet,
+  );
   if (proposal.status === 'proposed') {
     await logAuditEvent({
       action: 'validator_revocation',
@@ -166,7 +219,11 @@ export async function revokeValidator(req: Request, res: Response, next: NextFun
     res.status(202).json({
       success: true,
       message: `Validator revocation proposed, awaiting ${config.adminThreshold - 1} more admin signature(s)`,
-      data: { actionId: proposal.actionId, collectedSignatures: 1, requiredSignatures: config.adminThreshold },
+      data: {
+        actionId: proposal.actionId,
+        collectedSignatures: 1,
+        requiredSignatures: config.adminThreshold,
+      },
     });
     return;
   }
@@ -218,16 +275,32 @@ export async function revokeValidator(req: Request, res: Response, next: NextFun
     if (err instanceof ValidatorActionError) {
       switch (err.code) {
         case 'ALREADY_REVOKED':
-          res.status(409).json({ success: false, error: 'Validator is already revoked on-chain', code: ErrorCode.CONFLICT });
+          res.status(409).json({
+            success: false,
+            error: 'Validator is already revoked on-chain',
+            code: ErrorCode.CONFLICT,
+          });
           return;
         case 'NOT_REGISTERED':
-          res.status(409).json({ success: false, error: 'Wallet is not a registered validator on-chain', code: ErrorCode.CONFLICT });
+          res.status(409).json({
+            success: false,
+            error: 'Wallet is not a registered validator on-chain',
+            code: ErrorCode.CONFLICT,
+          });
           return;
         case 'UNAUTHORIZED':
-          res.status(403).json({ success: false, error: 'Unauthorized to revoke this validator', code: ErrorCode.FORBIDDEN });
+          res.status(403).json({
+            success: false,
+            error: 'Unauthorized to revoke this validator',
+            code: ErrorCode.FORBIDDEN,
+          });
           return;
         case 'NETWORK_ERROR':
-          res.status(503).json({ success: false, error: 'Network error; please retry', code: ErrorCode.NETWORK_ERROR });
+          res.status(503).json({
+            success: false,
+            error: 'Network error; please retry',
+            code: ErrorCode.NETWORK_ERROR,
+          });
           return;
       }
     }
@@ -251,7 +324,11 @@ export async function revokeValidator(req: Request, res: Response, next: NextFun
  * Optional `from`/`to` query params (ISO 8601) restrict the approval/rejection
  * counts, the median approval latency and `last_action_at` to the given window.
  */
-export async function getValidatorStatsEndpoint(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function getValidatorStatsEndpoint(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   const wallet = req.params.wallet as string;
   // Validate wallet address
   if (!isValidStellarAddress(wallet)) {

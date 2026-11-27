@@ -27,8 +27,14 @@ jest.mock('../../src/db', () => ({
   fetchLastIndexedLedger: jest.fn().mockReturnValue(0),
   persistLastIndexedLedger: jest.fn(),
   insertAuditLog: jest.fn().mockReturnValue({
-    id: 1, hash: 'aaa', prev_hash: 'bbb', action: '',
-    admin_wallet: '', query_params: '{}', created_at: '', event_source: '',
+    id: 1,
+    hash: 'aaa',
+    prev_hash: 'bbb',
+    action: '',
+    admin_wallet: '',
+    query_params: '{}',
+    created_at: '',
+    event_source: '',
   }),
   getAuditLogs: jest.fn().mockReturnValue([]),
   getAuditLogsCount: jest.fn().mockReturnValue(0),
@@ -92,11 +98,7 @@ function makeRefreshToken(
 }
 
 function makeAccessToken(account: string, role = 'player'): string {
-  return jwt.sign(
-    { sub: account, role, jti: crypto.randomUUID() },
-    SECRET,
-    { expiresIn: 900 },
-  );
+  return jwt.sign({ sub: account, role, jti: crypto.randomUUID() }, SECRET, { expiresIn: 900 });
 }
 
 // ─── POST /auth/refresh ───────────────────────────────────────────────────────
@@ -109,9 +111,7 @@ describe('POST /auth/refresh', () => {
   });
 
   it('returns 401 for a completely invalid token', async () => {
-    const res = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken: 'not-a-jwt' });
+    const res = await request(app).post('/auth/refresh').send({ refreshToken: 'not-a-jwt' });
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
     expect(res.body.code).toBe('TOKEN_INVALID');
@@ -119,9 +119,7 @@ describe('POST /auth/refresh', () => {
 
   it('returns 401 when a plain access token (no type:refresh) is submitted', async () => {
     const accessToken = makeAccessToken('GACCOUNT123');
-    const res = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken: accessToken });
+    const res = await request(app).post('/auth/refresh').send({ refreshToken: accessToken });
     expect(res.status).toBe(401);
     expect(res.body.error).toMatch(/not a refresh token/i);
     expect(res.body.code).toBe('TOKEN_INVALID');
@@ -133,18 +131,14 @@ describe('POST /auth/refresh', () => {
       SECRET,
       { expiresIn: -1 },
     );
-    const res = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken: expired });
+    const res = await request(app).post('/auth/refresh').send({ refreshToken: expired });
     expect(res.status).toBe(401);
     expect(res.body.code).toBe('TOKEN_EXPIRED');
   });
 
   it('returns TOKEN_INVALID for a refresh token missing required claims', async () => {
     const malformed = jwt.sign({ type: 'refresh' }, SECRET, { expiresIn: 3600 });
-    const res = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken: malformed });
+    const res = await request(app).post('/auth/refresh').send({ refreshToken: malformed });
     expect(res.status).toBe(401);
     expect(res.body.code).toBe('TOKEN_INVALID');
   });
@@ -171,9 +165,7 @@ describe('POST /auth/refresh', () => {
 
   it('returns a new token pair for a valid refresh token', async () => {
     const refreshToken = makeRefreshToken('GACCOUNT123', 'scout');
-    const res = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken });
+    const res = await request(app).post('/auth/refresh').send({ refreshToken });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -187,9 +179,7 @@ describe('POST /auth/refresh', () => {
 
   it('sets Cache-Control: no-store and Pragma: no-cache on /auth/refresh responses', async () => {
     const refreshToken = makeRefreshToken('GACCOUNT123', 'scout');
-    const res = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken });
+    const res = await request(app).post('/auth/refresh').send({ refreshToken });
 
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
@@ -198,9 +188,7 @@ describe('POST /auth/refresh', () => {
 
   it('new access token carries the correct role', async () => {
     const refreshToken = makeRefreshToken('GSCOUT', 'scout');
-    const res = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken });
+    const res = await request(app).post('/auth/refresh').send({ refreshToken });
 
     expect(res.status).toBe(200);
     const decoded = jwt.decode(res.body.accessToken) as jwt.JwtPayload;
@@ -210,9 +198,7 @@ describe('POST /auth/refresh', () => {
 
   it('new refresh token also has type:refresh', async () => {
     const refreshToken = makeRefreshToken('GACCOUNT123');
-    const res = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken });
+    const res = await request(app).post('/auth/refresh').send({ refreshToken });
 
     expect(res.status).toBe(200);
     const decoded = jwt.decode(res.body.refreshToken) as jwt.JwtPayload;
@@ -223,15 +209,11 @@ describe('POST /auth/refresh', () => {
     const refreshToken = makeRefreshToken('GACCOUNT456', 'player');
 
     // First use — should succeed and revoke the original jti
-    const first = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken });
+    const first = await request(app).post('/auth/refresh').send({ refreshToken });
     expect(first.status).toBe(200);
 
     // Second use of the same token — jti is now in the blocklist
-    const second = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken });
+    const second = await request(app).post('/auth/refresh').send({ refreshToken });
     expect(second.status).toBe(401);
     expect(second.body.error).toMatch(/revoked/i);
     expect(second.body.code).toBe('TOKEN_INVALID');
@@ -269,9 +251,7 @@ describe('POST /auth/logout', () => {
     expect(logoutRes.status).toBe(200);
 
     // Subsequent refresh attempt with the same token must be rejected
-    const refreshRes = await request(app)
-      .post('/auth/refresh')
-      .send({ refreshToken });
+    const refreshRes = await request(app).post('/auth/refresh').send({ refreshToken });
     expect(refreshRes.status).toBe(401);
   });
 
@@ -304,9 +284,7 @@ describe('POST /auth/token — response still includes legacy `token` field', ()
     // calling through the mock layer.  The mock path returns 400 for
     // non-XDR input — we only verify the field name contract here via unit
     // test of the controller module.
-    const res = await request(app)
-      .post('/auth/token')
-      .send({ transaction: 'not-xdr' });
+    const res = await request(app).post('/auth/token').send({ transaction: 'not-xdr' });
     // Malformed XDR → 400 is expected; we just confirm no 500 occurs
     expect(res.status).not.toBe(500);
   });

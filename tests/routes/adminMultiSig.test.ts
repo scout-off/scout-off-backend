@@ -88,7 +88,10 @@ jest.mock('../../src/db', () => {
       });
     }),
     getPendingAdminActionById: jest.fn((id: string) => {
-      return (store.pending_admin_actions as Array<Record<string, unknown>>).find((a) => a.id === id) ?? null;
+      return (
+        (store.pending_admin_actions as Array<Record<string, unknown>>).find((a) => a.id === id) ??
+        null
+      );
     }),
     updatePendingAdminActionStatus: jest.fn((id: string, status: string) => {
       const a = store.pending_admin_actions.find((x) => x.id === id);
@@ -143,14 +146,25 @@ jest.mock('../../src/services/audit', () => ({
 }));
 
 jest.mock('../../src/utils/logger', () => ({
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), critical: jest.fn(), debug: jest.fn() },
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    critical: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 // Mock stellar calls so quorum-reached tests don't hit the network
 jest.mock('../../src/services/stellar', () => ({
   pauseContractOnChain: jest.fn().mockResolvedValue({ transactionId: 'tx_pause_mock' }),
   unpauseContractOnChain: jest.fn().mockResolvedValue({ transactionId: 'tx_unpause_mock' }),
-  withdrawFees: jest.fn().mockResolvedValue({ transactionId: 'tx_withdraw_mock', amount: 0, recipient: '', token: 'XLM' }),
+  withdrawFees: jest.fn().mockResolvedValue({
+    transactionId: 'tx_withdraw_mock',
+    amount: 0,
+    recipient: '',
+    token: 'XLM',
+  }),
   registerValidatorOnChain: jest.fn().mockResolvedValue({ transactionId: 'tx_register_mock' }),
   revokeValidatorOnChain: jest.fn().mockResolvedValue({ transactionId: 'tx_revoke_mock' }),
 }));
@@ -361,7 +375,12 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
     const stellar = jest.requireMock('../../src/services/stellar');
     stellar.pauseContractOnChain.mockResolvedValue({ transactionId: 'tx_pause_mock' });
     stellar.unpauseContractOnChain.mockResolvedValue({ transactionId: 'tx_unpause_mock' });
-    stellar.withdrawFees.mockResolvedValue({ transactionId: 'tx_withdraw_mock', amount: 0, recipient: '', token: 'XLM' });
+    stellar.withdrawFees.mockResolvedValue({
+      transactionId: 'tx_withdraw_mock',
+      amount: 0,
+      recipient: '',
+      token: 'XLM',
+    });
     stellar.registerValidatorOnChain.mockResolvedValue({ transactionId: 'tx_register_mock' });
     stellar.revokeValidatorOnChain.mockResolvedValue({ transactionId: 'tx_revoke_mock' });
     resetStore();
@@ -370,7 +389,10 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
   it('pause_contract calls pauseContractOnChain', async () => {
     const stellar = jest.requireMock('../../src/services/stellar');
     const mockConfig = jest.requireMock('../../src/config').default;
-    const orig = { adminThreshold: mockConfig.adminThreshold, adminWallets: [...mockConfig.adminWallets] };
+    const orig = {
+      adminThreshold: mockConfig.adminThreshold,
+      adminWallets: [...mockConfig.adminWallets],
+    };
     Object.assign(mockConfig, threshold2Config);
 
     try {
@@ -386,7 +408,10 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
   it('unpause_contract calls unpauseContractOnChain', async () => {
     const stellar = jest.requireMock('../../src/services/stellar');
     const mockConfig = jest.requireMock('../../src/config').default;
-    const orig = { adminThreshold: mockConfig.adminThreshold, adminWallets: [...mockConfig.adminWallets] };
+    const orig = {
+      adminThreshold: mockConfig.adminThreshold,
+      adminWallets: [...mockConfig.adminWallets],
+    };
     Object.assign(mockConfig, threshold2Config);
 
     try {
@@ -402,7 +427,10 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
   it('register_validator calls registerValidatorOnChain', async () => {
     const stellar = jest.requireMock('../../src/services/stellar');
     const mockConfig = jest.requireMock('../../src/config').default;
-    const orig = { adminThreshold: mockConfig.adminThreshold, adminWallets: [...mockConfig.adminWallets] };
+    const orig = {
+      adminThreshold: mockConfig.adminThreshold,
+      adminWallets: [...mockConfig.adminWallets],
+    };
     Object.assign(mockConfig, threshold2Config);
 
     try {
@@ -419,7 +447,10 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
   it('revoke_validator calls revokeValidatorOnChain', async () => {
     const stellar = jest.requireMock('../../src/services/stellar');
     const mockConfig = jest.requireMock('../../src/config').default;
-    const orig = { adminThreshold: mockConfig.adminThreshold, adminWallets: [...mockConfig.adminWallets] };
+    const orig = {
+      adminThreshold: mockConfig.adminThreshold,
+      adminWallets: [...mockConfig.adminWallets],
+    };
     Object.assign(mockConfig, threshold2Config);
 
     try {
@@ -436,7 +467,10 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
   it('withdraw_fees calls withdrawFees with the recipient', async () => {
     const stellar = jest.requireMock('../../src/services/stellar');
     const mockConfig = jest.requireMock('../../src/config').default;
-    const orig = { adminThreshold: mockConfig.adminThreshold, adminWallets: [...mockConfig.adminWallets] };
+    const orig = {
+      adminThreshold: mockConfig.adminThreshold,
+      adminWallets: [...mockConfig.adminWallets],
+    };
     Object.assign(mockConfig, threshold2Config);
 
     try {
@@ -453,12 +487,19 @@ describe('Execution dispatch — each AdminActionType fires the correct stellar 
   it('bulk_validator_import calls registerValidatorOnChain', async () => {
     const stellar = jest.requireMock('../../src/services/stellar');
     const mockConfig = jest.requireMock('../../src/config').default;
-    const orig = { adminThreshold: mockConfig.adminThreshold, adminWallets: [...mockConfig.adminWallets] };
+    const orig = {
+      adminThreshold: mockConfig.adminThreshold,
+      adminWallets: [...mockConfig.adminWallets],
+    };
     Object.assign(mockConfig, threshold2Config);
 
     try {
       const wallet = 'GVAL123XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-      const { actionId } = await proposeAction('bulk_validator_import', { wallet, label: 'Test', region: 'US' }, ADMIN_1);
+      const { actionId } = await proposeAction(
+        'bulk_validator_import',
+        { wallet, label: 'Test', region: 'US' },
+        ADMIN_1,
+      );
       const result = await approveAction(actionId, ADMIN_2);
       expect(result.status).toBe('approved');
       expect(stellar.registerValidatorOnChain).toHaveBeenCalledWith(wallet);

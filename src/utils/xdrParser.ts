@@ -32,7 +32,7 @@ export function parseMilestones(val: xdr.ScVal): OnChainMilestone[] {
       ((item as xdr.ScValMap).map ?? []).map((e) => [
         scValToNative(e.key) as string,
         scValToNative(e.val),
-      ])
+      ]),
     );
     return {
       milestoneId: String(map.milestone_id ?? ''),
@@ -55,7 +55,7 @@ export function parseSubscription(val: xdr.ScVal): { active: boolean; expiresAt:
     ((val as xdr.ScValMap).map ?? []).map((e) => [
       scValToNative(e.key) as string,
       scValToNative(e.val),
-    ])
+    ]),
   );
   return {
     active: Boolean(map.active),

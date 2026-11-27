@@ -21,9 +21,7 @@ async function migrate(db: Database.Database): Promise<void> {
 /** Return the set of index names present in the DB. */
 function getIndexes(db: Database.Database): Set<string> {
   const rows = db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'"
-    )
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'")
     .all() as { name: string }[];
   return new Set(rows.map((r) => r.name));
 }
@@ -33,9 +31,7 @@ function getIndexes(db: Database.Database): Set<string> {
  * Each row's `detail` field describes the strategy SQLite chose.
  */
 function explainPlan(db: Database.Database, sql: string, params: unknown[] = []): string[] {
-  const rows = db
-    .prepare(`EXPLAIN QUERY PLAN ${sql}`)
-    .all(...params) as { detail: string }[];
+  const rows = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as { detail: string }[];
   return rows.map((r) => r.detail);
 }
 
@@ -45,14 +41,14 @@ function seedData(db: Database.Database): void {
   for (let i = 0; i < 20; i++) {
     db.prepare(
       `INSERT INTO players (player_id, wallet, region, position, progress_level, created_at, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, 1)`
+       VALUES (?, ?, ?, ?, ?, ?, 1)`,
     ).run(
       `player-${i}`,
       `wallet-${i}`,
       i % 2 === 0 ? 'EU' : 'NA',
       i % 3 === 0 ? 'FWD' : 'MID',
       i % 5,
-      Date.now() - i * 1000
+      Date.now() - i * 1000,
     );
   }
 
@@ -60,7 +56,7 @@ function seedData(db: Database.Database): void {
   for (let i = 0; i < 10; i++) {
     db.prepare(
       `INSERT INTO subscriptions (scout_wallet, tier, expires_at, created_at)
-       VALUES (?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?)`,
     ).run(`scout-${i}`, 'pro', Date.now() + i * 86400000, Date.now());
   }
 
@@ -68,7 +64,7 @@ function seedData(db: Database.Database): void {
   for (let i = 0; i < 10; i++) {
     db.prepare(
       `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at)
-       VALUES (?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?)`,
     ).run(`scout-${i}`, `player-${i}`, `tx-${i}`, Date.now());
   }
 
@@ -76,7 +72,7 @@ function seedData(db: Database.Database): void {
   for (let i = 0; i < 10; i++) {
     db.prepare(
       `INSERT INTO audit_log (action, admin_wallet, query_params, created_at, prev_hash, hash, event_source)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       'player.deactivate',
       `admin-${i}`,
@@ -84,7 +80,7 @@ function seedData(db: Database.Database): void {
       new Date(Date.now() - i * 3600000).toISOString(),
       'genesis',
       `hash-${i}`,
-      'admin_action'
+      'admin_action',
     );
   }
 
@@ -93,7 +89,7 @@ function seedData(db: Database.Database): void {
   for (let i = 0; i < 10; i++) {
     db.prepare(
       `INSERT INTO idempotency_keys (key, status_code, response, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?)`,
     ).run(`idem-key-${i}`, 200, '{}', now, now + 86400000);
   }
 }
@@ -157,7 +153,7 @@ describe('Migration 013 — composite indexes (#821)', () => {
         db,
         `SELECT * FROM players WHERE region = ? AND position = ? AND progress_level >= ? AND is_active = 1
          ORDER BY created_at ASC LIMIT 20 OFFSET 0`,
-        ['EU', 'FWD', 2]
+        ['EU', 'FWD', 2],
       );
       const planText = plan.join('\n');
       expect(planText).toMatch(/SEARCH players USING INDEX idx_players_search/i);
@@ -170,10 +166,12 @@ describe('Migration 013 — composite indexes (#821)', () => {
         `SELECT * FROM subscriptions
          WHERE scout_wallet = ? AND cancelled_at IS NULL
          ORDER BY expires_at DESC LIMIT 1`,
-        ['scout-0']
+        ['scout-0'],
       );
       const planText = plan.join('\n');
-      expect(planText).toMatch(/SEARCH subscriptions USING INDEX idx_subscriptions_wallet_active_expires/i);
+      expect(planText).toMatch(
+        /SEARCH subscriptions USING INDEX idx_subscriptions_wallet_active_expires/i,
+      );
       expect(planText).not.toMatch(/SCAN TABLE subscriptions(?! USING)/i);
     });
 
@@ -190,7 +188,7 @@ describe('Migration 013 — composite indexes (#821)', () => {
       const plan = explainPlan(
         db,
         `SELECT 1 FROM contact_unlocks WHERE scout_wallet = ? AND player_id = ? LIMIT 1`,
-        ['scout-0', 'player-0']
+        ['scout-0', 'player-0'],
       );
       const planText = plan.join('\n');
       expect(planText).toMatch(/SEARCH contact_unlocks USING (COVERING )?INDEX/i);
@@ -203,7 +201,7 @@ describe('Migration 013 — composite indexes (#821)', () => {
         `SELECT * FROM audit_log
          WHERE action = ? AND created_at >= ? AND created_at <= ?
          ORDER BY created_at DESC LIMIT 50 OFFSET 0`,
-        ['player.deactivate', '2020-01-01T00:00:00Z', '2099-01-01T00:00:00Z']
+        ['player.deactivate', '2020-01-01T00:00:00Z', '2099-01-01T00:00:00Z'],
       );
       const planText = plan.join('\n');
       expect(planText).toMatch(/SEARCH audit_log USING INDEX idx_audit_log_action_created_at/i);
@@ -214,7 +212,7 @@ describe('Migration 013 — composite indexes (#821)', () => {
       const plan = explainPlan(
         db,
         `SELECT * FROM idempotency_keys WHERE key = ? AND expires_at > ?`,
-        ['idem-key-0', Date.now()]
+        ['idem-key-0', Date.now()],
       );
       const planText = plan.join('\n');
       // key is the PRIMARY KEY so SQLite may report USING INTEGER PRIMARY KEY or
@@ -223,11 +221,9 @@ describe('Migration 013 — composite indexes (#821)', () => {
     });
 
     it('purgeExpiredIdempotencyKeys DELETE uses an index scan', () => {
-      const plan = explainPlan(
-        db,
-        `DELETE FROM idempotency_keys WHERE expires_at <= ?`,
-        [Date.now() - 1]
-      );
+      const plan = explainPlan(db, `DELETE FROM idempotency_keys WHERE expires_at <= ?`, [
+        Date.now() - 1,
+      ]);
       const planText = plan.join('\n');
       expect(planText).not.toMatch(/SCAN TABLE idempotency_keys(?! USING)/i);
     });

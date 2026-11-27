@@ -7,7 +7,12 @@ jest.mock('../../src/utils/logger', () => ({
 jest.mock('../../src/services/stellar', () => ({
   submitContactPayment: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -31,8 +36,8 @@ import * as cacheModule from '../../src/services/cache';
 import { broadcaster } from '../../src/services/eventBroadcaster';
 
 const mockSubmit = submitContactPayment as jest.Mock;
-const mockWarn = (logger.warn as jest.Mock);
-const mockInfo = (logger.info as jest.Mock);
+const mockWarn = logger.warn as jest.Mock;
+const mockInfo = logger.info as jest.Mock;
 
 function makeRes() {
   const json = jest.fn().mockReturnThis();
@@ -44,7 +49,7 @@ const next = jest.fn() as unknown as NextFunction;
 
 describe('unlockContact', () => {
   const WALLET = 'GAE3BQINZGCGNDDFRJZYAWXDXBFJJALLZ47UCHMWASF56ILDAVUODSOR';
-  const OTHER  = 'GD4LQIN4652EY3VSBTQ32PY3GVKZBKRA2PN3LUUC2TL7I53COGFLWYQP';
+  const OTHER = 'GD4LQIN4652EY3VSBTQ32PY3GVKZBKRA2PN3LUUC2TL7I53COGFLWYQP';
   const PLAYER = 'player-123';
   const PLAYER_ROW = {
     player_id: PLAYER,
@@ -74,38 +79,47 @@ describe('unlockContact', () => {
   });
 
   it('returns 403 when JWT account does not match wallet param', async () => {
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: OTHER } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: OTHER,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(403);
-    const body = ((res.status as jest.Mock).mock.results[0].value.json as jest.Mock).mock.calls[0][0];
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(403);
+    const body = ((res.status as jest.Mock).mock.results[0].value.json as jest.Mock).mock
+      .calls[0][0];
     expect(body.success).toBe(false);
     expect(body.error).toMatch(/wallet/i);
   });
 
   it('logs a warning on denied unlock attempt', async () => {
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: OTHER } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: OTHER,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
-    expect(mockWarn).toHaveBeenCalledWith(
-      expect.stringContaining('unlock_contact_denied')
-    );
+    expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('unlock_contact_denied'));
   });
 
   it('returns 400 when wallet param is missing', async () => {
     const req = { params: { wallet: '', playerId: PLAYER }, account: '' } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(400);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(400);
   });
 
   it('returns 404 when the player does not exist', async () => {
     (require('../../src/db').getPlayerById as jest.Mock).mockReturnValue(null);
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: WALLET,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(404);
-    const body = ((res.status as jest.Mock).mock.results[0].value.json as jest.Mock).mock.calls[0][0];
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(404);
+    const body = ((res.status as jest.Mock).mock.results[0].value.json as jest.Mock).mock
+      .calls[0][0];
     expect(body).toMatchObject({ success: false, code: 'PLAYER_NOT_FOUND' });
     expect(mockSubmit).not.toHaveBeenCalled();
   });
@@ -115,17 +129,24 @@ describe('unlockContact', () => {
       ...PLAYER_ROW,
       wallet: WALLET,
     });
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: WALLET,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(400);
-    const body = ((res.status as jest.Mock).mock.results[0].value.json as jest.Mock).mock.calls[0][0];
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(400);
+    const body = ((res.status as jest.Mock).mock.results[0].value.json as jest.Mock).mock
+      .calls[0][0];
     expect(body.error).toMatch(/own profile/i);
     expect(mockSubmit).not.toHaveBeenCalled();
   });
 
   it('calls submitContactPayment when wallet ownership is verified and persists the unlock', async () => {
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: WALLET,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
     expect(mockSubmit).toHaveBeenCalledWith(WALLET, PLAYER);
@@ -135,13 +156,14 @@ describe('unlockContact', () => {
       tx_hash: 'tx-unlock-1',
       unlocked_at: expect.any(Number),
     });
-    expect((res.json as jest.Mock)).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true })
-    );
+    expect(res.json as jest.Mock).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 
   it('returns the player contact metadata and transaction info in the response', async () => {
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: WALLET,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
     const body = (res.json as jest.Mock).mock.calls[0][0];
@@ -155,7 +177,10 @@ describe('unlockContact', () => {
   });
 
   it('broadcasts a contact_unlocked SSE event after the unlock is persisted', async () => {
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: WALLET,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
     expect(broadcastSpy).toHaveBeenCalledTimes(1);
@@ -173,7 +198,10 @@ describe('unlockContact', () => {
     insertMock.mockImplementation(() => {
       expect(broadcastSpy).not.toHaveBeenCalled();
     });
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: WALLET,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
     expect(broadcastSpy).toHaveBeenCalledTimes(1);
@@ -182,7 +210,10 @@ describe('unlockContact', () => {
 
   it('does not broadcast or insert when the payment fails', async () => {
     mockSubmit.mockRejectedValue(new PaymentError('payment failed', 'NETWORK_ERROR'));
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: WALLET,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
     expect(require('../../src/db').insertContactUnlock).not.toHaveBeenCalled();
@@ -191,11 +222,14 @@ describe('unlockContact', () => {
 
   it('returns the cached contact details without a new payment when already unlocked', async () => {
     (require('../../src/db').hasContactUnlock as jest.Mock).mockReturnValue(true);
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: WALLET,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
     expect(mockSubmit).not.toHaveBeenCalled();
-    expect((res.json as jest.Mock)).toHaveBeenCalledWith(
+    expect(res.json as jest.Mock).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
         data: expect.objectContaining({
@@ -203,18 +237,19 @@ describe('unlockContact', () => {
           playerId: PLAYER,
           metadataUri: PLAYER_ROW.metadata_uri,
         }),
-      })
+      }),
     );
   });
 
   it('logs the unlock attempt with scout wallet when wallet matches', async () => {
     mockSubmit.mockResolvedValue({ transactionId: 'tx', status: 'submitted' });
-    const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+    const req = {
+      params: { wallet: WALLET, playerId: PLAYER },
+      account: WALLET,
+    } as unknown as Request;
     const res = makeRes();
     await unlockContact(req, res, next);
-    expect(mockInfo).toHaveBeenCalledWith(
-      expect.stringContaining(WALLET)
-    );
+    expect(mockInfo).toHaveBeenCalledWith(expect.stringContaining(WALLET));
   });
 
   // #763 — contact_unlocked is a player-state-changing event: after the unlock
@@ -228,12 +263,17 @@ describe('unlockContact', () => {
         .mockResolvedValue(undefined);
       mockSubmit.mockResolvedValue({ transactionId: 'abc', status: 'submitted' });
 
-      const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+      const req = {
+        params: { wallet: WALLET, playerId: PLAYER },
+        account: WALLET,
+      } as unknown as Request;
       const res = makeRes();
       await unlockContact(req, res, next);
 
       expect(invalidateSpy).toHaveBeenCalledTimes(1);
-      expect((res.json as jest.Mock)).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+      expect(res.json as jest.Mock).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true }),
+      );
       invalidateSpy.mockRestore();
     });
 
@@ -243,7 +283,10 @@ describe('unlockContact', () => {
         .mockResolvedValue(undefined);
       mockSubmit.mockRejectedValue(new PaymentError('payment failed', 'PAYMENT_FAILED'));
 
-      const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+      const req = {
+        params: { wallet: WALLET, playerId: PLAYER },
+        account: WALLET,
+      } as unknown as Request;
       const res = makeRes();
       await unlockContact(req, res, next);
 
@@ -267,11 +310,15 @@ describe('unlockContact', () => {
 
     it.each(CASES)('maps PaymentError code %s to HTTP %d', async (code, expectedStatus) => {
       mockSubmit.mockRejectedValue(new PaymentError(`failed: ${code}`, code));
-      const req = { params: { wallet: WALLET, playerId: PLAYER }, account: WALLET } as unknown as Request;
+      const req = {
+        params: { wallet: WALLET, playerId: PLAYER },
+        account: WALLET,
+      } as unknown as Request;
       const res = makeRes();
       await unlockContact(req, res, next);
-      expect((res.status as jest.Mock)).toHaveBeenCalledWith(expectedStatus);
-      const body = ((res.status as jest.Mock).mock.results[0].value.json as jest.Mock).mock.calls[0][0];
+      expect(res.status as jest.Mock).toHaveBeenCalledWith(expectedStatus);
+      const body = ((res.status as jest.Mock).mock.results[0].value.json as jest.Mock).mock
+        .calls[0][0];
       expect(body).toMatchObject({ success: false, code });
     });
 

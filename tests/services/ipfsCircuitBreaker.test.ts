@@ -8,7 +8,13 @@ process.env.PINATA_SECRET = 'test-secret-pinata';
 
 import axios from 'axios';
 import config from '../../src/config';
-import { ipfsBreaker, pinJson, pinFile, checkHealth, clearPinJsonCache } from '../../src/services/ipfs';
+import {
+  ipfsBreaker,
+  pinJson,
+  pinFile,
+  checkHealth,
+  clearPinJsonCache,
+} from '../../src/services/ipfs';
 import { CircuitBreakerOpenError } from '../../src/utils/circuitBreaker';
 
 jest.mock('axios');
@@ -59,7 +65,7 @@ describe('CircuitBreaker — unit', () => {
     });
     await breaker.execute(() => Promise.reject(new Error('fail'))).catch(() => {});
     await expect(breaker.execute(() => Promise.resolve('ok'))).rejects.toBeInstanceOf(
-      CircuitBreakerOpenError
+      CircuitBreakerOpenError,
     );
   });
 
@@ -130,9 +136,9 @@ describe('pinFile — circuit breaker integration', () => {
     for (let i = 0; i < 5; i++) {
       await pinJson({}).catch(() => {});
     }
-    await expect(
-      pinFile(Buffer.from('data'), 'test.jpg', 'image/jpeg')
-    ).rejects.toBeInstanceOf(CircuitBreakerOpenError);
+    await expect(pinFile(Buffer.from('data'), 'test.jpg', 'image/jpeg')).rejects.toBeInstanceOf(
+      CircuitBreakerOpenError,
+    );
   });
 });
 
@@ -151,7 +157,7 @@ describe('checkHealth — breaker awareness', () => {
     await expect(checkHealth()).resolves.toBeUndefined();
     expect(mockAxios.get).toHaveBeenCalledWith(
       expect.stringContaining('testAuthentication'),
-      expect.anything()
+      expect.anything(),
     );
   });
 });

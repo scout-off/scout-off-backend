@@ -48,7 +48,9 @@ const POSTGRES_TEST_URL = process.env.POSTGRES_TEST_URL || process.env.DATABASE_
  */
 async function applyPostgresMigrations(driver: DbDriver): Promise<void> {
   const migrationsDir = path.resolve(__dirname, '../../db');
-  await driver.exec('CREATE TABLE IF NOT EXISTS migrations (id TEXT PRIMARY KEY, applied_at BIGINT NOT NULL)');
+  await driver.exec(
+    'CREATE TABLE IF NOT EXISTS migrations (id TEXT PRIMARY KEY, applied_at BIGINT NOT NULL)',
+  );
 
   const files = fs
     .readdirSync(migrationsDir)
@@ -56,7 +58,9 @@ async function applyPostgresMigrations(driver: DbDriver): Promise<void> {
     .sort();
 
   for (const file of files) {
-    const already = await driver.get<{ id: string }>('SELECT id FROM migrations WHERE id = ?', [file]);
+    const already = await driver.get<{ id: string }>('SELECT id FROM migrations WHERE id = ?', [
+      file,
+    ]);
     if (already) continue;
 
     const postgresFile = file.replace('.sql', '_postgres.sql');
@@ -183,7 +187,13 @@ describePg('PostgresDriver — live integration (#1014)', () => {
             const queryParams = '{}';
             const createdAt = new Date().toISOString();
             const hash = computeChainHash(
-              auditChainContent({ action, adminWallet, queryParams, createdAt, eventSource: 'admin_action' }),
+              auditChainContent({
+                action,
+                adminWallet,
+                queryParams,
+                createdAt,
+                eventSource: 'admin_action',
+              }),
               prevHash,
             );
             await tx.run(
@@ -201,9 +211,12 @@ describePg('PostgresDriver — live integration (#1014)', () => {
       const rejected = results.filter((r) => r.status === 'rejected');
       expect(rejected).toHaveLength(0);
 
-      const rows = await driver.all<{ id: number; action: string; prev_hash: string | null; hash: string }>(
-        'SELECT id, action, prev_hash, hash FROM audit_log ORDER BY id ASC',
-      );
+      const rows = await driver.all<{
+        id: number;
+        action: string;
+        prev_hash: string | null;
+        hash: string;
+      }>('SELECT id, action, prev_hash, hash FROM audit_log ORDER BY id ASC');
       expect(rows).toHaveLength(N);
 
       // Hash chain must be unbroken end-to-end, starting from GENESIS_HASH —

@@ -11,7 +11,7 @@ services:
     container_name: scout-off-backend
     restart: unless-stopped
     ports:
-      - "${PORT:-4000}:4000"
+      - '${PORT:-4000}:4000'
     volumes:
       # Named volume keeps the SQLite DB file across restarts and `docker compose down`
       - scout_db:/data
@@ -19,12 +19,12 @@ services:
       NODE_ENV: development
 
       # ── Server ────────────────────────────────────────────────────
-      PORT: "4000"
+      PORT: '4000'
 
       # ── Auth (REQUIRED — change before first run) ─────────────────
       # Generate a strong secret: openssl rand -hex 32
-      JWT_SECRET: "change-me-to-a-long-random-secret-at-least-32-chars"
-      ADMIN_WALLET: ""
+      JWT_SECRET: 'change-me-to-a-long-random-secret-at-least-32-chars'
+      ADMIN_WALLET: ''
 
       # ── Stellar / Soroban ─────────────────────────────────────────
       # Points at the `stellar` service below: a standalone Stellar network
@@ -45,9 +45,9 @@ services:
       #   HORIZON_URL: "https://horizon-testnet.stellar.org"
       #   SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
       NETWORK: standalone
-      NETWORK_PASSPHRASE: "Standalone Network ; February 2017"
-      HORIZON_URL: "http://stellar:8000"
-      SOROBAN_RPC_URL: "http://stellar:8000/soroban/rpc"
+      NETWORK_PASSPHRASE: 'Standalone Network ; February 2017'
+      HORIZON_URL: 'http://stellar:8000'
+      SOROBAN_RPC_URL: 'http://stellar:8000/soroban/rpc'
 
       # CONTRACT_ID is required by the app — run
       # ./scripts/soroban-sandbox/deploy.sh against the local network to build,
@@ -56,39 +56,39 @@ services:
       # scripts/soroban-sandbox/.env.contracts). The placeholder below satisfies
       # the startup check; the indexer will log errors on each poll until a real
       # contract ID is supplied.
-      CONTRACT_ID: "PLACEHOLDER_REPLACE_WITH_REAL_CONTRACT_ID"
+      CONTRACT_ID: 'PLACEHOLDER_REPLACE_WITH_REAL_CONTRACT_ID'
 
       # ── Database ──────────────────────────────────────────────────
       # Mapped to the named volume mount point set in the Dockerfile
       DB_PATH: /data/scout-off.db
 
       # ── IPFS / Pinata (optional in development) ───────────────────
-      PINATA_API_KEY: ""
-      PINATA_SECRET: ""
-      PINATA_GATEWAY: "https://gateway.pinata.cloud"
+      PINATA_API_KEY: ''
+      PINATA_SECRET: ''
+      PINATA_GATEWAY: 'https://gateway.pinata.cloud'
 
       # ── Platform ──────────────────────────────────────────────────
-      PLATFORM_FEE_BPS: "500"
+      PLATFORM_FEE_BPS: '500'
       LOG_LEVEL: info
 
       # ── Feature flags ─────────────────────────────────────────────
       # Disable Stellar health check so the server starts cleanly
       # even when CONTRACT_ID is not yet set
-      STELLAR_HEALTH_CHECK: "false"
+      STELLAR_HEALTH_CHECK: 'false'
       JSON_PAYLOAD_LIMIT: 1mb
       UPLOAD_PAYLOAD_LIMIT: 10mb
 
       # ── Rate limiting ─────────────────────────────────────────────
-      RATE_LIMIT_ENABLED: "true"
-      RATE_LIMIT_WINDOW_MS: "60000"
-      RATE_LIMIT_MAX: "60"
+      RATE_LIMIT_ENABLED: 'true'
+      RATE_LIMIT_WINDOW_MS: '60000'
+      RATE_LIMIT_MAX: '60'
 
       # ── Webhooks (off by default) ─────────────────────────────────
-      WEBHOOK_ENABLED: "false"
-      WEBHOOK_URL: ""
+      WEBHOOK_ENABLED: 'false'
+      WEBHOOK_URL: ''
 
       # ── Security headers ──────────────────────────────────────────
-      SECURITY_HSTS: "max-age=31536000; includeSubDomains"
+      SECURITY_HSTS: 'max-age=31536000; includeSubDomains'
       SECURITY_X_CONTENT_TYPE_OPTIONS: nosniff
       SECURITY_X_FRAME_OPTIONS: DENY
       SECURITY_REFERRER_POLICY: no-referrer
@@ -98,24 +98,24 @@ services:
       API_V: v1
 
       # ── Metrics ───────────────────────────────────────────────────
-      METRICS_ENABLED: "false"
+      METRICS_ENABLED: 'false'
 
       # ── Milestone rate limiting ───────────────────────────────────
-      MILESTONE_RATE_WINDOW_MS: "60000"
-      MILESTONE_RATE_MAX: "10"
+      MILESTONE_RATE_WINDOW_MS: '60000'
+      MILESTONE_RATE_MAX: '10'
 
       # ── Redis (optional) ──────────────────────────────────────────
       # Points the search cache (src/services/cache.ts) at the redis service
       # below instead of the process-local in-memory fallback. Unset this
       # (or remove the redis service and depends_on) to run against the
       # in-memory cache — nothing else needs to change.
-      REDIS_URL: "redis://redis:6379"
+      REDIS_URL: 'redis://redis:6379'
 
       # ── Proxy ─────────────────────────────────────────────────────
-      TRUSTED_PROXY_COUNT: "0"
+      TRUSTED_PROXY_COUNT: '0'
 
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/health/liveness"]
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:4000/health/liveness']
       interval: 10s
       timeout: 5s
       retries: 3
@@ -136,9 +136,9 @@ services:
     container_name: scout-off-redis
     restart: unless-stopped
     expose:
-      - "6379"
+      - '6379'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -177,7 +177,7 @@ services:
     command: --local --enable-soroban-rpc
     ports:
       # Host port only — containers reach the network at stellar:8000.
-      - "${STELLAR_PORT:-8000}:8000"
+      - '${STELLAR_PORT:-8000}:8000'
     healthcheck:
       # /soroban/rpc is a JSON-RPC endpoint: it must be POSTed. A plain GET
       # returns 405, so a `curl -f` probe would keep the container permanently
@@ -210,11 +210,11 @@ services:
       POSTGRES_PASSWORD: scout_password
       POSTGRES_DB: scout_off
     expose:
-      - "5432"
+      - '5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U scout_user -d scout_off"]
+      test: ['CMD-SHELL', 'pg_isready -U scout_user -d scout_off']
       interval: 5s
       timeout: 5s
       retries: 5

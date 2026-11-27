@@ -113,11 +113,7 @@ export function resetInFlightRequestCountForTests(): void {
  * disconnects. Mounted early in `src/app.ts` so every route (streams, exports,
  * keep-alive requests) is covered.
  */
-export function trackInFlightRequest(
-  _req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
+export function trackInFlightRequest(_req: Request, res: Response, next: NextFunction): void {
   inFlightRequests += 1;
   let settled = false;
   const release = (): void => {
@@ -172,16 +168,11 @@ function withTimeout<T>(
   ms: number,
   sleep: (ms: number) => Promise<void>,
 ): Promise<T | undefined> {
-  return Promise.race([
-    promise,
-    sleep(Math.max(0, ms)).then(() => undefined),
-  ]);
+  return Promise.race([promise, sleep(Math.max(0, ms)).then(() => undefined)]);
 }
 
 type CleanupOutcome =
-  | { status: 'ok' }
-  | { status: 'timeout' }
-  | { status: 'error'; error: unknown };
+  { status: 'ok' } | { status: 'timeout' } | { status: 'error'; error: unknown };
 
 /**
  * Runs a cleanup step, bounding it by the remaining budget. A rejected
@@ -197,9 +188,9 @@ async function runCleanupStep(
     () => ({ status: 'ok' as const }),
     (error: unknown) => ({ status: 'error' as const, error }),
   );
-  const timeout: Promise<CleanupOutcome> = sleep(
-    Math.max(1, remainingMs),
-  ).then(() => ({ status: 'timeout' as const }));
+  const timeout: Promise<CleanupOutcome> = sleep(Math.max(1, remainingMs)).then(() => ({
+    status: 'timeout' as const,
+  }));
   return Promise.race([work, timeout]);
 }
 
@@ -214,9 +205,7 @@ interface CleanupStep {
  * Runs the full graceful-shutdown sequence. Never throws: cleanup failures are
  * collected in `cleanupFailures` and reflected in `exitCode`.
  */
-export async function runShutdown(
-  deps: ShutdownDeps,
-): Promise<ShutdownResult> {
+export async function runShutdown(deps: ShutdownDeps): Promise<ShutdownResult> {
   const {
     server,
     timeoutMs,
@@ -232,8 +221,7 @@ export async function runShutdown(
   } = deps;
 
   const getInFlightJobs = deps.getInFlightJobs ?? (() => 0);
-  const getInFlightRequests =
-    deps.getInFlightRequests ?? getInFlightRequestCount;
+  const getInFlightRequests = deps.getInFlightRequests ?? getInFlightRequestCount;
 
   const start = now();
   const log: ShutdownLogger = logger ?? {
@@ -289,17 +277,10 @@ export async function runShutdown(
   if (inFlightJobs > 0) {
     log.info(`[shutdown] waiting for ${inFlightJobs} in-flight job(s)...`);
     const jobDeadline = Math.min(now() + jobDrainMs, cleanupDeadline);
-    await waitFor(
-      () => getInFlightJobs() === 0,
-      jobDeadline,
-      now,
-      sleep,
-    );
+    await waitFor(() => getInFlightJobs() === 0, jobDeadline, now, sleep);
     const remainingJobs = getInFlightJobs();
     if (remainingJobs > 0) {
-      log.warn(
-        `[shutdown] ${remainingJobs} job(s) still running, proceeding`,
-      );
+      log.warn(`[shutdown] ${remainingJobs} job(s) still running, proceeding`);
     }
   }
 
@@ -345,12 +326,7 @@ export async function runShutdown(
 
   // Step 7: let in-flight requests finish within their slice.
   const requestDeadline = Math.min(now() + requestDrainMs, cleanupDeadline);
-  await waitFor(
-    () => getInFlightRequests() === 0 || serverClosed,
-    requestDeadline,
-    now,
-    sleep,
-  );
+  await waitFor(() => getInFlightRequests() === 0 || serverClosed, requestDeadline, now, sleep);
 
   // Step 8: force-close whatever is still connected.
   const stragglers = getInFlightRequests();
@@ -389,20 +365,12 @@ export async function runShutdown(
     if (remainingMs <= 0) {
       // Out of budget: still attempt the cleanup, but do not let a hang keep
       // the process alive indefinitely.
-      log.warn(
-        `[shutdown] no budget left for ${step.name} cleanup, attempting anyway`,
-      );
+      log.warn(`[shutdown] no budget left for ${step.name} cleanup, attempting anyway`);
     }
-    const outcome = await runCleanupStep(
-      step.run,
-      Math.max(1, remainingMs),
-      sleep,
-    );
+    const outcome = await runCleanupStep(step.run, Math.max(1, remainingMs), sleep);
     if (outcome.status === 'timeout') {
       cleanupFailures.push(step.name);
-      log.error(
-        `[shutdown] ${step.name} cleanup exceeded the remaining budget`,
-      );
+      log.error(`[shutdown] ${step.name} cleanup exceeded the remaining budget`);
     } else if (outcome.status === 'error') {
       cleanupFailures.push(step.name);
       log.error(`[shutdown] error closing ${step.name}:`, outcome.error);
@@ -413,9 +381,7 @@ export async function runShutdown(
 
   const durationMs = now() - start;
   if (durationMs > budget) {
-    log.warn(
-      `[shutdown] exceeded the ${budget}ms budget (took ${durationMs}ms)`,
-    );
+    log.warn(`[shutdown] exceeded the ${budget}ms budget (took ${durationMs}ms)`);
   }
 
   return {

@@ -118,7 +118,9 @@ export function publishSseEvent(event: {
     });
     return true;
   } catch (err) {
-    logger.warn(`[redis] failed to publish event to ${channel}: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(
+      `[redis] failed to publish event to ${channel}: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return false;
   }
 }
@@ -135,7 +137,7 @@ export function subscribeSseEvents(onEvent: (data: unknown) => void): () => void
     // No-op when Redis is not available
     return () => {};
   }
-  
+
   const handler = (channel: string, data: string) => {
     if (channel === 'sse:events') {
       try {
@@ -143,18 +145,22 @@ export function subscribeSseEvents(onEvent: (data: unknown) => void): () => void
           'messaging.destination.name': channel,
         }).catch((err: unknown) => logger.warn('[redis] SSE message handler failed:', err));
       } catch (err) {
-        logger.warn(`[redis] failed to parse SSE event message: ${err instanceof Error ? err.message : String(err)}`);
+        logger.warn(
+          `[redis] failed to parse SSE event message: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   };
   client.on('message', handler);
-  
+
   void client.subscribe('sse:events', (err) => {
     if (err) {
-      logger.error(`[redis] failed to subscribe to sse:events: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(
+        `[redis] failed to subscribe to sse:events: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   });
-  
+
   // Return unsubscribe function
   return () => {
     client.off('message', handler);
@@ -166,7 +172,10 @@ export function subscribeSseEvents(onEvent: (data: unknown) => void): () => void
  * Publish a cross-instance security event on the `security:<event>` channel
  * consumed by securityEventPubSub.ts. No-op when Redis is not configured.
  */
-export async function publishSecurityEvent(event: string, payload: Record<string, unknown>): Promise<void> {
+export async function publishSecurityEvent(
+  event: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
   const client = getRedisClient();
   if (!client) return;
   await client.publish(`security:${event}`, encodeTracedMessage(payload));

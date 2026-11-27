@@ -28,7 +28,16 @@ import {
   upsertNoteSchema,
   noteContentSchema,
 } from '../controllers/scoutNotesController';
-import { issueApiKey, listApiKeys, revokeApiKey, rotateApiKey, updateApiKey, issueKeySchema, rotateKeySchema, updateKeySchema } from '../controllers/apiKeyController';
+import {
+  issueApiKey,
+  listApiKeys,
+  revokeApiKey,
+  rotateApiKey,
+  updateApiKey,
+  issueKeySchema,
+  rotateKeySchema,
+  updateKeySchema,
+} from '../controllers/apiKeyController';
 import {
   addBookmark,
   removeBookmark,
@@ -100,8 +109,14 @@ const webhookTestRateLimit = walletRateLimit({
  * @response 401 { success: false, error: string } - Missing or invalid token
  * @auth Bearer (scout role required)
  */
-router.route('/:wallet/subscription')
-  .get(requireRole('scout'), requireApiKeyScope('read:subscription'), requireWalletOwner(), getSubscription)
+router
+  .route('/:wallet/subscription')
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:subscription'),
+    requireWalletOwner(),
+    getSubscription,
+  )
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -144,10 +159,31 @@ router.route('/:wallet/subscription')
  * @response 404 { success: false, error: string } - No active subscription found
  * @auth Bearer (scout role required)
  */
-router.route('/:wallet/subscribe')
-  .post(requireRole('scout'), requireWalletOwner({ validateAddress: false }), requireApiKeyScope('write:subscriptions'), walletRateLimit(), idempotency, validateBody(subscribeSchema), subscribe)
-  .put(requireRole('scout'), requireWalletOwner({ validateAddress: false }), requireApiKeyScope('write:subscriptions'), walletRateLimit(), validateBody(subscribeSchema), renewSubscription)
-  .delete(requireRole('scout'), requireWalletOwner({ validateAddress: false }), requireApiKeyScope('write:subscriptions'), cancelSubscription)
+router
+  .route('/:wallet/subscribe')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner({ validateAddress: false }),
+    requireApiKeyScope('write:subscriptions'),
+    walletRateLimit(),
+    idempotency,
+    validateBody(subscribeSchema),
+    subscribe,
+  )
+  .put(
+    requireRole('scout'),
+    requireWalletOwner({ validateAddress: false }),
+    requireApiKeyScope('write:subscriptions'),
+    walletRateLimit(),
+    validateBody(subscribeSchema),
+    renewSubscription,
+  )
+  .delete(
+    requireRole('scout'),
+    requireWalletOwner({ validateAddress: false }),
+    requireApiKeyScope('write:subscriptions'),
+    cancelSubscription,
+  )
   .all(methodNotAllowed(['POST', 'PUT', 'DELETE']));
 
 /**
@@ -162,8 +198,14 @@ router.route('/:wallet/subscribe')
  * @response 401 { success: false, error: string } - Wallet mismatch or missing token
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/contacts')
-  .get(requireRole('scout'), requireApiKeyScope('read:contacts'), requireWalletOwner(), getUnlockedContacts)
+router
+  .route('/:wallet/contacts')
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:contacts'),
+    requireWalletOwner(),
+    getUnlockedContacts,
+  )
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -179,8 +221,14 @@ router.route('/:wallet/contacts')
  * @response 404 { success: false, error: string } - Player not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/contacts/:playerId')
-  .get(requireRole('scout'), requireApiKeyScope('read:contacts'), requireWalletOwner({ validateAddress: false }), getContactDetails)
+router
+  .route('/:wallet/contacts/:playerId')
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:contacts'),
+    requireWalletOwner({ validateAddress: false }),
+    getContactDetails,
+  )
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -204,9 +252,10 @@ router.route('/:wallet/contacts/:playerId')
  * @response 409 { success: false, error: string } - Idempotency key reused with a different request
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route("/:wallet/contacts/:playerId/unlock")
+router
+  .route('/:wallet/contacts/:playerId/unlock')
   .post(
-    requireRole("scout"),
+    requireRole('scout'),
     requireWalletOwner(),
     requireApiKeyScope('write:contacts'),
     walletRateLimit(),
@@ -237,8 +286,14 @@ router.route("/:wallet/contacts/:playerId/unlock")
  * @response 400 { success: false, error: string } - Invalid query parameters or dates
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/payments')
-  .get(requireRole('scout'), requireApiKeyScope('read:payments'), requireWalletOwner(), getPaymentHistory)
+router
+  .route('/:wallet/payments')
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:payments'),
+    requireWalletOwner(),
+    getPaymentHistory,
+  )
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -260,7 +315,8 @@ router.route('/:wallet/payments')
  * @response 409 { success: false, error: string } - Idempotency key reused with a different request
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/trial-offer')
+router
+  .route('/:wallet/trial-offer')
   .post(
     (_req, res, next) => {
       // RFC 9745 Structured Field Date: 2026-08-18.
@@ -305,7 +361,8 @@ router.route('/:wallet/trial-offer')
  * @response 409 { success: false, error: string } - Idempotency key reused with a different request
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/trial-offers')
+router
+  .route('/:wallet/trial-offers')
   .get(
     requireRole('scout', 'admin'),
     requireWalletOwner({ mismatchStatus: 401 }),
@@ -340,7 +397,8 @@ router.route('/:wallet/trial-offers')
  * @response 409 { success: false, error: string } - Offer already accepted/rejected or already cancelled
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/trial-offers/:offerId')
+router
+  .route('/:wallet/trial-offers/:offerId')
   .delete(
     requireRole('scout'),
     requireWalletOwner({ validateAddress: false }),
@@ -364,7 +422,8 @@ router.route('/:wallet/trial-offers/:offerId')
  * @response 400 { success: false, error: string } - Invalid query parameters
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/recommendations')
+router
+  .route('/:wallet/recommendations')
   .get(
     requireRole('scout'),
     requireApiKeyScope('read:recommendations'),
@@ -396,8 +455,15 @@ router.route('/:wallet/recommendations')
  * @response 404 { success: false, error: string } - No note exists yet
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/notes/:playerId')
-  .put(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:notes'), validateBody(upsertNoteSchema), putScoutNote)
+router
+  .route('/:wallet/notes/:playerId')
+  .put(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:notes'),
+    validateBody(upsertNoteSchema),
+    putScoutNote,
+  )
   .get(
     requireRole('scout'),
     requireApiKeyScope('read:notes'),
@@ -415,7 +481,8 @@ router.route('/:wallet/notes/:playerId')
  * @response 200 { success: true, data: Array<{ scout_wallet, player_id, note, updated_at }> }
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/notes')
+router
+  .route('/:wallet/notes')
   .get(
     requireRole('scout'),
     requireApiKeyScope('read:notes'),
@@ -448,13 +515,23 @@ router.route('/:wallet/notes')
  * @response 403 { success: false, error: string } - Wallet mismatch
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/players/:playerId/notes')
-  .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:notes'), validateBody(noteContentSchema), createPlayerNote)
+router
+  .route('/:wallet/players/:playerId/notes')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:notes'),
+    validateBody(noteContentSchema),
+    createPlayerNote,
+  )
   .get(
     requireRole('scout'),
     requireApiKeyScope('read:notes'),
     requireWalletOwner(),
-    auditRead('scout_player_notes', (req) => `${String(req.params.wallet)}/${String(req.params.playerId)}`),
+    auditRead(
+      'scout_player_notes',
+      (req) => `${String(req.params.wallet)}/${String(req.params.playerId)}`,
+    ),
     listPlayerNotes,
   )
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
@@ -485,9 +562,21 @@ router.route('/:wallet/players/:playerId/notes')
  * @response 404 { success: false, error: string } - Note not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/players/:playerId/notes/:noteId')
-  .put(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:notes'), validateBody(noteContentSchema), updatePlayerNote)
-  .delete(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:notes'), deletePlayerNote)
+router
+  .route('/:wallet/players/:playerId/notes/:noteId')
+  .put(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:notes'),
+    validateBody(noteContentSchema),
+    updatePlayerNote,
+  )
+  .delete(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:notes'),
+    deletePlayerNote,
+  )
   .all(methodNotAllowed(['PUT', 'DELETE']));
 
 // ─── API key management (#490) ────────────────────────────────────────────────
@@ -510,8 +599,15 @@ router.route('/:wallet/players/:playerId/notes/:noteId')
  * @response 200 { success: true, data: Array<{ id, label, key_prefix, created_at, last_used_at, revoked, revoked_at, scopes }> }
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/api-keys')
-  .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:api_keys'), validateBody(issueKeySchema), issueApiKey)
+router
+  .route('/:wallet/api-keys')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:api_keys'),
+    validateBody(issueKeySchema),
+    issueApiKey,
+  )
   .get(
     requireRole('scout'),
     requireApiKeyScope('read:api_keys'),
@@ -546,9 +642,21 @@ router.route('/:wallet/api-keys')
  * @response 404 { success: false, error: string } - API key not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/api-keys/:id')
-  .patch(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:api_keys'), validateBody(updateKeySchema), updateApiKey)
-  .delete(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:api_keys'), revokeApiKey)
+router
+  .route('/:wallet/api-keys/:id')
+  .patch(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:api_keys'),
+    validateBody(updateKeySchema),
+    updateApiKey,
+  )
+  .delete(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:api_keys'),
+    revokeApiKey,
+  )
   .all(methodNotAllowed(['PATCH', 'DELETE']));
 
 /**
@@ -566,8 +674,15 @@ router.route('/:wallet/api-keys/:id')
  * @response 404 { success: false, error: string } - API key not found (or already revoked)
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/api-keys/:id/rotate')
-  .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:api_keys'), validateBody(rotateKeySchema), rotateApiKey)
+router
+  .route('/:wallet/api-keys/:id/rotate')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:api_keys'),
+    validateBody(rotateKeySchema),
+    rotateApiKey,
+  )
   .all(methodNotAllowed(['POST']));
 
 // ─── Scout bookmarks (#487) ───────────────────────────────────────────────────
@@ -592,9 +707,21 @@ router.route('/:wallet/api-keys/:id/rotate')
  * @response 200 { success: true, data: Array<PlayerSummary & { bookmarked_at, folder_id, note }> }
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/bookmarks')
-  .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:bookmarks'), validateBody(addBookmarkSchema), addBookmark)
-  .get(requireRole('scout'), requireApiKeyScope('read:bookmarks'), requireWalletOwner(), listBookmarks)
+router
+  .route('/:wallet/bookmarks')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:bookmarks'),
+    validateBody(addBookmarkSchema),
+    addBookmark,
+  )
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:bookmarks'),
+    requireWalletOwner(),
+    listBookmarks,
+  )
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -607,8 +734,14 @@ router.route('/:wallet/bookmarks')
  * @response 404 { success: false, error: string } - Bookmark not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/bookmarks/:playerId')
-  .delete(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:bookmarks'), removeBookmark)
+router
+  .route('/:wallet/bookmarks/:playerId')
+  .delete(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:bookmarks'),
+    removeBookmark,
+  )
   .all(methodNotAllowed(['DELETE']));
 
 /**
@@ -628,9 +761,21 @@ router.route('/:wallet/bookmarks/:playerId')
  * @response 200 { success: true, data: Array<{ id, scout_wallet, name, created_at, bookmark_count }> }
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/bookmark-folders')
-  .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:bookmarks'), validateBody(createBookmarkFolderSchema), createBookmarkFolder)
-  .get(requireRole('scout'), requireApiKeyScope('read:bookmarks'), requireWalletOwner(), listBookmarkFolders)
+router
+  .route('/:wallet/bookmark-folders')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:bookmarks'),
+    validateBody(createBookmarkFolderSchema),
+    createBookmarkFolder,
+  )
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:bookmarks'),
+    requireWalletOwner(),
+    listBookmarkFolders,
+  )
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -656,9 +801,21 @@ router.route('/:wallet/bookmark-folders')
  * @response 404 { success: false, error: string } - Folder not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/bookmark-folders/:folderId')
-  .patch(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:bookmarks'), validateBody(renameBookmarkFolderSchema), renameBookmarkFolderHandler)
-  .delete(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:bookmarks'), deleteBookmarkFolderHandler)
+router
+  .route('/:wallet/bookmark-folders/:folderId')
+  .patch(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:bookmarks'),
+    validateBody(renameBookmarkFolderSchema),
+    renameBookmarkFolderHandler,
+  )
+  .delete(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:bookmarks'),
+    deleteBookmarkFolderHandler,
+  )
   .all(methodNotAllowed(['PATCH', 'DELETE']));
 
 // ─── Scout saved searches (#486) ──────────────────────────────────────────────
@@ -685,9 +842,23 @@ router.route('/:wallet/bookmark-folders/:folderId')
  * @response 403 { success: false, error: string } - Wallet mismatch or not the scout role
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/saved-searches')
-  .post(requireRole('scout'), requireApiKeyScope('write:saved_searches'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), validateBody(createSavedSearchSchema), createSavedSearch)
-  .get(requireRole('scout'), requireApiKeyScope('read:saved_searches'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), listSavedSearches)
+router
+  .route('/:wallet/saved-searches')
+  .post(
+    requireRole('scout'),
+    requireApiKeyScope('write:saved_searches'),
+    requireFeatureFlag(FeatureFlags.SAVED_SEARCHES),
+    requireWalletOwner(),
+    validateBody(createSavedSearchSchema),
+    createSavedSearch,
+  )
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:saved_searches'),
+    requireFeatureFlag(FeatureFlags.SAVED_SEARCHES),
+    requireWalletOwner(),
+    listSavedSearches,
+  )
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -715,9 +886,23 @@ router.route('/:wallet/saved-searches')
  * @response 404 { success: false, error: string } - Saved search not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/saved-searches/:id')
-  .put(requireRole('scout'), requireApiKeyScope('write:saved_searches'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), validateBody(updateSavedSearchSchema), updateSavedSearchHandler)
-  .delete(requireRole('scout'), requireApiKeyScope('write:saved_searches'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), deleteSavedSearchHandler)
+router
+  .route('/:wallet/saved-searches/:id')
+  .put(
+    requireRole('scout'),
+    requireApiKeyScope('write:saved_searches'),
+    requireFeatureFlag(FeatureFlags.SAVED_SEARCHES),
+    requireWalletOwner(),
+    validateBody(updateSavedSearchSchema),
+    updateSavedSearchHandler,
+  )
+  .delete(
+    requireRole('scout'),
+    requireApiKeyScope('write:saved_searches'),
+    requireFeatureFlag(FeatureFlags.SAVED_SEARCHES),
+    requireWalletOwner(),
+    deleteSavedSearchHandler,
+  )
   .all(methodNotAllowed(['PUT', 'DELETE']));
 
 /**
@@ -734,8 +919,15 @@ router.route('/:wallet/saved-searches/:id')
  * @response 404 { success: false, error: string } - Saved search not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/saved-searches/:id/run')
-  .get(requireRole('scout'), requireApiKeyScope('read:saved_searches'), requireFeatureFlag(FeatureFlags.SAVED_SEARCHES), requireWalletOwner(), runSavedSearch)
+router
+  .route('/:wallet/saved-searches/:id/run')
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:saved_searches'),
+    requireFeatureFlag(FeatureFlags.SAVED_SEARCHES),
+    requireWalletOwner(),
+    runSavedSearch,
+  )
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 // ─── Webhook subscription management (#806) ───────────────────────────────────
@@ -763,9 +955,22 @@ router.route('/:wallet/saved-searches/:id/run')
  * @response 403 { success: false, error: string } - Wallet mismatch
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/webhooks')
-  .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), walletRateLimit(), validateBody(registerWebhookSchema), registerWebhook)
-  .get(requireRole('scout'), requireApiKeyScope('read:webhooks'), requireWalletOwner(), listWebhooks)
+router
+  .route('/:wallet/webhooks')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:webhooks'),
+    walletRateLimit(),
+    validateBody(registerWebhookSchema),
+    registerWebhook,
+  )
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:webhooks'),
+    requireWalletOwner(),
+    listWebhooks,
+  )
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
@@ -806,10 +1011,22 @@ router.route('/:wallet/webhooks')
  * @response 404 { success: false, error: string } - Subscription not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/webhooks/:id')
+router
+  .route('/:wallet/webhooks/:id')
   .get(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('read:webhooks'), getWebhook)
-  .patch(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), validateBody(updateWebhookSchema), updateWebhook)
-  .delete(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), deleteWebhook)
+  .patch(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:webhooks'),
+    validateBody(updateWebhookSchema),
+    updateWebhook,
+  )
+  .delete(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:webhooks'),
+    deleteWebhook,
+  )
   .all(methodNotAllowed(['GET', 'HEAD', 'PATCH', 'DELETE']));
 
 /**
@@ -833,8 +1050,16 @@ router.route('/:wallet/webhooks/:id')
  * @response 502 { success: false, error: string, data: { id, url, statusCode? } } - Remote server returned non-2xx or was unreachable
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/webhooks/:id/test')
-  .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), webhookTestRateLimit, validateBody(emptyBodySchema), testWebhook)
+router
+  .route('/:wallet/webhooks/:id/test')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:webhooks'),
+    webhookTestRateLimit,
+    validateBody(emptyBodySchema),
+    testWebhook,
+  )
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -851,8 +1076,16 @@ router.route('/:wallet/webhooks/:id/test')
  * @response 502 { success: false, error: string } - Test ping failed; subscription stays suspended
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/webhooks/:id/reactivate')
-  .post(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:webhooks'), webhookTestRateLimit, validateBody(emptyBodySchema), reactivateWebhook)
+router
+  .route('/:wallet/webhooks/:id/reactivate')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner(),
+    requireApiKeyScope('write:webhooks'),
+    webhookTestRateLimit,
+    validateBody(emptyBodySchema),
+    reactivateWebhook,
+  )
   .all(methodNotAllowed(['POST']));
 
 /**
@@ -871,8 +1104,14 @@ router.route('/:wallet/webhooks/:id/reactivate')
  * @response 404 { success: false, error: string } - Subscription not found
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
-router.route('/:wallet/webhooks/:id/deliveries')
-  .get(requireRole('scout'), requireApiKeyScope('read:webhooks'), requireWalletOwner(), getScoutWebhookDeliveries)
+router
+  .route('/:wallet/webhooks/:id/deliveries')
+  .get(
+    requireRole('scout'),
+    requireApiKeyScope('read:webhooks'),
+    requireWalletOwner(),
+    getScoutWebhookDeliveries,
+  )
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 /**
@@ -894,8 +1133,14 @@ router.route('/:wallet/webhooks/:id/deliveries')
  * @response 403 { success: false, error: string } - Wallet mismatch
  * @auth Bearer (scout role required; own wallet or admin)
  */
-router.route('/:wallet/dashboard')
-  .get(requireRole('scout', 'admin'), requireApiKeyScope('read:dashboard'), requireWalletOwner(), getScoutDashboard)
+router
+  .route('/:wallet/dashboard')
+  .get(
+    requireRole('scout', 'admin'),
+    requireApiKeyScope('read:dashboard'),
+    requireWalletOwner(),
+    getScoutDashboard,
+  )
   .all(methodNotAllowed(['GET', 'HEAD']));
 
 export default router;

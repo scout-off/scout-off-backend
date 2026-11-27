@@ -4,9 +4,9 @@ services:
     platform: linux/amd64
     command: --local --enable-soroban-rpc --enable-soroban-diagnostic-events
     ports:
-      - "8000:8000"
+      - '8000:8000'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/soroban/rpc"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/soroban/rpc']
       interval: 10s
       timeout: 5s
       retries: 30

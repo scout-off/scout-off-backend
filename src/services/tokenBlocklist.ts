@@ -173,7 +173,9 @@ async function syncDbToRedis(): Promise<void> {
     loaded = await warmRevocationsIntoRedis(redisClient, rows, now);
   }
 
-  logger.info(`[tokenBlocklist] Startup sync: loaded ${loaded}/${rows.length} revocations into Redis`);
+  logger.info(
+    `[tokenBlocklist] Startup sync: loaded ${loaded}/${rows.length} revocations into Redis`,
+  );
 }
 
 /** Pipeline batch size for the startup warm-up (#1592). */
@@ -231,9 +233,7 @@ export async function warmRevocationsIntoRedis(
  * Must be called once at application startup (after initDb()).
  */
 export function initBlocklist(): void {
-  pruneExpiredTokens().catch((err) =>
-    logger.warn('[tokenBlocklist] initial prune failed:', err),
-  );
+  pruneExpiredTokens().catch((err) => logger.warn('[tokenBlocklist] initial prune failed:', err));
   setInterval(() => {
     pruneExpiredTokens().catch((err) =>
       logger.warn('[tokenBlocklist] scheduled prune failed:', err),
@@ -241,9 +241,7 @@ export function initBlocklist(): void {
   }, PRUNE_INTERVAL_MS).unref();
 
   // Kick off startup sync without blocking startup
-  syncDbToRedis().catch((err) =>
-    logger.error('[tokenBlocklist] Startup sync error:', err),
-  );
+  syncDbToRedis().catch((err) => logger.error('[tokenBlocklist] Startup sync error:', err));
 }
 
 /**

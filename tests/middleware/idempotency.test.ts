@@ -59,16 +59,14 @@ jest.mock('../../src/db', () => {
       return true;
     }),
 
-    updateIdempotencyRecord: jest.fn(
-      (key: string, statusCode: number, body: unknown) => {
-        const record = idempotencyStore.get(key);
-        if (record) {
-          record.status_code = statusCode;
-          record.response = JSON.stringify(body);
-          record.status = 'complete';
-        }
-      },
-    ),
+    updateIdempotencyRecord: jest.fn((key: string, statusCode: number, body: unknown) => {
+      const record = idempotencyStore.get(key);
+      if (record) {
+        record.status_code = statusCode;
+        record.response = JSON.stringify(body);
+        record.status = 'complete';
+      }
+    }),
 
     // Keep saveIdempotencyRecord for backwards-compat with other tests that
     // import from the same mock module.
@@ -340,12 +338,10 @@ describe('idempotency middleware — claim-first concurrency', () => {
     // Override IN_PROGRESS_WAIT_MS by mocking inFlightLock.withLock to
     // resolve immediately so the test doesn't actually wait 5 seconds.
     // The middleware will then re-read the record (still pending) and 409.
-    jest
-      .spyOn(inFlightLock, 'withLock')
-      .mockImplementationOnce(async () => ({
-        statusCode: 0,
-        body: null,
-      }));
+    jest.spyOn(inFlightLock, 'withLock').mockImplementationOnce(async () => ({
+      statusCode: 0,
+      body: null,
+    }));
 
     const res = await request(app)
       .post(`/api/scouts/${WALLET}/subscribe`)
@@ -370,8 +366,7 @@ describe('idempotency middleware — request fingerprint conflicts', () => {
   miniApp.post(
     '/items',
     idempotency({
-      requestFingerprint: (req) =>
-        String((req.body as { id?: string } | undefined)?.id ?? ''),
+      requestFingerprint: (req) => String((req.body as { id?: string } | undefined)?.id ?? ''),
     }),
     (req, res) => {
       res.json({ ok: true, id: (req.body as { id?: string }).id });
@@ -505,8 +500,7 @@ describe('idempotency middleware — lease and persistence', () => {
   miniApp.post(
     '/items',
     idempotency({
-      requestFingerprint: (req) =>
-        String((req.body as { id?: string } | undefined)?.id ?? ''),
+      requestFingerprint: (req) => String((req.body as { id?: string } | undefined)?.id ?? ''),
     }),
     (req, res) => {
       res.json({ ok: true, id: (req.body as { id?: string }).id });
@@ -622,9 +616,10 @@ describe('idempotency middleware — lease and persistence', () => {
 
     // Simulate the new claim logic: should succeed because lease expired
     const now = Date.now();
-    const claimed = mockClaim.mock.calls.length > 0
-      ? !idempotencyStore.has(key) // simplified
-      : true;
+    const claimed =
+      mockClaim.mock.calls.length > 0
+        ? !idempotencyStore.has(key) // simplified
+        : true;
 
     expect(claimed).toBe(true);
     // The new request should be able to claim the key
@@ -644,12 +639,10 @@ describe('idempotency middleware — lease and persistence', () => {
     });
 
     // Override inFlightLock to timeout immediately so we get 409
-    jest
-      .spyOn(inFlightLock, 'withLock')
-      .mockImplementationOnce(async () => ({
-        statusCode: 0,
-        body: null,
-      }));
+    jest.spyOn(inFlightLock, 'withLock').mockImplementationOnce(async () => ({
+      statusCode: 0,
+      body: null,
+    }));
 
     const res = await request(app)
       .post(`/api/scouts/${WALLET}/subscribe`)

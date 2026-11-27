@@ -13,7 +13,10 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../../src/app';
-import { parsePlayerCsvBody, processPlayerImportBatch } from '../../src/controllers/adminPlayerImportController';
+import {
+  parsePlayerCsvBody,
+  processPlayerImportBatch,
+} from '../../src/controllers/adminPlayerImportController';
 import config from '../../src/config';
 
 const SECRET = process.env.JWT_SECRET ?? 'test-secret';
@@ -67,7 +70,12 @@ describe('parsePlayerCsvBody()', () => {
     const wallet = randomWallet();
     const result = parsePlayerCsvBody(`${wallet},striker,europe,QmCid1`);
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({ wallet, position: 'striker', region: 'europe', metadataUri: 'QmCid1' });
+    expect(result[0]).toEqual({
+      wallet,
+      position: 'striker',
+      region: 'europe',
+      metadataUri: 'QmCid1',
+    });
   });
 
   it('skips empty lines and comment lines', () => {
@@ -78,7 +86,9 @@ describe('parsePlayerCsvBody()', () => {
 
   it('skips a header row starting with "wallet" (case-insensitive)', () => {
     const wallet = randomWallet();
-    const result = parsePlayerCsvBody(`wallet,position,region,metadataUri\n${wallet},striker,europe,QmCid1`);
+    const result = parsePlayerCsvBody(
+      `wallet,position,region,metadataUri\n${wallet},striker,europe,QmCid1`,
+    );
     expect(result).toHaveLength(1);
     expect(result[0].wallet).toBe(wallet);
   });
@@ -108,7 +118,9 @@ describe('processPlayerImportBatch()', () => {
   });
 
   it('reports a schema validation failure without throwing', async () => {
-    const results = await processPlayerImportBatch([{ wallet: 'too-short', position: 'striker', region: 'europe', metadataUri: 'QmCid1' }]);
+    const results = await processPlayerImportBatch([
+      { wallet: 'too-short', position: 'striker', region: 'europe', metadataUri: 'QmCid1' },
+    ]);
     expect(results[0].status).toBe('error');
     expect(results[0].error).toBeDefined();
   });
@@ -127,9 +139,7 @@ describe('processPlayerImportBatch()', () => {
 
 describe('POST /api/admin/players/import — auth guards', () => {
   it('returns 401 when no token is provided', async () => {
-    const res = await request(app)
-      .post('/api/admin/players/import')
-      .send({ players: [] });
+    const res = await request(app).post('/api/admin/players/import').send({ players: [] });
     expect(res.status).toBe(401);
   });
 
@@ -180,14 +190,21 @@ describe('POST /api/admin/players/import — JSON body', () => {
 
   it('pins raw metadata via pinJson when metadataUri is not provided', async () => {
     const token = makeToken(ADMIN_WALLET, 'admin');
-    const entry = { wallet: randomWallet(), position: 'keeper', region: 'asia', metadata: { height: 190 } };
+    const entry = {
+      wallet: randomWallet(),
+      position: 'keeper',
+      region: 'asia',
+      metadata: { height: 190 },
+    };
     const res = await request(app)
       .post('/api/admin/players/import')
       .set('Authorization', `Bearer ${token}`)
       .send({ players: [entry] });
     expect(res.status).toBe(200);
     expect(res.body.data.results[0].status).toBe('success');
-    expect(res.body.data.results[0].metadataUri).toBe('QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG');
+    expect(res.body.data.results[0].metadataUri).toBe(
+      'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+    );
   });
 
   it('does not abort the batch when one row fails validation', async () => {
@@ -207,7 +224,9 @@ describe('POST /api/admin/players/import — JSON body', () => {
 
   it('rejects a batch larger than the configured maximum', async () => {
     const token = makeToken(ADMIN_WALLET, 'admin');
-    const oversized = Array.from({ length: config.playerImport.maxBatchSize + 1 }, () => validEntry());
+    const oversized = Array.from({ length: config.playerImport.maxBatchSize + 1 }, () =>
+      validEntry(),
+    );
     const res = await request(app)
       .post('/api/admin/players/import')
       .set('Authorization', `Bearer ${token}`)

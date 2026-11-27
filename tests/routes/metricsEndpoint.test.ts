@@ -26,7 +26,10 @@ function buildApp() {
   app.get('/missing', (_req, res) => {
     res.status(404).json({ error: 'nope' });
   });
-  app.get('/metrics', createMetricsHandler(() => 7));
+  app.get(
+    '/metrics',
+    createMetricsHandler(() => 7),
+  );
   return app;
 }
 

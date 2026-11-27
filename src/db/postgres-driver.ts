@@ -229,7 +229,9 @@ export class PostgresDriver implements DbDriver {
    * believing they got the exclusion they asked for.
    */
   async lockForWrite(_key: string): Promise<void> {
-    throw new Error('lockForWrite() must be called on the tx handle inside driver.transaction(), not on the outer driver');
+    throw new Error(
+      'lockForWrite() must be called on the tx handle inside driver.transaction(), not on the outer driver',
+    );
   }
 
   async transaction<T>(fn: (tx: DbTxHandle) => Promise<T>): Promise<T> {

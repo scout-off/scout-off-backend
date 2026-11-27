@@ -11,11 +11,11 @@ stored, and replayed.
 
 Every event in a poll is classified into exactly one outcome:
 
-| Outcome | Meaning | Cursor | Stored for replay |
-| ------- | ------- | ------ | ----------------- |
-| `applied` | Recognised type (in `CONTRACT_EVENT_TYPES`); side effects ran (or no-op). | Advances | No |
-| `unknown_type` | Topic decoded, but the type is not in the allowlist. | Advances | Yes |
-| `decode_error` | `normalizeSorobanEvent()` threw (unexpected value shape). | Advances, **unless** the topic is a recognised type — then the cursor is held | Yes |
+| Outcome        | Meaning                                                                   | Cursor                                                                        | Stored for replay |
+| -------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------- |
+| `applied`      | Recognised type (in `CONTRACT_EVENT_TYPES`); side effects ran (or no-op). | Advances                                                                      | No                |
+| `unknown_type` | Topic decoded, but the type is not in the allowlist.                      | Advances                                                                      | Yes               |
+| `decode_error` | `normalizeSorobanEvent()` threw (unexpected value shape).                 | Advances, **unless** the topic is a recognised type — then the cursor is held | Yes               |
 
 The allowlist is derived from `CONTRACT_EVENT_TYPES` (`src/types/index.ts`), so
 the set of "known" events cannot drift from the rest of the app.
@@ -74,11 +74,11 @@ Both require the `admin` role.
 
 Paginated list, newest first.
 
-| Query | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `page` | integer ≥ 1 | 1 | 1-based page number |
-| `pageSize` | integer 1–100 | 20 | Rows per page |
-| `reason` | `unknown_type` \| `decode_error` | — | Optional filter |
+| Query      | Type                             | Default | Description         |
+| ---------- | -------------------------------- | ------- | ------------------- |
+| `page`     | integer ≥ 1                      | 1       | 1-based page number |
+| `pageSize` | integer 1–100                    | 20      | Rows per page       |
+| `reason`   | `unknown_type` \| `decode_error` | —       | Optional filter     |
 
 Response: `{ success, data: UnprocessedEvent[], total, page, pageSize }`.
 

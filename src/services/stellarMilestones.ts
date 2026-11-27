@@ -1,4 +1,11 @@
-import { rpc, Contract, nativeToScVal, scValToNative, Keypair, Account } from '@stellar/stellar-sdk';
+import {
+  rpc,
+  Contract,
+  nativeToScVal,
+  scValToNative,
+  Keypair,
+  Account,
+} from '@stellar/stellar-sdk';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import config from '../config';
 import {
@@ -25,7 +32,6 @@ export interface PageResult<T> {
   items: T[];
   next: number | null;
 }
-
 
 export function parseMilestonesFromNative(playerId: string, native: unknown): OnChainMilestone[] {
   if (!Array.isArray(native)) {
@@ -130,10 +136,7 @@ export async function queryMilestonesPage(
         return { items: milestones, next: page.next };
       } catch (err) {
         if (err instanceof PaymentError) throw err;
-        throw new PaymentError(
-          `RPC call failed: ${(err as Error).message}`,
-          'NETWORK_ERROR',
-        );
+        throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
       }
     } catch (err) {
       span.recordException(err as Error);
@@ -148,7 +151,7 @@ export async function queryMilestonesPage(
 
 /**
  * Query milestones for a player with pagination support.
- * 
+ *
  * @param playerId - The player ID to query
  * @param start - Zero-based index of the first milestone to return (default: 0)
  * @param limit - Maximum number of milestones to return (default: 50, max: 50)
@@ -222,10 +225,7 @@ export async function queryMilestones(
         return milestones;
       } catch (err) {
         if (err instanceof PaymentError) throw err;
-        throw new PaymentError(
-          `RPC call failed: ${(err as Error).message}`,
-          'NETWORK_ERROR',
-        );
+        throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
       }
     } catch (err) {
       span.recordException(err as Error);

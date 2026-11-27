@@ -46,7 +46,13 @@ jest.mock('../../src/services/cache', () => ({
   invalidateMilestoneCache: jest.fn(),
 }));
 
-import { queryEvents, getPendingMilestones, getDriver, incrementValidatorApproved, updatePlayerProgress } from '../../src/db';
+import {
+  queryEvents,
+  getPendingMilestones,
+  getDriver,
+  incrementValidatorApproved,
+  updatePlayerProgress,
+} from '../../src/db';
 const mockGetEvents = queryEvents as jest.Mock;
 const mockGetPendingMilestones = getPendingMilestones as jest.Mock;
 const mockGetDriver = getDriver as jest.Mock;
@@ -248,7 +254,7 @@ describe('GET /api/validators/milestones/pending', () => {
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].evidenceUri).toBe('QmEvidence1');
     expect(mockGetPendingMilestones).toHaveBeenCalledWith(
-      expect.objectContaining({ region: 'EU' })
+      expect.objectContaining({ region: 'EU' }),
     );
   });
 
@@ -277,7 +283,7 @@ describe('GET /api/validators/milestones/pending', () => {
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].evidenceUri).toBe('QmEvidence1');
     expect(mockGetPendingMilestones).toHaveBeenCalledWith(
-      expect.objectContaining({ playerId: 'player-1' })
+      expect.objectContaining({ playerId: 'player-1' }),
     );
   });
 });
@@ -286,7 +292,9 @@ describe('GET /api/validators/milestones/pending', () => {
 
 describe('POST /api/validators/milestones/approve-bulk', () => {
   it('returns 401 when no token is provided', async () => {
-    const res = await request(app).post('/api/validators/milestones/approve-bulk').send({ milestoneIds: ['m1'] });
+    const res = await request(app)
+      .post('/api/validators/milestones/approve-bulk')
+      .send({ milestoneIds: ['m1'] });
     expect(res.status).toBe(401);
   });
 
@@ -307,8 +315,9 @@ describe('POST /api/validators/milestones/approve-bulk', () => {
       { milestone_id: 'm2', player_id: 'player-2', validator_wallet: 'OTHER_VALIDATOR' },
     ]);
     const mockTxRun = jest.fn().mockResolvedValue({ changes: 1 });
-    const mockTransaction = jest.fn(async (callback: (tx: { run: jest.Mock }) => Promise<unknown>) =>
-      callback({ run: mockTxRun }),
+    const mockTransaction = jest.fn(
+      async (callback: (tx: { run: jest.Mock }) => Promise<unknown>) =>
+        callback({ run: mockTxRun }),
     );
     mockGetDriver.mockReturnValue({ all: mockAll, transaction: mockTransaction });
     mockGetEvents.mockReturnValue([]);
@@ -363,12 +372,15 @@ describe('POST /api/validators/milestones/approve-bulk', () => {
   it('reports a concurrent/replayed approval as already processed without repeating writes', async () => {
     const validatorToken = makeToken(VALIDATOR_WALLET, 'validator');
     mockGetEvents.mockReturnValue([]);
-    const mockAll = jest.fn().mockResolvedValue([
-      { milestone_id: 'm1', player_id: 'player-1', validator_wallet: VALIDATOR_WALLET },
-    ]);
+    const mockAll = jest
+      .fn()
+      .mockResolvedValue([
+        { milestone_id: 'm1', player_id: 'player-1', validator_wallet: VALIDATOR_WALLET },
+      ]);
     const mockTxRun = jest.fn().mockResolvedValueOnce({ changes: 0 });
-    const mockTransaction = jest.fn(async (callback: (tx: { run: jest.Mock }) => Promise<unknown>) =>
-      callback({ run: mockTxRun }),
+    const mockTransaction = jest.fn(
+      async (callback: (tx: { run: jest.Mock }) => Promise<unknown>) =>
+        callback({ run: mockTxRun }),
     );
     mockGetDriver.mockReturnValue({ all: mockAll, transaction: mockTransaction });
 
@@ -382,4 +394,3 @@ describe('POST /api/validators/milestones/approve-bulk', () => {
     expect(mockTxRun).toHaveBeenCalledTimes(1);
   });
 });
-

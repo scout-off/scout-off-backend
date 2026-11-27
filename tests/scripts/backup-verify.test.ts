@@ -9,11 +9,7 @@ const VERIFY_SCRIPT = path.join(REPO_ROOT, 'scripts/verify-backup.sh');
 const SQLITE_CLI = path.join(REPO_ROOT, 'scripts/sqlite-cli.sh');
 const INITIAL_SCHEMA = path.join(REPO_ROOT, 'db/001_initial.sql');
 
-function runScript(
-  script: string,
-  args: string[] = [],
-  env: NodeJS.ProcessEnv = {}
-): string {
+function runScript(script: string, args: string[] = [], env: NodeJS.ProcessEnv = {}): string {
   return execFileSync('bash', [script, ...args], {
     cwd: REPO_ROOT,
     env: { ...process.env, ...env },
@@ -24,7 +20,7 @@ function runScript(
 function runScriptExpectFailure(
   script: string,
   args: string[] = [],
-  env: NodeJS.ProcessEnv = {}
+  env: NodeJS.ProcessEnv = {},
 ): string {
   try {
     execFileSync('bash', [script, ...args], {
@@ -61,7 +57,7 @@ function createTestDatabase(dbPath: string): void {
       VALUES ('register', 100, 'abc123hash', '{}');
       CREATE TABLE migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL);
       INSERT INTO migrations (id, applied_at) VALUES ('001_initial.sql', 1);
-    `
+    `,
   );
 }
 
@@ -108,7 +104,10 @@ const isWindows = process.platform === 'win32';
       BACKUP_DEST: backupDir,
     });
 
-    const backupPath = path.join(backupDir, fs.readdirSync(backupDir).find((n) => n.endsWith('.db'))!);
+    const backupPath = path.join(
+      backupDir,
+      fs.readdirSync(backupDir).find((n) => n.endsWith('.db'))!,
+    );
     const output = runScript(BACKUP_SCRIPT, ['--verify-only', backupPath]);
 
     expect(output).toContain('Backup verification succeeded');
@@ -120,7 +119,10 @@ const isWindows = process.platform === 'win32';
       BACKUP_DEST: backupDir,
     });
 
-    const backupPath = path.join(backupDir, fs.readdirSync(backupDir).find((n) => n.endsWith('.db'))!);
+    const backupPath = path.join(
+      backupDir,
+      fs.readdirSync(backupDir).find((n) => n.endsWith('.db'))!,
+    );
     const corruptedPath = path.join(tmpDir, 'corrupted.db');
     const backupBytes = fs.readFileSync(backupPath);
     fs.writeFileSync(corruptedPath, backupBytes.subarray(0, 100));
@@ -136,7 +138,10 @@ const isWindows = process.platform === 'win32';
       BACKUP_DEST: backupDir,
     });
 
-    const backupPath = path.join(backupDir, fs.readdirSync(backupDir).find((n) => n.endsWith('.db'))!);
+    const backupPath = path.join(
+      backupDir,
+      fs.readdirSync(backupDir).find((n) => n.endsWith('.db'))!,
+    );
     const output = runScriptExpectFailure(VERIFY_SCRIPT, [backupPath], {
       EXPECT_PLAYERS: '999',
       EXPECT_EVENTS: '0',
@@ -177,12 +182,15 @@ const isWindows = process.platform === 'win32';
     const emptyDbPath = path.join(tmpDir, 'empty-players.db');
     runSql(emptyDbPath, fs.readFileSync(INITIAL_SCHEMA, 'utf8'));
     // Add migrations table but leave players empty.
-    runSql(emptyDbPath, `
+    runSql(
+      emptyDbPath,
+      `
       CREATE TABLE migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL);
       INSERT INTO migrations (id, applied_at) VALUES ('001_initial.sql', 1);
       INSERT INTO events (type, ledger, tx_hash, payload)
       VALUES ('register', 1, 'txhash1', '{}');
-    `);
+    `,
+    );
 
     const emptyBackupDir = path.join(tmpDir, 'empty-backups');
     const output = runScript(BACKUP_SCRIPT, [], {
@@ -194,7 +202,7 @@ const isWindows = process.platform === 'win32';
     expect(output).toContain('Backup verified successfully');
     const countsPath = path.join(
       emptyBackupDir,
-      fs.readdirSync(emptyBackupDir).find((n) => n.endsWith('.counts'))!
+      fs.readdirSync(emptyBackupDir).find((n) => n.endsWith('.counts'))!,
     );
     expect(fs.readFileSync(countsPath, 'utf8')).toContain('players=0');
   });

@@ -1,9 +1,5 @@
 import crypto from 'crypto';
-import {
-  decryptField,
-  encryptField,
-  isEncryptedField,
-} from '../../src/utils/fieldCipher';
+import { decryptField, encryptField, isEncryptedField } from '../../src/utils/fieldCipher';
 
 describe('fieldCipher (#1328)', () => {
   it('round-trips notes through encrypt/decrypt', () => {
@@ -39,7 +35,8 @@ describe('fieldCipher (#1328)', () => {
       process.env.NOTES_ENCRYPTION_KEY = previousHex;
       delete process.env.NOTES_ENCRYPTION_KEY_PREVIOUS;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const fc = require('../../src/utils/fieldCipher') as typeof import('../../src/utils/fieldCipher');
+      const fc =
+        require('../../src/utils/fieldCipher') as typeof import('../../src/utils/fieldCipher');
       encrypted = fc.encryptField('rotation-test', { purpose: 'notes' });
     });
 
@@ -47,7 +44,8 @@ describe('fieldCipher (#1328)', () => {
       process.env.NOTES_ENCRYPTION_KEY = primaryHex;
       process.env.NOTES_ENCRYPTION_KEY_PREVIOUS = previousHex;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const fc = require('../../src/utils/fieldCipher') as typeof import('../../src/utils/fieldCipher');
+      const fc =
+        require('../../src/utils/fieldCipher') as typeof import('../../src/utils/fieldCipher');
       expect(fc.decryptField(encrypted, { purpose: 'notes' })).toBe('rotation-test');
     });
   });

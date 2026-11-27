@@ -7,6 +7,9 @@ export async function getEncryptionStatusEndpoint(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  try { res.json({ success: true, data: await getEncryptionStatus() }); }
-  catch (err) { next(err); }
+  try {
+    res.json({ success: true, data: await getEncryptionStatus() });
+  } catch (err) {
+    next(err);
+  }
 }

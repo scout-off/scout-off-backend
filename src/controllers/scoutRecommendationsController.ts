@@ -156,14 +156,10 @@ function derivePreferences(
   }
 
   const hasHistory =
-    savedSearches.length > 0 ||
-    bookmarkedPlayers.length > 0 ||
-    contactedIds.size > 0;
+    savedSearches.length > 0 || bookmarkedPlayers.length > 0 || contactedIds.size > 0;
 
-  const topRegion =
-    [...regionWeights.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  const topPosition =
-    [...positionWeights.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const topRegion = [...regionWeights.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const topPosition = [...positionWeights.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
   return {
     region: topRegion,
@@ -256,9 +252,7 @@ async function fetchCandidatePool(prefs: ScoutPreferences): Promise<PlayerRow[]>
       offset: 0,
     });
     return rows.sort(
-      (a, b) =>
-        b.progress_level - a.progress_level ||
-        (b.created_at ?? 0) - (a.created_at ?? 0),
+      (a, b) => b.progress_level - a.progress_level || (b.created_at ?? 0) - (a.created_at ?? 0),
     );
   }
 
@@ -379,7 +373,7 @@ export async function getScoutRecommendations(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const {wallet} = req.params as {wallet: string};
+  const { wallet } = req.params as { wallet: string };
 
   // ── Ownership guard ──────────────────────────────────────────────────────
   // Enforced by requireWalletOwner() at the route level; re-invoked here so
@@ -405,7 +399,9 @@ export async function getScoutRecommendations(
     // We cache the full ranked list, not a single page, so pagination works
     // across cache hits without re-querying the DB.
     const cacheKey = `recommendations:${wallet}`;
-    let cachedResult = await cacheGet<{ ranked: ScoredPlayer[]; prefs: ScoutPreferences }>(cacheKey);
+    let cachedResult = await cacheGet<{ ranked: ScoredPlayer[]; prefs: ScoutPreferences }>(
+      cacheKey,
+    );
 
     if (!cachedResult) {
       logger.debug({ wallet, action: 'recommendations_cache_miss' });

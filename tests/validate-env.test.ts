@@ -88,7 +88,7 @@ describe('validate-env runtime validation', () => {
     };
     const errors = validateRuntimeEnv(env);
     expect(errors).toContain(
-      'NODE_ENV="invalid_env" is invalid. Must be one of: development, test, staging, production'
+      'NODE_ENV="invalid_env" is invalid. Must be one of: development, test, staging, production',
     );
   });
 
@@ -123,7 +123,7 @@ describe('validate-env runtime validation', () => {
     };
     const errors = validateRuntimeEnv(env);
     expect(errors).toContain(
-      'Invalid CORS origin format: "invalid-origin-without-protocol". Origins must be "*" or start with http:// or https://'
+      'Invalid CORS origin format: "invalid-origin-without-protocol". Origins must be "*" or start with http:// or https://',
     );
   });
 
@@ -157,7 +157,7 @@ describe('validate-env runtime validation', () => {
     };
     const errors = validateRuntimeEnv(env);
     expect(errors).toContain(
-      'PINATA_GATEWAY="http://gateway.pinata.cloud" is invalid. Must be a valid HTTPS URL.'
+      'PINATA_GATEWAY="http://gateway.pinata.cloud" is invalid. Must be a valid HTTPS URL.',
     );
   });
 
@@ -169,9 +169,7 @@ describe('validate-env runtime validation', () => {
       PINATA_GATEWAY: 'not-a-url',
     };
     const errors = validateRuntimeEnv(env);
-    expect(errors).toContain(
-      'PINATA_GATEWAY="not-a-url" is invalid. Must be a valid HTTPS URL.'
-    );
+    expect(errors).toContain('PINATA_GATEWAY="not-a-url" is invalid. Must be a valid HTTPS URL.');
   });
 });
 

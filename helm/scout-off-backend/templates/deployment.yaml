@@ -185,6 +185,13 @@ spec:
                   name: {{ .Values.secretName }}
                   key: DATABASE_URL
                   optional: true
+            # Optional PostgreSQL read replicas (comma-separated URLs with credentials).
+            - name: DATABASE_READ_URLS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: DATABASE_READ_URLS
+                  optional: true
             # ── Webhook encryption key ─────────────────────────────────────
             # Required in production when any webhook subscriptions exist.
             # 32-byte hex key used to encrypt webhook_subscriptions.secret

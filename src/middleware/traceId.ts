@@ -48,7 +48,9 @@ export function traceId(req: Request, res: Response, next: NextFunction): void {
 }
 
 /** Injects `traceparent` into an outgoing axios request when a valid span is active. */
-export function propagateTraceParent(requestConfig: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
+export function propagateTraceParent(
+  requestConfig: InternalAxiosRequestConfig,
+): InternalAxiosRequestConfig {
   const traceparent = currentTraceParent();
   if (traceparent) {
     requestConfig.headers.set('traceparent', traceparent);

@@ -12,7 +12,10 @@ beforeEach(async () => {
 
 describe('recordAudit', () => {
   it('stores a milestone_submitted entry with correct fields', async () => {
-    const entry = await recordAudit('GVALIDATOR', 'milestone_submitted', { playerId: 'P1', milestoneType: 'identity' });
+    const entry = await recordAudit('GVALIDATOR', 'milestone_submitted', {
+      playerId: 'P1',
+      milestoneType: 'identity',
+    });
     expect(entry.actorWallet).toBe('GVALIDATOR');
     expect(entry.eventType).toBe('milestone_submitted');
     expect(typeof entry.payloadHash).toBe('string');
@@ -23,14 +26,23 @@ describe('recordAudit', () => {
   });
 
   it('stores a milestone_approved entry with notes field', async () => {
-    const entry = await recordAudit('GVALIDATOR', 'milestone_approved', { milestoneId: 'M42' }, 'approved via admin panel');
+    const entry = await recordAudit(
+      'GVALIDATOR',
+      'milestone_approved',
+      { milestoneId: 'M42' },
+      'approved via admin panel',
+    );
     expect(entry.eventType).toBe('milestone_approved');
     expect(entry.notes).toBe('approved via admin panel');
     expect(await queryAudit()).toHaveLength(1);
   });
 
   it('stores a player_search entry linked to a scout wallet', async () => {
-    const entry = await recordAudit('GSCOUT123', 'player_search', { region: 'europe', position: 'striker', resultCount: 5 });
+    const entry = await recordAudit('GSCOUT123', 'player_search', {
+      region: 'europe',
+      position: 'striker',
+      resultCount: 5,
+    });
     expect(entry.eventType).toBe('player_search');
     expect(entry.actorWallet).toBe('GSCOUT123');
     expect(typeof entry.payloadHash).toBe('string');
@@ -38,7 +50,11 @@ describe('recordAudit', () => {
   });
 
   it('stores a player_search entry with anonymous wallet when unauthenticated', async () => {
-    const entry = await recordAudit('anonymous', 'player_search', { region: null, position: null, resultCount: 10 });
+    const entry = await recordAudit('anonymous', 'player_search', {
+      region: null,
+      position: null,
+      resultCount: 10,
+    });
     expect(entry.actorWallet).toBe('anonymous');
     expect(entry.eventType).toBe('player_search');
   });
@@ -63,7 +79,15 @@ describe('recordAudit', () => {
     await getDriver().run(
       `INSERT INTO audit_log (action, admin_wallet, query_params, created_at, prev_hash, hash, event_source)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ['player_registered', 'GWALLET', 'invalid json', new Date().toISOString(), GENESIS_HASH, 'dummyhash', 'app_event'],
+      [
+        'player_registered',
+        'GWALLET',
+        'invalid json',
+        new Date().toISOString(),
+        GENESIS_HASH,
+        'dummyhash',
+        'app_event',
+      ],
     );
 
     const results = await queryAudit();
@@ -103,7 +127,12 @@ describe('queryAudit', () => {
   });
 
   it('does not surface admin-action rows written via insertAuditLog directly', async () => {
-    await insertAuditLog({ action: 'contract_state_change', adminWallet: 'GADMIN', queryParams: {}, createdAt: new Date().toISOString() });
+    await insertAuditLog({
+      action: 'contract_state_change',
+      adminWallet: 'GADMIN',
+      queryParams: {},
+      createdAt: new Date().toISOString(),
+    });
     expect(await queryAudit()).toHaveLength(3);
   });
 });

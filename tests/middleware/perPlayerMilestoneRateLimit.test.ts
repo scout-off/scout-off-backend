@@ -30,12 +30,17 @@ const OTHER_PLAYER_ID = 'per-player-rate-limit-other-player-2';
 
 // ── Service mocks ──────────────────────────────────────────────────────────────
 jest.mock('../../src/controllers/validatorController', () => {
-  const actual = jest.requireActual('../../src/controllers/validatorController') as Record<string, unknown>;
+  const actual = jest.requireActual('../../src/controllers/validatorController') as Record<
+    string,
+    unknown
+  >;
   return {
     ...actual,
-    submitMilestoneEvidence: jest.fn((_req: unknown, res: { status: (n: number) => { json: (b: unknown) => void } }) => {
-      res.status(201).json({ success: true, data: { evidenceCid: 'QmMock' } });
-    }),
+    submitMilestoneEvidence: jest.fn(
+      (_req: unknown, res: { status: (n: number) => { json: (b: unknown) => void } }) => {
+        res.status(201).json({ success: true, data: { evidenceCid: 'QmMock' } });
+      },
+    ),
   };
 });
 
@@ -90,7 +95,9 @@ describe('POST /api/validators/milestone — per-player rate limit (#1137)', () 
         set: jest.fn(),
         statusCode: 200,
       });
-      const next = () => { nextCalled++; };
+      const next = () => {
+        nextCalled++;
+      };
 
       await limiter(makeReq(PLAYER_ID) as never, makeRes() as never, next);
       await limiter(makeReq(PLAYER_ID) as never, makeRes() as never, next);
@@ -106,7 +113,9 @@ describe('POST /api/validators/milestone — per-player rate limit (#1137)', () 
       let retryAfterSet = false;
       const next = jest.fn();
       const res = {
-        set: (name: string, _value: string) => { if (name === 'Retry-After') retryAfterSet = true; },
+        set: (name: string, _value: string) => {
+          if (name === 'Retry-After') retryAfterSet = true;
+        },
         status: (code: number) => {
           if (code === 429) blocked = true;
           return { json: jest.fn() };

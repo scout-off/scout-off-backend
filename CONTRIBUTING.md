@@ -35,6 +35,7 @@ Welcome! This guide covers contribution workflows, code standards, and critical 
 ### Setup
 
 1. **Fork and Clone**
+
    ```bash
    git clone https://github.com/scout-off/scout-off-backend.git
    cd scout-off-backend
@@ -44,6 +45,7 @@ Welcome! This guide covers contribution workflows, code standards, and critical 
    ```
 
 2. **Create a Feature Branch**
+
    ```bash
    git checkout -b add-your-feature-description
    ```
@@ -58,10 +60,10 @@ Welcome! This guide covers contribution workflows, code standards, and critical 
 
 `scripts/validate-env.js` runs in two modes:
 
-| Command | Mode | Purpose |
-| ------- | ---- | ------- |
-| `npm run env:check` | Documentation check (default) | Fails if a `process.env.VAR` used in `src/` is missing from `.env.example`. CI runs this. |
-| `node scripts/validate-env.js --runtime` | Runtime check | Validates `NODE_ENV`, `NETWORK`, `DB_DRIVER`, required variables and CORS/PINATA settings for the current environment. `npm run dev` and `npm start` run this via `predev`/`prestart`, and `src/config.ts` performs the same validation on import. |
+| Command                                  | Mode                          | Purpose                                                                                                                                                                                                                                            |
+| ---------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run env:check`                      | Documentation check (default) | Fails if a `process.env.VAR` used in `src/` is missing from `.env.example`. CI runs this.                                                                                                                                                          |
+| `node scripts/validate-env.js --runtime` | Runtime check                 | Validates `NODE_ENV`, `NETWORK`, `DB_DRIVER`, required variables and CORS/PINATA settings for the current environment. `npm run dev` and `npm start` run this via `predev`/`prestart`, and `src/config.ts` performs the same validation on import. |
 
 The accepted values for `NODE_ENV`, `NETWORK`, `DB_DRIVER` and the required runtime variables live in **`src/config/env-constants.json`**. Both `src/config.ts` and `scripts/validate-env.js` read that file, so add new values there — never in one of the consumers. `tests/validate-env.test.ts` fails if the lists drift apart.
 
@@ -134,23 +136,23 @@ runs any pending migrations, and inserts the sample rows described below.
 
 ### What gets seeded
 
-| Data                 | Count | Details                                                                          |
-| -------------------- | ----- | --------------------------------------------------------------------------------- |
-| Players               | 5     | One per region (West Africa, East Africa, South America, Europe, Southeast Asia) |
-| Positions             | 5     | Forward, Midfielder, Defender, Goalkeeper, Winger                                |
-| Progress tiers        | 0–3   | One player at each tier level (0, 1, 1, 2, 3), showcasing the full tier model     |
-| Milestone events      | 3     | `performance`, `identity`, and `trial_offer` milestones (`milestone_approved`)   |
-| Scout subscriptions   | 2     | One `premium` (90 days) and one `basic` (30 days), both active                   |
-| Contact unlocks       | 2     | Scout Alpha → `seed-player-001`, Scout Beta → `seed-player-003`                  |
+| Data                | Count | Details                                                                          |
+| ------------------- | ----- | -------------------------------------------------------------------------------- |
+| Players             | 5     | One per region (West Africa, East Africa, South America, Europe, Southeast Asia) |
+| Positions           | 5     | Forward, Midfielder, Defender, Goalkeeper, Winger                                |
+| Progress tiers      | 0–3   | One player at each tier level (0, 1, 1, 2, 3), showcasing the full tier model    |
+| Milestone events    | 3     | `performance`, `identity`, and `trial_offer` milestones (`milestone_approved`)   |
+| Scout subscriptions | 2     | One `premium` (90 days) and one `basic` (30 days), both active                   |
+| Contact unlocks     | 2     | Scout Alpha → `seed-player-001`, Scout Beta → `seed-player-003`                  |
 
 The full player/scout wallet list (with the exact seed values) lives in
 the comment block and constant declarations at the top of
 [`scripts/seed.ts`](scripts/seed.ts). At the time of writing, the seeded
 wallets used for manual API testing are:
 
-| Role                   | Wallet                                                    |
-| ----------------------- | ---------------------------------------------------------- |
-| `seed-player-001` (Forward, West Africa)   | `GAEZI3BYWDXHZVJBDG5AXBLYMN6VJXVHAJBGZFAZQXNK3BFMN7XRVGB` |
+| Role                                        | Wallet                                                     |
+| ------------------------------------------- | ---------------------------------------------------------- |
+| `seed-player-001` (Forward, West Africa)    | `GAEZI3BYWDXHZVJBDG5AXBLYMN6VJXVHAJBGZFAZQXNK3BFMN7XRVGB`  |
 | `seed-player-003` (Defender, South America) | `GCRVGBAEZI3BYWDXHZVJBDG5AXBLYMN6VJXVHAJBGZFAZQXNK3BFMN7X` |
 | Scout Alpha (`premium` subscription)        | `GFAZQXNK3BFMN7XRVGBAEZI3BYWDXHZVJBDG5AXBLYMN6VJXVHAJBGZE` |
 | Scout Beta (`basic` subscription)           | `GHAJBGZFAZQXNK3BFMN7XRVGBAEZI3BYWDXHZVJBDG5AXBLYMN6VJXVB` |
@@ -209,6 +211,7 @@ npm run seed
 ## Understanding the Data Model
 
 Before writing queries or modifying data flows, consult **[`docs/data-model.md`](docs/data-model.md)** to understand:
+
 - Which table is authoritative for a given concept
 - Whether data is populated by the indexer (on-chain mirror) or direct API writes
 - The relationships between chain-mirror tables and API-owned tables
@@ -261,6 +264,7 @@ Fixes #123"
 ```
 
 **Commit types:**
+
 - `feat:` – New feature
 - `fix:` – Bug fix
 - `docs:` – Documentation only
@@ -277,6 +281,7 @@ git push origin add-your-feature-description
 ```
 
 Reference the issue in the PR description:
+
 ```
 ## Summary
 Brief description of what this PR does.
@@ -358,7 +363,8 @@ Modelled on the existing scout subscription route in
  * @response 403 { success: false, error: string } - Scout role required or wallet mismatch
  * @auth Bearer (scout role required)
  */
-router.route('/:wallet/subscribe')
+router
+  .route('/:wallet/subscribe')
   .post(
     requireRole('scout'),
     requireWalletOwner({ validateAddress: false }),
@@ -432,16 +438,19 @@ npx lint-staged
 ### Required Checks
 
 - **Tests**: New features must include unit or integration tests
+
   ```bash
   npm run test
   ```
 
 - **Linting**: No linting warnings
+
   ```bash
   npm run lint
   ```
 
 - **SQL Injection Check**: `src/db/*.ts` must not splice values into SQL via string interpolation; use parameterized `?` placeholders instead
+
   ```bash
   npm run check:sql-injection
   ```
@@ -489,6 +498,7 @@ npm audit
 ```
 
 **Output interpretation:**
+
 - ✅ **No vulnerabilities**: Safe to proceed
 - ⚠️ **Low severity**: Document in PR; fix in next sprint if no workaround exists
 - 🔴 **Moderate/High/Critical**: **Must fix before merging**
@@ -523,7 +533,7 @@ If this job fails on a finding that is genuinely not yet fixable:
    check on a PR-by-PR basis — this is not a permanent CI change). Reference
    the tracking issue from step 2 in both the override and the PR
    description, e.g. `[audit-exception: GHSA-xxxx-xxxx-xxxx, tracked in #NNN,
-   re-check by YYYY-MM-DD]`.
+re-check by YYYY-MM-DD]`.
 4. Do **not** work around the gate by lowering `--audit-level`, adding
    `--omit` for a production package, or piping the command through
    `|| true` — those changes are permanent and silently widen the gate for
@@ -532,11 +542,13 @@ If this job fails on a finding that is genuinely not yet fixable:
 ### Dependency Update Process
 
 1. **Check for Updates**
+
    ```bash
    npm outdated
    ```
 
 2. **Test Before Updating**
+
    ```bash
    npm update <package-name>
    npm run test && npm run lint && npm audit
@@ -562,16 +574,17 @@ If this job fails on a finding that is genuinely not yet fixable:
 
 The following dependencies require extra scrutiny during updates due to their security-sensitive roles:
 
-| Package | Role | Why Critical |
-|---------|------|-------------|
-| `express` | Web framework | Handles auth, request validation, rate limiting |
+| Package                | Role                   | Why Critical                                          |
+| ---------------------- | ---------------------- | ----------------------------------------------------- |
+| `express`              | Web framework          | Handles auth, request validation, rate limiting       |
 | `@stellar/stellar-sdk` | Blockchain integration | Direct interaction with Stellar network, key material |
-| `jsonwebtoken` | JWT handling | Authentication tokens, session management |
-| `better-sqlite3` | Database | Stores user profiles, transaction records |
-| `axios` / `node-fetch` | HTTP client | External API calls to Pinata/IPFS, Stellar Horizon |
-| `dotenv` | Environment config | Loads sensitive secrets (JWT_SECRET, PINATA_KEY) |
+| `jsonwebtoken`         | JWT handling           | Authentication tokens, session management             |
+| `better-sqlite3`       | Database               | Stores user profiles, transaction records             |
+| `axios` / `node-fetch` | HTTP client            | External API calls to Pinata/IPFS, Stellar Horizon    |
+| `dotenv`               | Environment config     | Loads sensitive secrets (JWT_SECRET, PINATA_KEY)      |
 
 **When updating these, always:**
+
 - Run full test suite: `npm run test`
 - Run security audit: `npm audit`
 - Test integration points manually
@@ -595,6 +608,7 @@ Dependabot is configured in `.github/dependabot.yml` to open pull requests for o
 - Grouped: all `soroban-*` crates are bundled into a single PR via the `soroban-deps` group, reducing noise from Soroban SDK patch releases.
 
 When Dependabot opens a Cargo PR, verify:
+
 1. Review the Cargo.lock diff and the crate's CHANGELOG for breaking changes.
 2. Run `npm run test:contracts` locally to run the workspace unit tests and CI-sized invariant tests.
 3. Merge or close the PR — do **not** leave stale Dependabot PRs open longer than one sprint.
@@ -613,9 +627,11 @@ When Dependabot opens a Cargo PR, verify:
 When you encounter a deprecated package or see warnings during audit:
 
 1. **Identify Deprecation Reason**
+
    ```bash
    npm info <package-name>
    ```
+
    Check for:
    - `deprecated` field (shows deprecation message)
    - No activity in past 12+ months
@@ -636,10 +652,11 @@ When you encounter a deprecated package or see warnings during audit:
    - Document any API changes in commit message
 
 4. **Examples of Recently Handled Deprecations**
-   | Old Package | Reason | Replacement | Status |
-   |-------------|--------|-------------|--------|
-   | `node-fetch@2` | Deprecated in favor of native fetch | native `fetch` or `axios` | Migration in progress |
-   | Specific older packages | No longer maintained | Actively maintained fork | Queued for review |
+
+   | Old Package             | Reason                              | Replacement               | Status                |
+   | ----------------------- | ----------------------------------- | ------------------------- | --------------------- |
+   | `node-fetch@2`          | Deprecated in favor of native fetch | native `fetch` or `axios` | Migration in progress |
+   | Specific older packages | No longer maintained                | Actively maintained fork  | Queued for review     |
 
 5. **Security Review Checklist for Deprecated Packages**
    - [ ] Check CVE databases (NVD, Snyk, npm audit)
@@ -653,6 +670,7 @@ When you encounter a deprecated package or see warnings during audit:
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
 Instead:
+
 1. Email maintainers privately
 2. Include proof of concept (if safe to share)
 3. Allow 7 days for maintainers to respond before public disclosure
@@ -673,19 +691,19 @@ taxonomy used across the ScoutOff backend repository.
 ### Issue Category Labels
 
 Apply **exactly one** category label when you open an issue. If your issue
-genuinely spans two categories, pick the one that best describes the *primary*
+genuinely spans two categories, pick the one that best describes the _primary_
 work required.
 
-| Label | Description | Example issues |
-|-------|-------------|----------------|
-| `bug` | Unintended behaviour or a crash in an existing feature. The system did something it should not have done, or failed to do something it should. | IPFS upload times out; SEP-10 challenge returns 500; milestone approval emits duplicate event |
-| `feature` | A new capability or a meaningful enhancement to an existing behaviour. No existing code is broken — you are adding something that does not exist yet. | Add player region filter to `/api/players`; support trial-offer logging; expose scout payment history endpoint |
-| `performance` | The system works correctly but is too slow, uses too much memory, or makes unnecessary network/database calls. | Cache milestone query results in Redis; reduce indexer latency by batching ledger reads; add DB index on `player_id` |
-| `documentation` | Changes to README, CONTRIBUTING.md, API docs, inline code comments, or the `docs/` directory. No production code changes. | Clarify SEP-10 error codes; add SDK usage examples; fix broken links in DEPLOYMENT.md |
-| `refactor` | Restructuring existing code **without** changing observable behaviour. Tests should still pass before and after. | Consolidate request-validation middleware; extract retry logic into a shared helper; rename internal variables for clarity |
-| `infra` | Deployment pipelines, CI/CD configuration, Docker setup, database migrations, or other DevOps concerns. | Optimise GitHub Actions matrix; add Postgres migration tooling; update `docker-compose.yml` health-check interval |
-| `security` | Vulnerability fixes, input hardening, rate-limit tuning, or any change whose primary motivation is reducing attack surface. Always follow the [Security & Dependency Review](#security--dependency-review) process. | Validate JSON payloads with Zod schemas; tighten CORS allowed-origins; add rate limit to `/auth/token` |
-| `test` | Additions or improvements to the test suite — new test files, improved assertions, better test isolation, or coverage fixes. No production code changes required. | Add edge-case tests for `tierPromotion.ts`; improve IPFS serialiser coverage; replace fragile integration fixture |
+| Label           | Description                                                                                                                                                                                                         | Example issues                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `bug`           | Unintended behaviour or a crash in an existing feature. The system did something it should not have done, or failed to do something it should.                                                                      | IPFS upload times out; SEP-10 challenge returns 500; milestone approval emits duplicate event                              |
+| `feature`       | A new capability or a meaningful enhancement to an existing behaviour. No existing code is broken — you are adding something that does not exist yet.                                                               | Add player region filter to `/api/players`; support trial-offer logging; expose scout payment history endpoint             |
+| `performance`   | The system works correctly but is too slow, uses too much memory, or makes unnecessary network/database calls.                                                                                                      | Cache milestone query results in Redis; reduce indexer latency by batching ledger reads; add DB index on `player_id`       |
+| `documentation` | Changes to README, CONTRIBUTING.md, API docs, inline code comments, or the `docs/` directory. No production code changes.                                                                                           | Clarify SEP-10 error codes; add SDK usage examples; fix broken links in DEPLOYMENT.md                                      |
+| `refactor`      | Restructuring existing code **without** changing observable behaviour. Tests should still pass before and after.                                                                                                    | Consolidate request-validation middleware; extract retry logic into a shared helper; rename internal variables for clarity |
+| `infra`         | Deployment pipelines, CI/CD configuration, Docker setup, database migrations, or other DevOps concerns.                                                                                                             | Optimise GitHub Actions matrix; add Postgres migration tooling; update `docker-compose.yml` health-check interval          |
+| `security`      | Vulnerability fixes, input hardening, rate-limit tuning, or any change whose primary motivation is reducing attack surface. Always follow the [Security & Dependency Review](#security--dependency-review) process. | Validate JSON payloads with Zod schemas; tighten CORS allowed-origins; add rate limit to `/auth/token`                     |
+| `test`          | Additions or improvements to the test suite — new test files, improved assertions, better test isolation, or coverage fixes. No production code changes required.                                                   | Add edge-case tests for `tierPromotion.ts`; improve IPFS serialiser coverage; replace fragile integration fixture          |
 
 ---
 
@@ -696,12 +714,12 @@ you should **estimate** the priority and note it in the issue body — maintaine
 will confirm or adjust it. Do not add a `P*` label yourself at creation time;
 wait for maintainer confirmation.
 
-| Label | Severity | Expected response | Examples |
-|-------|----------|-------------------|----------|
-| `P0` — Critical | Blocks a production deployment or causes data loss / security breach. Everything else stops until this is resolved. | **Fix immediately** — same day if possible | Contract initialisation fails; database corruption; JWT secret exposed in logs |
-| `P1` — High | Breaks a core user flow or affects many users simultaneously. A workaround may exist but it is not acceptable long-term. | **Fix within the current sprint** | Milestone approval returns 500; payment processing hangs indefinitely; scout filter returns wrong results |
-| `P2` — Medium | Degrades the experience but a reasonable workaround exists. Users can still complete their core tasks. | **Schedule for the next sprint** | Scout search is noticeably slow; validator list becomes stale after 10 minutes; error messages are misleading |
-| `P3` — Low | Nice-to-have improvement or an issue that affects very few users. No workaround needed because the impact is minimal. | **Plan in the backlog** | Improve wording in a rarely-seen error message; refactor an unused module; add an optional query-string alias |
+| Label           | Severity                                                                                                                 | Expected response                          | Examples                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `P0` — Critical | Blocks a production deployment or causes data loss / security breach. Everything else stops until this is resolved.      | **Fix immediately** — same day if possible | Contract initialisation fails; database corruption; JWT secret exposed in logs                                |
+| `P1` — High     | Breaks a core user flow or affects many users simultaneously. A workaround may exist but it is not acceptable long-term. | **Fix within the current sprint**          | Milestone approval returns 500; payment processing hangs indefinitely; scout filter returns wrong results     |
+| `P2` — Medium   | Degrades the experience but a reasonable workaround exists. Users can still complete their core tasks.                   | **Schedule for the next sprint**           | Scout search is noticeably slow; validator list becomes stale after 10 minutes; error messages are misleading |
+| `P3` — Low      | Nice-to-have improvement or an issue that affects very few users. No workaround needed because the impact is minimal.    | **Plan in the backlog**                    | Improve wording in a rarely-seen error message; refactor an unused module; add an optional query-string alias |
 
 ---
 
@@ -721,21 +739,21 @@ An additional `difficulty: extreme` label exists for issues that require
 deep, cross-cutting architectural changes — these go beyond `hard` in scope
 or risk and are typically reserved for core contributors.
 
-| Label | Canonical form | Description |
-|-------|---------------|-------------|
-| Easy | `difficulty: easy` | Self-contained change in a single file or module. No deep knowledge of the codebase or Stellar/Soroban required. Good first issues. Examples: add a missing test case, fix a typo in docs, add a helper function. |
-| Medium | `difficulty: medium` | Requires understanding two or more modules, or involves a non-trivial algorithm / data-model change. Some prior exposure to the project is helpful. Examples: extend the indexer to handle a new event type, add a new API route with validation. |
-| Hard | `difficulty: hard` | Spans multiple layers of the stack (contract + backend + docs), requires deep domain knowledge (Soroban, SEP-10), or has significant performance or security implications. Examples: implement pay-to-contact flow end-to-end; introduce distributed caching; harden auth middleware against timing attacks. |
-| Extreme | `difficulty: extreme` | Cross-cutting architectural changes spanning most of the stack. Reserved for core contributors with deep domain expertise. These issues are rare and typically require design discussion before implementation begins. |
+| Label   | Canonical form        | Description                                                                                                                                                                                                                                                                                                  |
+| ------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Easy    | `difficulty: easy`    | Self-contained change in a single file or module. No deep knowledge of the codebase or Stellar/Soroban required. Good first issues. Examples: add a missing test case, fix a typo in docs, add a helper function.                                                                                            |
+| Medium  | `difficulty: medium`  | Requires understanding two or more modules, or involves a non-trivial algorithm / data-model change. Some prior exposure to the project is helpful. Examples: extend the indexer to handle a new event type, add a new API route with validation.                                                            |
+| Hard    | `difficulty: hard`    | Spans multiple layers of the stack (contract + backend + docs), requires deep domain knowledge (Soroban, SEP-10), or has significant performance or security implications. Examples: implement pay-to-contact flow end-to-end; introduce distributed caching; harden auth middleware against timing attacks. |
+| Extreme | `difficulty: extreme` | Cross-cutting architectural changes spanning most of the stack. Reserved for core contributors with deep domain expertise. These issues are rare and typically require design discussion before implementation begins.                                                                                       |
 
 ---
 
 ### Applying Labels — Quick Reference
 
-| Who | When | What |
-|-----|------|------|
-| **Reporter** (you) | At issue creation | One `category` label (e.g. `bug`, `test`). Estimated priority written in the issue body (not as a label). |
-| **Maintainer** | During triage | Confirms or changes the category label; adds the official `P0`–`P3` priority label; adds the `easy`/`medium`/`hard` difficulty label. |
+| Who                | When              | What                                                                                                                                  |
+| ------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Reporter** (you) | At issue creation | One `category` label (e.g. `bug`, `test`). Estimated priority written in the issue body (not as a label).                             |
+| **Maintainer**     | During triage     | Confirms or changes the category label; adds the official `P0`–`P3` priority label; adds the `easy`/`medium`/`hard` difficulty label. |
 
 > **Tip:** If you are unsure which category applies, pick the closest one and
 > explain your reasoning in the issue body. Maintainers will adjust if needed —
@@ -750,25 +768,25 @@ We track ~125 active issues. Use these guidelines to help us prioritize efficien
 
 ### Issue Categories
 
-| Category | Description | Examples |
-|----------|-------------|----------|
-| `bug` | Unintended behavior or crashes | IPFS timeout; SEP-10 auth fails |
-| `feature` | New capability or enhancement | Add region filter; support trial offer |
-| `performance` | Optimization or speed improvements | Cache milestone queries; reduce latency |
-| `documentation` | README, API docs, or code comments | Clarify error codes; add SDK examples |
-| `refactor` | Code restructuring without behavior changes | Consolidate validation; reduce middleware |
-| `infra` | Deployment, CI/CD, DevOps | GitHub Actions; database migration tools |
-| `security` | Vulnerability fixes or hardening | JSON validation; rate limit on auth |
-| `test` | Test coverage or reliability | Add contract edge cases; improve isolation |
+| Category        | Description                                 | Examples                                   |
+| --------------- | ------------------------------------------- | ------------------------------------------ |
+| `bug`           | Unintended behavior or crashes              | IPFS timeout; SEP-10 auth fails            |
+| `feature`       | New capability or enhancement               | Add region filter; support trial offer     |
+| `performance`   | Optimization or speed improvements          | Cache milestone queries; reduce latency    |
+| `documentation` | README, API docs, or code comments          | Clarify error codes; add SDK examples      |
+| `refactor`      | Code restructuring without behavior changes | Consolidate validation; reduce middleware  |
+| `infra`         | Deployment, CI/CD, DevOps                   | GitHub Actions; database migration tools   |
+| `security`      | Vulnerability fixes or hardening            | JSON validation; rate limit on auth        |
+| `test`          | Test coverage or reliability                | Add contract edge cases; improve isolation |
 
 ### Priority Levels
 
-| Priority | Severity | Timeline | Example |
-|----------|----------|----------|---------|
-| **P0** | Critical | Fix immediately | Contract init fails; data corruption |
-| **P1** | High | Fix within sprint | Milestone broken; payment hangs |
-| **P2** | Medium | Schedule next sprint | Scout search slow; stale validator list |
-| **P3** | Low | Plan in backlog | Error message clarity; refactor unused module |
+| Priority | Severity | Timeline             | Example                                       |
+| -------- | -------- | -------------------- | --------------------------------------------- |
+| **P0**   | Critical | Fix immediately      | Contract init fails; data corruption          |
+| **P1**   | High     | Fix within sprint    | Milestone broken; payment hangs               |
+| **P2**   | Medium   | Schedule next sprint | Scout search slow; stale validator list       |
+| **P3**   | Low      | Plan in backlog      | Error message clarity; refactor unused module |
 
 ### How to File a High-Quality Issue
 
@@ -776,21 +794,23 @@ We track ~125 active issues. Use these guidelines to help us prioritize efficien
    Avoid duplicates: https://github.com/scout-off/scout-off-backend/issues
 
 2. **Use a Clear Title**  
-   ✅ *"Auth token expires before subscription ends"*  
-   ❌ *"Bug with tokens"*
+   ✅ _"Auth token expires before subscription ends"_  
+   ❌ _"Bug with tokens"_
 
 3. **Provide Steps to Reproduce** (for bugs)
+
    ```
    1. Create a scout account
    2. Purchase a 30-day subscription via /api/scouts/subscribe
    3. Wait 25 days
    4. Call /api/scouts/:wallet/subscription
-   
+
    Expected: subscription still active
    Actual: returns 401 NotSubscribed
    ```
 
 4. **Include Environment Context**
+
    ```
    - OS: macOS 14.1 / Linux 24.04 / Windows 11
    - Node: v18.16.0

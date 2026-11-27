@@ -19,7 +19,8 @@
 
 require('dotenv').config();
 
-if (!process.env.CONTRACT_ID) process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
+if (!process.env.CONTRACT_ID)
+  process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
 if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'reencrypt-notes-script';
 
 if (!process.env.NOTES_ENCRYPTION_KEY) {
@@ -29,11 +30,7 @@ if (!process.env.NOTES_ENCRYPTION_KEY) {
 }
 
 const { initDb, getDb } = require('../dist/db');
-const {
-  encryptField,
-  decryptField,
-  isEncryptedField,
-} = require('../dist/utils/fieldCipher');
+const { encryptField, decryptField, isEncryptedField } = require('../dist/utils/fieldCipher');
 
 async function reencryptStored(stored) {
   const plaintext = decryptField(stored, { purpose: 'notes' });
@@ -45,7 +42,9 @@ async function main() {
   await initDb();
   const db = getDb();
 
-  const v1Rows = db.prepare('SELECT scout_wallet, player_id, note_text FROM scout_player_notes').all();
+  const v1Rows = db
+    .prepare('SELECT scout_wallet, player_id, note_text FROM scout_player_notes')
+    .all();
   const updateV1 = db.prepare(
     'UPDATE scout_player_notes SET note_text = ? WHERE scout_wallet = ? AND player_id = ?',
   );

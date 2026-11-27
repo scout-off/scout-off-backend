@@ -10,7 +10,7 @@ import RedisMock from 'ioredis-mock';
 import { RateLimitStore } from '../../src/middleware/rateLimitStore';
 
 function makeReqRes(ip = '127.0.0.1') {
-  const req = { ip } as unknown as Request;
+  const req = { ip, headers: {}, socket: { remoteAddress: ip } } as unknown as Request;
   const res = {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
@@ -27,7 +27,7 @@ const stores = [
 
 describe.each(stores)('auth rate limit — tighter limit (5/min default) ($name)', ({ create }) => {
   let store: RateLimitStore;
-  
+
   beforeEach(() => {
     store = create();
   });
@@ -68,7 +68,7 @@ describe.each(stores)('auth rate limit — tighter limit (5/min default) ($name)
     expect(second.res.status).toHaveBeenCalledWith(429);
     expect(second.res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
     const retryAfter = (second.res.set as jest.Mock).mock.calls.find(
-      ([h]: [string]) => h === 'Retry-After'
+      ([h]: [string]) => h === 'Retry-After',
     )?.[1];
     expect(Number(retryAfter)).toBeGreaterThan(0);
   });
@@ -104,7 +104,7 @@ describe.each(stores)('auth rate limit — tighter limit (5/min default) ($name)
 
 describe.each(stores)('auth rate limit — independence and window reset ($name)', ({ create }) => {
   let store: RateLimitStore;
-  
+
   beforeEach(() => {
     store = create();
   });
@@ -156,7 +156,7 @@ describe.each(stores)('auth rate limit — independence and window reset ($name)
     expect(second.res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
 
     const retryAfterCall = (second.res.set as jest.Mock).mock.calls.find(
-      ([h]: [string]) => h === 'Retry-After'
+      ([h]: [string]) => h === 'Retry-After',
     );
     expect(retryAfterCall).toBeDefined();
     const retryAfterValue = Number(retryAfterCall![1]);
@@ -164,7 +164,9 @@ describe.each(stores)('auth rate limit — independence and window reset ($name)
   });
 
   it('allows requests again after the rate limit window resets', async () => {
-    const mw = rateLimit({ windowMs: 50, max: 2, store });
+    // Window wide enough that the three requests below can't straddle it on a
+    // slow (coverage) run, which made this test flaky.
+    const mw = rateLimit({ windowMs: 500, max: 2, store });
     const ip = '10.1.0.4';
 
     // Exhaust the limit
@@ -179,7 +181,7 @@ describe.each(stores)('auth rate limit — independence and window reset ($name)
     expect(blocked.res.status).toHaveBeenCalledWith(429);
 
     // Wait for the window to expire
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await new Promise((resolve) => setTimeout(resolve, 600));
 
     // Should be allowed again after reset
     const { req, res, next } = makeReqRes(ip);

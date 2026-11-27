@@ -3,7 +3,12 @@
 import 'dotenv/config';
 import path from 'path';
 import Database from 'better-sqlite3';
-import { discoverMigrationFiles, getAppliedMigrations, generateStatusReport, formatStatusReport } from '../src/db/migration-status';
+import {
+  discoverMigrationFiles,
+  getAppliedMigrations,
+  generateStatusReport,
+  formatStatusReport,
+} from '../src/db/migration-status';
 
 /**
  * Main entry point for the migration status script.
@@ -37,8 +42,7 @@ async function main(): Promise<void> {
 
     process.exit(0);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : JSON.stringify(error);
+    const message = error instanceof Error ? error.message : JSON.stringify(error);
     // eslint-disable-next-line no-console
     console.error('✗ Error:', message);
     process.exit(1);

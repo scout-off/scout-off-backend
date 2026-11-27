@@ -45,9 +45,7 @@ function discoverMigrationFiles(): string[] {
 /** Thin wrapper: return the set of table names present in the DB. */
 function getTables(db: Database.Database): Set<string> {
   const rows = db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-    )
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
     .all() as { name: string }[];
   return new Set(rows.map((r) => r.name));
 }
@@ -61,9 +59,7 @@ function getColumns(db: Database.Database, table: string): Set<string> {
 /** Return the set of index names present in the DB (excluding internal). */
 function getIndexes(db: Database.Database): Set<string> {
   const rows = db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'"
-    )
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'")
     .all() as { name: string }[];
   return new Set(rows.map((r) => r.name));
 }
@@ -106,9 +102,9 @@ describe('runMigrations — integration suite (#508)', () => {
       const db = new Database(':memory:');
       await migrate(db);
 
-      const appliedRows = db
-        .prepare('SELECT id FROM migrations ORDER BY id')
-        .all() as { id: string }[];
+      const appliedRows = db.prepare('SELECT id FROM migrations ORDER BY id').all() as {
+        id: string;
+      }[];
       const appliedIds = appliedRows.map((r) => r.id);
 
       const expectedFiles = discoverMigrationFiles();
@@ -257,9 +253,7 @@ describe('runMigrations — integration suite (#508)', () => {
       });
 
       it('creates idx_player_profile_history_player_changed_at index', () => {
-        expect(getIndexes(sharedDb)).toContain(
-          'idx_player_profile_history_player_changed_at'
-        );
+        expect(getIndexes(sharedDb)).toContain('idx_player_profile_history_player_changed_at');
       });
     });
 
@@ -338,11 +332,11 @@ describe('runMigrations — integration suite (#508)', () => {
         await migrate(db);
         db.prepare(
           `INSERT INTO idempotency_keys (key, status_code, response, created_at, expires_at, status, request_fingerprint)
-           VALUES ('fp-key', 0, '', 1, 9999999999999, 'pending', 'wallet:player')`
+           VALUES ('fp-key', 0, '', 1, 9999999999999, 'pending', 'wallet:player')`,
         ).run();
-        const row = db.prepare(
-          'SELECT request_fingerprint FROM idempotency_keys WHERE key = ?'
-        ).get('fp-key') as { request_fingerprint: string | null };
+        const row = db
+          .prepare('SELECT request_fingerprint FROM idempotency_keys WHERE key = ?')
+          .get('fp-key') as { request_fingerprint: string | null };
         expect(row.request_fingerprint).toBe('wallet:player');
         db.close();
       });
@@ -435,9 +429,7 @@ describe('runMigrations — integration suite (#508)', () => {
     describe('004_validators.sql (no-op — IF NOT EXISTS)', () => {
       it('validators table still exists and is queryable after the no-op 004 migration', () => {
         expect(getTables(sharedDb)).toContain('validators');
-        expect(() =>
-          sharedDb.prepare('SELECT * FROM validators LIMIT 0').all()
-        ).not.toThrow();
+        expect(() => sharedDb.prepare('SELECT * FROM validators LIMIT 0').all()).not.toThrow();
       });
     });
 
@@ -523,10 +515,10 @@ describe('runMigrations — integration suite (#508)', () => {
       await expect(migrate(db)).resolves.not.toThrow();
 
       const tables = getTables(db);
-      expect(tables).toContain('validators');              // 002_validators
-      expect(tables).toContain('player_profile_history');  // 002_player_profile_history
-      expect(tables).toContain('audit_log');               // 002_audit_log
-      expect(tables).toContain('trial_offer_events');      // 002_trial_offer_events
+      expect(tables).toContain('validators'); // 002_validators
+      expect(tables).toContain('player_profile_history'); // 002_player_profile_history
+      expect(tables).toContain('audit_log'); // 002_audit_log
+      expect(tables).toContain('trial_offer_events'); // 002_trial_offer_events
 
       const applied = (
         db.prepare("SELECT id FROM migrations WHERE id LIKE '002_%'").all() as {
@@ -534,9 +526,7 @@ describe('runMigrations — integration suite (#508)', () => {
         }[]
       ).map((r) => r.id);
 
-      const expected002 = discoverMigrationFiles().filter((f) =>
-        f.startsWith('002_')
-      );
+      const expected002 = discoverMigrationFiles().filter((f) => f.startsWith('002_'));
       expect(applied.sort()).toEqual(expected002.sort());
 
       db.close();
@@ -547,10 +537,10 @@ describe('runMigrations — integration suite (#508)', () => {
       await expect(migrate(db)).resolves.not.toThrow();
 
       const tables = getTables(db);
-      expect(tables).toContain('idempotency_keys');   // 003_idempotency_keys
-      expect(tables).toContain('pending_pins');        // 003_pending_pins
-      expect(tables).toContain('subscriptions');       // 003_subscriptions
-      expect(tables).toContain('trial_offers');        // 003_subscriptions_and_trial_offers
+      expect(tables).toContain('idempotency_keys'); // 003_idempotency_keys
+      expect(tables).toContain('pending_pins'); // 003_pending_pins
+      expect(tables).toContain('subscriptions'); // 003_subscriptions
+      expect(tables).toContain('trial_offers'); // 003_subscriptions_and_trial_offers
 
       const applied = (
         db.prepare("SELECT id FROM migrations WHERE id LIKE '003_%'").all() as {
@@ -558,9 +548,7 @@ describe('runMigrations — integration suite (#508)', () => {
         }[]
       ).map((r) => r.id);
 
-      const expected003 = discoverMigrationFiles().filter((f) =>
-        f.startsWith('003_')
-      );
+      const expected003 = discoverMigrationFiles().filter((f) => f.startsWith('003_'));
       expect(applied.sort()).toEqual(expected003.sort());
 
       db.close();
@@ -571,8 +559,8 @@ describe('runMigrations — integration suite (#508)', () => {
       await expect(migrate(db)).resolves.not.toThrow();
 
       const tables = getTables(db);
-      expect(tables).toContain('revoked_tokens');  // 004_token_revocation
-      expect(tables).toContain('validators');       // already from 002; 004 is no-op
+      expect(tables).toContain('revoked_tokens'); // 004_token_revocation
+      expect(tables).toContain('validators'); // already from 002; 004 is no-op
 
       const applied = (
         db.prepare("SELECT id FROM migrations WHERE id LIKE '004_%'").all() as {
@@ -580,9 +568,7 @@ describe('runMigrations — integration suite (#508)', () => {
         }[]
       ).map((r) => r.id);
 
-      const expected004 = discoverMigrationFiles().filter((f) =>
-        f.startsWith('004_')
-      );
+      const expected004 = discoverMigrationFiles().filter((f) => f.startsWith('004_'));
       expect(applied.sort()).toEqual(expected004.sort());
 
       db.close();
@@ -597,9 +583,7 @@ describe('runMigrations — integration suite (#508)', () => {
       // test would have already failed above. Here we verify there is exactly
       // one entry in sqlite_master for the subscriptions table.
       const rows = db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'subscriptions'"
-        )
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'subscriptions'")
         .all();
       expect(rows.length).toBe(1);
 
@@ -611,9 +595,7 @@ describe('runMigrations — integration suite (#508)', () => {
       await migrate(db);
 
       const rows = db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'validators'"
-        )
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'validators'")
         .all();
       expect(rows.length).toBe(1);
 
@@ -632,9 +614,7 @@ describe('runMigrations — integration suite (#508)', () => {
       await migrate(db);
       await migrate(db);
 
-      const rows = db
-        .prepare('SELECT id FROM migrations')
-        .all() as { id: string }[];
+      const rows = db.prepare('SELECT id FROM migrations').all() as { id: string }[];
       const ids = rows.map((r) => r.id);
 
       // No duplicate rows
@@ -652,15 +632,15 @@ describe('runMigrations — integration suite (#508)', () => {
     it('running migrations three times produces no duplicate rows and no errors', async () => {
       const db = new Database(':memory:');
 
-      await expect((async () => {
-        await migrate(db);
-        await migrate(db);
-        await migrate(db);
-      })()).resolves.not.toThrow();
+      await expect(
+        (async () => {
+          await migrate(db);
+          await migrate(db);
+          await migrate(db);
+        })(),
+      ).resolves.not.toThrow();
 
-      const rows = db
-        .prepare('SELECT id FROM migrations')
-        .all() as { id: string }[];
+      const rows = db.prepare('SELECT id FROM migrations').all() as { id: string }[];
       expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length);
 
       db.close();
@@ -692,9 +672,7 @@ describe('runMigrations — integration suite (#508)', () => {
 
     for (const table of expectedTables) {
       it(`${table} is queryable with SELECT * LIMIT 0`, () => {
-        expect(() =>
-          sharedDb.prepare(`SELECT * FROM ${table} LIMIT 0`).all()
-        ).not.toThrow();
+        expect(() => sharedDb.prepare(`SELECT * FROM ${table} LIMIT 0`).all()).not.toThrow();
       });
     }
   });
@@ -724,9 +702,7 @@ describe('full migration sequence from scratch (#885)', () => {
 
   function tables(): Set<string> {
     const rows = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
     return new Set(rows.map((r) => r.name));
   }
@@ -774,7 +750,7 @@ describe('full migration sequence from scratch (#885)', () => {
     expect(columns('players')).toContain('is_active');
   });
 
-  it("api_keys table has expected columns from migration 007_api_keys", () => {
+  it('api_keys table has expected columns from migration 007_api_keys', () => {
     const cols = columns('api_keys');
     expect(cols).toContain('id');
     expect(cols).toContain('key_hash');
@@ -785,19 +761,17 @@ describe('full migration sequence from scratch (#885)', () => {
     expect(cols).toContain('revoked_at');
   });
 
-  it("api_keys table has the lookup_hash column added by migration 024_api_key_lookup_hash (#1033)", () => {
+  it('api_keys table has the lookup_hash column added by migration 024_api_key_lookup_hash (#1033)', () => {
     expect(columns('api_keys')).toContain('lookup_hash');
   });
 
-  it("migration 024 creates the api_keys lookup indexes on both driver variants", () => {
+  it('migration 024 creates the api_keys lookup indexes on both driver variants', () => {
     // Both 024_api_key_lookup_hash.sql and its _postgres twin are applied
     // (runMigrations converts cross-driver rather than skipping), and the pair
     // must be idempotent — the second must not fail or duplicate the indexes.
     const indexNames = (
       db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'api_keys'",
-        )
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'api_keys'")
         .all() as { name: string }[]
     ).map((r) => r.name);
 
@@ -814,7 +788,7 @@ describe('full migration sequence from scratch (#885)', () => {
     ]);
   });
 
-  it("webhook_subscriptions table has expected columns from migration 012_webhook_subscriptions", () => {
+  it('webhook_subscriptions table has expected columns from migration 012_webhook_subscriptions', () => {
     const cols = columns('webhook_subscriptions');
     expect(cols).toContain('id');
     expect(cols).toContain('url');
@@ -822,7 +796,7 @@ describe('full migration sequence from scratch (#885)', () => {
     expect(cols).toContain('created_at');
   });
 
-  it("feature_flags table has expected columns from migration 010_feature_flags", () => {
+  it('feature_flags table has expected columns from migration 010_feature_flags', () => {
     const cols = columns('feature_flags');
     expect(cols).toContain('name');
     expect(cols).toContain('enabled');
@@ -830,7 +804,7 @@ describe('full migration sequence from scratch (#885)', () => {
     expect(cols).toContain('updated_by');
   });
 
-  it("contact_unlocks table has expected columns from migration 005_contact_unlocks", () => {
+  it('contact_unlocks table has expected columns from migration 005_contact_unlocks', () => {
     const cols = columns('contact_unlocks');
     expect(cols).toContain('scout_wallet');
     expect(cols).toContain('player_id');
@@ -843,9 +817,9 @@ describe('full migration sequence from scratch (#885)', () => {
   it("'migrations' table exists and records every applied migration file", () => {
     expect(tables()).toContain('migrations');
 
-    const appliedRows = db
-      .prepare('SELECT id FROM migrations ORDER BY id')
-      .all() as { id: string }[];
+    const appliedRows = db.prepare('SELECT id FROM migrations ORDER BY id').all() as {
+      id: string;
+    }[];
     const appliedIds = new Set(appliedRows.map((r) => r.id));
 
     // runMigrations() applies every *.sql file under db/ (including _postgres
@@ -865,9 +839,10 @@ describe('full migration sequence from scratch (#885)', () => {
   });
 
   it("each migration in 'migrations' table has a non-null applied_at timestamp", () => {
-    const rows = db
-      .prepare('SELECT id, applied_at FROM migrations')
-      .all() as { id: string; applied_at: number }[];
+    const rows = db.prepare('SELECT id, applied_at FROM migrations').all() as {
+      id: string;
+      applied_at: number;
+    }[];
     for (const row of rows) {
       expect(typeof row.applied_at).toBe('number');
       expect(row.applied_at).toBeGreaterThan(0);

@@ -31,14 +31,11 @@ function listen(app: express.Express): Promise<ListeningServer> {
  */
 function openHangingRequest(port: number, path: string): Promise<void> {
   return new Promise((resolve) => {
-    const req = http.request(
-      { host: '127.0.0.1', port, path, method: 'GET', agent: false },
-      () => {
-        // The server never responds for the hanging route; if we somehow get
-        // a response, consider the request done.
-        resolve();
-      },
-    );
+    const req = http.request({ host: '127.0.0.1', port, path, method: 'GET', agent: false }, () => {
+      // The server never responds for the hanging route; if we somehow get
+      // a response, consider the request done.
+      resolve();
+    });
     req.on('error', () => resolve());
     req.on('close', () => resolve());
     req.end();

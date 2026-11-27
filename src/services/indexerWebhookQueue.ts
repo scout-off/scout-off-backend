@@ -48,15 +48,25 @@ export class BoundedDispatchQueue<T> {
     private readonly maxPending: number,
     private readonly dispatch: (item: T) => Promise<void>,
     private readonly deadLetter: (item: T, reason: string) => void,
-    private readonly observe: (pending: number, active: number, durationMs?: number) => void = () => undefined,
+    private readonly observe: (pending: number, active: number, durationMs?: number) => void = () =>
+      undefined,
   ) {
-    if (!Number.isSafeInteger(concurrency) || concurrency < 1 || !Number.isSafeInteger(maxPending) || maxPending < 1) {
+    if (
+      !Number.isSafeInteger(concurrency) ||
+      concurrency < 1 ||
+      !Number.isSafeInteger(maxPending) ||
+      maxPending < 1
+    ) {
       throw new Error('Webhook queue concurrency and capacity must be positive integers');
     }
   }
 
-  get pendingCount(): number { return this.pending.length; }
-  get activeCount(): number { return this.active.size; }
+  get pendingCount(): number {
+    return this.pending.length;
+  }
+  get activeCount(): number {
+    return this.active.size;
+  }
 
   /** Resolves once accepted, NOT once delivered. Waits on a full queue. */
   async enqueue(item: T): Promise<void> {
@@ -85,16 +95,22 @@ export class BoundedDispatchQueue<T> {
       this.signalCapacity();
       this.observe(this.pending.length, this.active.size);
       const startedAt = Date.now();
-      void Promise.resolve().then(() => this.dispatch(item)).catch((err: unknown) => {
-        // Single-delivery dispatch normally persists its own dead letter;
-        // an unexpected failure here must still be recorded.
-        this.deadLetter(item, `dispatch_error: ${err instanceof Error ? err.message : String(err)}`);
-      }).finally(() => {
-        this.active.delete(item);
-        this.observe(this.pending.length, this.active.size, Date.now() - startedAt);
-        if (!this.closed) this.pump();
-        this.signalIdle();
-      });
+      void Promise.resolve()
+        .then(() => this.dispatch(item))
+        .catch((err: unknown) => {
+          // Single-delivery dispatch normally persists its own dead letter;
+          // an unexpected failure here must still be recorded.
+          this.deadLetter(
+            item,
+            `dispatch_error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        })
+        .finally(() => {
+          this.active.delete(item);
+          this.observe(this.pending.length, this.active.size, Date.now() - startedAt);
+          if (!this.closed) this.pump();
+          this.signalIdle();
+        });
     }
     this.observe(this.pending.length, this.active.size);
   }
@@ -135,7 +151,11 @@ function persistUndeliveredDelivery(item: Delivery, reason: string): void {
     subscriptionId: item.subscription.id,
     url: item.subscription.url,
     eventType: item.type,
-    payload: JSON.stringify({ deliveryId: item.deliveryId, eventType: item.type, payload: item.payload }),
+    payload: JSON.stringify({
+      deliveryId: item.deliveryId,
+      eventType: item.type,
+      payload: item.payload,
+    }),
     deliveryId: item.deliveryId,
     failureReason: reason,
     attempts: 0,
@@ -148,18 +168,26 @@ const queue = new BoundedDispatchQueue<Delivery>(
   config.webhook.dispatchConcurrency,
   config.webhook.dispatchMaxQueue,
   async (item) => {
-    await withRestoredCorrelation(item.txHash, 'indexer.webhookDispatch', async () => {
-      const correlationId = getCorrelationId();
-      await dispatchWebhookToSubscription(
-        item.subscription,
-        item.type,
-        {
-          deliveryId: item.deliveryId, eventType: item.type, payload: item.payload,
-          ...(correlationId ? { correlationId } : {}),
-        },
-        item.deliveryId,
-      );
-    }, undefined, { 'stellar.ledger': item.ledger, 'scoutoff.event_type': item.type });
+    await withRestoredCorrelation(
+      item.txHash,
+      'indexer.webhookDispatch',
+      async () => {
+        const correlationId = getCorrelationId();
+        await dispatchWebhookToSubscription(
+          item.subscription,
+          item.type,
+          {
+            deliveryId: item.deliveryId,
+            eventType: item.type,
+            payload: item.payload,
+            ...(correlationId ? { correlationId } : {}),
+          },
+          item.deliveryId,
+        );
+      },
+      undefined,
+      { 'stellar.ledger': item.ledger, 'scoutoff.event_type': item.type },
+    );
   },
   (item, reason) => {
     persistUndeliveredDelivery(item, reason);
@@ -172,7 +200,9 @@ const queue = new BoundedDispatchQueue<Delivery>(
 );
 
 /** Queue events without awaiting subscriber HTTP delivery. */
-export async function enqueueIndexerWebhookEvents(events: readonly IndexerWebhookEvent[]): Promise<void> {
+export async function enqueueIndexerWebhookEvents(
+  events: readonly IndexerWebhookEvent[],
+): Promise<void> {
   if (!events.length) return;
   const subscriptions = listWebhookSubscriptions().filter((sub) => !isSuspended(sub));
   for (const event of events) {

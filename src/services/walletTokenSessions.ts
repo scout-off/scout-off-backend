@@ -91,10 +91,11 @@ export async function revokeAllSessions(wallet: string): Promise<{
   const active = await listActiveSessions(wallet);
 
   if (active.length > 0) {
-    await revokeTokens(
-      active.map((s) => ({ jti: s.jti, expiresAt: s.expiresAt })),
+    await revokeTokens(active.map((s) => ({ jti: s.jti, expiresAt: s.expiresAt })));
+    await revokeSessions(
+      wallet,
+      active.map((s) => s.jti),
     );
-    await revokeSessions(wallet, active.map((s) => s.jti));
   }
 
   await setTokensValidAfter(wallet, now);

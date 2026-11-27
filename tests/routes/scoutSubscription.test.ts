@@ -56,10 +56,22 @@ jest.mock('../../src/services/stellar', () => ({
   renewSubscription: jest.fn(),
   cancelSubscriptionOnChain: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); this.name = 'PaymentError'; }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+      this.name = 'PaymentError';
+    }
   },
   SubscriptionError: class SubscriptionError extends Error {
-    constructor(public message: string, public code: string) { super(message); this.name = 'SubscriptionError'; }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+      this.name = 'SubscriptionError';
+    }
   },
 }));
 
@@ -87,7 +99,7 @@ const mockCancelOnChain = cancelSubscriptionOnChain as jest.Mock;
 const mockIsSubscribed = isSubscribed as jest.Mock;
 
 const WALLET = 'GDKSHEL5SMPOFACYRWBN7R5ONIF34MSBJWBVAFFTW6OB3B4WPEUYNQC5';
-const OTHER  = 'GAKDJUDRDDNTQFJAXI7T5HQ6ZFBRC2ICLEQHSCQJYU46UFC26GVQO52Q';
+const OTHER = 'GAKDJUDRDDNTQFJAXI7T5HQ6ZFBRC2ICLEQHSCQJYU46UFC26GVQO52Q';
 
 function makeToken(wallet: string, role = 'scout'): string {
   return jwt.sign({ sub: wallet, role }, SECRET, { expiresIn: '1h' });
@@ -155,7 +167,12 @@ describe('PUT /api/scouts/:wallet/subscribe', () => {
   it('creates a new subscription (201) when no existing subscription', async () => {
     mockGetLatest.mockReturnValue(null);
     const expiresAt = Math.floor(Date.now() / 1000) + 30 * 86400;
-    mockPurchase.mockResolvedValue({ transactionId: 'tx-new', tier: 'basic', expiresAt, status: 'active' });
+    mockPurchase.mockResolvedValue({
+      transactionId: 'tx-new',
+      tier: 'basic',
+      expiresAt,
+      status: 'active',
+    });
 
     const token = makeToken(WALLET);
     const res = await request(app)
@@ -174,8 +191,20 @@ describe('PUT /api/scouts/:wallet/subscribe', () => {
   it('renews an existing subscription (200) and extends expiry', async () => {
     const oldExpiry = Math.floor(Date.now() / 1000) + 10 * 86400;
     const newExpiry = oldExpiry + 30 * 86400;
-    mockGetLatest.mockReturnValue({ id: 7, scout_wallet: WALLET, tier: 'basic', expires_at: oldExpiry, cancelled_at: null, created_at: 0 });
-    mockStellarRenew.mockResolvedValue({ transactionId: 'tx-renew', tier: 'basic', expiresAt: newExpiry, status: 'active' });
+    mockGetLatest.mockReturnValue({
+      id: 7,
+      scout_wallet: WALLET,
+      tier: 'basic',
+      expires_at: oldExpiry,
+      cancelled_at: null,
+      created_at: 0,
+    });
+    mockStellarRenew.mockResolvedValue({
+      transactionId: 'tx-renew',
+      tier: 'basic',
+      expiresAt: newExpiry,
+      status: 'active',
+    });
 
     const token = makeToken(WALLET);
     const res = await request(app)
@@ -196,8 +225,20 @@ describe('PUT /api/scouts/:wallet/subscribe', () => {
   it('renews an expired subscription — base moves from now not old expiry', async () => {
     const oldExpiry = Math.floor(Date.now() / 1000) - 86400; // expired yesterday
     const newExpiry = Math.floor(Date.now() / 1000) + 30 * 86400;
-    mockGetLatest.mockReturnValue({ id: 3, scout_wallet: WALLET, tier: 'premium', expires_at: oldExpiry, cancelled_at: null, created_at: 0 });
-    mockStellarRenew.mockResolvedValue({ transactionId: 'tx-renew-expired', tier: 'premium', expiresAt: newExpiry, status: 'active' });
+    mockGetLatest.mockReturnValue({
+      id: 3,
+      scout_wallet: WALLET,
+      tier: 'premium',
+      expires_at: oldExpiry,
+      cancelled_at: null,
+      created_at: 0,
+    });
+    mockStellarRenew.mockResolvedValue({
+      transactionId: 'tx-renew-expired',
+      tier: 'premium',
+      expiresAt: newExpiry,
+      status: 'active',
+    });
 
     const token = makeToken(WALLET);
     const res = await request(app)
@@ -240,7 +281,14 @@ describe('DELETE /api/scouts/:wallet/subscribe', () => {
   });
 
   it('cancels an active subscription and returns 200', async () => {
-    const existingSub = { id: 5, scout_wallet: WALLET, tier: 'basic', expires_at: Math.floor(Date.now() / 1000) + 86400, cancelled_at: null, created_at: 0 };
+    const existingSub = {
+      id: 5,
+      scout_wallet: WALLET,
+      tier: 'basic',
+      expires_at: Math.floor(Date.now() / 1000) + 86400,
+      cancelled_at: null,
+      created_at: 0,
+    };
     mockGetLatest.mockReturnValue(existingSub);
     mockCancelOnChain.mockResolvedValue({ transactionId: 'tx-cancel' });
 
@@ -259,7 +307,14 @@ describe('DELETE /api/scouts/:wallet/subscribe', () => {
   });
 
   it('returns 404 when on-chain cancel throws SubscriptionError NOT_SUBSCRIBED', async () => {
-    const existingSub = { id: 6, scout_wallet: WALLET, tier: 'basic', expires_at: Math.floor(Date.now() / 1000) + 86400, cancelled_at: null, created_at: 0 };
+    const existingSub = {
+      id: 6,
+      scout_wallet: WALLET,
+      tier: 'basic',
+      expires_at: Math.floor(Date.now() / 1000) + 86400,
+      cancelled_at: null,
+      created_at: 0,
+    };
     mockGetLatest.mockReturnValue(existingSub);
     mockCancelOnChain.mockRejectedValue(
       new (SubscriptionError as any)('Scout has no active on-chain subscription', 'NOT_SUBSCRIBED'),
@@ -278,10 +333,20 @@ describe('DELETE /api/scouts/:wallet/subscribe', () => {
   });
 
   it('returns 403 when on-chain cancel throws SubscriptionError UNAUTHORIZED', async () => {
-    const existingSub = { id: 7, scout_wallet: WALLET, tier: 'premium', expires_at: Math.floor(Date.now() / 1000) + 86400, cancelled_at: null, created_at: 0 };
+    const existingSub = {
+      id: 7,
+      scout_wallet: WALLET,
+      tier: 'premium',
+      expires_at: Math.floor(Date.now() / 1000) + 86400,
+      cancelled_at: null,
+      created_at: 0,
+    };
     mockGetLatest.mockReturnValue(existingSub);
     mockCancelOnChain.mockRejectedValue(
-      new (SubscriptionError as any)('Unauthorized: wallet is not allowed to cancel', 'UNAUTHORIZED'),
+      new (SubscriptionError as any)(
+        'Unauthorized: wallet is not allowed to cancel',
+        'UNAUTHORIZED',
+      ),
     );
 
     const token = makeToken(WALLET);
@@ -296,7 +361,14 @@ describe('DELETE /api/scouts/:wallet/subscribe', () => {
   });
 
   it('does not update the DB when the on-chain call throws a PaymentError (RPC failure)', async () => {
-    const existingSub = { id: 8, scout_wallet: WALLET, tier: 'basic', expires_at: Math.floor(Date.now() / 1000) + 86400, cancelled_at: null, created_at: 0 };
+    const existingSub = {
+      id: 8,
+      scout_wallet: WALLET,
+      tier: 'basic',
+      expires_at: Math.floor(Date.now() / 1000) + 86400,
+      cancelled_at: null,
+      created_at: 0,
+    };
     mockGetLatest.mockReturnValue(existingSub);
 
     // PaymentError is imported via the mock factory above
@@ -320,7 +392,14 @@ describe('DELETE /api/scouts/:wallet/subscribe', () => {
 describe('GET /api/scouts/:wallet/subscription — grace period', () => {
   it('returns gracePeriodActive: false for a fully active subscription', async () => {
     const expiresAt = Math.floor(Date.now() / 1000) + 86400 * 5;
-    mockGetLatest.mockReturnValue({ id: 1, scout_wallet: WALLET, tier: 'basic', expires_at: expiresAt, cancelled_at: null, created_at: 0 });
+    mockGetLatest.mockReturnValue({
+      id: 1,
+      scout_wallet: WALLET,
+      tier: 'basic',
+      expires_at: expiresAt,
+      cancelled_at: null,
+      created_at: 0,
+    });
 
     const token = makeToken(WALLET);
     const res = await request(app)
@@ -335,7 +414,14 @@ describe('GET /api/scouts/:wallet/subscription — grace period', () => {
   it('returns gracePeriodActive: true and active: true when within grace window', async () => {
     // Expired 12 hours ago, within the default 24-hour grace period
     const expiresAt = Math.floor(Date.now() / 1000) - 12 * 3600;
-    mockGetLatest.mockReturnValue({ id: 2, scout_wallet: WALLET, tier: 'premium', expires_at: expiresAt, cancelled_at: null, created_at: 0 });
+    mockGetLatest.mockReturnValue({
+      id: 2,
+      scout_wallet: WALLET,
+      tier: 'premium',
+      expires_at: expiresAt,
+      cancelled_at: null,
+      created_at: 0,
+    });
 
     const token = makeToken(WALLET);
     const res = await request(app)
@@ -351,7 +437,14 @@ describe('GET /api/scouts/:wallet/subscription — grace period', () => {
   it('returns active: false when grace period has passed', async () => {
     // Expired 48 hours ago, beyond the 24-hour grace window
     const expiresAt = Math.floor(Date.now() / 1000) - 48 * 3600;
-    mockGetLatest.mockReturnValue({ id: 3, scout_wallet: WALLET, tier: 'basic', expires_at: expiresAt, cancelled_at: null, created_at: 0 });
+    mockGetLatest.mockReturnValue({
+      id: 3,
+      scout_wallet: WALLET,
+      tier: 'basic',
+      expires_at: expiresAt,
+      cancelled_at: null,
+      created_at: 0,
+    });
 
     const token = makeToken(WALLET);
     const res = await request(app)

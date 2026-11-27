@@ -6,7 +6,12 @@
  */
 
 const express = require('express');
-const { getOperationHash, registerPersistedOperation, loadPersistedOperationsFromFile, getOperationDocument } = require('../graphql/persisted-operations');
+const {
+  getOperationHash,
+  registerPersistedOperation,
+  loadPersistedOperationsFromFile,
+  getOperationDocument,
+} = require('../graphql/persisted-operations');
 const { withAuth } = require('./admin');
 
 const router = express.Router();
@@ -15,7 +20,7 @@ const router = express.Router();
 
 /**
  * GET /api/graphql/operations
- * 
+ *
  * List all registered persisted operations.
  */
 router.get('/', withAuth, (req, res) => {
@@ -29,25 +34,26 @@ router.get('/', withAuth, (req, res) => {
 
 /**
  * POST /api/graphql/operations
- * 
+ *
  * Register a new persisted operation.
- * 
+ *
  * Body:
  *   - document: string (GraphQL query/mutation)
  *   - name: string (optional, for documentation)
  */
 router.post('/', withAuth, (req, res) => {
   const { document, name } = req.body;
-  
+
   if (!document || typeof document !== 'string') {
     return res.status(400).json({
-      error: 'Missing or invalid "document" field. Must be a string containing the GraphQL operation.',
+      error:
+        'Missing or invalid "document" field. Must be a string containing the GraphQL operation.',
     });
   }
-  
+
   const hash = getOperationHash(document);
   const existing = getOperationDocument(hash);
-  
+
   if (existing) {
     return res.status(409).json({
       error: 'Operation already registered',
@@ -55,11 +61,11 @@ router.post('/', withAuth, (req, res) => {
       name: extractOperationName(existing) || 'unknown',
     });
   }
-  
+
   registerPersistedOperation(hash, document);
-  
+
   const opName = extractOperationName(document);
-  
+
   res.status(201).json({
     message: 'Operation registered successfully',
     hash,
@@ -72,19 +78,19 @@ router.post('/', withAuth, (req, res) => {
 
 /**
  * DELETE /api/graphql/operations/:hash
- * 
+ *
  * Remove a registered operation.
  */
 router.delete('/:hash', withAuth, (req, res) => {
   const { hash } = req.params;
-  
+
   if (!getOperationDocument(hash)) {
     return res.status(404).json({
       error: 'Operation not found',
       hash,
     });
   }
-  
+
   // For now, just return success - actual removal would require file persistence
   res.json({
     message: 'Operation unregistered (note: requires file persistence for production use)',

@@ -60,7 +60,10 @@ describe('pinJson concurrency and atomic deduplication (#466)', () => {
 
   it('guarantees exactly one Pinata API call when two pinJson requests are made concurrently with identical content', async () => {
     mockedPost.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({ data: { IpfsHash: 'QmConcurrentCID' } }), 50))
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ data: { IpfsHash: 'QmConcurrentCID' } }), 50),
+        ),
     );
 
     const metadata = { playerId: 'P001', score: 100 };
@@ -71,7 +74,7 @@ describe('pinJson concurrency and atomic deduplication (#466)', () => {
     expect(cid2).toBe('QmConcurrentCID');
     expect(mockedPost).toHaveBeenCalledTimes(1);
     expect(insertPendingPin).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: JSON.stringify(metadata), hash: expect.any(String) })
+      expect.objectContaining({ payload: JSON.stringify(metadata), hash: expect.any(String) }),
     );
     expect(deletePendingPinByHash).toHaveBeenCalledWith(expect.any(String));
   });
@@ -93,7 +96,10 @@ describe('pinJson concurrency and atomic deduplication (#466)', () => {
     });
 
     mockedPost.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({ data: { IpfsHash: 'QmContendedCID' } }), 60))
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ data: { IpfsHash: 'QmContendedCID' } }), 60),
+        ),
     );
 
     const metadata = { playerId: 'P002', score: 200 };
@@ -128,12 +134,14 @@ describe('pinJson multi-instance deduplication — shared DB, separate process c
     const dbPendingPins = new Map<string, { resolved_cid: string | null }>();
 
     // DB helpers wired to the shared state
-    const sharedInsertPendingPin = jest.fn((p: { hash?: string; payload: string; created_at: string; last_tried: string }) => {
-      if (!p.hash) return true;
-      if (dbPendingPins.has(p.hash)) return false; // lock contended
-      dbPendingPins.set(p.hash, { resolved_cid: null });
-      return true;
-    });
+    const sharedInsertPendingPin = jest.fn(
+      (p: { hash?: string; payload: string; created_at: string; last_tried: string }) => {
+        if (!p.hash) return true;
+        if (dbPendingPins.has(p.hash)) return false; // lock contended
+        dbPendingPins.set(p.hash, { resolved_cid: null });
+        return true;
+      },
+    );
     const sharedIsPendingPinByHash = jest.fn((hash: string) => dbPendingPins.has(hash));
     const sharedSetPendingPinResolvedCid = jest.fn((hash: string, cid: string) => {
       const row = dbPendingPins.get(hash);
@@ -147,11 +155,14 @@ describe('pinJson multi-instance deduplication — shared DB, separate process c
     });
 
     // Pinata upload mock — slow enough that the losing instance enters its poll loop
-    const uploadMock = jest.fn().mockImplementation(
-      () => new Promise<{ data: { IpfsHash: string } }>((resolve) =>
-        setTimeout(() => resolve({ data: { IpfsHash: 'QmSharedCID' } }), 80)
-      )
-    );
+    const uploadMock = jest
+      .fn()
+      .mockImplementation(
+        () =>
+          new Promise<{ data: { IpfsHash: string } }>((resolve) =>
+            setTimeout(() => resolve({ data: { IpfsHash: 'QmSharedCID' } }), 80),
+          ),
+      );
 
     // ── Helper: build an isolated pinJson function with its own process-local
     //    caches but wired to the shared DB state above ──────────────────────
@@ -168,7 +179,10 @@ describe('pinJson multi-instance deduplication — shared DB, separate process c
         }
         const sorted = Object.keys(value as Record<string, unknown>)
           .sort()
-          .map((k) => `${JSON.stringify(k)}:${canonicalStringify((value as Record<string, unknown>)[k])}`)
+          .map(
+            (k) =>
+              `${JSON.stringify(k)}:${canonicalStringify((value as Record<string, unknown>)[k])}`,
+          )
           .join(',');
         return `{${sorted}}`;
       }
@@ -187,7 +201,12 @@ describe('pinJson multi-instance deduplication — shared DB, separate process c
         if (localInflight.has(hash)) return localInflight.get(hash)!;
 
         // Try to acquire the DB lock
-        const acquiredLock = sharedInsertPendingPin({ payload: JSON.stringify(body), hash, created_at: new Date().toISOString(), last_tried: new Date().toISOString() });
+        const acquiredLock = sharedInsertPendingPin({
+          payload: JSON.stringify(body),
+          hash,
+          created_at: new Date().toISOString(),
+          last_tried: new Date().toISOString(),
+        });
 
         if (acquiredLock === false) {
           // Lost the lock — poll until the winning instance finishes
@@ -216,7 +235,9 @@ describe('pinJson multi-instance deduplication — shared DB, separate process c
 
         // Won the lock (or safety-net fallthrough) — upload
         try {
-          const res = await uploadMock(`https://api.pinata.cloud/pinning/pinJSONToIPFS`, body, { headers: {} });
+          const res = await uploadMock(`https://api.pinata.cloud/pinning/pinJSONToIPFS`, body, {
+            headers: {},
+          });
           const cid = res.data.IpfsHash;
           // Persist CID before releasing lock so losers can read it
           sharedSetPendingPinResolvedCid(hash, cid);

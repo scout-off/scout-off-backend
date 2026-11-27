@@ -24,7 +24,9 @@ function makeRes() {
   const headers: Record<string, string> = {};
   return {
     headers,
-    setHeader: jest.fn((k: string, v: string) => { headers[k] = v; }),
+    setHeader: jest.fn((k: string, v: string) => {
+      headers[k] = v;
+    }),
   };
 }
 

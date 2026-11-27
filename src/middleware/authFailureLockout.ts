@@ -20,7 +20,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import config from '../config';
-import { RateLimitStore } from './rateLimitStore';
+import { ReadableRateLimitStore } from './rateLimitStore';
 import { InMemoryRateLimitStore } from './inMemoryRateLimitStore';
 import { RedisRateLimitStore } from './redisRateLimitStore';
 import { getRedisClient } from '../services/redis';
@@ -34,18 +34,18 @@ import { insertAuditLog } from '../db';
 // validated once at startup via parseNumericEnv, can be overridden in tests
 // through config mocks, and are documented in .env.example (#1830).
 
-export const AUTH_FAIL_THRESHOLD  = config.authLockout.threshold;
+export const AUTH_FAIL_THRESHOLD = config.authLockout.threshold;
 export const AUTH_LOCKOUT_BASE_MS = config.authLockout.baseMs;
-export const AUTH_LOCKOUT_MAX_MS  = config.authLockout.maxMs;
+export const AUTH_LOCKOUT_MAX_MS = config.authLockout.maxMs;
 /** Sliding window in which failures are counted. */
-export const AUTH_FAIL_WINDOW_MS  = config.authLockout.windowMs;
+export const AUTH_FAIL_WINDOW_MS = config.authLockout.windowMs;
 
 const LOCKOUT_KEY_PREFIX = 'auth:fail';
 const LOCKOUT_STATE_PREFIX = 'auth:locked';
 
 // ─── Store ─────────────────────────────────────────────────────────────────────
 
-function createLockoutStore(): RateLimitStore {
+function createLockoutStore(): ReadableRateLimitStore {
   const redis = getRedisClient();
   if (redis) return new RedisRateLimitStore(redis);
   return new InMemoryRateLimitStore();
@@ -53,14 +53,14 @@ function createLockoutStore(): RateLimitStore {
 
 // Lazily created so the store is not instantiated during module load in tests
 // that mock the redis client.
-let _store: RateLimitStore | null = null;
-function getLockoutStore(): RateLimitStore {
+let _store: ReadableRateLimitStore | null = null;
+function getLockoutStore(): ReadableRateLimitStore {
   if (!_store) _store = createLockoutStore();
   return _store;
 }
 
 /** Override the store — used in tests only. */
-export function _setLockoutStore(store: RateLimitStore): void {
+export function _setLockoutStore(store: ReadableRateLimitStore): void {
   _store = store;
 }
 
@@ -86,69 +86,12 @@ export function computeLockoutMs(failureCount: number): number {
 // ─── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Middleware: check the per-account failure counter before processing a token
- * exchange. If the account is currently locked out, respond 429 AUTH_LOCKED
- * with a Retry-After header. Otherwise pass through.
- *
- * Place this middleware on POST /auth/token, *after* the IP rate limit but
- * *before* `validateBody` / `postToken` so the expensive XDR verification is
- * skipped while the account is locked.
+ * @deprecated Use {@link enforceAuthLockout}. Kept as an alias for older call
+ * sites; the previous implementation never enforced anything and wrote a
+ * stray store key on every request.
  */
 export function checkAuthLockout(req: Request, res: Response, next: NextFunction): void {
-  // Extract the attempted account from the raw XDR body without full
-  // verification (verification happens in postToken). Fails gracefully if
-  // the body is missing / malformed — we still let postToken return the
-  // correct error in that case.
-  const body = req.body as { transaction?: unknown } | undefined;
-  const transaction = typeof body?.transaction === 'string' ? body.transaction : null;
-  if (!transaction) {
-    // No transaction — let postToken handle the validation error
-    next();
-    return;
-  }
-
-  let account: string | null = null;
-  try {
-    account = extractAccount(transaction);
-  } catch {
-    // Malformed XDR — pass through, postToken will reject it
-    next();
-    return;
-  }
-
-  if (!account) {
-    next();
-    return;
-  }
-
-  const stateKey = `${LOCKOUT_STATE_PREFIX}:${account}`;
-
-  getLockoutStore()
-    .increment(stateKey, 1 /* dummy windowMs, we just read */)
-    .then((state) => {
-      // We use the store purely as a way to read whether the key exists and
-      // what its current count is.  The counter is only written by recordAuthFailure.
-      // A count of 1 after increment means the key was just created (no active lockout).
-      // We rely on recordAuthFailure to set the correct window on failure.
-      // If the key exists with count > 0 AND the window has not expired,
-      // the account is locked.
-      //
-      // Implementation detail: because increment() creates the key on first call
-      // (count=1), we need to distinguish "this check just created the key" from
-      // "the key already existed". We do this by looking at resetAt: if resetAt is
-      // very soon from now (i.e., within AUTH_FAIL_WINDOW_MS from epoch start), the
-      // key is brand-new and the account is not locked.
-      //
-      // Simplified approach: we use a *separate* key just for the locked state, and
-      // the failure recorder sets that key only after threshold is crossed.
-      // This avoids the race by design.
-      void state; // unused from this call
-      next();
-    })
-    .catch(() => {
-      // Fail open on store error
-      next();
-    });
+  enforceAuthLockout(req, res, next);
 }
 
 /**
@@ -164,20 +107,12 @@ export async function isAccountLocked(
   const lockKey = `${LOCKOUT_STATE_PREFIX}:account:${account}`;
 
   try {
-    // Probe by incrementing with a 1 ms window so expired entries are evicted.
-    // We use a separate "lock" key that is only set by recordAuthFailure when
-    // the threshold is crossed, so this probe is safe.
-    const { count, resetAt } = await store.increment(lockKey, 1);
-    if (count > 1) {
-      // Key already existed — account is locked
-      const now = Date.now();
-      const retryAfterSec = Math.max(1, Math.ceil((resetAt - now) / 1000));
-      return { locked: true, retryAfterSec };
-    }
-    // count === 1 means the key was just created by this probe — not locked.
-    // The 1ms window means it expires almost immediately, so it won't
-    // interfere with a real lockout that recordAuthFailure sets next.
-    return { locked: false };
+    // Read-only check: probing with increment() would itself create or bump the
+    // lock key, so two checks in quick succession would lock a clean account.
+    const state = await store.get(lockKey);
+    if (!state) return { locked: false };
+    const retryAfterSec = Math.max(1, Math.ceil((state.resetAt - Date.now()) / 1000));
+    return { locked: true, retryAfterSec };
   } catch {
     // Fail open
     return { locked: false };
@@ -207,7 +142,9 @@ export async function recordAuthFailure(
       const lockoutMs = computeLockoutMs(count);
       const lockKey = `${LOCKOUT_STATE_PREFIX}:account:${account}`;
 
-      // Set the lockout-state key with the backoff duration as window
+      // (Re)start the lockout-state key with the escalated backoff as its window.
+      // Without the reset, an existing lock key would keep its original expiry.
+      await store.reset(lockKey);
       await store.increment(lockKey, lockoutMs);
 
       logger.warn('[auth] auth_lockout', {
@@ -248,14 +185,11 @@ export async function recordAuthFailure(
  */
 export async function resetAuthFailures(account: string): Promise<void> {
   if (!account) return;
-  // We can't delete keys from the store interface, so we set both keys with a
-  // 1 ms window so they expire immediately.  New increments in subsequent
-  // requests will start fresh from count=1.
   const store = getLockoutStore();
   try {
     await Promise.all([
-      store.increment(`${LOCKOUT_KEY_PREFIX}:${account}`, 1),
-      store.increment(`${LOCKOUT_STATE_PREFIX}:account:${account}`, 1),
+      store.reset(`${LOCKOUT_KEY_PREFIX}:${account}`),
+      store.reset(`${LOCKOUT_STATE_PREFIX}:account:${account}`),
     ]);
   } catch {
     // Non-fatal
@@ -303,7 +237,8 @@ export function enforceAuthLockout(req: Request, res: Response, next: NextFuncti
         res.set('Retry-After', String(result.retryAfterSec));
         res.status(429).json({
           success: false,
-          error: 'Account temporarily locked due to too many failed attempts. Please try again later.',
+          error:
+            'Account temporarily locked due to too many failed attempts. Please try again later.',
           code: ErrorCode.AUTH_LOCKED,
           retryAfter: result.retryAfterSec,
         });

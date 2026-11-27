@@ -22,9 +22,10 @@ const { server } = require('../../src/services/stellar') as { server: { getEvent
 const mockedDispatch = dispatchEventWebhook as jest.MockedFunction<typeof dispatchEventWebhook>;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { invalidatePlayerCache: mockedInvalidatePlayerCache } = require('../../src/services/cache') as {
-  invalidatePlayerCache: jest.Mock;
-};
+const { invalidatePlayerCache: mockedInvalidatePlayerCache } =
+  require('../../src/services/cache') as {
+    invalidatePlayerCache: jest.Mock;
+  };
 
 function makeEvent(
   type: string,
@@ -67,7 +68,12 @@ describe('indexEvents — milestone_approved webhook dispatch', () => {
     server.getEvents.mockResolvedValue({
       events: [
         makeEvent('milestone_approved', { player_id: 'P1' }, 'hash-002', 100),
-        makeEvent('player_registered', { player_id: 'P2', wallet: 'GWALLETP2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-003', 101),
+        makeEvent(
+          'player_registered',
+          { player_id: 'P2', wallet: 'GWALLETP2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+          'hash-003',
+          101,
+        ),
         makeEvent('milestone_approved', { player_id: 'P3' }, 'hash-004', 102),
       ],
     });
@@ -125,7 +131,13 @@ describe('indexEvents — milestone_approved webhook dispatch', () => {
 
   it('does not dispatch a webhook for non-milestone_approved events', async () => {
     server.getEvents.mockResolvedValue({
-      events: [makeEvent('player_registered', { player_id: 'P1', wallet: 'GWALLETP1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-005')],
+      events: [
+        makeEvent(
+          'player_registered',
+          { player_id: 'P1', wallet: 'GWALLETP1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+          'hash-005',
+        ),
+      ],
     });
 
     await indexEvents();
@@ -143,7 +155,9 @@ describe('indexEvents — milestone_approved webhook dispatch', () => {
 
   it('logs a warning and continues when the webhook dispatch fails', async () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const warnSpy = jest.spyOn(require('../../src/utils/logger').logger, 'warn').mockImplementation(() => {});
+    const warnSpy = jest
+      .spyOn(require('../../src/utils/logger').logger, 'warn')
+      .mockImplementation(() => {});
     mockedDispatch.mockRejectedValueOnce(new Error('endpoint unreachable'));
 
     server.getEvents.mockResolvedValue({
@@ -161,38 +175,67 @@ describe('indexEvents — milestone_approved webhook dispatch', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getDb } = require('../../src/db');
     const db = getDb();
-    const warnSpy = jest.spyOn(require('../../src/utils/logger').logger, 'warn').mockImplementation(() => {});
+    const warnSpy = jest
+      .spyOn(require('../../src/utils/logger').logger, 'warn')
+      .mockImplementation(() => {});
 
     // Initial indexing
     server.getEvents.mockResolvedValue({
       latestLedger: 101,
       events: [
-        makeEvent('player_registered', { player_id: 'R1', wallet: 'GWALLETR1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-R1', 100, 'hashA'),
-        makeEvent('player_registered', { player_id: 'R2', wallet: 'GWALLETR2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-R2', 101, 'hashB')
+        makeEvent(
+          'player_registered',
+          { player_id: 'R1', wallet: 'GWALLETR1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+          'hash-R1',
+          100,
+          'hashA',
+        ),
+        makeEvent(
+          'player_registered',
+          { player_id: 'R2', wallet: 'GWALLETR2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+          'hash-R2',
+          101,
+          'hashB',
+        ),
       ],
     });
     await indexEvents();
 
-    let count = db.prepare("SELECT count(*) as c FROM events WHERE ledger IN (100, 101)").get().c;
+    let count = db.prepare('SELECT count(*) as c FROM events WHERE ledger IN (100, 101)').get().c;
     expect(count).toBe(2);
 
     // Reorg simulation: RPC returns a different hash for ledger 101
     server.getEvents.mockResolvedValue({
       latestLedger: 101,
       events: [
-        makeEvent('player_registered', { player_id: 'R1', wallet: 'GWALLETR1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-R1', 100, 'hashA'),
-        makeEvent('player_registered', { player_id: 'R3', wallet: 'GWALLETR3AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-R3', 101, 'hashC')
+        makeEvent(
+          'player_registered',
+          { player_id: 'R1', wallet: 'GWALLETR1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+          'hash-R1',
+          100,
+          'hashA',
+        ),
+        makeEvent(
+          'player_registered',
+          { player_id: 'R3', wallet: 'GWALLETR3AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+          'hash-R3',
+          101,
+          'hashC',
+        ),
       ],
     });
-    
+
     await indexEvents();
-    
+
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Reorg detected at ledger 101'));
     warnSpy.mockRestore();
 
-    count = db.prepare("SELECT count(*) as c FROM events WHERE ledger IN (100, 101)").get().c;
+    count = db.prepare('SELECT count(*) as c FROM events WHERE ledger IN (100, 101)').get().c;
     expect(count).toBe(2);
-    const hashes = db.prepare("SELECT tx_hash FROM events WHERE ledger = 101").all().map((r: any) => r.tx_hash);
+    const hashes = db
+      .prepare('SELECT tx_hash FROM events WHERE ledger = 101')
+      .all()
+      .map((r: any) => r.tx_hash);
     expect(hashes).toContain('hash-R3');
     expect(hashes).not.toContain('hash-R2');
   });
@@ -202,7 +245,7 @@ describe('indexEvents — milestone_approved webhook dispatch', () => {
     const { getDb, fetchLastIndexedLedger } = require('../../src/db');
     const db = getDb();
 
-    const beforeCount = db.prepare("SELECT count(*) as c FROM events").get().c;
+    const beforeCount = db.prepare('SELECT count(*) as c FROM events').get().c;
     const beforeLedger = fetchLastIndexedLedger();
 
     // Mock insertOrUpdatePlayer to throw midway through the batch.
@@ -224,8 +267,22 @@ describe('indexEvents — milestone_approved webhook dispatch', () => {
       // Explicit txIndex so the deterministic ordering applies OK before CRASH
       // regardless of txHash-alphabetical tie-breaking.
       events: [
-        makeEvent('player_registered', { player_id: 'OK', wallet: 'GWALLETOKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-OK', 150, undefined, 0),
-        makeEvent('player_registered', { player_id: 'CRASH', wallet: 'GWALLETCRASHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, 'hash-CRASH', 150, undefined, 1)
+        makeEvent(
+          'player_registered',
+          { player_id: 'OK', wallet: 'GWALLETOKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+          'hash-OK',
+          150,
+          undefined,
+          0,
+        ),
+        makeEvent(
+          'player_registered',
+          { player_id: 'CRASH', wallet: 'GWALLETCRASHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+          'hash-CRASH',
+          150,
+          undefined,
+          1,
+        ),
       ],
     });
 
@@ -242,7 +299,7 @@ describe('indexEvents — milestone_approved webhook dispatch', () => {
     // upserts are keyed), so the raw event rows already applied before the
     // crash (both OK's and CRASH's) are left in place rather than rolled
     // back.
-    const afterCount = db.prepare("SELECT count(*) as c FROM events").get().c;
+    const afterCount = db.prepare('SELECT count(*) as c FROM events').get().c;
     expect(afterCount).toBe(beforeCount + 2);
 
     // What must still hold: the last-indexed ledger is only persisted after
@@ -327,7 +384,12 @@ describe('indexEvents — player cache invalidation (#763)', () => {
       events: [
         makeEvent(
           'player_registered',
-          { player_id: 'P1', wallet: 'GWALLETP1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', position: 'striker', region: 'EU' },
+          {
+            player_id: 'P1',
+            wallet: 'GWALLETP1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+            position: 'striker',
+            region: 'EU',
+          },
           'hash-inv-1',
           100,
         ),
@@ -414,7 +476,12 @@ describe('indexEvents — player cache invalidation (#763)', () => {
       latestLedger: 104,
       events: [
         makeEvent('scout_subscribed', { scout: 'G' + 'S'.repeat(55) }, 'hash-inv-5', 104),
-        makeEvent('milestone_submitted', { player_id: 'P5', milestone_id: 'm1', validator: 'G' + 'V'.repeat(55) }, 'hash-inv-6', 104),
+        makeEvent(
+          'milestone_submitted',
+          { player_id: 'P5', milestone_id: 'm1', validator: 'G' + 'V'.repeat(55) },
+          'hash-inv-6',
+          104,
+        ),
       ],
     });
 

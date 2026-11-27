@@ -31,12 +31,7 @@ import { encodeTracedMessage } from '../utils/traceContext';
 import { logger } from '../utils/logger';
 import config from '../config';
 import { getRedisClient } from './redis';
-import {
-  blockWalletDb,
-  unblockWalletDb,
-  isWalletBlocklistedDb,
-  listBlockedWalletsDb,
-} from '../db';
+import { blockWalletDb, unblockWalletDb, isWalletBlocklistedDb, listBlockedWalletsDb } from '../db';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -83,10 +78,10 @@ export async function blocklistWallet(wallet: string, reason: string | null = nu
   try {
     await blockWalletDb(wallet, reason);
     blockedCache.set(wallet, Date.now());
-    
+
     // Emit locally to terminate this instance's SSE sessions immediately
     emitter.emit(BLOCKED_EVENT, wallet);
-    
+
     // Publish to Redis pub/sub so other instances receive the event within ~1s
     const redis = getRedisClient();
     if (redis) {
@@ -97,7 +92,7 @@ export async function blocklistWallet(wallet: string, reason: string | null = nu
         // Continue; in-process effect still works, cross-instance effect deferred to sweep
       }
     }
-    
+
     logger.warn(`[walletBlocklist] wallet blocked: ${wallet}`);
   } catch (err) {
     logger.error(`[walletBlocklist] block failed for ${wallet}:`, err);
@@ -110,7 +105,7 @@ export async function unblocklistWallet(wallet: string): Promise<boolean> {
   try {
     const removed = await unblockWalletDb(wallet);
     blockedCache.delete(wallet);
-    
+
     if (removed) {
       // Publish unblock event to Redis pub/sub
       const redis = getRedisClient();
@@ -137,7 +132,8 @@ export async function unblocklistWallet(wallet: string): Promise<boolean> {
  */
 export async function isWalletBlocklisted(wallet: string): Promise<boolean> {
   const lastChecked = blockedCache.get(wallet);
-  const cacheFresh = lastChecked !== undefined && Date.now() - lastChecked < config.cache.walletBlocklistTtlMs;
+  const cacheFresh =
+    lastChecked !== undefined && Date.now() - lastChecked < config.cache.walletBlocklistTtlMs;
   if (cacheFresh) return true; // cached as blocked
   return refreshWallet(wallet);
 }

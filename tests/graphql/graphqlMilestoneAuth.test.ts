@@ -40,7 +40,12 @@ import { getPlayerById } from '../../src/db';
 import { typeDefs } from '../../src/graphql/schema';
 import { resolvers } from '../../src/graphql/resolvers';
 import { createContext } from '../../src/graphql/context';
-import { createDepthLimitRule, createQueryCostRule, MAX_DEPTH, MAX_QUERY_COST } from '../../src/graphql/validation';
+import {
+  createDepthLimitRule,
+  createQueryCostRule,
+  MAX_DEPTH,
+  MAX_QUERY_COST,
+} from '../../src/graphql/validation';
 
 const mockGetPlayerById = getPlayerById as jest.Mock;
 
@@ -167,7 +172,9 @@ describe('GraphQL nested Query.player -> Player.milestones', () => {
     const app = buildApp();
     const res = await request(app)
       .post('/graphql')
-      .send({ query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }` });
+      .send({
+        query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }`,
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.errors).toBeUndefined();
@@ -180,7 +187,9 @@ describe('GraphQL nested Query.player -> Player.milestones', () => {
     const app = buildApp();
     const res = await request(app)
       .post('/graphql')
-      .send({ query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }` });
+      .send({
+        query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }`,
+      });
 
     expect(res.body.errors).toBeUndefined();
     expect(res.body.data.player).toBeNull();
@@ -192,7 +201,9 @@ describe('GraphQL nested Query.player -> Player.milestones', () => {
     const res = await request(app)
       .post('/graphql')
       .set('Authorization', `Bearer ${makeToken(OTHER_WALLET, 'scout')}`)
-      .send({ query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }` });
+      .send({
+        query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }`,
+      });
 
     expect(res.body.errors).toBeUndefined();
     expect(res.body.data.player).toBeNull();
@@ -204,7 +215,9 @@ describe('GraphQL nested Query.player -> Player.milestones', () => {
     const res = await request(app)
       .post('/graphql')
       .set('Authorization', `Bearer ${makeToken(PLAYER_WALLET, 'player')}`)
-      .send({ query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }` });
+      .send({
+        query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }`,
+      });
 
     expect(res.body.errors).toBeUndefined();
     expect(res.body.data.player.player_id).toBe(PLAYER_ID);
@@ -217,7 +230,9 @@ describe('GraphQL nested Query.player -> Player.milestones', () => {
     const res = await request(app)
       .post('/graphql')
       .set('Authorization', `Bearer ${makeToken(ADMIN_WALLET, 'admin')}`)
-      .send({ query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }` });
+      .send({
+        query: `{ player(id: "${PLAYER_ID}") { player_id milestones ${MILESTONE_FIELDS} } }`,
+      });
 
     expect(res.body.errors).toBeUndefined();
     expect(res.body.data.player.player_id).toBe(PLAYER_ID);

@@ -51,7 +51,10 @@ async function resolveApiKeyRequest(
       return null;
     }
     void Promise.resolve(touchApiKeyLastUsed(resolved.id)).catch((err) => {
-      logger.warn({ path: req.path, error: 'graphql: failed to update API key last-used timestamp' }, err);
+      logger.warn(
+        { path: req.path, error: 'graphql: failed to update API key last-used timestamp' },
+        err,
+      );
     });
     return {
       account: resolved.scout_wallet,

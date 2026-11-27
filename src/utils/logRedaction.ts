@@ -31,12 +31,12 @@ const STRKEY_PATTERN = /^[GSM][A-Z0-9]{55,68}$/;
 function maskWalletAddress(address: string): string {
   const prefixLen = config.logRedaction.walletPrefixLength;
   const suffixLen = config.logRedaction.walletSuffixLength;
-  
+
   if (address.length <= prefixLen + suffixLen) {
     // If address is too short, just mask most of it
     return address.slice(0, prefixLen) + '***';
   }
-  
+
   return address.slice(0, prefixLen) + '...' + address.slice(-suffixLen);
 }
 
@@ -56,24 +56,24 @@ function hashCorrelationId(cid: string): string {
  */
 function redactObject(obj: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
-  
+
   for (const [key, value] of Object.entries(obj)) {
     const lowerKey = key.toLowerCase();
-    
+
     // Drop sensitive keys entirely
     if (SENSITIVE_KEYS.has(lowerKey)) {
       continue;
     }
-    
+
     // Recursively handle nested objects
     if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
       result[key] = redactObject(value as Record<string, unknown>);
       continue;
     }
-    
+
     // Handle arrays
     if (Array.isArray(value)) {
-      result[key] = value.map(item => {
+      result[key] = value.map((item) => {
         if (typeof item === 'string') {
           return redactString(item);
         }
@@ -84,20 +84,21 @@ function redactObject(obj: Record<string, unknown>): Record<string, unknown> {
       });
       continue;
     }
-    
+
     // Handle strings - check for wallet addresses and correlation IDs
     if (typeof value === 'string') {
       const isCorrelationIdKey = lowerKey === 'correlationid' || lowerKey === 'cid';
-      result[key] = isCorrelationIdKey && config.logRedaction.hashCorrelationIds
-        ? hashCorrelationId(value)
-        : redactString(value);
+      result[key] =
+        isCorrelationIdKey && config.logRedaction.hashCorrelationIds
+          ? hashCorrelationId(value)
+          : redactString(value);
       continue;
     }
-    
+
     // Pass through other values unchanged
     result[key] = value;
   }
-  
+
   return result;
 }
 
@@ -111,7 +112,7 @@ function redactString(str: string): string {
   if (STRKEY_PATTERN.test(str)) {
     return maskWalletAddress(str);
   }
-  
+
   // Check for correlation ID patterns (if configured to hash)
   if (config.logRedaction.hashCorrelationIds) {
     // Look for correlationId= or cid= patterns
@@ -120,7 +121,7 @@ function redactString(str: string): string {
       return str.replace(cidMatch[0], `${cidMatch[1]}=${hashCorrelationId(cidMatch[2])}`);
     }
   }
-  
+
   return str;
 }
 
@@ -133,22 +134,22 @@ export function redactLogArg(arg: unknown): unknown {
   if (!config.logRedaction.enabled) {
     return arg;
   }
-  
+
   // Handle objects
   if (arg !== null && typeof arg === 'object' && !Array.isArray(arg)) {
     return redactObject(arg as Record<string, unknown>);
   }
-  
+
   // Handle arrays
   if (Array.isArray(arg)) {
-    return arg.map(item => redactLogArg(item));
+    return arg.map((item) => redactLogArg(item));
   }
-  
+
   // Handle strings
   if (typeof arg === 'string') {
     return redactString(arg);
   }
-  
+
   // Pass through primitives unchanged
   return arg;
 }

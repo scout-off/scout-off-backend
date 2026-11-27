@@ -23,10 +23,15 @@ export class FileSecretsProvider implements SecretsProvider {
     private readonly refreshIntervalMs = DEFAULT_REFRESH_INTERVAL_MS,
   ) {}
 
-  get(name: string): string | undefined {
+  peek(name: string): string | undefined {
     const secretName = this.validateName(name);
     const value = this.read(secretName);
     this.apply(secretName, value);
+    return value;
+  }
+
+  get(name: string): string | undefined {
+    const value = this.peek(name);
     auditSecretAccess({
       action: 'get',
       name,

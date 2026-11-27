@@ -27,9 +27,14 @@ export function legacyFeeIdempotencyKey(req: Request, res: Response, next: NextF
     }
     req.headers['idempotency-key'] = alternate;
   }
-  if (typeof req.headers['idempotency-key'] !== 'string' || !req.headers['idempotency-key'].trim()) {
+  if (
+    typeof req.headers['idempotency-key'] !== 'string' ||
+    !req.headers['idempotency-key'].trim()
+  ) {
     incLegacyAdminCall('fees_missing_key');
-    logger.warn('[deprecation] POST /api/admin/fees called without an idempotency key; migrate to /api/admin/fees/withdraw');
+    logger.warn(
+      '[deprecation] POST /api/admin/fees called without an idempotency key; migrate to /api/admin/fees/withdraw',
+    );
   }
   next();
 }
@@ -41,11 +46,17 @@ export function normalizeLegacyReindex(req: Request, res: Response, next: NextFu
     next();
     return;
   }
-  if (body.toLedger === undefined && typeof body.fromLedger === 'number' &&
-      Number.isSafeInteger(body.fromLedger) && body.fromLedger >= 0) {
+  if (
+    body.toLedger === undefined &&
+    typeof body.fromLedger === 'number' &&
+    Number.isSafeInteger(body.fromLedger) &&
+    body.fromLedger >= 0
+  ) {
     const toLedger = body.fromLedger + 10_000;
     if (!Number.isSafeInteger(toLedger)) {
-      res.status(400).json({ success: false, error: 'Ledger range exceeds safe integer precision' });
+      res
+        .status(400)
+        .json({ success: false, error: 'Ledger range exceeds safe integer precision' });
       return;
     }
     req.body = { ...body, toLedger };

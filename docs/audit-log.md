@@ -24,20 +24,21 @@ This document centralizes the contract, design, and verification procedures.
 
 ### Column definitions
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `id` | BIGINT (primary key) | Insertion order identifier (immutable once written) |
-| `action` | TEXT | Event type (e.g., `validator_registration`, `auth_failed`) |
-| `admin_wallet` | TEXT | Stellar wallet address of the actor, or NULL for system events (e.g., auth failures) |
-| `query_params` | TEXT (JSON) | Additional context as a JSON object (e.g., IP address, scope name, validation errors) |
-| `created_at` | TEXT (ISO 8601) | Timestamp when the event occurred |
-| `prev_hash` | TEXT (64 hex chars) | Hash of the previous row (GENESIS_HASH for the first row) |
-| `hash` | TEXT (64 hex chars, NOT NULL) | SHA256 hash of this row's content plus the previous row's hash |
-| `event_source` | TEXT (NOT NULL) | Source of the event (`admin_action` or `app_event`) |
+| Column         | Type                          | Purpose                                                                               |
+| -------------- | ----------------------------- | ------------------------------------------------------------------------------------- |
+| `id`           | BIGINT (primary key)          | Insertion order identifier (immutable once written)                                   |
+| `action`       | TEXT                          | Event type (e.g., `validator_registration`, `auth_failed`)                            |
+| `admin_wallet` | TEXT                          | Stellar wallet address of the actor, or NULL for system events (e.g., auth failures)  |
+| `query_params` | TEXT (JSON)                   | Additional context as a JSON object (e.g., IP address, scope name, validation errors) |
+| `created_at`   | TEXT (ISO 8601)               | Timestamp when the event occurred                                                     |
+| `prev_hash`    | TEXT (64 hex chars)           | Hash of the previous row (GENESIS_HASH for the first row)                             |
+| `hash`         | TEXT (64 hex chars, NOT NULL) | SHA256 hash of this row's content plus the previous row's hash                        |
+| `event_source` | TEXT (NOT NULL)               | Source of the event (`admin_action` or `app_event`)                                   |
 
 ### NOT NULL constraints
 
 Both `hash` and `event_source` columns have `NOT NULL` constraints enforced in migrations:
+
 - `db/012_audit_log_hash_chain.sql` (SQLite) — adds both with NOT NULL defaults
 - `db/014_audit_log_hash_not_null_postgres.sql` (PostgreSQL) — backfills and tightens
 
@@ -49,35 +50,35 @@ The following actions are automatically logged:
 
 ### Admin operations
 
-| Action | Trigger | Context |
-|--------|---------|---------|
-| `validator_registration` | `POST /api/admin/validators/register` | Validator wallet added to platform; includes state change (attempt/success/failure) |
-| `validator_revocation` | `POST /api/admin/validators/revoke` | Validator wallet removed; includes state change |
-| `contract_state_change` | `POST /api/admin/contract/pause`, `POST /api/admin/contract/unpause` | On-chain contract paused or unpaused |
-| `fee_withdrawal_attempt` | `POST /api/admin/fees/withdraw` or `POST /api/admin/fees` | Fee withdrawal attempt; includes outcome (success/failure reason) |
-| `platform_fee_update_attempt` | `POST /api/admin/fees/{action}` | Platform fee basis points updated; includes old/new values |
-| `feature_flag_toggled` | `POST /api/admin/feature-flags/{flag}` | Feature flag enabled or disabled |
-| `bulk_player_import` | `POST /api/admin/players/import` | Bulk player import; includes rows attempted/inserted/failed |
-| `bulk_validator_import` | `POST /api/admin/validators/import` | Bulk validator import; similar to player import |
-| `player_deactivated` | `POST /api/admin/players/{playerId}/deactivate` | Player account deactivated |
-| `player_reactivated` | `POST /api/admin/players/{playerId}/reactivate` | Player account reactivated |
-| `fee_history_query` | `GET /api/admin/fees` | Admin queried fee history (for audit purposes) |
+| Action                        | Trigger                                                              | Context                                                                             |
+| ----------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `validator_registration`      | `POST /api/admin/validators/register`                                | Validator wallet added to platform; includes state change (attempt/success/failure) |
+| `validator_revocation`        | `POST /api/admin/validators/revoke`                                  | Validator wallet removed; includes state change                                     |
+| `contract_state_change`       | `POST /api/admin/contract/pause`, `POST /api/admin/contract/unpause` | On-chain contract paused or unpaused                                                |
+| `fee_withdrawal_attempt`      | `POST /api/admin/fees/withdraw` or `POST /api/admin/fees`            | Fee withdrawal attempt; includes outcome (success/failure reason)                   |
+| `platform_fee_update_attempt` | `POST /api/admin/fees/{action}`                                      | Platform fee basis points updated; includes old/new values                          |
+| `feature_flag_toggled`        | `POST /api/admin/feature-flags/{flag}`                               | Feature flag enabled or disabled                                                    |
+| `bulk_player_import`          | `POST /api/admin/players/import`                                     | Bulk player import; includes rows attempted/inserted/failed                         |
+| `bulk_validator_import`       | `POST /api/admin/validators/import`                                  | Bulk validator import; similar to player import                                     |
+| `player_deactivated`          | `POST /api/admin/players/{playerId}/deactivate`                      | Player account deactivated                                                          |
+| `player_reactivated`          | `POST /api/admin/players/{playerId}/reactivate`                      | Player account reactivated                                                          |
+| `fee_history_query`           | `GET /api/admin/fees`                                                | Admin queried fee history (for audit purposes)                                      |
 
 ### Authentication events
 
-| Action | Trigger | Reason |
-|--------|---------|--------|
-| `auth_failed` | Any protected endpoint | Missing auth header, invalid/expired token, invalid API key |
-| `auth_forbidden` | Any protected endpoint | Valid auth, but insufficient role or API key scope |
+| Action           | Trigger                | Reason                                                      |
+| ---------------- | ---------------------- | ----------------------------------------------------------- |
+| `auth_failed`    | Any protected endpoint | Missing auth header, invalid/expired token, invalid API key |
+| `auth_forbidden` | Any protected endpoint | Valid auth, but insufficient role or API key scope          |
 
 **Note:** Authentication failures are logged best-effort (errors are silently caught) so that a DB failure never blocks a 401/403 response.
 
 ### Application events
 
-| Action | Trigger | Context |
-|--------|---------|---------|
+| Action              | Trigger                                        | Context                                              |
+| ------------------- | ---------------------------------------------- | ---------------------------------------------------- |
 | `player_anonymized` | `POST /api/admin/players/{playerId}/anonymize` | Player PII removed; includes anonymization timestamp |
-| `reindex_triggered` | `POST /api/admin/reindex` | On-chain event reindexing started |
+| `reindex_triggered` | `POST /api/admin/reindex`                      | On-chain event reindexing started                    |
 
 ### Sensitive read events (#1531)
 
@@ -87,19 +88,19 @@ actor, role, target, correlation id, method, path and client IP — never the
 response body, query string or decrypted content. 4xx/5xx responses are not
 recorded, and the write is best-effort so auditing can never fail a request.
 
-| Action | Endpoint | Target |
-|--------|----------|--------|
-| `read:admin_audit_log` | `GET /api/admin/audit` | — |
-| `read:admin_audit_trail` | `GET /api/admin/audit/trail` | — |
-| `read:admin_events_export` | `GET /api/admin/events/export` | — |
-| `read:webhook_dead_letters` | `GET /api/admin/webhooks/dead-letters` | — |
-| `read:webhook_deliveries` | `GET /api/admin/webhooks/:id/deliveries` | webhook id |
-| `read:ip_reputation` | `GET /api/admin/ip-reputation/:ip` | IP address |
-| `read:token_introspection` | `POST /api/admin/introspect` | — |
-| `read:scout_note` | `GET /api/scouts/:wallet/notes/:playerId` | wallet/player id |
-| `read:scout_notes` | `GET /api/scouts/:wallet/notes` | wallet |
-| `read:scout_player_notes` | `GET /api/scouts/:wallet/players/:playerId/notes` | wallet/player id |
-| `read:scout_api_keys` | `GET /api/scouts/:wallet/api-keys` | wallet |
+| Action                      | Endpoint                                          | Target           |
+| --------------------------- | ------------------------------------------------- | ---------------- |
+| `read:admin_audit_log`      | `GET /api/admin/audit`                            | —                |
+| `read:admin_audit_trail`    | `GET /api/admin/audit/trail`                      | —                |
+| `read:admin_events_export`  | `GET /api/admin/events/export`                    | —                |
+| `read:webhook_dead_letters` | `GET /api/admin/webhooks/dead-letters`            | —                |
+| `read:webhook_deliveries`   | `GET /api/admin/webhooks/:id/deliveries`          | webhook id       |
+| `read:ip_reputation`        | `GET /api/admin/ip-reputation/:ip`                | IP address       |
+| `read:token_introspection`  | `POST /api/admin/introspect`                      | —                |
+| `read:scout_note`           | `GET /api/scouts/:wallet/notes/:playerId`         | wallet/player id |
+| `read:scout_notes`          | `GET /api/scouts/:wallet/notes`                   | wallet           |
+| `read:scout_player_notes`   | `GET /api/scouts/:wallet/players/:playerId/notes` | wallet/player id |
+| `read:scout_api_keys`       | `GET /api/scouts/:wallet/api-keys`                | wallet           |
 
 Read auditing is controlled by `AUDIT_READS_ENABLED` (default: `true` in
 production, `false` elsewhere). Because the entries join the same hash chain as
@@ -256,6 +257,7 @@ A `status: "tampered"` response with one or more violations means:
 ```
 
 This violation means:
+
 - Row 847 (validator_registration on 2025-01-15 08:32:00) was tampered with
 - The row's content no longer matches the stored hash
 - All rows inserted after row 847 now have invalid `prev_hash` values
@@ -284,12 +286,12 @@ chain on a schedule and alerts when it breaks.
 
 ### Configuration
 
-| Variable | Default | Description |
-| -------- | ------- | ----------- |
-| `AUDIT_VERIFY_INTERVAL_MS` | `3600000` (1 h) | How often an incremental run happens. |
-| `AUDIT_FULL_VERIFY_INTERVAL_MS` | `604800000` (7 d) | How often the whole chain is re-verified from genesis. |
-| `AUDIT_VERIFY_BATCH_SIZE` | `5000` | Rows read per batch. Bounds memory use. |
-| `AUDIT_ALERT_WEBHOOK_URL` | unset | Optional https URL. On a break the job sends a `GET` with `event=audit_chain_break`, `broken_at_id`, `expected_hash`, `actual_hash`, `row_created_at`, `reason` and `mode` query parameters through `safeFetch`, which blocks private/loopback/link-local targets and redirects. |
+| Variable                        | Default           | Description                                                                                                                                                                                                                                                                      |
+| ------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUDIT_VERIFY_INTERVAL_MS`      | `3600000` (1 h)   | How often an incremental run happens.                                                                                                                                                                                                                                            |
+| `AUDIT_FULL_VERIFY_INTERVAL_MS` | `604800000` (7 d) | How often the whole chain is re-verified from genesis.                                                                                                                                                                                                                           |
+| `AUDIT_VERIFY_BATCH_SIZE`       | `5000`            | Rows read per batch. Bounds memory use.                                                                                                                                                                                                                                          |
+| `AUDIT_ALERT_WEBHOOK_URL`       | unset             | Optional https URL. On a break the job sends a `GET` with `event=audit_chain_break`, `broken_at_id`, `expected_hash`, `actual_hash`, `row_created_at`, `reason` and `mode` query parameters through `safeFetch`, which blocks private/loopback/link-local targets and redirects. |
 
 ### When a break is detected
 
@@ -365,4 +367,3 @@ The audit log is designed for:
 4. **Post-incident forensics** — correlating audit entries with application logs via X-Correlation-ID
 
 Always include a copy of the audit log in incident reports. The `GET /api/admin/audit` endpoint supports filtering and pagination for compliance queries.
-

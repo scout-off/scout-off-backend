@@ -87,9 +87,9 @@ describe('cacheGet() increments hit/miss counters', () => {
 
   it('increments counters independently across multiple calls', async () => {
     await cacheModule.cacheSet('players:hit', { name: 'Bob' });
-    await cacheModule.cacheGet('players:hit');   // hit
-    await cacheModule.cacheGet('players:hit');   // hit
-    await cacheModule.cacheGet('players:miss');  // miss
+    await cacheModule.cacheGet('players:hit'); // hit
+    await cacheModule.cacheGet('players:hit'); // hit
+    await cacheModule.cacheGet('players:miss'); // miss
     expect(getCacheMetrics().hits).toBe(2);
     expect(getCacheMetrics().misses).toBe(1);
   });

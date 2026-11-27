@@ -66,12 +66,18 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) {
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
       super(message);
     }
   },
   SubscriptionError: class SubscriptionError extends Error {
-    constructor(public message: string, public code: string) {
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
       super(message);
     }
   },
@@ -123,7 +129,10 @@ describe('E2E Subscribe → Unlock Contact Flow', () => {
 
     // ── Step 2: unlock the player's contact ────────────────────────────────
     insertPlayer(PLAYER_ID, PLAYER_WALLET);
-    mockSubmitContactPayment.mockResolvedValue({ transactionId: 'tx-unlock-1', status: 'submitted' });
+    mockSubmitContactPayment.mockResolvedValue({
+      transactionId: 'tx-unlock-1',
+      status: 'submitted',
+    });
 
     const firstUnlockRes = await request(app)
       .post(`/api/scouts/${SCOUT_WALLET}/contacts/${PLAYER_ID}/unlock`)
@@ -202,7 +211,10 @@ describe('E2E Subscribe → Unlock Contact Flow', () => {
     // Clear call history accumulated by the previous test in this file.
     mockSubmitContactPayment.mockClear();
     insertPlayer(player2, player2Wallet);
-    mockSubmitContactPayment.mockResolvedValue({ transactionId: 'tx-unlock-idem', status: 'submitted' });
+    mockSubmitContactPayment.mockResolvedValue({
+      transactionId: 'tx-unlock-idem',
+      status: 'submitted',
+    });
 
     const first = await request(app)
       .post(`/api/scouts/${scout2}/contacts/${player2}/unlock`)

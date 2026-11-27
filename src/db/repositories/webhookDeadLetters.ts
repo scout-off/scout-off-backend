@@ -56,7 +56,7 @@ export function insertWebhookDeadLetter(input: InsertDeadLetterInput): WebhookDe
         input.payload,
         input.deliveryId,
         input.failureReason,
-        input.attempts
+        input.attempts,
       );
     return {
       id: Number(info.lastInsertRowid),
@@ -78,9 +78,7 @@ export function insertWebhookDeadLetter(input: InsertDeadLetterInput): WebhookDe
 
 export function listWebhookDeadLetters(limit: number, offset: number): WebhookDeadLetter[] {
   const sql = 'SELECT * FROM webhook_dead_letters ORDER BY id DESC LIMIT ? OFFSET ?';
-  return timedQuery(sql, () =>
-    getDb().prepare(sql).all(limit, offset) as WebhookDeadLetter[]
-  );
+  return timedQuery(sql, () => getDb().prepare(sql).all(limit, offset) as WebhookDeadLetter[]);
 }
 
 export function countWebhookDeadLetters(): number {
@@ -103,20 +101,20 @@ export function countWebhookDeadLettersBySubscription(): Array<{
                WHERE status IN ('pending', 'in_progress')
                GROUP BY subscription_id
                ORDER BY count DESC`;
-  return timedQuery(sql, () =>
-    getDb().prepare(sql).all() as Array<{ subscription_id: number | null; count: number }>,
+  return timedQuery(
+    sql,
+    () => getDb().prepare(sql).all() as Array<{ subscription_id: number | null; count: number }>,
   );
 }
 
 export function getWebhookDeadLetterById(id: number): WebhookDeadLetter | undefined {
   const sql = 'SELECT * FROM webhook_dead_letters WHERE id = ?';
-  return timedQuery(sql, () =>
-    getDb().prepare(sql).get(id) as WebhookDeadLetter | undefined
-  );
+  return timedQuery(sql, () => getDb().prepare(sql).get(id) as WebhookDeadLetter | undefined);
 }
 
 export function markWebhookDeadLetterReplayed(id: number): void {
-  const sql = "UPDATE webhook_dead_letters SET status = 'replayed', replayed_at = ?, locked_by = NULL, locked_at = NULL WHERE id = ?";
+  const sql =
+    "UPDATE webhook_dead_letters SET status = 'replayed', replayed_at = ?, locked_by = NULL, locked_at = NULL WHERE id = ?";
   timedQuery(sql, () => getDb().prepare(sql).run(new Date().toISOString(), id));
 }
 
@@ -157,7 +155,7 @@ export function releaseWebhookDeadLetterClaim(id: number): void {
 export function updateWebhookDeadLetterAttempt(
   id: number,
   attempts: number,
-  failureReason: string
+  failureReason: string,
 ): void {
   const sql = 'UPDATE webhook_dead_letters SET attempts = ?, failure_reason = ? WHERE id = ?';
   timedQuery(sql, () => getDb().prepare(sql).run(attempts, failureReason, id));
@@ -176,7 +174,7 @@ export function deleteWebhookDeadLetter(id: number): boolean {
 export function purgeOldWebhookDeadLetters(cutoffDays: number): number {
   // created_at is stored as ISO text ("2024-01-01T00:00:00.000Z")
   const cutoff = new Date(Date.now() - cutoffDays * 24 * 60 * 60 * 1000).toISOString();
-  const sql = "DELETE FROM webhook_dead_letters WHERE created_at < ?";
+  const sql = 'DELETE FROM webhook_dead_letters WHERE created_at < ?';
   return timedQuery(sql, () => {
     const info = getDb().prepare(sql).run(cutoff);
     return info.changes;

@@ -12,14 +12,15 @@ let found = false;
 const SUPPRESS_MARKERS = ['sql-injection-check-ignore', 'sql-injection-ok'];
 
 function isSuppressed(precedingLine) {
-  return SUPPRESS_MARKERS.some(marker => precedingLine.includes(marker));
+  return SUPPRESS_MARKERS.some((marker) => precedingLine.includes(marker));
 }
 
 function scanFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
   const lines = content.split('\n');
   // Look for backticks containing SQL keywords followed by string interpolation ${
-  const sqlInterpolationRegex = /`[^`]*(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)[^`]*\$\{.*?\}[^`]*`/g;
+  const sqlInterpolationRegex =
+    /`[^`]*(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)[^`]*\$\{.*?\}[^`]*`/g;
 
   let match;
   while ((match = sqlInterpolationRegex.exec(content)) !== null) {
@@ -60,4 +61,12 @@ if (require.main === module) {
   }
 }
 
-module.exports = { scanFile, scanDir, run, SUPPRESS_MARKERS, get found() { return found; } };
+module.exports = {
+  scanFile,
+  scanDir,
+  run,
+  SUPPRESS_MARKERS,
+  get found() {
+    return found;
+  },
+};

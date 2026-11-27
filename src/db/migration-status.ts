@@ -59,9 +59,7 @@ export function discoverMigrationFiles(migrationsDir: string): string[] {
  * @param db - The better-sqlite3 database connection
  * @returns Map<filename, appliedAt timestamp>, or empty Map if no migrations applied or table doesn't exist
  */
-export function getAppliedMigrations(
-  db: Database.Database
-): Map<string, number> {
+export function getAppliedMigrations(db: Database.Database): Map<string, number> {
   const result = new Map<string, number>();
 
   try {
@@ -87,8 +85,7 @@ export function getAppliedMigrations(
         : undefined;
     if (
       message !== undefined &&
-      (message.includes('no such table') ||
-        message.includes('SQLITE_NOTFOUND'))
+      (message.includes('no such table') || message.includes('SQLITE_NOTFOUND'))
     ) {
       return result;
     }
@@ -109,7 +106,7 @@ export function getAppliedMigrations(
  */
 export function generateStatusReport(
   discoveredFiles: string[],
-  appliedMigrations: Map<string, number>
+  appliedMigrations: Map<string, number>,
 ): StatusReport {
   const migrations: DiscoveredMigration[] = [];
   let appliedCount = 0;
@@ -174,9 +171,7 @@ export function formatStatusReport(report: StatusReport): string {
   lines.push('');
 
   // Summary line
-  lines.push(
-    `Status: ${report.appliedCount} applied, ${report.pendingCount} pending`
-  );
+  lines.push(`Status: ${report.appliedCount} applied, ${report.pendingCount} pending`);
   lines.push('');
 
   // Table header
@@ -192,31 +187,30 @@ export function formatStatusReport(report: StatusReport): string {
 
   // Build table
   lines.push(
-    `┌─${'-'.repeat(colWidths.migration)}─┬─${'-'.repeat(colWidths.status)}─┬─${'-'.repeat(colWidths.timestamp)}─┐`
+    `┌─${'-'.repeat(colWidths.migration)}─┬─${'-'.repeat(colWidths.status)}─┬─${'-'.repeat(colWidths.timestamp)}─┐`,
   );
   lines.push(
-    `│ ${colMigration.padEnd(colWidths.migration)} │ ${colStatus.padEnd(colWidths.status)} │ ${colTimestamp.padEnd(colWidths.timestamp)} │`
+    `│ ${colMigration.padEnd(colWidths.migration)} │ ${colStatus.padEnd(colWidths.status)} │ ${colTimestamp.padEnd(colWidths.timestamp)} │`,
   );
   lines.push(
-    `├─${'-'.repeat(colWidths.migration)}─┼─${'-'.repeat(colWidths.status)}─┼─${'-'.repeat(colWidths.timestamp)}─┤`
+    `├─${'-'.repeat(colWidths.migration)}─┼─${'-'.repeat(colWidths.status)}─┼─${'-'.repeat(colWidths.timestamp)}─┤`,
   );
 
   // Table rows
   for (const migration of report.migrations) {
-    const statusIcon =
-      migration.status === 'applied' ? '✓ Applied' : '⧬ Pending';
+    const statusIcon = migration.status === 'applied' ? '✓ Applied' : '⧬ Pending';
     const timestamp =
       migration.appliedAt !== null
         ? new Date(migration.appliedAt).toISOString().replace('T', ' ').slice(0, 19)
         : '—';
 
     lines.push(
-      `│ ${migration.filename.padEnd(colWidths.migration)} │ ${statusIcon.padEnd(colWidths.status)} │ ${timestamp.padEnd(colWidths.timestamp)} │`
+      `│ ${migration.filename.padEnd(colWidths.migration)} │ ${statusIcon.padEnd(colWidths.status)} │ ${timestamp.padEnd(colWidths.timestamp)} │`,
     );
   }
 
   lines.push(
-    `└─${'-'.repeat(colWidths.migration)}─┴─${'-'.repeat(colWidths.status)}─┴─${'-'.repeat(colWidths.timestamp)}─┘`
+    `└─${'-'.repeat(colWidths.migration)}─┴─${'-'.repeat(colWidths.status)}─┴─${'-'.repeat(colWidths.timestamp)}─┘`,
   );
 
   return lines.join('\n');

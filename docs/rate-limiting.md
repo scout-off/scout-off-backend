@@ -23,6 +23,7 @@ Limits requests per IP address across all endpoints (except health checks).
 **Namespace:** `ip`
 
 **Configuration:**
+
 - `RATE_LIMIT_ENABLED`: Enable/disable all rate limiting (default: `true`)
 - `RATE_LIMIT_WINDOW_MS`: Time window in milliseconds (default: `60000` = 1 second)
 - `RATE_LIMIT_MAX`: Max requests per window per IP (default: `60`)
@@ -30,6 +31,7 @@ Limits requests per IP address across all endpoints (except health checks).
 **Example:** With defaults, each IP can make 60 requests per 60 seconds (1 req/sec average).
 
 **Where applied:** Most API endpoints, including:
+
 - `GET /api/players`
 - `GET /api/validators`
 - `POST /api/auth/challenge`
@@ -48,6 +50,7 @@ consume another step's quota.
 **Namespaces:** `auth:challenge`, `auth:token`, and `auth:refresh`
 
 **Configuration:**
+
 - `AUTH_RATE_LIMIT_WINDOW_MS`: Time window in milliseconds (default: `60000` = 1 minute)
 - `AUTH_RATE_LIMIT_MAX`: Max requests per account and endpoint per window (default: `5`)
 - `AUTH_RATE_LIMIT_IP_MAX`: Max requests per endpoint and IP per window (default: `60`)
@@ -56,6 +59,7 @@ consume another step's quota.
 minute, while a shared IP can make up to 60 requests to each endpoint.
 
 **Where applied:**
+
 - `GET /auth/challenge` — keyed by validated Stellar account
 - `POST /auth/token` — keyed by the source account extracted from the transaction
 - `POST /auth/refresh` — keyed by the verified refresh token's account
@@ -86,12 +90,14 @@ Protects the validator milestone submission endpoint against evidence upload flo
 **Namespace:** `validator-milestone`
 
 **Configuration:**
+
 - `MILESTONE_RATE_WINDOW_MS`: Time window in milliseconds (default: `60000` = 1 minute)
 - `MILESTONE_RATE_MAX`: Max evidence submission requests per window per caller (default: `10`)
 
 **Example:** Each caller IP/validator can submit up to 10 milestone evidence payloads per 60 seconds.
 
 **Where applied:**
+
 - `POST /api/validators/milestone` (and versioned aliases `/api/v1/validators/milestone`, `/api/v2/validators/milestone`)
 
 **Use case:** Submitting milestone evidence triggers schema validation, Pinata IPFS file downloading/re-pinning, and Soroban on-chain verification. Restricting submissions per caller prevents denial-of-service and storage abuse.
@@ -103,6 +109,7 @@ Protects the validator milestone submission endpoint against evidence upload flo
 Rate limit namespaces are completely isolated — they do not share counters. This prevents spurious interactions:
 
 **Example:** Suppose we have two limiters:
+
 - Limiter A: 60 requests per 60 seconds per IP
 - Limiter B: 10 requests per 60 seconds per IP
 
@@ -117,6 +124,7 @@ When a client exceeds a rate limit, the server responds with HTTP 429:
 **Status Code:** `429`
 
 **Response Body:**
+
 ```json
 {
   "success": false,
@@ -125,6 +133,7 @@ When a client exceeds a rate limit, the server responds with HTTP 429:
 ```
 
 **Response Headers:**
+
 ```
 Retry-After: 45
 ```
@@ -146,6 +155,7 @@ If the rate limiter encounters an error (e.g., Redis connection lost, in-memory 
 **Rationale:** An outage in the rate limiter should not cascade into an outage of the entire API. It's better to briefly lose rate limit protection than to block legitimate traffic.
 
 **Example:**
+
 ```typescript
 try {
   const entry = hits.get(ip);
@@ -157,11 +167,13 @@ try {
 ```
 
 **Implications:**
+
 - A Redis failure temporarily disables rate limiting across instances
 - Attackers could exploit the window to send more requests
 - Monitoring should alert on rate limiter errors so operators can investigate
 
 **Mitigation:**
+
 - Monitor rate limiter error logs
 - Maintain Redis with high availability (replication, failover)
 - Consider periodic health checks of the rate limiter itself
@@ -171,6 +183,7 @@ try {
 ### Per-Environment Defaults
 
 **Development** (`NODE_ENV=development`):
+
 - `RATE_LIMIT_ENABLED=true`
 - `RATE_LIMIT_WINDOW_MS=60000`
 - `RATE_LIMIT_MAX=60`
@@ -178,15 +191,18 @@ try {
 - `AUTH_RATE_LIMIT_IP_MAX=60`
 
 **Test** (`NODE_ENV=test`):
+
 - `RATE_LIMIT_ENABLED=true` (typically disabled in tests via middleware)
 - `RATE_LIMIT_MAX=1000` (high, to avoid test flakiness)
 - `AUTH_RATE_LIMIT_MAX=1000`
 - `AUTH_RATE_LIMIT_IP_MAX=1000`
 
 **Staging** (`NODE_ENV=staging`):
+
 - Same as production defaults (see below)
 
 **Production** (`NODE_ENV=production`):
+
 - `RATE_LIMIT_ENABLED=true`
 - `RATE_LIMIT_WINDOW_MS=60000`
 - `RATE_LIMIT_MAX=60` (1 req/sec average)
@@ -198,6 +214,7 @@ try {
 ### Adjusting Limits
 
 **To allow more requests from trusted IPs:**
+
 ```env
 RATE_LIMIT_MAX=200
 ```
@@ -205,6 +222,7 @@ RATE_LIMIT_MAX=200
 This increases the global limit to 200 requests per 60 seconds per IP. If you have a trusted partner or internal service making bulk requests, this may be necessary. Consider IP allowlisting as an alternative if available.
 
 **To tighten per-account auth limits:**
+
 ```env
 AUTH_RATE_LIMIT_MAX=3
 AUTH_RATE_LIMIT_WINDOW_MS=300000  # 5-minute window instead of 1-minute
@@ -213,6 +231,7 @@ AUTH_RATE_LIMIT_WINDOW_MS=300000  # 5-minute window instead of 1-minute
 This allows only 3 requests per endpoint, per account, per 5 minutes.
 
 **To disable rate limiting entirely (not recommended):**
+
 ```env
 RATE_LIMIT_ENABLED=false
 ```
@@ -226,11 +245,13 @@ Rate limiting is disabled globally. All requests are allowed. Use only for testi
 Rate limit enforcement is logged at `warn` or `info` level (depending on logger config). No log entries are emitted for allowed requests — only for hits and blocks.
 
 **Hit (request blocked):**
+
 ```
 [rateLimit] IP=192.0.2.1 exceeded max=60 in window=60000ms, next reset in 45s
 ```
 
 **Errors:**
+
 ```
 [rateLimit] error: Redis connection lost — failing open
 ```
@@ -238,6 +259,7 @@ Rate limit enforcement is logged at `warn` or `info` level (depending on logger 
 ### Tracking
 
 Recommended metrics to expose (via Prometheus or similar):
+
 - `rate_limit_hits_total{namespace="ip", endpoint="/api/players"}` — Total 429 responses
 - `rate_limit_resets_total{namespace="wallet"}` — Total window resets
 - `rate_limit_errors_total{namespace="ip"}` — Total limiter errors (fail-open incidents)
@@ -266,6 +288,7 @@ These are exempted because they are health probes and should not be subject to r
 ### Subject to Rate Limiting
 
 All other endpoints are subject to rate limiting:
+
 - `GET /api/players`
 - `POST /api/auth/challenge`
 - `POST /api/auth/token`
@@ -295,6 +318,7 @@ All other endpoints are subject to rate limiting:
 **Source:** `src/middleware/rateLimit.ts`
 
 **Key functions:**
+
 - `rateLimit(options)` — Global IP-based limiter middleware
 - `walletRateLimit(options)` — Per-wallet limiter middleware
 - `authRateLimit()` — Auth-specific limiter (stricter)
@@ -302,6 +326,7 @@ All other endpoints are subject to rate limiting:
 **State storage:** In-memory `Map<string, { count, resetAt }>` (per-instance)
 
 **Window reset logic:**
+
 ```typescript
 const now = Date.now();
 if (!entry || now >= entry.resetAt) {
@@ -318,11 +343,13 @@ if (!entry || now >= entry.resetAt) {
 **Symptom:** Legitimate clients are getting 429 responses.
 
 **Causes:**
+
 1. Rate limit is too low for your traffic profile
 2. A bot or attacker is consuming quota
 3. A single client is retrying aggressively
 
 **Solution:**
+
 1. Check `RATE_LIMIT_MAX` — increase if needed
 2. Identify the IP in logs and decide: allowlist it, block it, or investigate
 3. Add monitoring to detect this pattern earlier
@@ -332,11 +359,13 @@ if (!entry || now >= entry.resetAt) {
 **Symptom:** Clients making thousands of requests without hitting 429.
 
 **Causes:**
+
 1. `RATE_LIMIT_ENABLED=false` (disabled)
 2. Middleware not mounted on a route
 3. Fail-open due to an error
 
 **Solution:**
+
 1. Check `config.rateLimit.enabled` — should be `true`
 2. Verify middleware is applied to all routes (check `src/routes/`)
 3. Check logs for `[rateLimit] error:` entries
@@ -346,11 +375,13 @@ if (!entry || now >= entry.resetAt) {
 **Symptom:** High-traffic wallet not being rate-limited.
 
 **Causes:**
+
 1. `req.account` not being set (JWT not authenticated)
 2. Wallet limiter middleware not mounted
 3. Wallet limiter has a higher threshold than IP limiter
 
 **Solution:**
+
 1. Verify JWT is being validated before the wallet limiter
 2. Check middleware order in router
 3. Review config for wallet vs. IP thresholds

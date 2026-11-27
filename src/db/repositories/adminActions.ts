@@ -28,17 +28,30 @@ export async function insertPendingAdminAction(p: {
   created_at: number;
 }): Promise<void> {
   const sql = `INSERT INTO pending_admin_actions (id, action_type, proposer, payload, required_signatures, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-  await timedQueryAsync(sql, () => getDriver().run(sql, [p.id, p.action_type, p.proposer, p.payload, p.required_signatures, p.expires_at, p.created_at]));
+  await timedQueryAsync(sql, () =>
+    getDriver().run(sql, [
+      p.id,
+      p.action_type,
+      p.proposer,
+      p.payload,
+      p.required_signatures,
+      p.expires_at,
+      p.created_at,
+    ]),
+  );
 }
 
 export async function getPendingAdminActionById(id: string): Promise<PendingAdminActionRow | null> {
   const sql = `SELECT * FROM pending_admin_actions WHERE id = ?`;
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<PendingAdminActionRow>(sql, [id])) ?? null,
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<PendingAdminActionRow>(sql, [id])) ?? null,
   );
 }
 
-export async function getPendingAdminActionsByStatus(status: string): Promise<PendingAdminActionRow[]> {
+export async function getPendingAdminActionsByStatus(
+  status: string,
+): Promise<PendingAdminActionRow[]> {
   const sql = `SELECT * FROM pending_admin_actions WHERE status = ? ORDER BY created_at DESC`;
   return timedQueryAsync(sql, () => getDriver().all<PendingAdminActionRow>(sql, [status]));
 }
@@ -65,18 +78,28 @@ export async function insertAdminActionSignature(p: {
   signed_at: number;
 }): Promise<boolean> {
   const sql = `INSERT INTO admin_action_signatures (action_id, signer, signed_at) VALUES (?, ?, ?) ON CONFLICT (action_id, signer) DO NOTHING`;
-  const info = await timedQueryAsync(sql, () => getDriver().run(sql, [p.action_id, p.signer, p.signed_at]));
+  const info = await timedQueryAsync(sql, () =>
+    getDriver().run(sql, [p.action_id, p.signer, p.signed_at]),
+  );
   return info.changes > 0;
 }
 
-export async function getAdminActionSignature(action_id: string, signer: string): Promise<{ signed_at: number } | null> {
+export async function getAdminActionSignature(
+  action_id: string,
+  signer: string,
+): Promise<{ signed_at: number } | null> {
   const sql = `SELECT signed_at FROM admin_action_signatures WHERE action_id = ? AND signer = ?`;
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<{ signed_at: number }>(sql, [action_id, signer])) ?? null,
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<{ signed_at: number }>(sql, [action_id, signer])) ?? null,
   );
 }
 
-export async function getAdminActionSignatures(action_id: string): Promise<{ signer: string; signed_at: number }[]> {
+export async function getAdminActionSignatures(
+  action_id: string,
+): Promise<{ signer: string; signed_at: number }[]> {
   const sql = `SELECT signer, signed_at FROM admin_action_signatures WHERE action_id = ? ORDER BY signed_at ASC`;
-  return timedQueryAsync(sql, () => getDriver().all<{ signer: string; signed_at: number }>(sql, [action_id]));
+  return timedQueryAsync(sql, () =>
+    getDriver().all<{ signer: string; signed_at: number }>(sql, [action_id]),
+  );
 }

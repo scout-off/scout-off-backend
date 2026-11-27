@@ -1,6 +1,10 @@
 import fetch from 'node-fetch';
 import crypto from 'crypto';
-import { postWebhookWithRetry, signWebhookPayload, dispatchEventWebhook } from '../../src/services/webhooks';
+import {
+  postWebhookWithRetry,
+  signWebhookPayload,
+  dispatchEventWebhook,
+} from '../../src/services/webhooks';
 import { createWebhookSubscription, listWebhookDeadLetters } from '../../src/db';
 import { getVersionInfo } from '../../src/version';
 
@@ -21,7 +25,9 @@ describe('postWebhookWithRetry', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedFetch.mockResolvedValue({ ok: true, status: 200 } as any);
 
-    await expect(postWebhookWithRetry('https://example.com', { eventType: 'test' })).resolves.toBeUndefined();
+    await expect(
+      postWebhookWithRetry('https://example.com', { eventType: 'test' }),
+    ).resolves.toBeUndefined();
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -31,7 +37,11 @@ describe('postWebhookWithRetry', () => {
     mockedFetch.mockResolvedValue({ ok: true, status: 200 } as any);
 
     await expect(
-      postWebhookWithRetry('https://example.com', { eventType: 'test' }, { retries: 3, baseDelayMs: 1, maxDelayMs: 2 })
+      postWebhookWithRetry(
+        'https://example.com',
+        { eventType: 'test' },
+        { retries: 3, baseDelayMs: 1, maxDelayMs: 2 },
+      ),
     ).resolves.toBeUndefined();
 
     expect(mockedFetch).toHaveBeenCalledTimes(2);
@@ -99,7 +109,11 @@ describe('postWebhookWithRetry', () => {
     mockedFetch.mockRejectedValue(new Error('network down'));
 
     await expect(
-      postWebhookWithRetry('https://example.com', { eventType: 'test' }, { retries: 2, baseDelayMs: 1, maxDelayMs: 2 })
+      postWebhookWithRetry(
+        'https://example.com',
+        { eventType: 'test' },
+        { retries: 2, baseDelayMs: 1, maxDelayMs: 2 },
+      ),
     ).rejects.toThrow('network down');
 
     expect(mockedFetch).toHaveBeenCalledTimes(2);
@@ -148,7 +162,7 @@ describe('postWebhookWithRetry', () => {
     await postWebhookWithRetry(
       'https://example.com',
       { eventType: 'player_registered', payload: { wallet: 'GABC' } },
-      { eventType: 'player_registered', deliveryId: 'delivery-123' }
+      { eventType: 'player_registered', deliveryId: 'delivery-123' },
     );
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
@@ -167,7 +181,13 @@ describe('postWebhookWithRetry', () => {
     await postWebhookWithRetry(
       'https://example.com',
       { eventType: 'milestone_approved', payload: { milestoneId: 'm1' } },
-      { eventType: 'milestone_approved', deliveryId: 'delivery-456', retries: 3, baseDelayMs: 1, maxDelayMs: 2 }
+      {
+        eventType: 'milestone_approved',
+        deliveryId: 'delivery-456',
+        retries: 3,
+        baseDelayMs: 1,
+        maxDelayMs: 2,
+      },
     );
 
     expect(mockedFetch).toHaveBeenCalledTimes(2);
@@ -179,42 +199,42 @@ describe('postWebhookWithRetry', () => {
     }
   });
 
-  it(
-    'fails within the configured timeout when the subscriber never responds',
-    async () => {
-      // Simulates a subscriber that accepts the TCP connection but never sends
-      // a response: the underlying fetch promise never settles on its own.
-      // A real `node-fetch` call passed an aborted signal rejects with an
-      // AbortError, so we mimic that here to exercise our abort wiring
-      // without depending on real network timing.
-      mockedFetch.mockImplementation((_url, init) => {
-        return new Promise((_resolve, reject) => {
-          const signal = init?.signal as AbortSignal | undefined;
-          signal?.addEventListener('abort', () => {
-            const err = new Error('The operation was aborted');
-            err.name = 'AbortError';
-            reject(err);
-          });
-        }) as ReturnType<typeof fetch>;
-      });
+  it('fails within the configured timeout when the subscriber never responds', async () => {
+    // Simulates a subscriber that accepts the TCP connection but never sends
+    // a response: the underlying fetch promise never settles on its own.
+    // A real `node-fetch` call passed an aborted signal rejects with an
+    // AbortError, so we mimic that here to exercise our abort wiring
+    // without depending on real network timing.
+    mockedFetch.mockImplementation((_url, init) => {
+      return new Promise((_resolve, reject) => {
+        const signal = init?.signal as AbortSignal | undefined;
+        signal?.addEventListener('abort', () => {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      }) as ReturnType<typeof fetch>;
+    });
 
-      const startedAt = Date.now();
-      await expect(
-        postWebhookWithRetry('https://example.com', { eventType: 'test' }, {
+    const startedAt = Date.now();
+    await expect(
+      postWebhookWithRetry(
+        'https://example.com',
+        { eventType: 'test' },
+        {
           retries: 1,
           timeoutMs: 50,
-        })
-      ).rejects.toThrow(/timed out/i);
+        },
+      ),
+    ).rejects.toThrow(/timed out/i);
 
-      // The attempt must fail close to the configured timeout, not hang
-      // indefinitely (well under the 10s test timeout below).
-      expect(Date.now() - startedAt).toBeLessThan(2000);
-      expect(mockedFetch).toHaveBeenCalledTimes(1);
-      const [, init] = mockedFetch.mock.calls[0];
-      expect(init!.signal).toBeDefined();
-    },
-    10000
-  );
+    // The attempt must fail close to the configured timeout, not hang
+    // indefinitely (well under the 10s test timeout below).
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockedFetch.mock.calls[0];
+    expect(init!.signal).toBeDefined();
+  }, 10000);
 });
 
 describe('signWebhookPayload', () => {
@@ -288,125 +308,107 @@ describe('dispatchEventWebhook', () => {
     expect(headers['X-Webhook-Delivery']).toBe(parsed.deliveryId);
   });
 
-  it(
-    'persists a dead letter with the right fields when retries are exhausted, without throwing',
-    async () => {
-      mockedFetch.mockRejectedValue(new Error('connection refused'));
-      const url = uniqueUrl('dead-letter');
-      const secret = 'subscriber-secret-b';
-      const subscription = createWebhookSubscription(url, secret);
+  it('persists a dead letter with the right fields when retries are exhausted, without throwing', async () => {
+    mockedFetch.mockRejectedValue(new Error('connection refused'));
+    const url = uniqueUrl('dead-letter');
+    const secret = 'subscriber-secret-b';
+    const subscription = createWebhookSubscription(url, secret);
 
-      await expect(dispatchEventWebhook('milestone_approved', { milestoneId: 'm1' })).resolves.toBeUndefined();
+    await expect(
+      dispatchEventWebhook('milestone_approved', { milestoneId: 'm1' }),
+    ).resolves.toBeUndefined();
 
-      const deadLetters = listWebhookDeadLetters(100, 0);
-      const match = deadLetters.find((d) => d.url === url);
-      expect(match).toBeDefined();
-      expect(match!.subscription_id).toBe(subscription.id);
-      expect(match!.event_type).toBe('milestone_approved');
-      // Payload must include deliveryId
-      const parsedPayload = JSON.parse(match!.payload);
-      expect(parsedPayload.eventType).toBe('milestone_approved');
-      expect(parsedPayload.payload).toEqual({ milestoneId: 'm1' });
-      expect(parsedPayload.deliveryId).toBeDefined();
-      expect(typeof parsedPayload.deliveryId).toBe('string');
-      expect(parsedPayload.deliveryId.length).toBeGreaterThan(0);
-    },
-    15000
-  );
+    const deadLetters = listWebhookDeadLetters(100, 0);
+    const match = deadLetters.find((d) => d.url === url);
+    expect(match).toBeDefined();
+    expect(match!.subscription_id).toBe(subscription.id);
+    expect(match!.event_type).toBe('milestone_approved');
+    // Payload must include deliveryId
+    const parsedPayload = JSON.parse(match!.payload);
+    expect(parsedPayload.eventType).toBe('milestone_approved');
+    expect(parsedPayload.payload).toEqual({ milestoneId: 'm1' });
+    expect(parsedPayload.deliveryId).toBeDefined();
+    expect(typeof parsedPayload.deliveryId).toBe('string');
+    expect(parsedPayload.deliveryId.length).toBeGreaterThan(0);
+  }, 15000);
 
-  it(
-    'dead-letters only the subscriber that fails when multiple subscriptions are registered',
-    async () => {
-      const okUrl = uniqueUrl('ok');
-      const failingUrl = uniqueUrl('fail');
-      createWebhookSubscription(okUrl, 'secret-ok');
-      createWebhookSubscription(failingUrl, 'secret-fail');
+  it('dead-letters only the subscriber that fails when multiple subscriptions are registered', async () => {
+    const okUrl = uniqueUrl('ok');
+    const failingUrl = uniqueUrl('fail');
+    createWebhookSubscription(okUrl, 'secret-ok');
+    createWebhookSubscription(failingUrl, 'secret-fail');
 
-      mockedFetch.mockImplementation(async (url) => {
-        if (url === failingUrl) {
-          throw new Error('subscriber unreachable');
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return { ok: true, status: 200 } as any;
-      });
-
-      await dispatchEventWebhook('scout_subscribed', { scout: 'S1' });
-
-      const deadLetters = listWebhookDeadLetters(100, 0);
-      expect(deadLetters.find((d) => d.url === failingUrl)).toBeDefined();
-      expect(deadLetters.find((d) => d.url === okUrl)).toBeUndefined();
-    },
-    15000
-  );
-
-  it(
-    'delivery ID is HMAC-covered — altering it invalidates the signature',
-    async () => {
+    mockedFetch.mockImplementation(async (url) => {
+      if (url === failingUrl) {
+        throw new Error('subscriber unreachable');
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      mockedFetch.mockResolvedValue({ ok: true, status: 200 } as any);
-      const url = uniqueUrl('hmac-cover');
-      const secret = 'subscriber-secret-hmac';
-      createWebhookSubscription(url, secret);
+      return { ok: true, status: 200 } as any;
+    });
 
-      await dispatchEventWebhook('player_registered', { wallet: 'GABC' });
+    await dispatchEventWebhook('scout_subscribed', { scout: 'S1' });
 
-      const call = mockedFetch.mock.calls.find(([calledUrl]) => calledUrl === url);
-      expect(call).toBeDefined();
-      const [, init] = call!;
-      const rawBody = init!.body as string;
-      const parsed = JSON.parse(rawBody);
+    const deadLetters = listWebhookDeadLetters(100, 0);
+    expect(deadLetters.find((d) => d.url === failingUrl)).toBeDefined();
+    expect(deadLetters.find((d) => d.url === okUrl)).toBeUndefined();
+  }, 15000);
 
-      // The HMAC is computed over the signed timestamp and raw body, which
-      // includes the deliveryId.
-      // If we swap the deliveryId and re-sign with the same secret,
-      // the original signature no longer matches.
-      const tampered = { ...parsed, deliveryId: 'forged-id' };
-      const tamperedBody = JSON.stringify(tampered);
-      const headers = init!.headers as Record<string, string>;
-      const timestamp = headers['X-Webhook-Timestamp'];
-      const originalSig = headers['X-Webhook-Signature'];
-      expect(originalSig).toBe(signWebhookPayload(rawBody, secret, timestamp));
-      expect(signWebhookPayload(tamperedBody, secret, timestamp)).not.toBe(originalSig);
-    },
-    15000
-  );
+  it('delivery ID is HMAC-covered — altering it invalidates the signature', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedFetch.mockResolvedValue({ ok: true, status: 200 } as any);
+    const url = uniqueUrl('hmac-cover');
+    const secret = 'subscriber-secret-hmac';
+    createWebhookSubscription(url, secret);
 
-  it(
-    'genuinely distinct events produce distinct delivery IDs',
-    async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      mockedFetch.mockResolvedValue({ ok: true, status: 200 } as any);
-      const url1 = uniqueUrl('distinct-1');
-      const url2 = uniqueUrl('distinct-2');
-      createWebhookSubscription(url1, 'secret-1');
-      createWebhookSubscription(url2, 'secret-2');
+    await dispatchEventWebhook('player_registered', { wallet: 'GABC' });
 
-      await dispatchEventWebhook('player_registered', { wallet: 'A' });
-      await dispatchEventWebhook('milestone_approved', { milestoneId: 'B' });
+    const call = mockedFetch.mock.calls.find(([calledUrl]) => calledUrl === url);
+    expect(call).toBeDefined();
+    const [, init] = call!;
+    const rawBody = init!.body as string;
+    const parsed = JSON.parse(rawBody);
 
-      const bodies = mockedFetch.mock.calls.map(([, init]) =>
-        JSON.parse((init!.body as string))
-      );
+    // The HMAC is computed over the signed timestamp and raw body, which
+    // includes the deliveryId.
+    // If we swap the deliveryId and re-sign with the same secret,
+    // the original signature no longer matches.
+    const tampered = { ...parsed, deliveryId: 'forged-id' };
+    const tamperedBody = JSON.stringify(tampered);
+    const headers = init!.headers as Record<string, string>;
+    const timestamp = headers['X-Webhook-Timestamp'];
+    const originalSig = headers['X-Webhook-Signature'];
+    expect(originalSig).toBe(signWebhookPayload(rawBody, secret, timestamp));
+    expect(signWebhookPayload(tamperedBody, secret, timestamp)).not.toBe(originalSig);
+  }, 15000);
 
-      expect(bodies.length).toBeGreaterThanOrEqual(2);
-      const deliveryIds = bodies.map((b) => b.deliveryId);
+  it('genuinely distinct events produce distinct delivery IDs', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedFetch.mockResolvedValue({ ok: true, status: 200 } as any);
+    const url1 = uniqueUrl('distinct-1');
+    const url2 = uniqueUrl('distinct-2');
+    createWebhookSubscription(url1, 'secret-1');
+    createWebhookSubscription(url2, 'secret-2');
 
-      // Each event type is dispatched to multiple subscriptions, so the same
-      // delivery ID appears once per subscription for a given event. Verify
-      // that distinct events have distinct delivery IDs by collecting unique
-      // IDs and confirming at least 2 different ones.
-      const uniqueIds = [...new Set(deliveryIds)];
-      expect(uniqueIds.length).toBeGreaterThanOrEqual(2);
+    await dispatchEventWebhook('player_registered', { wallet: 'A' });
+    await dispatchEventWebhook('milestone_approved', { milestoneId: 'B' });
 
-      // Within a single call to dispatchEventWebhook, all subscriptions get
-      // the same delivery ID. Verify this: both calls to url1 should have
-      // different IDs (one per event).
-      const url1Calls = mockedFetch.mock.calls.filter(([u]) => u === url1);
-      const url1Ids = url1Calls.map(([, init]) =>
-        JSON.parse((init!.body as string)).deliveryId
-      );
-      expect(url1Ids[0]).not.toBe(url1Ids[1]);
-    },
-    15000
-  );
+    const bodies = mockedFetch.mock.calls.map(([, init]) => JSON.parse(init!.body as string));
+
+    expect(bodies.length).toBeGreaterThanOrEqual(2);
+    const deliveryIds = bodies.map((b) => b.deliveryId);
+
+    // Each event type is dispatched to multiple subscriptions, so the same
+    // delivery ID appears once per subscription for a given event. Verify
+    // that distinct events have distinct delivery IDs by collecting unique
+    // IDs and confirming at least 2 different ones.
+    const uniqueIds = [...new Set(deliveryIds)];
+    expect(uniqueIds.length).toBeGreaterThanOrEqual(2);
+
+    // Within a single call to dispatchEventWebhook, all subscriptions get
+    // the same delivery ID. Verify this: both calls to url1 should have
+    // different IDs (one per event).
+    const url1Calls = mockedFetch.mock.calls.filter(([u]) => u === url1);
+    const url1Ids = url1Calls.map(([, init]) => JSON.parse(init!.body as string).deliveryId);
+    expect(url1Ids[0]).not.toBe(url1Ids[1]);
+  }, 15000);
 });

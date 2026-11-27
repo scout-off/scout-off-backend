@@ -18,11 +18,7 @@ export interface UpdatePlatformFeeResult {
 }
 
 export type UpdatePlatformFeeErrorCode =
-  | 'INVALID_INPUT'
-  | 'UNAUTHORIZED'
-  | 'CONTRACT_PAUSED'
-  | 'NOT_INITIALIZED'
-  | 'NETWORK_ERROR';
+  'INVALID_INPUT' | 'UNAUTHORIZED' | 'CONTRACT_PAUSED' | 'NOT_INITIALIZED' | 'NETWORK_ERROR';
 
 export class UpdatePlatformFeeError extends Error {
   constructor(
@@ -54,7 +50,10 @@ export class UpdatePlatformFeeError extends Error {
  */
 export async function updatePlatformFee(newFeeBps: number): Promise<UpdatePlatformFeeResult> {
   if (!Number.isInteger(newFeeBps) || newFeeBps < 0 || newFeeBps > 10000) {
-    throw new UpdatePlatformFeeError('newFeeBps must be an integer between 0 and 10000', 'INVALID_INPUT');
+    throw new UpdatePlatformFeeError(
+      'newFeeBps must be an integer between 0 and 10000',
+      'INVALID_INPUT',
+    );
   }
 
   return tracer.startActiveSpan('stellar.updatePlatformFee', async (span) => {
@@ -68,7 +67,10 @@ export async function updatePlatformFee(newFeeBps: number): Promise<UpdatePlatfo
       try {
         account = await server.getAccount(keypair.publicKey());
       } catch (err) {
-        throw new UpdatePlatformFeeError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        throw new UpdatePlatformFeeError(
+          `RPC call failed: ${(err as Error).message}`,
+          'NETWORK_ERROR',
+        );
       }
 
       const contract = new Contract(config.subscriptionContractId);
@@ -88,22 +90,34 @@ export async function updatePlatformFee(newFeeBps: number): Promise<UpdatePlatfo
       try {
         simResult = await server.simulateTransaction(tx);
       } catch (err) {
-        throw new UpdatePlatformFeeError(`Simulation request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        throw new UpdatePlatformFeeError(
+          `Simulation request failed: ${(err as Error).message}`,
+          'NETWORK_ERROR',
+        );
       }
 
       if (rpc.Api.isSimulationError(simResult)) {
         const errMsg = simResult.error ?? '';
         if (isContractPausedError(errMsg)) {
-          throw new UpdatePlatformFeeError('Contract is paused; fee updates are unavailable', 'CONTRACT_PAUSED');
+          throw new UpdatePlatformFeeError(
+            'Contract is paused; fee updates are unavailable',
+            'CONTRACT_PAUSED',
+          );
         }
         if (/#9\b/.test(errMsg) || /unauthorized/i.test(errMsg)) {
-          throw new UpdatePlatformFeeError('Platform keypair is not authorized to set fee', 'UNAUTHORIZED');
+          throw new UpdatePlatformFeeError(
+            'Platform keypair is not authorized to set fee',
+            'UNAUTHORIZED',
+          );
         }
         if (/#2\b/.test(errMsg) || /not.?initialized/i.test(errMsg)) {
           throw new UpdatePlatformFeeError('Contract is not initialized', 'NOT_INITIALIZED');
         }
         if (/#5\b/.test(errMsg) || /invalid.?input/i.test(errMsg)) {
-          throw new UpdatePlatformFeeError('Invalid fee value rejected by contract', 'INVALID_INPUT');
+          throw new UpdatePlatformFeeError(
+            'Invalid fee value rejected by contract',
+            'INVALID_INPUT',
+          );
         }
         throw new UpdatePlatformFeeError(`Simulation failed: ${errMsg}`, 'NETWORK_ERROR');
       }
@@ -115,10 +129,16 @@ export async function updatePlatformFee(newFeeBps: number): Promise<UpdatePlatfo
       try {
         sendResult = await sendTransactionWithCorrelation(preparedTx);
       } catch (err) {
-        throw new UpdatePlatformFeeError(`Submit request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        throw new UpdatePlatformFeeError(
+          `Submit request failed: ${(err as Error).message}`,
+          'NETWORK_ERROR',
+        );
       }
       if (sendResult.status === 'ERROR') {
-        throw new UpdatePlatformFeeError(`Submit failed: ${sendResult.errorResult}`, 'NETWORK_ERROR');
+        throw new UpdatePlatformFeeError(
+          `Submit failed: ${sendResult.errorResult}`,
+          'NETWORK_ERROR',
+        );
       }
 
       const hash = sendResult.hash;
@@ -132,11 +152,17 @@ export async function updatePlatformFee(newFeeBps: number): Promise<UpdatePlatfo
           getResult = await server.getTransaction(hash);
         }
       } catch (err) {
-        throw new UpdatePlatformFeeError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        throw new UpdatePlatformFeeError(
+          `RPC call failed: ${(err as Error).message}`,
+          'NETWORK_ERROR',
+        );
       }
 
       if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
-        throw new UpdatePlatformFeeError('set_platform_fee_bps transaction failed on-chain', 'NETWORK_ERROR');
+        throw new UpdatePlatformFeeError(
+          'set_platform_fee_bps transaction failed on-chain',
+          'NETWORK_ERROR',
+        );
       }
 
       span.setAttribute('stellar.status', 'success');
@@ -159,7 +185,8 @@ export interface ContractActionResult {
 export class ContractActionError extends Error {
   constructor(
     message: string,
-    public readonly code: 'CONTRACT_NOT_PAUSED' | 'CONTRACT_ALREADY_PAUSED' | 'NETWORK_ERROR' | 'UNAUTHORIZED',
+    public readonly code:
+      'CONTRACT_NOT_PAUSED' | 'CONTRACT_ALREADY_PAUSED' | 'NETWORK_ERROR' | 'UNAUTHORIZED',
   ) {
     super(message);
     this.name = 'ContractActionError';
@@ -195,7 +222,11 @@ export async function unpauseContractOnChain(adminWallet: string): Promise<Contr
       const simResult = await server.simulateTransaction(tx);
       if (rpc.Api.isSimulationError(simResult)) {
         const errMsg = simResult.error ?? '';
-        if (errMsg.includes('ContractPaused') || errMsg.includes('contract_paused') || errMsg.includes('#10')) {
+        if (
+          errMsg.includes('ContractPaused') ||
+          errMsg.includes('contract_paused') ||
+          errMsg.includes('#10')
+        ) {
           throw new ContractActionError('Contract is not currently paused', 'CONTRACT_NOT_PAUSED');
         }
         if (/#9\b/.test(errMsg) || /unauthorized/i.test(errMsg)) {
@@ -309,7 +340,11 @@ export async function registerValidatorOnChain(
 
       const tx = createTxBuilder(account)
         .addOperation(
-          contract.call('register_validator_as', Address.fromString(keypair.publicKey()).toScVal(), Address.fromString(validatorWallet).toScVal()),
+          contract.call(
+            'register_validator_as',
+            Address.fromString(keypair.publicKey()).toScVal(),
+            Address.fromString(validatorWallet).toScVal(),
+          ),
         )
         .setTimeout(30)
         .build();
@@ -324,10 +359,16 @@ export async function registerValidatorOnChain(
           throw new ValidatorActionError('Validator is not registered on-chain', 'NOT_REGISTERED');
         }
         if (/already.?registered/i.test(errMsg)) {
-          throw new ValidatorActionError('Validator is already registered on-chain', 'ALREADY_REGISTERED');
+          throw new ValidatorActionError(
+            'Validator is already registered on-chain',
+            'ALREADY_REGISTERED',
+          );
         }
         if (/#9\b/.test(errMsg) || /unauthorized/i.test(errMsg)) {
-          throw new ValidatorActionError('Unauthorized: platform account cannot register this validator', 'UNAUTHORIZED');
+          throw new ValidatorActionError(
+            'Unauthorized: platform account cannot register this validator',
+            'UNAUTHORIZED',
+          );
         }
         throw new ValidatorActionError(`Simulation failed: ${errMsg}`, 'NETWORK_ERROR');
       }
@@ -353,15 +394,21 @@ export async function registerValidatorOnChain(
         // Inspect the result XDR for contract-level error codes.
         // Cast through unknown because GetFailedTransactionResponse and
         // GetSuccessfulTransactionResponse share no overlapping status type.
-        const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
+        const resultMeta = (getResult as unknown as { resultMetaXdr?: string }).resultMetaXdr ?? '';
         const code = extractContractErrorCode(resultMeta);
         if (code === 13) {
           throw new ValidatorActionError('Validator is not registered on-chain', 'NOT_REGISTERED');
         }
         if (/already.?registered/i.test(resultMeta)) {
-          throw new ValidatorActionError('Validator is already registered on-chain', 'ALREADY_REGISTERED');
+          throw new ValidatorActionError(
+            'Validator is already registered on-chain',
+            'ALREADY_REGISTERED',
+          );
         }
-        throw new ValidatorActionError('register_validator transaction failed on-chain', 'NETWORK_ERROR');
+        throw new ValidatorActionError(
+          'register_validator transaction failed on-chain',
+          'NETWORK_ERROR',
+        );
       }
 
       return { transactionId: hash };
@@ -407,7 +454,11 @@ export async function pauseContractOnChain(adminWallet: string): Promise<Contrac
       const simResult = await server.simulateTransaction(tx);
       if (rpc.Api.isSimulationError(simResult)) {
         const errMsg = simResult.error ?? '';
-        if (errMsg.includes('ContractPaused') || errMsg.includes('contract_paused') || errMsg.includes('#10')) {
+        if (
+          errMsg.includes('ContractPaused') ||
+          errMsg.includes('contract_paused') ||
+          errMsg.includes('#10')
+        ) {
           throw new ContractActionError('Contract is already paused', 'CONTRACT_ALREADY_PAUSED');
         }
         if (/#9\b/.test(errMsg) || /unauthorized/i.test(errMsg)) {
@@ -449,7 +500,6 @@ export async function pauseContractOnChain(adminWallet: string): Promise<Contrac
   });
 }
 
-
 export async function revokeValidatorOnChain(
   validatorWallet: string,
 ): Promise<RegisterValidatorResult> {
@@ -468,7 +518,11 @@ export async function revokeValidatorOnChain(
 
       const tx = createTxBuilder(account)
         .addOperation(
-          contract.call('revoke_validator_as', Address.fromString(keypair.publicKey()).toScVal(), Address.fromString(validatorWallet).toScVal()),
+          contract.call(
+            'revoke_validator_as',
+            Address.fromString(keypair.publicKey()).toScVal(),
+            Address.fromString(validatorWallet).toScVal(),
+          ),
         )
         .setTimeout(30)
         .build();
@@ -478,13 +532,22 @@ export async function revokeValidatorOnChain(
       if (rpc.Api.isSimulationError(simResult)) {
         const errMsg = simResult.error ?? '';
         if (extractContractErrorCode(errMsg) === 14 || /already.?revoked/i.test(errMsg)) {
-          throw new ValidatorActionError('Validator is already revoked on-chain', 'ALREADY_REVOKED');
+          throw new ValidatorActionError(
+            'Validator is already revoked on-chain',
+            'ALREADY_REVOKED',
+          );
         }
         if (extractContractErrorCode(errMsg) === 13 || /not.?registered/i.test(errMsg)) {
-          throw new ValidatorActionError('Wallet is not a registered validator on-chain', 'NOT_REGISTERED');
+          throw new ValidatorActionError(
+            'Wallet is not a registered validator on-chain',
+            'NOT_REGISTERED',
+          );
         }
         if (/#9\b/.test(errMsg) || /unauthorized/i.test(errMsg)) {
-          throw new ValidatorActionError('Unauthorized: platform account cannot revoke this validator', 'UNAUTHORIZED');
+          throw new ValidatorActionError(
+            'Unauthorized: platform account cannot revoke this validator',
+            'UNAUTHORIZED',
+          );
         }
         throw new ValidatorActionError(`Simulation failed: ${errMsg}`, 'NETWORK_ERROR');
       }
@@ -507,14 +570,23 @@ export async function revokeValidatorOnChain(
       }
 
       if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
-        const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
+        const resultMeta = (getResult as unknown as { resultMetaXdr?: string }).resultMetaXdr ?? '';
         if (extractContractErrorCode(resultMeta) === 14 || /already.?revoked/i.test(resultMeta)) {
-          throw new ValidatorActionError('Validator is already revoked on-chain', 'ALREADY_REVOKED');
+          throw new ValidatorActionError(
+            'Validator is already revoked on-chain',
+            'ALREADY_REVOKED',
+          );
         }
         if (extractContractErrorCode(resultMeta) === 13 || /not.?registered/i.test(resultMeta)) {
-          throw new ValidatorActionError('Wallet is not a registered validator on-chain', 'NOT_REGISTERED');
+          throw new ValidatorActionError(
+            'Wallet is not a registered validator on-chain',
+            'NOT_REGISTERED',
+          );
         }
-        throw new ValidatorActionError('revoke_validator transaction failed on-chain', 'NETWORK_ERROR');
+        throw new ValidatorActionError(
+          'revoke_validator transaction failed on-chain',
+          'NETWORK_ERROR',
+        );
       }
 
       return { transactionId: hash };
@@ -529,8 +601,15 @@ export async function revokeValidatorOnChain(
   });
 }
 
-export const CONTRACT_ROLES = ['DEFAULT_ADMIN', 'PAUSER', 'FEE_MANAGER', 'VALIDATOR_MANAGER', 'UPDATER_MANAGER', 'MIGRATOR'] as const;
-export type ContractRole = typeof CONTRACT_ROLES[number];
+export const CONTRACT_ROLES = [
+  'DEFAULT_ADMIN',
+  'PAUSER',
+  'FEE_MANAGER',
+  'VALIDATOR_MANAGER',
+  'UPDATER_MANAGER',
+  'MIGRATOR',
+] as const;
+export type ContractRole = (typeof CONTRACT_ROLES)[number];
 
 /** Submit a role change with the platform signer; on-chain role-admin auth remains authoritative. */
 export async function changeContractRole(
@@ -545,22 +624,30 @@ export async function changeContractRole(
   const { getPlatformKeypair } = await import('../utils/signer');
   const keypair = getPlatformKeypair();
   const account = await server.getAccount(keypair.publicKey());
-  const tx = createTxBuilder(account).addOperation(new Contract(contractId).call(
-    action,
-    Address.fromString(keypair.publicKey()).toScVal(),
-    nativeToScVal(role, { type: 'symbol' }),
-    Address.fromString(accountWallet).toScVal(),
-  )).setTimeout(30).build();
+  const tx = createTxBuilder(account)
+    .addOperation(
+      new Contract(contractId).call(
+        action,
+        Address.fromString(keypair.publicKey()).toScVal(),
+        nativeToScVal(role, { type: 'symbol' }),
+        Address.fromString(accountWallet).toScVal(),
+      ),
+    )
+    .setTimeout(30)
+    .build();
   const simulation = await server.simulateTransaction(tx);
   if (rpc.Api.isSimulationError(simulation)) {
     const message = simulation.error ?? '';
-    throw new ContractActionError(`Role change rejected: ${message}`,
-      /#9\b|unauthorized/i.test(message) ? 'UNAUTHORIZED' : 'NETWORK_ERROR');
+    throw new ContractActionError(
+      `Role change rejected: ${message}`,
+      /#9\b|unauthorized/i.test(message) ? 'UNAUTHORIZED' : 'NETWORK_ERROR',
+    );
   }
   const prepared = rpc.assembleTransaction(tx, simulation).build();
   prepared.sign(keypair);
   const sent = await sendTransactionWithCorrelation(prepared);
-  if (sent.status === 'ERROR') throw new ContractActionError('Role change submission failed', 'NETWORK_ERROR');
+  if (sent.status === 'ERROR')
+    throw new ContractActionError('Role change submission failed', 'NETWORK_ERROR');
   // Bound confirmation polling; returning an unconfirmed hash would misrepresent success.
   for (let attempt = 0; attempt < 30; attempt++) {
     const result = await server.getTransaction(sent.hash);
@@ -570,5 +657,8 @@ export async function changeContractRole(
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  throw new ContractActionError(`Role change confirmation timed out: ${sent.hash}`, 'NETWORK_ERROR');
+  throw new ContractActionError(
+    `Role change confirmation timed out: ${sent.hash}`,
+    'NETWORK_ERROR',
+  );
 }

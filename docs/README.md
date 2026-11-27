@@ -10,64 +10,67 @@ not a directory listing.
 
 ## API
 
-| Doc | Audience | Description |
-| --- | -------- | ----------- |
-| [API_DOCUMENTATION.md](API_DOCUMENTATION.md) | Contributor | How the OpenAPI spec is generated from route JSDoc comments, and the annotation format to keep it accurate when adding or changing routes |
-| [api-versioning.md](api-versioning.md) | Contributor | The API versioning policy: `/api/v1`, `/api/v2`, and the `API-Version` header semantics |
-| [events.md](events.md) | Operator & client developer | The SSE event stream (`/api/events/stream`): how to connect, filter parameters, frame format, wallet-relevance rules, and reconnection limitations |
-| [ipfs-pinata-gateway.md](ipfs-pinata-gateway.md) | Operator | IPFS gateway configuration: `PINATA_GATEWAY` vs `IPFS_GATEWAYS`, default fallback order, HTTPS validation, and retrieval retry behavior |
-| [webhooks.md](webhooks.md) | Operator & subscriber | Outbound event webhooks: subscribing, HMAC signature verification, delivery/retry, the dead-letter queue, and admin replay |
-| [trace-correlation.md](trace-correlation.md) | Contributor | End-to-end correlation lifecycle across HTTP → Soroban tx → indexer → webhook/SSE (#1113) |
-| [event-ordering.md](event-ordering.md) | Contributor | Deterministic indexer event total order and co-transaction atomicity (#1111) |
-| [indexer-unprocessed-events.md](indexer-unprocessed-events.md) | Operator & contributor | How the indexer counts, stores, and replays contract events it cannot decode or recognise, plus the admin list/retry endpoints and cursor semantics (#1540) |
-| [graphql.md](graphql.md) | Contributor & client developer | The GraphQL endpoint: schema, resolvers, loaders, persisted operations, and validation rules |
-| [mutating-route-validation.md](mutating-route-validation.md) | Contributor | The shared body-validation contract every mutating route must follow (#1145) |
+| Doc                                                            | Audience                       | Description                                                                                                                                                 |
+| -------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [API_DOCUMENTATION.md](API_DOCUMENTATION.md)                   | Contributor                    | How the OpenAPI spec is generated from route JSDoc comments, and the annotation format to keep it accurate when adding or changing routes                   |
+| [api-versioning.md](api-versioning.md)                         | Contributor                    | The API versioning policy: `/api/v1`, `/api/v2`, and the `API-Version` header semantics                                                                     |
+| [events.md](events.md)                                         | Operator & client developer    | The SSE event stream (`/api/events/stream`): how to connect, filter parameters, frame format, wallet-relevance rules, and reconnection limitations          |
+| [ipfs-pinata-gateway.md](ipfs-pinata-gateway.md)               | Operator                       | IPFS gateway configuration: `PINATA_GATEWAY` vs `IPFS_GATEWAYS`, default fallback order, HTTPS validation, and retrieval retry behavior                     |
+| [webhooks.md](webhooks.md)                                     | Operator & subscriber          | Outbound event webhooks: subscribing, HMAC signature verification, delivery/retry, the dead-letter queue, and admin replay                                  |
+| [trace-correlation.md](trace-correlation.md)                   | Contributor                    | End-to-end correlation lifecycle across HTTP → Soroban tx → indexer → webhook/SSE (#1113)                                                                   |
+| [event-ordering.md](event-ordering.md)                         | Contributor                    | Deterministic indexer event total order and co-transaction atomicity (#1111)                                                                                |
+| [indexer-unprocessed-events.md](indexer-unprocessed-events.md) | Operator & contributor         | How the indexer counts, stores, and replays contract events it cannot decode or recognise, plus the admin list/retry endpoints and cursor semantics (#1540) |
+| [graphql.md](graphql.md)                                       | Contributor & client developer | The GraphQL endpoint: schema, resolvers, loaders, persisted operations, and validation rules                                                                |
+| [mutating-route-validation.md](mutating-route-validation.md)   | Contributor                    | The shared body-validation contract every mutating route must follow (#1145)                                                                                |
 
 ## Auth & Security
 
-| Doc | Audience | Description |
-| --- | -------- | ----------- |
-| [auth.md](auth.md) | Contributor | SEP-10 challenge/response, JWT issuance and claims, refresh, logout, API keys, admin wallets, and live SSE revocation |
-| [audit-log.md](audit-log.md) | Operator | Tamper-evident audit trail: schema, hash-chain construction, what actions are logged, verification procedures, and tamper detection |
-| [secrets-rotation.md](secrets-rotation.md) | Operator | Rotation policy and step-by-step procedures for every long-lived secret (JWT, Pinata, Stellar keys, webhook secrets) |
-| [ip-reputation.md](ip-reputation.md) | Operator | The IP reputation scoring model (0–100, tiers, decay, bad user-agents) and the admin whitelist/blacklist endpoints |
-| [admin-multisig.md](admin-multisig.md) | Operator | Admin multi-sig: signer sets, thresholds, pending actions, and the approval/execution flow |
-| [rate-limiting.md](rate-limiting.md) | Operator & contributor | Rate-limit tiers, keying, headers, and how limits are enforced per route group |
+| Doc                                        | Audience               | Description                                                                                                                         |
+| ------------------------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| [auth.md](auth.md)                         | Contributor            | SEP-10 challenge/response, JWT issuance and claims, refresh, logout, API keys, admin wallets, and live SSE revocation               |
+| [audit-log.md](audit-log.md)               | Operator               | Tamper-evident audit trail: schema, hash-chain construction, what actions are logged, verification procedures, and tamper detection |
+| [secrets-rotation.md](secrets-rotation.md) | Operator               | Rotation policy and step-by-step procedures for every long-lived secret (JWT, Pinata, Stellar keys, webhook secrets)                |
+| [ip-reputation.md](ip-reputation.md)       | Operator               | The IP reputation scoring model (0–100, tiers, decay, bad user-agents) and the admin whitelist/blacklist endpoints                  |
+| [admin-multisig.md](admin-multisig.md)     | Operator               | Admin multi-sig: signer sets, thresholds, pending actions, and the approval/execution flow                                          |
+| [rate-limiting.md](rate-limiting.md)       | Operator & contributor | Rate-limit tiers, keying, headers, and how limits are enforced per route group                                                      |
 
 ## Data
 
-| Doc | Audience | Description |
-| --- | -------- | ----------- |
-| [data-model.md](data-model.md) | Contributor | All application tables, their purposes, and how they are populated (indexer, API writes, migrations) — consult this before writing queries |
-| [contract-errors.md](contract-errors.md) | Contributor & client | Soroban error discriminants, their backend `code`/HTTP status mapping, and how to add a variant without breaking the on-chain ABI |
-| [data-privacy.md](data-privacy.md) | Operator | GDPR right-to-erasure: what the backend can erase, and the immutable on-chain boundary |
-| [postgres-migration.md](postgres-migration.md) | Operator | Migrating a deployment from SQLite to PostgreSQL |
-| [tier-promotion.md](tier-promotion.md) | Contributor | How a player's progress tier (0–3) is derived from approved milestones |
-| [player-onchain-registration.md](player-onchain-registration.md) | Contributor | Mapping between backend player IDs and on-chain player IDs, including backfill |
-| [reindexing.md](reindexing.md) | Operator | Reindexing the chain from a given ledger: cursors, resume behaviour, and safety checks |
+| Doc                                                              | Audience             | Description                                                                                                                                |
+| ---------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| [data-model.md](data-model.md)                                   | Contributor          | All application tables, their purposes, and how they are populated (indexer, API writes, migrations) — consult this before writing queries |
+| [contract-errors.md](contract-errors.md)                         | Contributor & client | Soroban error discriminants, their backend `code`/HTTP status mapping, and how to add a variant without breaking the on-chain ABI          |
+| [data-privacy.md](data-privacy.md)                               | Operator             | GDPR right-to-erasure: what the backend can erase, and the immutable on-chain boundary                                                     |
+| [postgres-migration.md](postgres-migration.md)                   | Operator             | Migrating a deployment from SQLite to PostgreSQL                                                                                           |
+| [tier-promotion.md](tier-promotion.md)                           | Contributor          | How a player's progress tier (0–3) is derived from approved milestones                                                                     |
+| [player-onchain-registration.md](player-onchain-registration.md) | Contributor          | Mapping between backend player IDs and on-chain player IDs, including backfill                                                             |
+| [reindexing.md](reindexing.md)                                   | Operator             | Reindexing the chain from a given ledger: cursors, resume behaviour, and safety checks                                                     |
 
 ## Operations
 
-| Doc | Audience | Description |
-| --- | -------- | ----------- |
-| [feature-flags.md](feature-flags.md) | Operator | Every runtime feature flag: what it gates, its default, where it's checked, the admin toggle API, caching/propagation across replicas, and the audit trail |
-| [metrics.md](metrics.md) | Operator | Every Prometheus metric on `GET /metrics` (type, labels, meaning), how to scrape it, and suggested alerts |
-| [runbook.md](runbook.md) | Operator | Incident → action runbook: indexer lag, wrong tiers, webhook failures, RPC/IPFS outages, DB slowness, reindex/replay, dead-letter drain, cache flush, circuit breaker, pause/unpause |
-| [background-jobs.md](background-jobs.md) | Operator | Every periodic in-process job (indexer, pin retry/reconcile, tier divergence, blocklist prune, IP decay, SSE sweeps, webhook DLQ): interval, config, start location, failure behaviour, and multi-replica safety |
-| [performance.md](performance.md) | Contributor | Latency budgets for key endpoints and how to run the load-test suites |
-| [soroban-sandbox-e2e.md](soroban-sandbox-e2e.md) | Contributor | Local + CI Soroban sandbox that deploys all five contracts and runs live backend E2E (#1117) |
-| [readiness-check.md](readiness-check.md) | Operator | The readiness probe, indexer-lag gating, exposed metrics, and suggested alert expressions |
-| [degradation-contracts.md](degradation-contracts.md) | Contributor | Per-route-group responses required when a dependency fails, as asserted by the chaos harness (#1116) |
-| [METRICS_REFERENCE.md](METRICS_REFERENCE.md) | Operator | Reference listing of the metrics exposed by the backend and their meaning |
+| Doc                                                    | Audience    | Description                                                                                                                                                                                                      |
+| ------------------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [feature-flags.md](feature-flags.md)                   | Operator    | Every runtime feature flag: what it gates, its default, where it's checked, the admin toggle API, caching/propagation across replicas, and the audit trail                                                       |
+| [metrics.md](metrics.md)                               | Operator    | Every Prometheus metric on `GET /metrics` (type, labels, meaning), how to scrape it, and suggested alerts                                                                                                        |
+| [runbook.md](runbook.md)                               | Operator    | Incident → action runbook: indexer lag, wrong tiers, webhook failures, RPC/IPFS outages, DB slowness, reindex/replay, dead-letter drain, cache flush, circuit breaker, pause/unpause                             |
+| [background-jobs.md](background-jobs.md)               | Operator    | Every periodic in-process job (indexer, pin retry/reconcile, tier divergence, blocklist prune, IP decay, SSE sweeps, webhook DLQ): interval, config, start location, failure behaviour, and multi-replica safety |
+| [performance.md](performance.md)                       | Contributor | Latency budgets for key endpoints and how to run the load-test suites                                                                                                                                            |
+| [soroban-sandbox-e2e.md](soroban-sandbox-e2e.md)       | Contributor | Local + CI Soroban sandbox that deploys all five contracts and runs live backend E2E (#1117)                                                                                                                     |
+| [readiness-check.md](readiness-check.md)               | Operator    | The readiness probe, indexer-lag gating, exposed metrics, and suggested alert expressions                                                                                                                        |
+| [degradation-contracts.md](degradation-contracts.md)   | Contributor | Per-route-group responses required when a dependency fails, as asserted by the chaos harness (#1116)                                                                                                             |
+| [METRICS_REFERENCE.md](METRICS_REFERENCE.md)           | Operator    | Reference listing of the metrics exposed by the backend and their meaning                                                                                                                                        |
+| [indexer-webhook-queue.md](indexer-webhook-queue.md)   | Operator    | Per-subscriber webhook dispatch queue fed by the indexer: concurrency, retries, and metrics (#1795)                                                                                                              |
+| [issues/1880-codeowners.md](issues/1880-codeowners.md) | Maintainer  | CODEOWNERS coverage of critical paths and the maintainer handles still to confirm (#1880)                                                                                                                        |
 
 ## History
 
 Dated implementation notes kept for historical record; not living documentation.
 
-| Doc | Audience | Description |
-| --- | -------- | ----------- |
-| [history/2026-07-25-bulk-validator-import.md](history/2026-07-25-bulk-validator-import.md) | Contributor | Implementation notes for the bulk validator import endpoint (multi-sig gating, concurrency limiting) |
+| Doc                                                                                                                      | Audience    | Description                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| [history/2026-07-25-bulk-validator-import.md](history/2026-07-25-bulk-validator-import.md)                               | Contributor | Implementation notes for the bulk validator import endpoint (multi-sig gating, concurrency limiting)          |
 | [history/2026-07-27-pagination-versioning-payments-mutex.md](history/2026-07-27-pagination-versioning-payments-mutex.md) | Contributor | Implementation notes for player pagination, API versioning, payment history filters, and the withdrawal mutex |
+| [history/2024-11-past-pr-summaries.md](history/2024-11-past-pr-summaries.md)                                             | Contributor | Consolidated design decisions from past root-level PR summary files (November 2024)                           |
 
 ## Not in this directory
 

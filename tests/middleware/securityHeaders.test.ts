@@ -24,7 +24,9 @@ describe('securityHeaders middleware', () => {
 
     it('sets X-Content-Type-Options: nosniff (securityHeaders only)', () => {
       expect(res.headers['x-content-type-options']).toBe('nosniff');
-      expect(res.headers['x-content-type-options']).toBe(config.securityHeaders.xContentTypeOptions);
+      expect(res.headers['x-content-type-options']).toBe(
+        config.securityHeaders.xContentTypeOptions,
+      );
     });
 
     it('sets X-Frame-Options: DENY (securityHeaders only)', () => {
@@ -39,9 +41,7 @@ describe('securityHeaders middleware', () => {
 
     it('sets Permissions-Policy from config (securityHeaders only)', () => {
       expect(res.headers['permissions-policy']).toBe(config.securityHeaders.permissionsPolicy);
-      expect(res.headers['permissions-policy']).toBe(
-        'camera=(), microphone=(), geolocation=()',
-      );
+      expect(res.headers['permissions-policy']).toBe('camera=(), microphone=(), geolocation=()');
     });
 
     it('does not expose X-Powered-By', () => {

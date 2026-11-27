@@ -90,9 +90,7 @@ const isWindows = process.platform === 'win32';
     expect(startIdx).toBeGreaterThan(-1);
     expect(endIdx).toBeGreaterThan(startIdx);
 
-    const expectedLines = lines
-      .slice(startIdx + 1, endIdx)
-      .map((l) => l.replace(/^# ?/, ''));
+    const expectedLines = lines.slice(startIdx + 1, endIdx).map((l) => l.replace(/^# ?/, ''));
     const expected = expectedLines.join('\n').trim();
 
     const result = spawnSync('bash', [BACKUP_SCRIPT, '--help'], {
@@ -114,7 +112,7 @@ const isWindows = process.platform === 'win32';
       const extraLine = '# EXTRA_TEST_LINE: added to verify robustness';
       const modified = scriptContent.replace(
         '# --- USAGE END ---',
-        `${extraLine}\n# --- USAGE END ---`
+        `${extraLine}\n# --- USAGE END ---`,
       );
 
       const tmpScript = path.join(tmpDir, 'backup-db.sh');

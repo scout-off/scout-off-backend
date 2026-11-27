@@ -73,7 +73,12 @@ export function idempotency(
 ): void | ((req: Request, res: Response, next: NextFunction) => void) {
   // Plain middleware usage: idempotency(req, res, next).
   if (typeof (reqOrOptions as Request | undefined)?.params === 'object') {
-    handleIdempotency(reqOrOptions as Request, res as Response, next as NextFunction, undefined).catch(next as NextFunction);
+    handleIdempotency(
+      reqOrOptions as Request,
+      res as Response,
+      next as NextFunction,
+      undefined,
+    ).catch(next as NextFunction);
     return;
   }
 
@@ -109,9 +114,7 @@ async function handleIdempotency(
     return;
   }
 
-  const requestFingerprint = options?.requestFingerprint
-    ? options.requestFingerprint(req)
-    : null;
+  const requestFingerprint = options?.requestFingerprint ? options.requestFingerprint(req) : null;
 
   // ── Step 1: check for an existing record ─────────────────────────────────
   let existingRecord;
@@ -119,9 +122,7 @@ async function handleIdempotency(
     existingRecord = await getIdempotencyRecord(trimmedKey);
   } catch (err) {
     // DB read failure is non-fatal; fall through and process normally.
-    logger.warn(
-      `[idempotency] cache_lookup_error key=${trimmedKey} err=${(err as Error).message}`,
-    );
+    logger.warn(`[idempotency] cache_lookup_error key=${trimmedKey} err=${(err as Error).message}`);
     next();
     return;
   }
@@ -131,7 +132,11 @@ async function handleIdempotency(
       // ── Case 2: complete cache hit ────────────────────────────────────────
       if (fingerprintConflicts(requestFingerprint, existingRecord.request_fingerprint)) {
         logger.warn(`[idempotency] fingerprint_conflict key=${trimmedKey}`);
-        res.status(409).json({ success: false, error: 'Idempotency key was already used with a different request', code: 'CONFLICT' });
+        res.status(409).json({
+          success: false,
+          error: 'Idempotency key was already used with a different request',
+          code: 'CONFLICT',
+        });
         return;
       }
       logger.info(`[idempotency] cache_hit key=${trimmedKey}`);
@@ -152,9 +157,7 @@ async function handleIdempotency(
     claimed = await claimIdempotencyKey(trimmedKey, requestFingerprint);
   } catch (err) {
     // DB claim failure is non-fatal; process normally without idempotency.
-    logger.warn(
-      `[idempotency] claim_error key=${trimmedKey} err=${(err as Error).message}`,
-    );
+    logger.warn(`[idempotency] claim_error key=${trimmedKey} err=${(err as Error).message}`);
     next();
     return;
   }
@@ -205,12 +208,10 @@ async function handleIdempotency(
   let resolveInFlight!: (value: { statusCode: number; body: unknown }) => void;
   let rejectInFlight!: (reason: unknown) => void;
 
-  const inFlightPromise = new Promise<{ statusCode: number; body: unknown }>(
-    (resolve, reject) => {
-      resolveInFlight = resolve;
-      rejectInFlight = reject;
-    },
-  );
+  const inFlightPromise = new Promise<{ statusCode: number; body: unknown }>((resolve, reject) => {
+    resolveInFlight = resolve;
+    rejectInFlight = reject;
+  });
 
   // Register the promise under this key so concurrent losers can await it.
   // inFlightLock.withLock() is designed for async coalescing; we prime it by
@@ -230,9 +231,13 @@ async function handleIdempotency(
     // unhandled even if updateIdempotencyRecord doesn't return a genuine
     // Promise (e.g. an incomplete test mock).
     Promise.resolve(updateIdempotencyRecord(trimmedKey, res.statusCode, body))
-      .then(() => logger.info(`[idempotency] cache_stored key=${trimmedKey} status=${res.statusCode}`))
+      .then(() =>
+        logger.info(`[idempotency] cache_stored key=${trimmedKey} status=${res.statusCode}`),
+      )
       .catch((err: unknown) =>
-        logger.warn(`[idempotency] cache_store_error key=${trimmedKey} err=${(err as Error).message}`),
+        logger.warn(
+          `[idempotency] cache_store_error key=${trimmedKey} err=${(err as Error).message}`,
+        ),
       );
     // Resolve the in-flight promise so concurrent waiters unblock.
     resolveInFlight({ statusCode: res.statusCode, body });
@@ -255,7 +260,9 @@ async function handleIdempotency(
       Promise.resolve(releaseIdempotencyKey(trimmedKey))
         .then(() => logger.info(`[idempotency] claim_released key=${trimmedKey}`))
         .catch((err: unknown) =>
-          logger.warn(`[idempotency] claim_release_error key=${trimmedKey} err=${(err as Error).message}`),
+          logger.warn(
+            `[idempotency] claim_release_error key=${trimmedKey} err=${(err as Error).message}`,
+          ),
         );
       // Reject the in-flight promise so waiters get a 409 instead of hanging.
       rejectInFlight(new Error('response ended without res.json'));
@@ -295,16 +302,9 @@ function fingerprintConflicts(
  * Wait for the in-flight owner to finish, then serve the cached response.
  * Falls back to a 409 if the owner doesn't complete within IN_PROGRESS_WAIT_MS.
  */
-function waitForCompletion(
-  key: string,
-  res: Response,
-  requestFingerprint: string | null,
-): void {
+function waitForCompletion(key: string, res: Response, requestFingerprint: string | null): void {
   const timeout = new Promise<never>((_, reject) =>
-    setTimeout(
-      () => reject(new Error('in-progress timeout')),
-      IN_PROGRESS_WAIT_MS,
-    ),
+    setTimeout(() => reject(new Error('in-progress timeout')), IN_PROGRESS_WAIT_MS),
   );
 
   Promise.race([
@@ -321,7 +321,11 @@ function waitForCompletion(
       if (record && record.status === 'complete') {
         if (fingerprintConflicts(requestFingerprint, record.request_fingerprint)) {
           logger.warn(`[idempotency] fingerprint_conflict_after_wait key=${key}`);
-          res.status(409).json({ success: false, error: 'Idempotency key was already used with a different request', code: 'CONFLICT' });
+          res.status(409).json({
+            success: false,
+            error: 'Idempotency key was already used with a different request',
+            code: 'CONFLICT',
+          });
           return;
         }
         logger.info(`[idempotency] served_after_wait key=${key}`);
@@ -330,17 +334,19 @@ function waitForCompletion(
       } else {
         // Record is still pending or gone — return 409.
         logger.warn(`[idempotency] still_pending_after_wait key=${key}`);
-        res
-          .status(409)
-          .json({ success: false, error: 'Request already in progress for this idempotency key', code: 'IN_PROGRESS' });
+        res.status(409).json({
+          success: false,
+          error: 'Request already in progress for this idempotency key',
+          code: 'IN_PROGRESS',
+        });
       }
     })
     .catch((err: Error) => {
-      logger.warn(
-        `[idempotency] wait_timeout key=${key} err=${err.message}`,
-      );
-      res
-        .status(409)
-        .json({ success: false, error: 'Request already in progress for this idempotency key', code: 'IN_PROGRESS' });
+      logger.warn(`[idempotency] wait_timeout key=${key} err=${err.message}`);
+      res.status(409).json({
+        success: false,
+        error: 'Request already in progress for this idempotency key',
+        code: 'IN_PROGRESS',
+      });
     });
 }

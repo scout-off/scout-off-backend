@@ -26,7 +26,7 @@ export function toIso(ts: number): string {
  */
 export function normalizeTimestamps(
   payload: Record<string, unknown>,
-  fields: string[]
+  fields: string[],
 ): Record<string, unknown> {
   const out = { ...payload };
   for (const f of fields) {
@@ -48,7 +48,7 @@ export function sendSuccess<T>(
   res: Response,
   data: T,
   status = 200,
-  meta?: Record<string, unknown>
+  meta?: Record<string, unknown>,
 ): void {
   res.set('Content-Type', 'application/json');
   res.status(status).json({ success: true, data, ...meta });
@@ -62,12 +62,7 @@ export function sendSuccess<T>(
  * an optional `errors` array for field-level validation details — as the
  * response body.
  */
-export function sendError(
-  res: Response,
-  message: string,
-  status = 500,
-  errors?: string[]
-): void {
+export function sendError(res: Response, message: string, status = 500, errors?: string[]): void {
   res.set('Content-Type', 'application/json');
   res.status(status).json({
     success: false,

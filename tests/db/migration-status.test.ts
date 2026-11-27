@@ -182,7 +182,7 @@ describe('getAppliedMigrations', () => {
     const timestamp = Date.now();
     db.prepare('INSERT INTO migrations (id, applied_at) VALUES (?, ?)').run(
       '001_initial.sql',
-      timestamp
+      timestamp,
     );
 
     const result = getAppliedMigrations(db);
@@ -206,15 +206,15 @@ describe('getAppliedMigrations', () => {
 
     db.prepare('INSERT INTO migrations (id, applied_at) VALUES (?, ?)').run(
       '001_initial.sql',
-      timestamp1
+      timestamp1,
     );
     db.prepare('INSERT INTO migrations (id, applied_at) VALUES (?, ?)').run(
       '002_audit_log.sql',
-      timestamp2
+      timestamp2,
     );
     db.prepare('INSERT INTO migrations (id, applied_at) VALUES (?, ?)').run(
       '003_tables.sql',
-      timestamp3
+      timestamp3,
     );
 
     const result = getAppliedMigrations(db);
@@ -236,7 +236,7 @@ describe('getAppliedMigrations', () => {
     const now = Date.now();
     db.prepare('INSERT INTO migrations (id, applied_at) VALUES (?, ?)').run(
       'test_migration.sql',
-      now
+      now,
     );
 
     const result = getAppliedMigrations(db);
@@ -258,7 +258,7 @@ describe('getAppliedMigrations', () => {
 
     db.prepare('INSERT INTO migrations (id, applied_at) VALUES (?, ?)').run(
       specialFilename,
-      timestamp
+      timestamp,
     );
 
     const result = getAppliedMigrations(db);
@@ -269,11 +269,7 @@ describe('getAppliedMigrations', () => {
 
 describe('generateStatusReport', () => {
   it('returns correct counts for all applied migrations', () => {
-    const discoveredFiles = [
-      '001_initial.sql',
-      '002_audit_log.sql',
-      '003_tables.sql',
-    ];
+    const discoveredFiles = ['001_initial.sql', '002_audit_log.sql', '003_tables.sql'];
 
     const appliedMigrations = new Map<string, number>([
       ['001_initial.sql', 1000000],
@@ -289,11 +285,7 @@ describe('generateStatusReport', () => {
   });
 
   it('returns correct counts for all pending migrations', () => {
-    const discoveredFiles = [
-      '001_initial.sql',
-      '002_audit_log.sql',
-      '003_tables.sql',
-    ];
+    const discoveredFiles = ['001_initial.sql', '002_audit_log.sql', '003_tables.sql'];
 
     const appliedMigrations = new Map<string, number>();
 
@@ -327,11 +319,7 @@ describe('generateStatusReport', () => {
   });
 
   it('marks migrations with correct status', () => {
-    const discoveredFiles = [
-      '001_initial.sql',
-      '002_audit_log.sql',
-      '003_tables.sql',
-    ];
+    const discoveredFiles = ['001_initial.sql', '002_audit_log.sql', '003_tables.sql'];
 
     const appliedMigrations = new Map<string, number>([
       ['001_initial.sql', 1000000],
@@ -340,15 +328,9 @@ describe('generateStatusReport', () => {
 
     const report = generateStatusReport(discoveredFiles, appliedMigrations);
 
-    const migration1 = report.migrations.find(
-      (m) => m.filename === '001_initial.sql'
-    );
-    const migration2 = report.migrations.find(
-      (m) => m.filename === '002_audit_log.sql'
-    );
-    const migration3 = report.migrations.find(
-      (m) => m.filename === '003_tables.sql'
-    );
+    const migration1 = report.migrations.find((m) => m.filename === '001_initial.sql');
+    const migration2 = report.migrations.find((m) => m.filename === '002_audit_log.sql');
+    const migration3 = report.migrations.find((m) => m.filename === '003_tables.sql');
 
     expect(migration1?.status).toBe('applied');
     expect(migration1?.appliedAt).toBe(1000000);
@@ -361,11 +343,7 @@ describe('generateStatusReport', () => {
   });
 
   it('preserves alphabetical order of migrations', () => {
-    const discoveredFiles = [
-      '003_tables.sql',
-      '001_initial.sql',
-      '002_audit_log.sql',
-    ];
+    const discoveredFiles = ['003_tables.sql', '001_initial.sql', '002_audit_log.sql'];
 
     const appliedMigrations = new Map<string, number>();
 
@@ -403,9 +381,7 @@ describe('generateStatusReport', () => {
 
   it('includes all migration details in report', () => {
     const discoveredFiles = ['001_initial.sql'];
-    const appliedMigrations = new Map<string, number>([
-      ['001_initial.sql', 1000000],
-    ]);
+    const appliedMigrations = new Map<string, number>([['001_initial.sql', 1000000]]);
 
     const report = generateStatusReport(discoveredFiles, appliedMigrations);
 
@@ -419,11 +395,7 @@ describe('generateStatusReport', () => {
   });
 
   it('handles multiple migrations with same applied timestamp', () => {
-    const discoveredFiles = [
-      '001_initial.sql',
-      '002_audit_log.sql',
-      '002_validators.sql',
-    ];
+    const discoveredFiles = ['001_initial.sql', '002_audit_log.sql', '002_validators.sql'];
 
     const sharedTimestamp = 2000000;
     const appliedMigrations = new Map<string, number>([
@@ -435,12 +407,8 @@ describe('generateStatusReport', () => {
     const report = generateStatusReport(discoveredFiles, appliedMigrations);
 
     expect(report.appliedCount).toBe(3);
-    const migration2 = report.migrations.find(
-      (m) => m.filename === '002_audit_log.sql'
-    );
-    const migration3 = report.migrations.find(
-      (m) => m.filename === '002_validators.sql'
-    );
+    const migration2 = report.migrations.find((m) => m.filename === '002_audit_log.sql');
+    const migration3 = report.migrations.find((m) => m.filename === '002_validators.sql');
 
     expect(migration2?.appliedAt).toBe(sharedTimestamp);
     expect(migration3?.appliedAt).toBe(sharedTimestamp);
@@ -465,11 +433,7 @@ describe('generateStatusReport', () => {
   });
 
   it('handles filenames without leading numbers gracefully', () => {
-    const discoveredFiles = [
-      'initial.sql',
-      '002_audit_log.sql',
-      'no_prefix.sql',
-    ];
+    const discoveredFiles = ['initial.sql', '002_audit_log.sql', 'no_prefix.sql'];
 
     const appliedMigrations = new Map<string, number>();
 

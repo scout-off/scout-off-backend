@@ -326,10 +326,7 @@ describe('config.pinata.gateways fallback', () => {
     process.env.IPFS_GATEWAYS = 'https://a.example.com, https://b.example.com';
     jest.resetModules();
     const { default: config } = await import('../src/config');
-    expect(config.pinata.gateways).toEqual([
-      'https://a.example.com',
-      'https://b.example.com',
-    ]);
+    expect(config.pinata.gateways).toEqual(['https://a.example.com', 'https://b.example.com']);
   });
 });
 
@@ -1020,17 +1017,14 @@ describe('config.admin.ipAllowlist validation', () => {
     expect(cfg.admin.ipAllowlist).toEqual(['10.0.0.1', '192.168.1.0/24', '10.0.0.0/8']);
   });
 
-  it.each([
-    'not-an-ip',
-    '999.999.999.999/24',
-    '10.0.0.0/33',
-    '10.0.0.0/abc',
-    'bad-entry,10.0.0.1',
-  ])('throws naming ADMIN_IP_ALLOWLIST for an invalid entry %s', async (value) => {
-    process.env.ADMIN_IP_ALLOWLIST = value;
-    jest.resetModules();
-    await expect(import('../src/config')).rejects.toThrow('ADMIN_IP_ALLOWLIST');
-  });
+  it.each(['not-an-ip', '999.999.999.999/24', '10.0.0.0/33', '10.0.0.0/abc', 'bad-entry,10.0.0.1'])(
+    'throws naming ADMIN_IP_ALLOWLIST for an invalid entry %s',
+    async (value) => {
+      process.env.ADMIN_IP_ALLOWLIST = value;
+      jest.resetModules();
+      await expect(import('../src/config')).rejects.toThrow('ADMIN_IP_ALLOWLIST');
+    },
+  );
 });
 
 describe('config.graphql.milestoneLoaderConcurrency', () => {
@@ -1119,10 +1113,10 @@ describe('config.authLockout validation', () => {
   });
 
   it('reads valid overrides from the environment', async () => {
-    process.env.AUTH_FAIL_THRESHOLD  = '10';
-    process.env.AUTH_FAIL_WINDOW_MS  = '60000';
+    process.env.AUTH_FAIL_THRESHOLD = '10';
+    process.env.AUTH_FAIL_WINDOW_MS = '60000';
     process.env.AUTH_LOCKOUT_BASE_MS = '5000';
-    process.env.AUTH_LOCKOUT_MAX_MS  = '300000';
+    process.env.AUTH_LOCKOUT_MAX_MS = '300000';
     const cfg = await loadConfig();
     expect(cfg.authLockout).toEqual({
       threshold: 10,
@@ -1133,14 +1127,14 @@ describe('config.authLockout validation', () => {
   });
 
   it.each([
-    ['AUTH_FAIL_THRESHOLD',  '0'],
-    ['AUTH_FAIL_THRESHOLD',  'abc'],
-    ['AUTH_FAIL_WINDOW_MS',  '0'],
-    ['AUTH_FAIL_WINDOW_MS',  'xyz'],
+    ['AUTH_FAIL_THRESHOLD', '0'],
+    ['AUTH_FAIL_THRESHOLD', 'abc'],
+    ['AUTH_FAIL_WINDOW_MS', '0'],
+    ['AUTH_FAIL_WINDOW_MS', 'xyz'],
     ['AUTH_LOCKOUT_BASE_MS', '0'],
     ['AUTH_LOCKOUT_BASE_MS', 'nan'],
-    ['AUTH_LOCKOUT_MAX_MS',  '0'],
-    ['AUTH_LOCKOUT_MAX_MS',  'nan'],
+    ['AUTH_LOCKOUT_MAX_MS', '0'],
+    ['AUTH_LOCKOUT_MAX_MS', 'nan'],
   ])('%s=%s fails validation at startup', async (name, value) => {
     process.env[name] = value;
     jest.resetModules();
@@ -1149,7 +1143,7 @@ describe('config.authLockout validation', () => {
 
   it('fails when AUTH_LOCKOUT_BASE_MS > AUTH_LOCKOUT_MAX_MS', async () => {
     process.env.AUTH_LOCKOUT_BASE_MS = '60000';
-    process.env.AUTH_LOCKOUT_MAX_MS  = '30000';
+    process.env.AUTH_LOCKOUT_MAX_MS = '30000';
     jest.resetModules();
     await expect(import('../src/config')).rejects.toThrow('AUTH_LOCKOUT_BASE_MS');
   });
@@ -1157,10 +1151,17 @@ describe('config.authLockout validation', () => {
 
 describe('central metrics and API docs config (#1832, #1834)', () => {
   const names = [
-    'NODE_ENV', 'METRICS_ENABLED', 'METRICS_LEGACY_MS',
-    'API_DOCS_MODE', 'API_DOCS_HIDE_ADMIN', 'JWT_SECRET',
-    'CONTRACT_ID', 'ADMIN_WALLET', 'PLATFORM_SECRET_KEY',
-    'SEP10_SERVER_SECRET', 'API_KEY_LOOKUP_SECRET',
+    'NODE_ENV',
+    'METRICS_ENABLED',
+    'METRICS_LEGACY_MS',
+    'API_DOCS_MODE',
+    'API_DOCS_HIDE_ADMIN',
+    'JWT_SECRET',
+    'CONTRACT_ID',
+    'ADMIN_WALLET',
+    'PLATFORM_SECRET_KEY',
+    'SEP10_SERVER_SECRET',
+    'API_KEY_LOOKUP_SECRET',
   ];
   const saved = new Map<string, string | undefined>();
 
@@ -1198,8 +1199,10 @@ describe('central metrics and API docs config (#1832, #1834)', () => {
     return (await import('../src/config')).default;
   }
   it.each([
-    ['development', 'public'], ['test', 'public'],
-    ['staging', 'admin'], ['production', 'admin'],
+    ['development', 'public'],
+    ['test', 'public'],
+    ['staging', 'admin'],
+    ['production', 'admin'],
   ])('defaults API docs to %s -> %s', async (env, mode) => {
     const cfg = await load(env);
     expect(cfg.apiDocs).toEqual({ mode, hideAdminPaths: false });

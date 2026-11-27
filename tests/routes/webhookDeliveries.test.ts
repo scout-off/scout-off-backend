@@ -99,7 +99,9 @@ import jwt from 'jsonwebtoken';
 import config from '../../src/config';
 
 function makeAdminToken(): string {
-  return jwt.sign({ sub: 'GADMIN1234567890', role: 'admin' }, config.jwtSecret, { expiresIn: '1h' });
+  return jwt.sign({ sub: 'GADMIN1234567890', role: 'admin' }, config.jwtSecret, {
+    expiresIn: '1h',
+  });
 }
 
 describe('GET /api/admin/webhooks/:id/deliveries', () => {

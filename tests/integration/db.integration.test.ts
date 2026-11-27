@@ -129,9 +129,7 @@ describe('Player insert and query (real DB)', () => {
     expect(euStrikers).toHaveLength(1);
     expect(euStrikers[0].player_id).toBe('p1');
 
-    const allEU = db
-      .prepare('SELECT * FROM players WHERE region = ?')
-      .all('EU') as any[];
+    const allEU = db.prepare('SELECT * FROM players WHERE region = ?').all('EU') as any[];
     expect(allEU).toHaveLength(2);
   });
 
@@ -142,9 +140,7 @@ describe('Player insert and query (real DB)', () => {
     db.prepare(insertSql).run('p2', 'GW2', 'striker', 'EU', 'Qm2', 2, 1001);
     db.prepare(insertSql).run('p3', 'GW3', 'striker', 'EU', 'Qm3', 3, 1002);
 
-    const tier2Plus = db
-      .prepare('SELECT * FROM players WHERE progress_level >= ?')
-      .all(2) as any[];
+    const tier2Plus = db.prepare('SELECT * FROM players WHERE progress_level >= ?').all(2) as any[];
     expect(tier2Plus).toHaveLength(2);
   });
 
@@ -171,9 +167,17 @@ describe('Player insert and query (real DB)', () => {
 describe('Event insert and filter (real DB)', () => {
   it('inserts an event and retrieves by type', () => {
     const insertSql = `INSERT INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)`;
-    db.prepare(insertSql).run('player_registered', 100, 'tx1', JSON.stringify({ player_id: 'p1' }), 1000);
+    db.prepare(insertSql).run(
+      'player_registered',
+      100,
+      'tx1',
+      JSON.stringify({ player_id: 'p1' }),
+      1000,
+    );
 
-    const rows = db.prepare('SELECT * FROM events WHERE type = ? ORDER BY ledger ASC').all('player_registered') as any[];
+    const rows = db
+      .prepare('SELECT * FROM events WHERE type = ? ORDER BY ledger ASC')
+      .all('player_registered') as any[];
     expect(rows).toHaveLength(1);
     expect(rows[0].type).toBe('player_registered');
     expect(rows[0].ledger).toBe(100);
@@ -192,7 +196,13 @@ describe('Event insert and filter (real DB)', () => {
   it('filters events by type and supports pagination (LIMIT/OFFSET)', () => {
     const insertSql = `INSERT INTO events (type, ledger, tx_hash, payload, created_at) VALUES (?, ?, ?, ?, ?)`;
     for (let i = 0; i < 5; i++) {
-      db.prepare(insertSql).run('milestone_approved', 100 + i, `tx-ma-${i}`, JSON.stringify({ idx: i }), 1000 + i);
+      db.prepare(insertSql).run(
+        'milestone_approved',
+        100 + i,
+        `tx-ma-${i}`,
+        JSON.stringify({ idx: i }),
+        1000 + i,
+      );
     }
     db.prepare(insertSql).run('player_registered', 200, 'tx-pr', '{}', 2000);
 
@@ -214,7 +224,9 @@ describe('Event insert and filter (real DB)', () => {
     db.prepare(insertSql).run('contact_unlocked', 101, 'tx2', '{}', 1001);
     db.prepare(insertSql).run('player_registered', 102, 'tx3', '{}', 1002);
 
-    const countRow = db.prepare('SELECT COUNT(*) AS count FROM events WHERE type = ?').get('contact_unlocked') as any;
+    const countRow = db
+      .prepare('SELECT COUNT(*) AS count FROM events WHERE type = ?')
+      .get('contact_unlocked') as any;
     expect(countRow.count).toBe(2);
 
     const totalRow = db.prepare('SELECT COUNT(*) AS count FROM events').get() as any;
@@ -263,9 +275,7 @@ describe('Migration runner (real DB)', () => {
       db.prepare(insertSql).run('test-key', 200, '{}', now, now + 86400000);
     }).not.toThrow();
 
-    const row = db
-      .prepare('SELECT * FROM idempotency_keys WHERE key = ?')
-      .get('test-key') as any;
+    const row = db.prepare('SELECT * FROM idempotency_keys WHERE key = ?').get('test-key') as any;
     expect(row).toBeDefined();
     expect(row.status_code).toBe(200);
   });
@@ -291,7 +301,7 @@ describe('Contact unlocks (real DB)', () => {
   it('inserts and queries contact unlocks', () => {
     const now = Math.floor(Date.now() / 1000);
     db.prepare(
-      `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?)`
+      `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?)`,
     ).run('GSCOUT1', 'player-1', 'txhash1', now);
 
     const row = db
@@ -303,12 +313,12 @@ describe('Contact unlocks (real DB)', () => {
   it('enforces PRIMARY KEY (scout_wallet, player_id) — no duplicate unlocks', () => {
     const now = Math.floor(Date.now() / 1000);
     db.prepare(
-      `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?)`
+      `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?)`,
     ).run('GSCOUT1', 'player-1', 'txhash1', now);
 
     expect(() => {
       db.prepare(
-        `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?)`
+        `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?)`,
       ).run('GSCOUT1', 'player-1', 'txhash2', now + 1);
     }).toThrow();
   });
@@ -316,12 +326,12 @@ describe('Contact unlocks (real DB)', () => {
   it('INSERT OR IGNORE skips duplicate contact unlocks silently', () => {
     const now = Math.floor(Date.now() / 1000);
     db.prepare(
-      `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?) ON CONFLICT(scout_wallet, player_id) DO NOTHING`
+      `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?) ON CONFLICT(scout_wallet, player_id) DO NOTHING`,
     ).run('GSCOUT1', 'player-1', 'txhash1', now);
 
     expect(() => {
       db.prepare(
-        `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?) ON CONFLICT(scout_wallet, player_id) DO NOTHING`
+        `INSERT INTO contact_unlocks (scout_wallet, player_id, tx_hash, unlocked_at) VALUES (?, ?, ?, ?) ON CONFLICT(scout_wallet, player_id) DO NOTHING`,
       ).run('GSCOUT1', 'player-1', 'txhash2', now + 1);
     }).not.toThrow();
 

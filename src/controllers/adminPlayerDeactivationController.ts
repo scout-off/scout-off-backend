@@ -35,13 +35,15 @@ import { sanitizeInput } from '../utils/sanitizer';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
-export const deactivateBodySchema = z.object({
-  reason: z
-    .string(requiredError('reason is required'))
-    .min(1, 'reason is required')
-    .max(500, 'reason must be 500 characters or fewer')
-    .transform((s) => s.trim()),
-}).strict();
+export const deactivateBodySchema = z
+  .object({
+    reason: z
+      .string(requiredError('reason is required'))
+      .min(1, 'reason is required')
+      .max(500, 'reason must be 500 characters or fewer')
+      .transform((s) => s.trim()),
+  })
+  .strict();
 
 // ─── POST /api/admin/players/:playerId/deactivate ─────────────────────────────
 
@@ -229,9 +231,7 @@ export async function adminReactivatePlayer(
     queryParams: { player_id: playerId },
   }).catch(() => {});
 
-  logger.info(
-    `[adminReactivate] player=${playerId} reactivated by admin=${adminWallet}`,
-  );
+  logger.info(`[adminReactivate] player=${playerId} reactivated by admin=${adminWallet}`);
 
   res.json({
     success: true,

@@ -36,7 +36,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
   const ip = extractClientIp(req);
   const { correlationId } = req;
   logger.info(
-    `[request] ${req.method} ${req.path} ip=${ip}${correlationId ? ` correlationId=${correlationId}` : ''}`
+    `[request] ${req.method} ${req.path} ip=${ip}${correlationId ? ` correlationId=${correlationId}` : ''}`,
   );
   next();
 }

@@ -303,9 +303,7 @@ describe('chaos — auth & key read route groups', () => {
 
   it('GET /auth/challenge completes within hang budget (no dep hang)', async () => {
     const account = 'G' + 'A'.repeat(55);
-    const res = await expectWithinBudget(
-      request(app).get('/auth/challenge').query({ account }),
-    );
+    const res = await expectWithinBudget(request(app).get('/auth/challenge').query({ account }));
     expect(res.status).toBeLessThan(500);
   });
 

@@ -106,8 +106,16 @@ export async function getEncryptionStatus(): Promise<{
 }> {
   const db = getDriver();
   const out = {
-    notes: { activeKeyId: null as string | null, keyIds: [] as string[], targets: [] as KeyCounts[] },
-    webhook: { activeKeyId: null as string | null, keyIds: [] as string[], targets: [] as KeyCounts[] },
+    notes: {
+      activeKeyId: null as string | null,
+      keyIds: [] as string[],
+      targets: [] as KeyCounts[],
+    },
+    webhook: {
+      activeKeyId: null as string | null,
+      keyIds: [] as string[],
+      targets: [] as KeyCounts[],
+    },
   };
 
   for (const purpose of ['notes', 'webhook'] as const) {
@@ -154,7 +162,9 @@ async function tick(): Promise<void> {
   try {
     const r = await reencryptBatch();
     if (r.reencrypted > 0 || r.conflicts > 0) {
-      logger.info(`[encryption] re-encrypted ${r.reencrypted} row(s), ${r.conflicts} conflict(s), ${r.failed} failed`);
+      logger.info(
+        `[encryption] re-encrypted ${r.reencrypted} row(s), ${r.conflicts} conflict(s), ${r.failed} failed`,
+      );
       delay = config.encryptionReencryptIntervalMs;
     }
   } catch (err) {

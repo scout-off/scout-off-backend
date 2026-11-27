@@ -20,94 +20,104 @@ export async function submitContactPayment(
   scoutWallet: string,
   playerId: string,
 ): Promise<ContactPaymentResult> {
-  return tracer.startActiveSpan('stellar.submitContactPayment', async (span): Promise<ContactPaymentResult> => {
-    span.setAttribute('stellar.contract_function', 'pay_to_contact');
-    span.setAttribute('stellar.player_id', playerId);
-    try {
-      if (!scoutWallet || !playerId) {
-        throw new PaymentError('Missing scoutWallet or playerId', 'INVALID_ACCOUNT');
-      }
-      const onChainPlayerId = await requireOnChainPlayerId(playerId);
-
-      const { getPlatformKeypair } = await import('../utils/signer');
-      const keypair = getPlatformKeypair();
-
-      let account;
+  return tracer.startActiveSpan(
+    'stellar.submitContactPayment',
+    async (span): Promise<ContactPaymentResult> => {
+      span.setAttribute('stellar.contract_function', 'pay_to_contact');
+      span.setAttribute('stellar.player_id', playerId);
       try {
-        account = await server.getAccount(keypair.publicKey());
+        if (!scoutWallet || !playerId) {
+          throw new PaymentError('Missing scoutWallet or playerId', 'INVALID_ACCOUNT');
+        }
+        const onChainPlayerId = await requireOnChainPlayerId(playerId);
+
+        const { getPlatformKeypair } = await import('../utils/signer');
+        const keypair = getPlatformKeypair();
+
+        let account;
+        try {
+          account = await server.getAccount(keypair.publicKey());
+        } catch (err) {
+          throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        }
+
+        const contract = new Contract(config.subscriptionContractId);
+
+        const tx = createTxBuilder(account)
+          .addOperation(
+            contract.call(
+              'pay_to_contact',
+              Address.fromString(scoutWallet).toScVal(),
+              nativeToScVal(onChainPlayerId, { type: 'u64' }),
+            ),
+          )
+          .setTimeout(30)
+          .build();
+
+        let simResult;
+        try {
+          simResult = await server.simulateTransaction(tx);
+        } catch (err) {
+          throw new PaymentError(
+            `Simulation request failed: ${(err as Error).message}`,
+            'NETWORK_ERROR',
+          );
+        }
+
+        if (rpc.Api.isSimulationError(simResult)) {
+          const errMsg = simResult.error ?? '';
+          const mapped = contractErrorToPaymentError(errMsg);
+          if (mapped) throw mapped;
+          throw new PaymentError(`Simulation failed: ${errMsg}`, 'NETWORK_ERROR');
+        }
+
+        const preparedTx = rpc.assembleTransaction(tx, simResult).build();
+        preparedTx.sign(keypair);
+
+        let sendResult;
+        try {
+          sendResult = await sendTransactionWithCorrelation(preparedTx);
+        } catch (err) {
+          throw new PaymentError(
+            `Submit request failed: ${(err as Error).message}`,
+            'NETWORK_ERROR',
+          );
+        }
+        if (sendResult.status === 'ERROR') {
+          const errMsg = String(sendResult.errorResult ?? '');
+          const mapped = contractErrorToPaymentError(errMsg);
+          if (mapped) throw mapped;
+          throw new PaymentError(`Submit failed: ${sendResult.errorResult}`, 'NETWORK_ERROR');
+        }
+
+        const hash = sendResult.hash;
+        span.setAttribute('stellar.tx_hash', hash);
+
+        const getResult = await waitForTransactionConfirmation(hash);
+
+        if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
+          const resultMeta =
+            (getResult as unknown as { resultMetaXdr?: string }).resultMetaXdr ?? '';
+          const mapped = contractErrorToPaymentError(resultMeta);
+          if (mapped) throw mapped;
+          throw new PaymentError('pay_to_contact transaction failed on-chain', 'NETWORK_ERROR');
+        }
+
+        span.setAttribute('stellar.status', 'submitted');
+        return {
+          transactionId: hash,
+          status: 'submitted',
+        };
       } catch (err) {
-        throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        span.recordException(err as Error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
+        span.setAttribute('error.type', (err as Error).name);
+        throw err;
+      } finally {
+        span.end();
       }
-
-      const contract = new Contract(config.subscriptionContractId);
-
-      const tx = createTxBuilder(account)
-        .addOperation(
-          contract.call(
-            'pay_to_contact',
-            Address.fromString(scoutWallet).toScVal(),
-            nativeToScVal(onChainPlayerId, { type: 'u64' }),
-          ),
-        )
-        .setTimeout(30)
-        .build();
-
-      let simResult;
-      try {
-        simResult = await server.simulateTransaction(tx);
-      } catch (err) {
-        throw new PaymentError(`Simulation request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
-      }
-
-      if (rpc.Api.isSimulationError(simResult)) {
-        const errMsg = simResult.error ?? '';
-        const mapped = contractErrorToPaymentError(errMsg);
-        if (mapped) throw mapped;
-        throw new PaymentError(`Simulation failed: ${errMsg}`, 'NETWORK_ERROR');
-      }
-
-      const preparedTx = rpc.assembleTransaction(tx, simResult).build();
-      preparedTx.sign(keypair);
-
-      let sendResult;
-      try {
-        sendResult = await sendTransactionWithCorrelation(preparedTx);
-      } catch (err) {
-        throw new PaymentError(`Submit request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
-      }
-      if (sendResult.status === 'ERROR') {
-        const errMsg = String(sendResult.errorResult ?? '');
-        const mapped = contractErrorToPaymentError(errMsg);
-        if (mapped) throw mapped;
-        throw new PaymentError(`Submit failed: ${sendResult.errorResult}`, 'NETWORK_ERROR');
-      }
-
-      const hash = sendResult.hash;
-      span.setAttribute('stellar.tx_hash', hash);
-
-      const getResult = await waitForTransactionConfirmation(hash);
-
-      if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
-        const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
-        const mapped = contractErrorToPaymentError(resultMeta);
-        if (mapped) throw mapped;
-        throw new PaymentError('pay_to_contact transaction failed on-chain', 'NETWORK_ERROR');
-      }
-
-      span.setAttribute('stellar.status', 'submitted');
-      return {
-        transactionId: hash,
-        status: 'submitted',
-      };
-    } catch (err) {
-      span.recordException(err as Error);
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
-      span.setAttribute('error.type', (err as Error).name);
-      throw err;
-    } finally {
-      span.end();
-    }
-  });
+    },
+  );
 }
 
 // ─── Trial offer ──────────────────────────────────────────────────────────────
@@ -173,7 +183,10 @@ export async function logTrialOffer(
       try {
         simResult = await server.simulateTransaction(tx);
       } catch (err) {
-        throw new PaymentError(`Simulation request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        throw new PaymentError(
+          `Simulation request failed: ${(err as Error).message}`,
+          'NETWORK_ERROR',
+        );
       }
 
       if (rpc.Api.isSimulationError(simResult)) {
@@ -212,9 +225,7 @@ export async function logTrialOffer(
       }
 
       const success = getResult as rpc.Api.GetSuccessfulTransactionResponse;
-      const playerTier = success.returnValue
-        ? (scValToNative(success.returnValue) as number)
-        : 3;
+      const playerTier = success.returnValue ? (scValToNative(success.returnValue) as number) : 3;
       span.setAttribute('stellar.player_tier', playerTier);
 
       return {
@@ -235,7 +246,6 @@ export async function logTrialOffer(
 }
 
 // ─── Milestone query ──────────────────────────────────────────────────────────
-
 
 export type SubscriptionTier = 'basic' | 'premium';
 
@@ -275,114 +285,124 @@ export async function purchaseSubscription(
   tier: SubscriptionTier,
   duration: number,
 ): Promise<SubscriptionResult> {
-  return tracer.startActiveSpan('stellar.purchaseSubscription', async (span): Promise<SubscriptionResult> => {
-    span.setAttribute('stellar.contract_function', 'subscribe');
-    span.setAttribute('stellar.tier', tier);
-    try {
-      if (!scoutWallet) {
-        throw new PaymentError('Missing scoutWallet', 'INVALID_ACCOUNT');
-      }
-
-      const { getPlatformKeypair } = await import('../utils/signer');
-      const keypair = getPlatformKeypair();
-
-      let account;
+  return tracer.startActiveSpan(
+    'stellar.purchaseSubscription',
+    async (span): Promise<SubscriptionResult> => {
+      span.setAttribute('stellar.contract_function', 'subscribe');
+      span.setAttribute('stellar.tier', tier);
       try {
-        account = await server.getAccount(keypair.publicKey());
-      } catch (err) {
-        throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
-      }
-
-      const contract = new Contract(config.subscriptionContractId);
-
-      const tx = createTxBuilder(account)
-        .addOperation(
-          contract.call(
-            'subscribe',
-            Address.fromString(scoutWallet).toScVal(),
-            nativeToScVal(tier, { type: 'string' }),
-            nativeToScVal(duration, { type: 'u32' }),
-          ),
-        )
-        .setTimeout(30)
-        .build();
-
-      let simResult;
-      try {
-        simResult = await server.simulateTransaction(tx);
-      } catch (err) {
-        throw new PaymentError(`Simulation request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
-      }
-
-      if (rpc.Api.isSimulationError(simResult)) {
-        const errMsg = simResult.error ?? '';
-        if (isInsufficientFeeError(errMsg)) {
-          throw new PaymentError('Insufficient funds for subscription', 'INSUFFICIENT_FUNDS');
+        if (!scoutWallet) {
+          throw new PaymentError('Missing scoutWallet', 'INVALID_ACCOUNT');
         }
-        throw new PaymentError(`Simulation failed: ${errMsg}`, 'NETWORK_ERROR');
-      }
 
-      const preparedTx = rpc.assembleTransaction(tx, simResult).build();
-      preparedTx.sign(keypair);
+        const { getPlatformKeypair } = await import('../utils/signer');
+        const keypair = getPlatformKeypair();
 
-      let sendResult;
-      try {
-        sendResult = await sendTransactionWithCorrelation(preparedTx);
-      } catch (err) {
-        throw new PaymentError(`Submit request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
-      }
-      if (sendResult.status === 'ERROR') {
-        const errMsg = String(sendResult.errorResult ?? '');
-        if (isInsufficientFeeError(errMsg)) {
-          throw new PaymentError('Insufficient funds for subscription', 'INSUFFICIENT_FUNDS');
+        let account;
+        try {
+          account = await server.getAccount(keypair.publicKey());
+        } catch (err) {
+          throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
         }
-        throw new PaymentError(`Submit failed: ${sendResult.errorResult}`, 'NETWORK_ERROR');
-      }
 
-      const hash = sendResult.hash;
-      span.setAttribute('stellar.tx_hash', hash);
+        const contract = new Contract(config.subscriptionContractId);
 
-      let getResult;
-      try {
-        getResult = await server.getTransaction(hash);
-        while (getResult.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
-          await new Promise((r) => setTimeout(r, 1000));
+        const tx = createTxBuilder(account)
+          .addOperation(
+            contract.call(
+              'subscribe',
+              Address.fromString(scoutWallet).toScVal(),
+              nativeToScVal(tier, { type: 'string' }),
+              nativeToScVal(duration, { type: 'u32' }),
+            ),
+          )
+          .setTimeout(30)
+          .build();
+
+        let simResult;
+        try {
+          simResult = await server.simulateTransaction(tx);
+        } catch (err) {
+          throw new PaymentError(
+            `Simulation request failed: ${(err as Error).message}`,
+            'NETWORK_ERROR',
+          );
+        }
+
+        if (rpc.Api.isSimulationError(simResult)) {
+          const errMsg = simResult.error ?? '';
+          if (isInsufficientFeeError(errMsg)) {
+            throw new PaymentError('Insufficient funds for subscription', 'INSUFFICIENT_FUNDS');
+          }
+          throw new PaymentError(`Simulation failed: ${errMsg}`, 'NETWORK_ERROR');
+        }
+
+        const preparedTx = rpc.assembleTransaction(tx, simResult).build();
+        preparedTx.sign(keypair);
+
+        let sendResult;
+        try {
+          sendResult = await sendTransactionWithCorrelation(preparedTx);
+        } catch (err) {
+          throw new PaymentError(
+            `Submit request failed: ${(err as Error).message}`,
+            'NETWORK_ERROR',
+          );
+        }
+        if (sendResult.status === 'ERROR') {
+          const errMsg = String(sendResult.errorResult ?? '');
+          if (isInsufficientFeeError(errMsg)) {
+            throw new PaymentError('Insufficient funds for subscription', 'INSUFFICIENT_FUNDS');
+          }
+          throw new PaymentError(`Submit failed: ${sendResult.errorResult}`, 'NETWORK_ERROR');
+        }
+
+        const hash = sendResult.hash;
+        span.setAttribute('stellar.tx_hash', hash);
+
+        let getResult;
+        try {
           getResult = await server.getTransaction(hash);
+          while (getResult.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+            await new Promise((r) => setTimeout(r, 1000));
+            getResult = await server.getTransaction(hash);
+          }
+        } catch (err) {
+          throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
         }
+
+        if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
+          const resultMeta =
+            (getResult as unknown as { resultMetaXdr?: string }).resultMetaXdr ?? '';
+          if (isInsufficientFeeError(resultMeta)) {
+            throw new PaymentError('Insufficient funds for subscription', 'INSUFFICIENT_FUNDS');
+          }
+          throw new PaymentError('subscribe transaction failed on-chain', 'NETWORK_ERROR');
+        }
+
+        const success = getResult as rpc.Api.GetSuccessfulTransactionResponse;
+        if (!success.returnValue) {
+          throw new PaymentError('subscribe transaction returned no expiry value', 'NETWORK_ERROR');
+        }
+        const expiresAt = scValToNative(success.returnValue) as number;
+        span.setAttribute('stellar.expires_at', expiresAt);
+
+        return {
+          transactionId: hash,
+          tier,
+          expiresAt,
+          status: 'active',
+        };
       } catch (err) {
-        throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        span.recordException(err as Error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
+        span.setAttribute('error.type', (err as Error).name);
+        throw err;
+      } finally {
+        span.end();
       }
-
-      if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
-        const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
-        if (isInsufficientFeeError(resultMeta)) {
-          throw new PaymentError('Insufficient funds for subscription', 'INSUFFICIENT_FUNDS');
-        }
-        throw new PaymentError('subscribe transaction failed on-chain', 'NETWORK_ERROR');
-      }
-
-      const success = getResult as rpc.Api.GetSuccessfulTransactionResponse;
-      if (!success.returnValue) {
-        throw new PaymentError('subscribe transaction returned no expiry value', 'NETWORK_ERROR');
-      }
-      const expiresAt = scValToNative(success.returnValue) as number;
-      span.setAttribute('stellar.expires_at', expiresAt);
-
-      return {
-        transactionId: hash,
-        tier,
-        expiresAt,
-        status: 'active',
-      };
-    } catch (err) {
-      span.recordException(err as Error);
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
-      span.setAttribute('error.type', (err as Error).name);
-      throw err;
-    } finally {
-      span.end();
-    }
-  });
+    },
+  );
 }
 
 /**
@@ -417,138 +437,166 @@ export async function renewSubscription(
   duration: number,
   currentExpiresAt: number,
 ): Promise<SubscriptionResult> {
-  return tracer.startActiveSpan('stellar.renewSubscription', async (span): Promise<SubscriptionResult> => {
-    span.setAttribute('stellar.contract_function', 'subscribe');
-    span.setAttribute('stellar.tier', tier);
-    span.setAttribute('stellar.renewal', true);
-    span.setAttribute('stellar.previous_expires_at', currentExpiresAt);
-    try {
-      if (!scoutWallet) {
-        throw new PaymentError('Missing scoutWallet', 'INVALID_ACCOUNT');
-      }
-
-      const { getPlatformKeypair } = await import('../utils/signer');
-      const keypair = getPlatformKeypair();
-
-      let account;
+  return tracer.startActiveSpan(
+    'stellar.renewSubscription',
+    async (span): Promise<SubscriptionResult> => {
+      span.setAttribute('stellar.contract_function', 'subscribe');
+      span.setAttribute('stellar.tier', tier);
+      span.setAttribute('stellar.renewal', true);
+      span.setAttribute('stellar.previous_expires_at', currentExpiresAt);
       try {
-        account = await server.getAccount(keypair.publicKey());
-      } catch (err) {
-        throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
-      }
-
-      const contract = new Contract(config.subscriptionContractId);
-
-      const tx = createTxBuilder(account)
-        .addOperation(
-          contract.call(
-            'subscribe',
-            Address.fromString(scoutWallet).toScVal(),
-            nativeToScVal(tier, { type: 'string' }),
-            nativeToScVal(duration, { type: 'u32' }),
-          ),
-        )
-        .setTimeout(30)
-        .build();
-
-      let simResult;
-      try {
-        simResult = await server.simulateTransaction(tx);
-      } catch (err) {
-        throw new PaymentError(`Simulation request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
-      }
-
-      if (rpc.Api.isSimulationError(simResult)) {
-        const errMsg = simResult.error ?? '';
-        if (isInsufficientFeeError(errMsg)) {
-          throw new PaymentError('Insufficient funds for subscription renewal', 'INSUFFICIENT_FUNDS');
+        if (!scoutWallet) {
+          throw new PaymentError('Missing scoutWallet', 'INVALID_ACCOUNT');
         }
-        if (isExpiredTrustlineError(errMsg)) {
-          throw new PaymentError('Payment token trustline is missing or expired', 'EXPIRED_TRUSTLINE');
+
+        const { getPlatformKeypair } = await import('../utils/signer');
+        const keypair = getPlatformKeypair();
+
+        let account;
+        try {
+          account = await server.getAccount(keypair.publicKey());
+        } catch (err) {
+          throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
         }
-        throw new PaymentError(`Simulation failed: ${errMsg}`, 'CONTRACT_ERROR');
-      }
 
-      const preparedTx = rpc.assembleTransaction(tx, simResult).build();
-      preparedTx.sign(keypair);
+        const contract = new Contract(config.subscriptionContractId);
 
-      let sendResult;
-      try {
-        sendResult = await sendTransactionWithCorrelation(preparedTx);
-      } catch (err) {
-        throw new PaymentError(`Submit request failed: ${(err as Error).message}`, 'NETWORK_ERROR');
-      }
-      if (sendResult.status === 'ERROR') {
-        const errMsg = String(sendResult.errorResult ?? '');
-        if (isInsufficientFeeError(errMsg)) {
-          throw new PaymentError('Insufficient funds for subscription renewal', 'INSUFFICIENT_FUNDS');
+        const tx = createTxBuilder(account)
+          .addOperation(
+            contract.call(
+              'subscribe',
+              Address.fromString(scoutWallet).toScVal(),
+              nativeToScVal(tier, { type: 'string' }),
+              nativeToScVal(duration, { type: 'u32' }),
+            ),
+          )
+          .setTimeout(30)
+          .build();
+
+        let simResult;
+        try {
+          simResult = await server.simulateTransaction(tx);
+        } catch (err) {
+          throw new PaymentError(
+            `Simulation request failed: ${(err as Error).message}`,
+            'NETWORK_ERROR',
+          );
         }
-        if (isExpiredTrustlineError(errMsg)) {
-          throw new PaymentError('Payment token trustline is missing or expired', 'EXPIRED_TRUSTLINE');
+
+        if (rpc.Api.isSimulationError(simResult)) {
+          const errMsg = simResult.error ?? '';
+          if (isInsufficientFeeError(errMsg)) {
+            throw new PaymentError(
+              'Insufficient funds for subscription renewal',
+              'INSUFFICIENT_FUNDS',
+            );
+          }
+          if (isExpiredTrustlineError(errMsg)) {
+            throw new PaymentError(
+              'Payment token trustline is missing or expired',
+              'EXPIRED_TRUSTLINE',
+            );
+          }
+          throw new PaymentError(`Simulation failed: ${errMsg}`, 'CONTRACT_ERROR');
         }
-        throw new PaymentError(`Submit failed: ${sendResult.errorResult}`, 'CONTRACT_ERROR');
-      }
 
-      const hash = sendResult.hash;
-      span.setAttribute('stellar.tx_hash', hash);
+        const preparedTx = rpc.assembleTransaction(tx, simResult).build();
+        preparedTx.sign(keypair);
 
-      let getResult;
-      try {
-        getResult = await server.getTransaction(hash);
-        while (getResult.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
-          await new Promise((r) => setTimeout(r, 1000));
+        let sendResult;
+        try {
+          sendResult = await sendTransactionWithCorrelation(preparedTx);
+        } catch (err) {
+          throw new PaymentError(
+            `Submit request failed: ${(err as Error).message}`,
+            'NETWORK_ERROR',
+          );
+        }
+        if (sendResult.status === 'ERROR') {
+          const errMsg = String(sendResult.errorResult ?? '');
+          if (isInsufficientFeeError(errMsg)) {
+            throw new PaymentError(
+              'Insufficient funds for subscription renewal',
+              'INSUFFICIENT_FUNDS',
+            );
+          }
+          if (isExpiredTrustlineError(errMsg)) {
+            throw new PaymentError(
+              'Payment token trustline is missing or expired',
+              'EXPIRED_TRUSTLINE',
+            );
+          }
+          throw new PaymentError(`Submit failed: ${sendResult.errorResult}`, 'CONTRACT_ERROR');
+        }
+
+        const hash = sendResult.hash;
+        span.setAttribute('stellar.tx_hash', hash);
+
+        let getResult;
+        try {
           getResult = await server.getTransaction(hash);
+          while (getResult.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+            await new Promise((r) => setTimeout(r, 1000));
+            getResult = await server.getTransaction(hash);
+          }
+        } catch (err) {
+          throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
         }
+
+        if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
+          const resultMeta =
+            (getResult as unknown as { resultMetaXdr?: string }).resultMetaXdr ?? '';
+          if (isInsufficientFeeError(resultMeta)) {
+            throw new PaymentError(
+              'Insufficient funds for subscription renewal',
+              'INSUFFICIENT_FUNDS',
+            );
+          }
+          if (isExpiredTrustlineError(resultMeta)) {
+            throw new PaymentError(
+              'Payment token trustline is missing or expired',
+              'EXPIRED_TRUSTLINE',
+            );
+          }
+          throw new PaymentError('subscribe transaction failed on-chain', 'CONTRACT_ERROR');
+        }
+
+        const success = getResult as rpc.Api.GetSuccessfulTransactionResponse;
+        // Check the *decoded* value, not just whether returnValue is present: a
+        // contract function returning unit (no expiry) still yields a truthy
+        // ScVal wrapping scvVoid, which scValToNative() decodes to `null` rather
+        // than throwing — so `!success.returnValue` alone would silently accept
+        // a null expiry here instead of surfacing the mismatch.
+        const decoded = success.returnValue ? scValToNative(success.returnValue) : null;
+        if (typeof decoded !== 'number') {
+          throw new PaymentError(
+            'renew_subscription transaction returned no expiry value',
+            'CONTRACT_ERROR',
+          );
+        }
+        const expiresAt = decoded;
+        span.setAttribute('stellar.expires_at', expiresAt);
+
+        return {
+          transactionId: hash,
+          tier,
+          expiresAt,
+          status: 'active',
+        };
       } catch (err) {
-        throw new PaymentError(`RPC call failed: ${(err as Error).message}`, 'NETWORK_ERROR');
+        span.recordException(err as Error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
+        span.setAttribute('error.type', (err as Error).name);
+        throw err;
+      } finally {
+        span.end();
       }
-
-      if (getResult.status === rpc.Api.GetTransactionStatus.FAILED) {
-        const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
-        if (isInsufficientFeeError(resultMeta)) {
-          throw new PaymentError('Insufficient funds for subscription renewal', 'INSUFFICIENT_FUNDS');
-        }
-        if (isExpiredTrustlineError(resultMeta)) {
-          throw new PaymentError('Payment token trustline is missing or expired', 'EXPIRED_TRUSTLINE');
-        }
-        throw new PaymentError('subscribe transaction failed on-chain', 'CONTRACT_ERROR');
-      }
-
-      const success = getResult as rpc.Api.GetSuccessfulTransactionResponse;
-      // Check the *decoded* value, not just whether returnValue is present: a
-      // contract function returning unit (no expiry) still yields a truthy
-      // ScVal wrapping scvVoid, which scValToNative() decodes to `null` rather
-      // than throwing — so `!success.returnValue` alone would silently accept
-      // a null expiry here instead of surfacing the mismatch.
-      const decoded = success.returnValue ? scValToNative(success.returnValue) : null;
-      if (typeof decoded !== 'number') {
-        throw new PaymentError('renew_subscription transaction returned no expiry value', 'CONTRACT_ERROR');
-      }
-      const expiresAt = decoded;
-      span.setAttribute('stellar.expires_at', expiresAt);
-
-      return {
-        transactionId: hash,
-        tier,
-        expiresAt,
-        status: 'active',
-      };
-    } catch (err) {
-      span.recordException(err as Error);
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
-      span.setAttribute('error.type', (err as Error).name);
-      throw err;
-    } finally {
-      span.end();
-    }
-  });
+    },
+  );
 }
 
 export type SubscriptionErrorCode =
-  | 'NOT_SUBSCRIBED'
-  | 'ALREADY_CANCELLED'
-  | 'UNAUTHORIZED'
-  | 'NETWORK_ERROR';
+  'NOT_SUBSCRIBED' | 'ALREADY_CANCELLED' | 'UNAUTHORIZED' | 'NETWORK_ERROR';
 
 /**
  * Thrown when a cancel_subscription contract call cannot proceed due to a
@@ -609,15 +657,24 @@ export async function cancelSubscriptionOnChain(
         const code = extractContractErrorCode(errMsg);
         // Contract error #8 = NotSubscribed
         if (code === 8 || /not.?subscribed/i.test(errMsg)) {
-          throw new SubscriptionError('Scout has no active on-chain subscription', 'NOT_SUBSCRIBED');
+          throw new SubscriptionError(
+            'Scout has no active on-chain subscription',
+            'NOT_SUBSCRIBED',
+          );
         }
         // Contract error #18 = SubscriptionExpired (expired or already cancelled)
         if (code === 18) {
-          throw new SubscriptionError('Subscription has expired or was already cancelled', 'ALREADY_CANCELLED');
+          throw new SubscriptionError(
+            'Subscription has expired or was already cancelled',
+            'ALREADY_CANCELLED',
+          );
         }
         // Contract error #9 = Unauthorized
         if (code === 9 || /unauthorized/i.test(errMsg)) {
-          throw new SubscriptionError('Unauthorized: wallet is not allowed to cancel this subscription', 'UNAUTHORIZED');
+          throw new SubscriptionError(
+            'Unauthorized: wallet is not allowed to cancel this subscription',
+            'UNAUTHORIZED',
+          );
         }
         throw new PaymentError(`Simulation failed: ${errMsg}`, 'NETWORK_ERROR');
       }
@@ -643,16 +700,25 @@ export async function cancelSubscriptionOnChain(
         // Inspect the result XDR for contract-level error codes.
         // Cast through unknown because GetFailedTransactionResponse and
         // GetSuccessfulTransactionResponse share no overlapping status type.
-        const resultMeta = ((getResult as unknown) as { resultMetaXdr?: string }).resultMetaXdr ?? '';
+        const resultMeta = (getResult as unknown as { resultMetaXdr?: string }).resultMetaXdr ?? '';
         const code = extractContractErrorCode(resultMeta);
         if (code === 8 || /not.?subscribed/i.test(resultMeta)) {
-          throw new SubscriptionError('Scout has no active on-chain subscription', 'NOT_SUBSCRIBED');
+          throw new SubscriptionError(
+            'Scout has no active on-chain subscription',
+            'NOT_SUBSCRIBED',
+          );
         }
         if (code === 18) {
-          throw new SubscriptionError('Subscription has expired or was already cancelled', 'ALREADY_CANCELLED');
+          throw new SubscriptionError(
+            'Subscription has expired or was already cancelled',
+            'ALREADY_CANCELLED',
+          );
         }
         if (code === 9 || /unauthorized/i.test(resultMeta)) {
-          throw new SubscriptionError('Unauthorized: wallet is not allowed to cancel this subscription', 'UNAUTHORIZED');
+          throw new SubscriptionError(
+            'Unauthorized: wallet is not allowed to cancel this subscription',
+            'UNAUTHORIZED',
+          );
         }
         throw new PaymentError('cancel_subscription transaction failed on-chain', 'NETWORK_ERROR');
       }

@@ -1,7 +1,16 @@
 import request from 'supertest';
 import app from '../../src/app';
 import { buildChallenge, getServerKeypair } from '../../src/services/sep10';
-import { Keypair, Transaction, Networks, TransactionBuilder, BASE_FEE, Operation, Account, Asset } from '@stellar/stellar-sdk';
+import {
+  Keypair,
+  Transaction,
+  Networks,
+  TransactionBuilder,
+  BASE_FEE,
+  Operation,
+  Account,
+  Asset,
+} from '@stellar/stellar-sdk';
 import crypto from 'crypto';
 
 jest.mock('../../src/db', () => ({
@@ -61,9 +70,7 @@ describe('POST /auth/token — malformed XDR handling', () => {
   });
 
   it('returns 400 for empty transaction string (Zod min-length guard)', async () => {
-    const res = await request(app)
-      .post('/auth/token')
-      .send({ transaction: '' });
+    const res = await request(app).post('/auth/token').send({ transaction: '' });
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });
@@ -75,17 +82,9 @@ describe('POST /auth/token — malformed XDR handling', () => {
   });
 
   it('response body is never a 500 for any string transaction value', async () => {
-    const payloads = [
-      'not-xdr',
-      '!!@@##$$%%',
-      ' ',
-      'A'.repeat(1000),
-      '0'.repeat(48),
-    ];
+    const payloads = ['not-xdr', '!!@@##$$%%', ' ', 'A'.repeat(1000), '0'.repeat(48)];
     for (const transaction of payloads) {
-      const res = await request(app)
-        .post('/auth/token')
-        .send({ transaction });
+      const res = await request(app).post('/auth/token').send({ transaction });
       expect(res.status).not.toBe(500);
       expect(res.body.success).toBe(false);
     }
@@ -105,9 +104,7 @@ describe('POST /auth/token — Sep10Error code mapping', () => {
       const realNow = Date.now;
       Date.now = () => realNow() + 400_000; // +400 seconds → past maxTime
       try {
-        const res = await request(app)
-          .post('/auth/token')
-          .send({ transaction: signedXdr });
+        const res = await request(app).post('/auth/token').send({ transaction: signedXdr });
         expect(res.status).toBe(401);
         expect(res.body.success).toBe(false);
         expect(res.body.code).toBe('TOKEN_EXPIRED');
@@ -122,9 +119,7 @@ describe('POST /auth/token — Sep10Error code mapping', () => {
     it('returns 401 with TOKEN_INVALID for unsigned challenge', async () => {
       const clientKeypair = Keypair.random();
       const xdr = buildChallenge(clientKeypair.publicKey());
-      const res = await request(app)
-        .post('/auth/token')
-        .send({ transaction: xdr });
+      const res = await request(app).post('/auth/token').send({ transaction: xdr });
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
       expect(res.body.code).toBe('TOKEN_INVALID');
@@ -144,16 +139,14 @@ describe('POST /auth/token — Sep10Error code mapping', () => {
             name: 'scoutoff auth',
             value: crypto.randomBytes(48).toString('base64'),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
 
       tx.sign(rogueKeypair);
       tx.sign(clientKeypair);
-      const res = await request(app)
-        .post('/auth/token')
-        .send({ transaction: tx.toXdr() });
+      const res = await request(app).post('/auth/token').send({ transaction: tx.toXdr() });
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
       expect(res.body.code).toBe('TOKEN_INVALID');
@@ -173,16 +166,14 @@ describe('POST /auth/token — Sep10Error code mapping', () => {
             name: 'wrong name',
             value: Buffer.from(Keypair.random().rawPublicKey()).toString('base64'),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
 
       tx.sign(serverKeypair);
       tx.sign(clientKeypair);
-      const res = await request(app)
-        .post('/auth/token')
-        .send({ transaction: tx.toXdr() });
+      const res = await request(app).post('/auth/token').send({ transaction: tx.toXdr() });
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
       expect(res.body.code).toBe('TOKEN_INVALID');
@@ -197,15 +188,11 @@ describe('POST /auth/token — Sep10Error code mapping', () => {
       const signedXdr = tx.toXdr();
 
       // First redemption succeeds
-      const res1 = await request(app)
-        .post('/auth/token')
-        .send({ transaction: signedXdr });
+      const res1 = await request(app).post('/auth/token').send({ transaction: signedXdr });
       expect(res1.status).toBe(200);
 
       // Second redemption fails
-      const res2 = await request(app)
-        .post('/auth/token')
-        .send({ transaction: signedXdr });
+      const res2 = await request(app).post('/auth/token').send({ transaction: signedXdr });
       expect(res2.status).toBe(401);
       expect(res2.body.success).toBe(false);
       expect(res2.body.code).toBe('TOKEN_INVALID');
@@ -245,9 +232,7 @@ describe('POST /auth/token — Sep10Error code mapping', () => {
     });
 
     it('returns 400 with VALIDATION_ERROR for empty transaction string', async () => {
-      const res = await request(app)
-        .post('/auth/token')
-        .send({ transaction: '' });
+      const res = await request(app).post('/auth/token').send({ transaction: '' });
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.code).toBe('VALIDATION_ERROR');
@@ -268,9 +253,7 @@ describe('POST /auth/token — Sep10Error code mapping', () => {
 
       tx.sign(serverKeypair);
       tx.sign(clientKeypair);
-      const res = await request(app)
-        .post('/auth/token')
-        .send({ transaction: tx.toXdr() });
+      const res = await request(app).post('/auth/token').send({ transaction: tx.toXdr() });
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
       expect(res.body.code).toBe('TOKEN_INVALID');
@@ -293,16 +276,14 @@ describe('POST /auth/token — Sep10Error code mapping', () => {
             amount: '1',
             asset: new Asset('TESTCOIN', serverKeypair.publicKey()),
             source: clientKeypair.publicKey(),
-          })
+          }),
         )
         .setTimeout(300)
         .build();
 
       tx.sign(serverKeypair);
       tx.sign(clientKeypair);
-      const res = await request(app)
-        .post('/auth/token')
-        .send({ transaction: tx.toXdr() });
+      const res = await request(app).post('/auth/token').send({ transaction: tx.toXdr() });
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
       expect(res.body.code).toBe('TOKEN_INVALID');
@@ -319,9 +300,7 @@ describe('POST /auth/token — admin role pre-verification regression (#694)', (
     // With the fix, role determination only happens from verifyChallenge()'s
     // verified account — so any signature failure produces a 401, not an admin token.
     const malformedXdr = 'AAAAAQAAAAAAAAAA'; // short / invalid XDR
-    const res = await request(app)
-      .post('/auth/token')
-      .send({ transaction: malformedXdr });
+    const res = await request(app).post('/auth/token').send({ transaction: malformedXdr });
 
     // Must never return 200 with an admin-role token
     expect(res.status).not.toBe(200);
@@ -355,9 +334,7 @@ describe('Cache-Control and Pragma headers on /auth/*', () => {
   });
 
   it('sets Cache-Control: no-store and Pragma: no-cache on /auth/refresh responses', async () => {
-    const res = await request(app)
-      .post('/auth/refresh')
-      .send({});
+    const res = await request(app).post('/auth/refresh').send({});
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.headers['pragma']).toBe('no-cache');
   });

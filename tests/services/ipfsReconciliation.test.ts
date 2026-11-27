@@ -21,6 +21,7 @@ jest.mock('../../src/config', () => ({
     ipfsReconcileAgeMs: 300000, // 5 min
     ipfsReconcileIntervalMs: 60000,
     ipfsReconcileMaxAttempts: 5,
+    metrics: { enabled: true, legacyMs: true },
   },
 }));
 

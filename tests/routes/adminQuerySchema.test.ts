@@ -20,7 +20,8 @@ const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 // the token must be issued for that exact wallet rather than a freshly
 // generated SEP-10 keypair (which can self-declare role:'admin' but will
 // never satisfy the wallet-identity check).
-const ADMIN_WALLET = process.env.ADMIN_WALLET ?? 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
+const ADMIN_WALLET =
+  process.env.ADMIN_WALLET ?? 'GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4';
 
 describe('Admin query schema date filtering (#30)', () => {
   let token: string;
@@ -85,9 +86,7 @@ describe('Admin query schema date filtering (#30)', () => {
 
   describe('GET /api/admin/fees', () => {
     it('returns 200 with no query params', async () => {
-      const res = await request(app)
-        .get('/api/admin/fees')
-        .set('Authorization', `Bearer ${token}`);
+      const res = await request(app).get('/api/admin/fees').set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
     });
 

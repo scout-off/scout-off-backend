@@ -135,7 +135,11 @@ describe('getFeeSummary', () => {
     ]);
     const res = makeRes();
 
-    await getFeeSummary({ query: {}, account: ADMIN_WALLET } as unknown as Request, res, makeNext());
+    await getFeeSummary(
+      { query: {}, account: ADMIN_WALLET } as unknown as Request,
+      res,
+      makeNext(),
+    );
 
     expect(mockQueryEvents).toHaveBeenCalledWith('fees_withdrawn');
     expect(res.json).toHaveBeenCalledWith({
@@ -155,9 +159,7 @@ describe('getFeeSummary', () => {
 
     await getFeeSummary({ query: {} } as unknown as Request, res, makeNext());
 
-    expect(mockAudit).toHaveBeenCalledWith(
-      expect.objectContaining({ adminWallet: 'unknown' }),
-    );
+    expect(mockAudit).toHaveBeenCalledWith(expect.objectContaining({ adminWallet: 'unknown' }));
   });
 
   it('returns 400 for an unparseable startDate and does not query events', async () => {
@@ -197,7 +199,11 @@ describe('getFeeSummary', () => {
     mockAudit.mockRejectedValueOnce(new Error('audit store down'));
     const res = makeRes();
 
-    await getFeeSummary({ query: {}, account: ADMIN_WALLET } as unknown as Request, res, makeNext());
+    await getFeeSummary(
+      { query: {}, account: ADMIN_WALLET } as unknown as Request,
+      res,
+      makeNext(),
+    );
 
     expect(res.json).toHaveBeenCalledWith({ success: true, data: [{ a: 1 }] });
   });
@@ -370,9 +376,7 @@ describe('withdrawFeesV2Controller', () => {
     await withdrawFeesV2Controller(v2Req({ role: 'scout' }), res, makeNext());
 
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ code: ErrorCode.FORBIDDEN }),
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: ErrorCode.FORBIDDEN }));
     expect(mockWithdrawFees).not.toHaveBeenCalled();
   });
 
@@ -388,11 +392,7 @@ describe('withdrawFeesV2Controller', () => {
   it('returns 400 with the required message when treasuryAddress is missing', async () => {
     const res = makeRes();
 
-    await withdrawFeesV2Controller(
-      v2Req({ body: { amountStroops: '100' } }),
-      res,
-      makeNext(),
-    );
+    await withdrawFeesV2Controller(v2Req({ body: { amountStroops: '100' } }), res, makeNext());
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith(
@@ -578,9 +578,7 @@ describe('withdrawFeesV2Controller', () => {
       makeNext(),
     );
 
-    expect(mockInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: 'key-abc' }),
-    );
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: 'key-abc' }));
   });
 
   it('normalises a blank or non-string Idempotency-Key header to null', async () => {

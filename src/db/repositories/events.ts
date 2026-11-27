@@ -83,10 +83,7 @@ function eventPayloadPredicate(
   };
 }
 
-export function queryEvents(
-  type?: ContractEventType,
-  opts?: GetEventsOptions,
-): EventRecord[] {
+export function queryEvents(type?: ContractEventType, opts?: GetEventsOptions): EventRecord[] {
   const db = getDb();
   const { limit, offset } = opts ?? {};
   const hasPagination = limit !== undefined && offset !== undefined;
@@ -97,15 +94,24 @@ export function queryEvents(
   if (type && hasPagination) {
     // sql-injection-check-ignore: EVENTS_ORDER_BY_SQL is a hardcoded ORDER BY fragment; values are bound via params.
     sql = `SELECT * FROM events WHERE type = ?${payloadPredicate.sql} ORDER BY ${EVENTS_ORDER_BY_SQL} LIMIT ? OFFSET ?`;
-    rows = timedQuery(sql, () => db.prepare(sql).all(type, ...payloadPredicate.params, limit, offset) as EventRow[]);
+    rows = timedQuery(
+      sql,
+      () => db.prepare(sql).all(type, ...payloadPredicate.params, limit, offset) as EventRow[],
+    );
   } else if (type) {
     // sql-injection-check-ignore: EVENTS_ORDER_BY_SQL is a hardcoded ORDER BY fragment; values are bound via params.
     sql = `SELECT * FROM events WHERE type = ?${payloadPredicate.sql} ORDER BY ${EVENTS_ORDER_BY_SQL}`;
-    rows = timedQuery(sql, () => db.prepare(sql).all(type, ...payloadPredicate.params) as EventRow[]);
+    rows = timedQuery(
+      sql,
+      () => db.prepare(sql).all(type, ...payloadPredicate.params) as EventRow[],
+    );
   } else if (hasPagination) {
     // sql-injection-check-ignore: EVENTS_ORDER_BY_SQL is a hardcoded ORDER BY fragment; values are bound via params.
     sql = `SELECT * FROM events WHERE 1 = 1${payloadPredicate.sql} ORDER BY ${EVENTS_ORDER_BY_SQL} LIMIT ? OFFSET ?`;
-    rows = timedQuery(sql, () => db.prepare(sql).all(...payloadPredicate.params, limit, offset) as EventRow[]);
+    rows = timedQuery(
+      sql,
+      () => db.prepare(sql).all(...payloadPredicate.params, limit, offset) as EventRow[],
+    );
   } else {
     // sql-injection-check-ignore: EVENTS_ORDER_BY_SQL is a hardcoded ORDER BY fragment; values are bound via params.
     sql = `SELECT * FROM events WHERE 1 = 1${payloadPredicate.sql} ORDER BY ${EVENTS_ORDER_BY_SQL}`;
@@ -139,12 +145,15 @@ export function getEventsCount(
   const db = getDb();
   const payloadPredicate = eventPayloadPredicate(filters ?? {});
   const sql = type
-    // sql-injection-check-ignore: payloadPredicate.sql is built from validated field names and `?` placeholders; values are bound via params.
-    ? `SELECT COUNT(*) AS count FROM events WHERE type = ?${payloadPredicate.sql}`
-    // sql-injection-check-ignore: payloadPredicate.sql is built from validated field names and `?` placeholders; values are bound via params.
-    : `SELECT COUNT(*) AS count FROM events WHERE 1 = 1${payloadPredicate.sql}`;
+    ? // sql-injection-check-ignore: payloadPredicate.sql is built from validated field names and `?` placeholders; values are bound via params.
+      `SELECT COUNT(*) AS count FROM events WHERE type = ?${payloadPredicate.sql}`
+    : // sql-injection-check-ignore: payloadPredicate.sql is built from validated field names and `?` placeholders; values are bound via params.
+      `SELECT COUNT(*) AS count FROM events WHERE 1 = 1${payloadPredicate.sql}`;
   const params = type ? [type, ...payloadPredicate.params] : payloadPredicate.params;
-  const row = timedQuery(sql, () => db.prepare(sql).get(...params) as { count: number } | undefined);
+  const row = timedQuery(
+    sql,
+    () => db.prepare(sql).get(...params) as { count: number } | undefined,
+  );
   return row?.count ?? 0;
 }
 
@@ -304,8 +313,9 @@ export function countEventsFiltered(filter: EventsPageFilter): number {
 
   const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
   const sql = 'SELECT COUNT(*) AS count FROM events ' + where;
-  const row = timedQuery(sql, () =>
-    db.prepare(sql).get(...(params as unknown[])) as { count: number } | undefined,
+  const row = timedQuery(
+    sql,
+    () => db.prepare(sql).get(...(params as unknown[])) as { count: number } | undefined,
   );
   return row?.count ?? 0;
 }
@@ -320,7 +330,11 @@ export function countEventsFiltered(filter: EventsPageFilter): number {
  * shorter than `limit` — at no point does the whole table need to live in
  * memory at once.
  */
-export function getEventsPage(filter: EventsPageFilter, limit: number, offset: number): EventExportRow[] {
+export function getEventsPage(
+  filter: EventsPageFilter,
+  limit: number,
+  offset: number,
+): EventExportRow[] {
   const db = getDb();
   const clauses: string[] = [];
   const params: unknown[] = [];
@@ -369,7 +383,9 @@ export function getEventsPage(filter: EventsPageFilter, limit: number, offset: n
  * cursor, so the result is a stable snapshot that does not drift when the
  * indexer inserts rows concurrently — no duplicates or skipped rows.
  */
-export function* getEventsIterable(filter: EventsPageFilter): Generator<EventExportRow, void, void> {
+export function* getEventsIterable(
+  filter: EventsPageFilter,
+): Generator<EventExportRow, void, void> {
   const db = getDb();
   const clauses: string[] = [];
   const params: unknown[] = [];
@@ -410,7 +426,6 @@ export function* getEventsIterable(filter: EventsPageFilter): Generator<EventExp
     };
   }
 }
-
 
 // ─── Unprocessed indexer events (#1540) ──────────────────────────────────────
 
@@ -521,8 +536,9 @@ export async function listUnprocessedEvents(opts: {
 /** Fetch a single unprocessed event by id, or null when absent. */
 export async function getUnprocessedEventById(id: number): Promise<UnprocessedEventRow | null> {
   const sql = 'SELECT * FROM indexer_unprocessed_events WHERE id = ?';
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<UnprocessedEventRow>(sql, [id])) ?? null,
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<UnprocessedEventRow>(sql, [id])) ?? null,
   );
 }
 

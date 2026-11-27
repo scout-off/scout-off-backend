@@ -71,7 +71,10 @@ export function filterAdminPathsFromSpec(spec: Record<string, unknown>): Record<
   const reachable = new Set<string>();
   function walk(obj: unknown) {
     if (!obj || typeof obj !== 'object') return;
-    if (Array.isArray(obj)) { obj.forEach(walk); return; }
+    if (Array.isArray(obj)) {
+      obj.forEach(walk);
+      return;
+    }
     for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
       if (k === '$ref' && typeof v === 'string') {
         reachable.add(v);

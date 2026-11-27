@@ -12,7 +12,8 @@
 
 require('dotenv').config();
 
-if (!process.env.CONTRACT_ID) process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
+if (!process.env.CONTRACT_ID)
+  process.env.CONTRACT_ID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
 if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'migrate-encrypt-notes-script';
 
 if (!process.env.NOTES_ENCRYPTION_KEY) {
@@ -28,7 +29,9 @@ async function main() {
   await initDb();
   const db = getDb();
 
-  const v1Rows = db.prepare('SELECT scout_wallet, player_id, note_text FROM scout_player_notes').all();
+  const v1Rows = db
+    .prepare('SELECT scout_wallet, player_id, note_text FROM scout_player_notes')
+    .all();
   const updateV1 = db.prepare(
     'UPDATE scout_player_notes SET note_text = ? WHERE scout_wallet = ? AND player_id = ?',
   );
@@ -40,7 +43,11 @@ async function main() {
       alreadyV1 += 1;
       continue;
     }
-    updateV1.run(encryptField(row.note_text, { purpose: 'notes' }), row.scout_wallet, row.player_id);
+    updateV1.run(
+      encryptField(row.note_text, { purpose: 'notes' }),
+      row.scout_wallet,
+      row.player_id,
+    );
     migratedV1 += 1;
   }
 
@@ -59,7 +66,9 @@ async function main() {
   }
 
   console.log(`Encrypted ${migratedV1} scout_player_notes row(s); ${alreadyV1} already encrypted.`);
-  console.log(`Encrypted ${migratedV2} scout_player_notes_v2 row(s); ${alreadyV2} already encrypted.`);
+  console.log(
+    `Encrypted ${migratedV2} scout_player_notes_v2 row(s); ${alreadyV2} already encrypted.`,
+  );
 }
 
 main().catch((err) => {

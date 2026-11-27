@@ -11,7 +11,11 @@ jest.mock('../../src/services/ipfs', () => ({
 
 import request from 'supertest';
 import app from '../../src/app';
-import { setFeatureFlag, clearFeatureFlagCache, GRAPHQL_ENABLED } from '../../src/services/featureFlags';
+import {
+  setFeatureFlag,
+  clearFeatureFlagCache,
+  GRAPHQL_ENABLED,
+} from '../../src/services/featureFlags';
 
 describe('/graphql flag gate (driver-agnostic)', () => {
   beforeEach(() => clearFeatureFlagCache());

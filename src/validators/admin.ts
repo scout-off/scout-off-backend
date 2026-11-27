@@ -33,14 +33,15 @@ const EVENT_TYPES = [
  * Schema for admin date range filtering
  * Used by: GET /api/admin/events, GET /api/admin/fees
  */
-export const adminDateRangeSchema = z.object({
-  startDate: isoDateString.optional(),
-  endDate: isoDateString.optional(),
-  eventType: z.enum(EVENT_TYPES).optional(),
-}).refine(
-  (d) => !(d.startDate && d.endDate && d.startDate > d.endDate),
-  { message: 'startDate must not be after endDate' }
-);
+export const adminDateRangeSchema = z
+  .object({
+    startDate: isoDateString.optional(),
+    endDate: isoDateString.optional(),
+    eventType: z.enum(EVENT_TYPES).optional(),
+  })
+  .refine((d) => !(d.startDate && d.endDate && d.startDate > d.endDate), {
+    message: 'startDate must not be after endDate',
+  });
 
 /**
  * Schema for pagination parameters
@@ -69,13 +70,14 @@ export const auditQuerySchema = z.object({
  * Schema for ledger range filtering
  * Used by: GET /api/admin/events (for fromLedger/toLedger)
  */
-export const ledgerRangeSchema = z.object({
-  fromLedger: z.coerce.number().int().min(0).optional(),
-  toLedger: z.coerce.number().int().min(0).optional(),
-}).refine(
-  (d) => !(d.fromLedger && d.toLedger && d.fromLedger > d.toLedger),
-  { message: 'fromLedger must not be greater than toLedger' }
-);
+export const ledgerRangeSchema = z
+  .object({
+    fromLedger: z.coerce.number().int().min(0).optional(),
+    toLedger: z.coerce.number().int().min(0).optional(),
+  })
+  .refine((d) => !(d.fromLedger && d.toLedger && d.fromLedger > d.toLedger), {
+    message: 'fromLedger must not be greater than toLedger',
+  });
 
 /**
  * Schema for wallet address validation
@@ -124,25 +126,31 @@ export const validatorStatsRangeSchema = z
  * Schema for reindex request body
  * Used by: POST /api/admin/indexer/reindex
  */
-export const reindexSchema = z.object({
-  fromLedger: z.coerce.number().int().min(0),
-}).strict();
+export const reindexSchema = z
+  .object({
+    fromLedger: z.coerce.number().int().min(0),
+  })
+  .strict();
 
 /**
  * Schema for validator registration/revocation request body
  * Used by: POST /api/admin/validators/register, POST /api/admin/validators/revoke
  */
-export const validatorWalletSchema = z.object({
-  validatorWallet: z.string().regex(STELLAR_ADDRESS_RE, 'Invalid Stellar address'),
-}).strict();
+export const validatorWalletSchema = z
+  .object({
+    validatorWallet: z.string().regex(STELLAR_ADDRESS_RE, 'Invalid Stellar address'),
+  })
+  .strict();
 
 /**
  * Schema for fee withdrawal request body
  * Used by: POST /api/admin/fees
  */
-export const withdrawFeesSchema = z.object({
-  recipient: z.string().regex(STELLAR_ADDRESS_RE, 'Invalid Stellar address'),
-}).strict();
+export const withdrawFeesSchema = z
+  .object({
+    recipient: z.string().regex(STELLAR_ADDRESS_RE, 'Invalid Stellar address'),
+  })
+  .strict();
 
 /**
  * Schema for token introspection request body

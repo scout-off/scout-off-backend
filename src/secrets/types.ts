@@ -80,6 +80,13 @@ export interface SecretsProvider {
   get(name: string): string | undefined;
 
   /**
+   * Resolve a secret without emitting a per-read audit event. Used by config
+   * getters on hot paths (e.g. every JWT check) and during config evaluation,
+   * before the logger is usable. Never logs the value.
+   */
+  peek(name: string): string | undefined;
+
+  /**
    * Refresh cached secrets from the backing store. Env provider is a no-op
    * (values are always read live from process.env).
    */

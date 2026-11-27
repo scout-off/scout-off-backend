@@ -80,10 +80,7 @@ describe('batchLoadMilestones', () => {
   });
 
   it('returns results in the requested playerId order', async () => {
-    mockQueryEvents.mockReturnValue([
-      indexedEvent('p1', 'm1'),
-      indexedEvent('p2', 'm2'),
-    ]);
+    mockQueryEvents.mockReturnValue([indexedEvent('p1', 'm1'), indexedEvent('p2', 'm2')]);
     mockQueryMilestones.mockResolvedValue([]);
 
     const results = await createLoaders().milestones.loadMany(['p2', 'p1']);
@@ -166,9 +163,7 @@ describe('batchLoadMilestones', () => {
 
       mockQueryEvents.mockReturnValue(
         PLAYERS > 0
-          ? Array.from({ length: PLAYERS }, (_, i) =>
-              indexedEvent(`player-${i}`, `m${i}`),
-            )
+          ? Array.from({ length: PLAYERS }, (_, i) => indexedEvent(`player-${i}`, `m${i}`))
           : [],
       );
       mockQueryMilestones.mockResolvedValue([]);
@@ -180,9 +175,7 @@ describe('batchLoadMilestones', () => {
       // Every player should have its indexed milestone
       for (let i = 0; i < PLAYERS; i++) {
         expect(results[i]).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ milestoneId: `m${i}` }),
-          ]),
+          expect.arrayContaining([expect.objectContaining({ milestoneId: `m${i}` })]),
         );
       }
 

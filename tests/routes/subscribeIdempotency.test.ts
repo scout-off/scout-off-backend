@@ -92,16 +92,14 @@ jest.mock('../../src/db', () => {
       return true;
     }),
 
-    updateIdempotencyRecord: jest.fn(
-      (key: string, statusCode: number, body: unknown) => {
-        const record = idempotencyStore.get(key);
-        if (record) {
-          record.status_code = statusCode;
-          record.response = JSON.stringify(body);
-          record.status = 'complete';
-        }
-      },
-    ),
+    updateIdempotencyRecord: jest.fn((key: string, statusCode: number, body: unknown) => {
+      const record = idempotencyStore.get(key);
+      if (record) {
+        record.status_code = statusCode;
+        record.response = JSON.stringify(body);
+        record.status = 'complete';
+      }
+    }),
 
     saveIdempotencyRecord: jest.fn((key: string, statusCode: number, body: unknown) => {
       idempotencyStore.set(key, {
@@ -116,11 +114,7 @@ jest.mock('../../src/db', () => {
 
 import app from '../../src/app';
 import { purchaseSubscription } from '../../src/services/stellar';
-import {
-  getIdempotencyRecord,
-  claimIdempotencyKey,
-  updateIdempotencyRecord,
-} from '../../src/db';
+import { getIdempotencyRecord, claimIdempotencyKey, updateIdempotencyRecord } from '../../src/db';
 import { inFlightLock } from '../../src/utils/inflightLock';
 
 const mockPurchase = purchaseSubscription as jest.Mock;

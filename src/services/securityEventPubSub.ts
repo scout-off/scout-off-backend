@@ -27,7 +27,9 @@ let subscriber: Redis | null = null;
 export async function initSecurityEventSubscriber(): Promise<void> {
   const redis = getRedisClient();
   if (!redis) {
-    logger.info('[securityEventPubSub] Redis not configured; cross-instance security events disabled');
+    logger.info(
+      '[securityEventPubSub] Redis not configured; cross-instance security events disabled',
+    );
     return;
   }
 
@@ -49,17 +51,22 @@ export async function initSecurityEventSubscriber(): Promise<void> {
         if (err) {
           logger.error('[securityEventPubSub] subscription error:', err);
         }
-      }
+      },
     );
 
     // Handle incoming messages
     subscriber.on('message', async (channel: string, message: string) => {
       try {
-        await consumeTracedMessage(message, 'redis.security.consume', async (payload) => {
-          if (payload && typeof payload === 'object') {
-            await handleSecurityEvent(channel, payload as Record<string, unknown>);
-          }
-        }, { 'messaging.destination.name': channel });
+        await consumeTracedMessage(
+          message,
+          'redis.security.consume',
+          async (payload) => {
+            if (payload && typeof payload === 'object') {
+              await handleSecurityEvent(channel, payload as Record<string, unknown>);
+            }
+          },
+          { 'messaging.destination.name': channel },
+        );
       } catch (err) {
         logger.warn(`[securityEventPubSub] failed to parse message on ${channel}:`, err);
       }
@@ -94,7 +101,10 @@ export async function closeSecurityEventSubscriber(): Promise<void> {
  * @internal Exported for unit tests; prefer driving tests through the
  * subscriber 'message' event instead of calling this directly.
  */
-export async function handleSecurityEvent(channel: string, payload: Record<string, unknown>): Promise<void> {
+export async function handleSecurityEvent(
+  channel: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
   try {
     switch (channel) {
       case 'security:wallet_blocked': {

@@ -132,17 +132,23 @@ export async function processEventBatches(
       try {
         const response = await server.getEvents({
           startLedger: currentBatchStart,
-          filters: [{ type: 'contract', contractIds: contractIds.length ? contractIds : [primaryContractId] }],
+          filters: [
+            {
+              type: 'contract',
+              contractIds: contractIds.length ? contractIds : [primaryContractId],
+            },
+          ],
         });
         batchEvents = response.events.filter(
-          (e: (typeof response.events)[number]) => e.ledger >= currentBatchStart && e.ledger <= batchEnd,
+          (e: (typeof response.events)[number]) =>
+            e.ledger >= currentBatchStart && e.ledger <= batchEnd,
         );
       } catch (rpcErr: unknown) {
         if (isRateLimitError?.(rpcErr)) {
           // Rate-limit error: back off and retry the same batch
           logger.warn(
             `[batchProcessor] rate-limited, backing off ${rateLimitBackoffMs}ms ` +
-            `(ledger ${currentBatchStart}-${batchEnd})`,
+              `(ledger ${currentBatchStart}-${batchEnd})`,
           );
           await _delay(rateLimitBackoffMs);
           continue; // retry without advancing currentBatchStart
@@ -169,40 +175,38 @@ export async function processEventBatches(
       const ordered = normalizeAndSortEvents(rawEvents, primaryContractId);
 
       // Insert events from this batch in a single transaction, in total order.
-      const insertBatch = db.transaction(
-        (events: typeof ordered) => {
-          let batchInserted = 0;
-          for (const event of events) {
-            const raw = event.raw as any;
-            const { type, payload } = normalizeSorobanEvent(raw);
-            const eventId = normalizeEventId(
-              event.contractId,
-              event.ledger,
-              event.txHash,
-              event.eventIndex,
-            );
-            const createdAt = raw.ledgerClosedAt
-              ? new Date(raw.ledgerClosedAt).getTime()
-              : Date.now();
+      const insertBatch = db.transaction((events: typeof ordered) => {
+        let batchInserted = 0;
+        for (const event of events) {
+          const raw = event.raw as any;
+          const { type, payload } = normalizeSorobanEvent(raw);
+          const eventId = normalizeEventId(
+            event.contractId,
+            event.ledger,
+            event.txHash,
+            event.eventIndex,
+          );
+          const createdAt = raw.ledgerClosedAt
+            ? new Date(raw.ledgerClosedAt).getTime()
+            : Date.now();
 
-            const result = insert.run(
-              type,
-              event.ledger,
-              event.txHash,
-              JSON.stringify(payload),
-              createdAt,
-              event.txApplicationOrder,
-              event.eventIndex,
-              event.contractId,
-            );
-            if (result.changes === 1) {
-              batchInserted++;
-              logger.debug(`[batchProcessor] inserted eventId=${eventId}`);
-            }
+          const result = insert.run(
+            type,
+            event.ledger,
+            event.txHash,
+            JSON.stringify(payload),
+            createdAt,
+            event.txApplicationOrder,
+            event.eventIndex,
+            event.contractId,
+          );
+          if (result.changes === 1) {
+            batchInserted++;
+            logger.debug(`[batchProcessor] inserted eventId=${eventId}`);
           }
-          return batchInserted;
-        },
-      );
+        }
+        return batchInserted;
+      });
 
       const batchInserted = insertBatch(ordered);
       eventsInserted += batchInserted;
@@ -211,7 +215,7 @@ export async function processEventBatches(
 
       logger.info(
         `[batchProcessor] batch done ledgers=${currentBatchStart}-${batchEnd} ` +
-        `batchSize=${dynamicBatchSize} eventsInserted=${eventsInserted} total`,
+          `batchSize=${dynamicBatchSize} eventsInserted=${eventsInserted} total`,
       );
 
       // Call onBatchComplete hook for cursor persistence, etc.
@@ -232,7 +236,9 @@ export async function processEventBatches(
       currentBatchStart = batchEnd + 1;
 
       // Throttle between batches
-      const dynamicDelay = getBatchDelay ? getBatchDelay(currentBatchStart, toLedger - currentBatchStart + 1) : batchDelayMs;
+      const dynamicDelay = getBatchDelay
+        ? getBatchDelay(currentBatchStart, toLedger - currentBatchStart + 1)
+        : batchDelayMs;
       if (dynamicDelay > 0 && currentBatchStart <= toLedger) {
         await _delay(dynamicDelay);
       }

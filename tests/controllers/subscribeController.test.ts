@@ -32,13 +32,19 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(message: string, public code: string) {
+    constructor(
+      message: string,
+      public code: string,
+    ) {
       super(message);
       this.name = 'PaymentError';
     }
   },
   SubscriptionError: class SubscriptionError extends Error {
-    constructor(message: string, public code: string) {
+    constructor(
+      message: string,
+      public code: string,
+    ) {
       super(message);
       this.name = 'SubscriptionError';
     }
@@ -151,7 +157,9 @@ describe('subscribe controller', () => {
   });
 
   it('returns 402 when purchaseSubscription throws PaymentError INSUFFICIENT_FUNDS', async () => {
-    mockPurchaseSubscription.mockRejectedValue(new PaymentError('Insufficient balance', 'INSUFFICIENT_FUNDS'));
+    mockPurchaseSubscription.mockRejectedValue(
+      new PaymentError('Insufficient balance', 'INSUFFICIENT_FUNDS'),
+    );
 
     const req = makeReq();
     const res = makeRes();

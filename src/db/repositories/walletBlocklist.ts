@@ -21,9 +21,7 @@ export async function blockWalletDb(wallet: string, reason: string | null): Prom
     VALUES (?, ?, ?)
     ON CONFLICT(wallet) DO NOTHING
   `;
-  await timedQueryAsync(sql, () =>
-    getDriver().run(sql, [wallet, reason, now]),
-  );
+  await timedQueryAsync(sql, () => getDriver().run(sql, [wallet, reason, now]));
 }
 
 /** Remove a wallet from the blocklist. Returns true if a row was removed. */
@@ -38,8 +36,9 @@ export async function unblockWalletDb(wallet: string): Promise<boolean> {
 /** Fresh DB check — is this wallet currently blocklisted? */
 export async function isWalletBlocklistedDb(wallet: string): Promise<boolean> {
   const sql = `SELECT wallet FROM wallet_blocklist WHERE wallet = ? LIMIT 1`;
-  return timedQueryAsync(sql, async () =>
-    (await getDriver().get<{ wallet: string }>(sql, [wallet])) !== undefined,
+  return timedQueryAsync(
+    sql,
+    async () => (await getDriver().get<{ wallet: string }>(sql, [wallet])) !== undefined,
   );
 }
 

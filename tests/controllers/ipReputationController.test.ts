@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { setIpReputationController, getIpReputationController } from '../../src/controllers/ipReputationController';
+import {
+  setIpReputationController,
+  getIpReputationController,
+} from '../../src/controllers/ipReputationController';
 import { resetReputationStore, getReputation } from '../../src/services/ipReputation';
 
 function mockRes() {
@@ -24,7 +27,10 @@ describe('setIpReputationController', () => {
     setIpReputationController(req, res);
 
     expect(res.status).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith({ success: true, data: { ip: '203.0.113.5', score: 100 } });
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: { ip: '203.0.113.5', score: 100 },
+    });
     expect(getReputation('203.0.113.5')?.score).toBe(100);
   });
 
@@ -56,7 +62,10 @@ describe('setIpReputationController', () => {
     setIpReputationController(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ success: false, error: 'ip must be a valid IPv4 or IPv6 address' });
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: 'ip must be a valid IPv4 or IPv6 address',
+    });
   });
 
   it('rejects random text', () => {
@@ -66,7 +75,10 @@ describe('setIpReputationController', () => {
     setIpReputationController(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ success: false, error: 'ip must be a valid IPv4 or IPv6 address' });
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: 'ip must be a valid IPv4 or IPv6 address',
+    });
   });
 
   it('does not store a rejected malformed ip', () => {
@@ -117,7 +129,10 @@ describe('getIpReputationController', () => {
     getIpReputationController(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ success: false, error: 'ip must be a valid IPv4 or IPv6 address' });
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: 'ip must be a valid IPv4 or IPv6 address',
+    });
   });
 
   it('rejects an empty ip param', () => {
@@ -127,6 +142,9 @@ describe('getIpReputationController', () => {
     getIpReputationController(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ success: false, error: 'ip must be a valid IPv4 or IPv6 address' });
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: 'ip must be a valid IPv4 or IPv6 address',
+    });
   });
 });

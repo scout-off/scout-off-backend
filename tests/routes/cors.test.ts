@@ -57,9 +57,7 @@ describe('CORS origin allowlist', () => {
     process.env.CORS_ALLOWED_ORIGINS = ALLOWED;
 
     const { default: app } = await import('../../src/app');
-    const res = await request(app)
-      .get('/health')
-      .set('Origin', 'https://unauthorized.example.com');
+    const res = await request(app).get('/health').set('Origin', 'https://unauthorized.example.com');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
   });
 
@@ -77,9 +75,7 @@ describe('CORS origin allowlist', () => {
     process.env.ALLOWED_ORIGINS = ALLOWED;
 
     const { default: app } = await import('../../src/app');
-    const res = await request(app)
-      .get('/health')
-      .set('Origin', 'https://evil.example.com');
+    const res = await request(app).get('/health').set('Origin', 'https://evil.example.com');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
   });
 
@@ -89,9 +85,7 @@ describe('CORS origin allowlist', () => {
     delete process.env.ALLOWED_ORIGINS;
 
     const { default: app } = await import('../../src/app');
-    const res = await request(app)
-      .get('/health')
-      .set('Origin', 'https://anything.example.com');
+    const res = await request(app).get('/health').set('Origin', 'https://anything.example.com');
     expect(res.headers['access-control-allow-origin']).toBe('*');
   });
 
@@ -100,9 +94,7 @@ describe('CORS origin allowlist', () => {
     process.env.CORS_ALLOWED_ORIGINS = 'https://app.scoutoff.io,https://staging.scoutoff.io';
 
     const { default: app } = await import('../../src/app');
-    const res = await request(app)
-      .get('/health')
-      .set('Origin', 'https://staging.scoutoff.io');
+    const res = await request(app).get('/health').set('Origin', 'https://staging.scoutoff.io');
     expect(res.headers['access-control-allow-origin']).toBe('https://staging.scoutoff.io');
   });
 
@@ -123,21 +115,21 @@ describe('CORS origin allowlist', () => {
     process.env.CORS_ALLOWED_ORIGINS = ALLOWED;
 
     const { default: app } = await import('../../src/app');
-    const res = await request(app)
-      .get('/api/version')
-      .set('Origin', ALLOWED);
+    const res = await request(app).get('/api/version').set('Origin', ALLOWED);
     const exposedHeaders = res.headers['access-control-expose-headers']
       .split(',')
       .map((header: string) => header.trim().toLowerCase());
 
     expect(res.headers['api-version']).toBeDefined();
-    expect(exposedHeaders).toEqual(expect.arrayContaining([
-      'api-version',
-      'location',
-      'retry-after',
-      'x-ratelimit-reputation-limit',
-      'x-trace-id',
-    ]));
+    expect(exposedHeaders).toEqual(
+      expect.arrayContaining([
+        'api-version',
+        'location',
+        'retry-after',
+        'x-ratelimit-reputation-limit',
+        'x-trace-id',
+      ]),
+    );
   });
 
   it('omits CORS header on preflight OPTIONS for disallowed origin', async () => {

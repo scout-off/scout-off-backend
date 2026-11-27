@@ -50,14 +50,12 @@ describe('setIpReputationSchema', () => {
 
 describe('subscribeSchema (.strict)', () => {
   it('accepts a valid subscribe body', () => {
-    expect(
-      subscribeSchema.safeParse({ tier: 'basic', duration: 30 }).success,
-    ).toBe(true);
+    expect(subscribeSchema.safeParse({ tier: 'basic', duration: 30 }).success).toBe(true);
   });
 
   it('rejects unknown keys', () => {
-    expect(
-      subscribeSchema.safeParse({ tier: 'basic', duration: 30, promo: 'x' }).success,
-    ).toBe(false);
+    expect(subscribeSchema.safeParse({ tier: 'basic', duration: 30, promo: 'x' }).success).toBe(
+      false,
+    );
   });
 });

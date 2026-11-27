@@ -16,16 +16,31 @@ function makeReqRes() {
   let _headersSent = false;
 
   const res = {
-    get headersSent() { return _headersSent; },
+    get headersSent() {
+      return _headersSent;
+    },
     on(event: string, cb: () => void) {
       listeners[event] = listeners[event] ?? [];
       listeners[event].push(cb);
     },
-    setHeader() { return this; },
-    status(code: number) { statusCode = code; return this; },
-    json(data: unknown) { body = data; _headersSent = true; return this; },
-    emit(event: string) { (listeners[event] ?? []).forEach(cb => cb()); },
-    markSent() { _headersSent = true; },
+    setHeader() {
+      return this;
+    },
+    status(code: number) {
+      statusCode = code;
+      return this;
+    },
+    json(data: unknown) {
+      body = data;
+      _headersSent = true;
+      return this;
+    },
+    emit(event: string) {
+      (listeners[event] ?? []).forEach((cb) => cb());
+    },
+    markSent() {
+      _headersSent = true;
+    },
     _getStatus: () => statusCode,
     _getBody: () => body,
   } as unknown as Response & {
@@ -36,8 +51,12 @@ function makeReqRes() {
   };
 
   const req = {
-    on() { return this; },
-    removeListener() { return this; },
+    on() {
+      return this;
+    },
+    removeListener() {
+      return this;
+    },
   } as unknown as Request;
   const next = jest.fn() as NextFunction;
   return { req, res, next };
@@ -195,7 +214,7 @@ describe('createTimeout(ms)', () => {
 
     jest.advanceTimersByTime(150);
     expect(r1.res._getStatus()).toBe(503); // short timeout fired
-    expect(r2.res._getStatus()).toBe(0);   // long timeout not yet
+    expect(r2.res._getStatus()).toBe(0); // long timeout not yet
 
     jest.advanceTimersByTime(200);
     expect(r2.res._getStatus()).toBe(503); // long timeout now fired

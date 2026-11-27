@@ -9,8 +9,7 @@ import { resolveApiKey } from '../services/apiKeyService';
 import { verifyJwt } from '../utils/jwt';
 import { hasApiKeyScope, ApiKeyScope } from '../utils/apiKeyScopes';
 import { ErrorCode } from '../utils/errorCodes';
-import { touchApiKeyLastUsed } from '../db';
-import { getTokensValidAfter } from '../db';
+import { touchApiKeyLastUsed, getTokensValidAfter } from '../db';
 import { incAuthFailure } from './metrics';
 
 export interface AuthPayload extends jwt.JwtPayload, Partial<JwtPayload> {}
@@ -40,17 +39,29 @@ function attachAuthState(req: Request, payload: AuthPayload): void {
  * outage doesn't lock out legitimate traffic. Returns `false` when the
  * request has already been answered with 401.
  */
-async function enforceTokensValidAfter(req: Request, res: Response, payload: AuthPayload): Promise<boolean> {
+async function enforceTokensValidAfter(
+  req: Request,
+  res: Response,
+  payload: AuthPayload,
+): Promise<boolean> {
   try {
-    const tokensValidAfter = await getTokensValidAfter(payload.sub);
+    const tokensValidAfter = payload.sub ? await getTokensValidAfter(payload.sub) : null;
     if (tokensValidAfter !== null && (payload.iat ?? 0) <= tokensValidAfter) {
-      logger.warn({ method: req.method, path: req.path, error: 'Token issued before tokens_valid_after cutoff' });
+      logger.warn({
+        method: req.method,
+        path: req.path,
+        error: 'Token issued before tokens_valid_after cutoff',
+      });
       incAuthFailure('revoked_token');
       sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
       return false;
     }
   } catch {
-    logger.warn({ method: req.method, path: req.path, error: 'tokens_valid_after lookup failed, allowing request' });
+    logger.warn({
+      method: req.method,
+      path: req.path,
+      error: 'tokens_valid_after lookup failed, allowing request',
+    });
   }
   return true;
 }
@@ -95,13 +106,26 @@ export async function authenticateApiKey(
         requiredRole,
         providedRole: 'scout',
       });
-      logAuditEvent({ action: 'auth_forbidden', path: req.path, reason: 'Insufficient permissions', requiredRole, timestamp: new Date().toISOString() }).catch(() => {});
+      logAuditEvent({
+        action: 'auth_forbidden',
+        path: req.path,
+        reason: 'Insufficient permissions',
+        requiredRole,
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
       incAuthFailure('forbidden_role');
       sendForbidden(res, 'Insufficient permissions', { requiredRole, providedRole: 'scout' });
       return 'forbidden';
     }
     void Promise.resolve(touchApiKeyLastUsed(resolved.id)).catch((err) => {
-      logger.warn({ method: req.method, path: req.path, error: 'Failed to update API key last-used timestamp' }, err);
+      logger.warn(
+        {
+          method: req.method,
+          path: req.path,
+          error: 'Failed to update API key last-used timestamp',
+        },
+        err,
+      );
     });
     req.account = resolved.scout_wallet;
     req.role = 'scout';
@@ -155,7 +179,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
     logger.warn({ method: req.method, path: req.path, error: 'Missing auth token' });
-    logAuditEvent({ action: 'auth_failed', path: req.path, reason: 'Missing auth token', timestamp: new Date().toISOString() }).catch(() => {});
+    logAuditEvent({
+      action: 'auth_failed',
+      path: req.path,
+      reason: 'Missing auth token',
+      timestamp: new Date().toISOString(),
+    }).catch(() => {});
     incAuthFailure('missing_token');
     sendUnauthorized(res, 'Missing auth token');
     return;
@@ -164,26 +193,37 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const payload = verifyToken(header.slice(7));
     // isTokenRevoked is async; we must chain into a Promise to avoid blocking
     // the event loop while still sending the 401 on the same request lifecycle.
-    isTokenRevoked(payload.jti).then(async (revoked) => {
-      if (revoked) {
-        logger.warn({ method: req.method, path: req.path, error: 'Token revoked' });
-        incAuthFailure('revoked_token');
-        sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
-        return;
-      }
-      if (!(await enforceTokensValidAfter(req, res, payload))) return;
-      attachAuthState(req, payload);
-      next();
-    }).catch(() => {
-      // Revocation check failed — fail open (allow request) to avoid blocking
-      // legitimate traffic when the blocklist store is temporarily unavailable.
-      logger.warn({ method: req.method, path: req.path, error: 'Revocation check failed, allowing request' });
-      attachAuthState(req, payload);
-      next();
-    });
+    isTokenRevoked(payload.jti)
+      .then(async (revoked) => {
+        if (revoked) {
+          logger.warn({ method: req.method, path: req.path, error: 'Token revoked' });
+          incAuthFailure('revoked_token');
+          sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
+          return;
+        }
+        if (!(await enforceTokensValidAfter(req, res, payload))) return;
+        attachAuthState(req, payload);
+        next();
+      })
+      .catch(() => {
+        // Revocation check failed — fail open (allow request) to avoid blocking
+        // legitimate traffic when the blocklist store is temporarily unavailable.
+        logger.warn({
+          method: req.method,
+          path: req.path,
+          error: 'Revocation check failed, allowing request',
+        });
+        attachAuthState(req, payload);
+        next();
+      });
   } catch (err) {
     logger.warn({ method: req.method, path: req.path, error: 'Invalid or expired token' });
-    logAuditEvent({ action: 'auth_failed', path: req.path, reason: 'Invalid or expired token', timestamp: new Date().toISOString() }).catch(() => {});
+    logAuditEvent({
+      action: 'auth_failed',
+      path: req.path,
+      reason: 'Invalid or expired token',
+      timestamp: new Date().toISOString(),
+    }).catch(() => {});
     incAuthFailure(err instanceof jwt.TokenExpiredError ? 'expired_token' : 'invalid_token');
     sendUnauthorized(res, 'Invalid or expired token', undefined, tokenErrorCode(err));
   }
@@ -215,8 +255,19 @@ export function requireRole(...allowedRoles: string[]) {
     // ── JWT Bearer path ─────────────────────────────────────────────────────────
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ')) {
-      logger.warn({ method: req.method, path: req.path, error: 'Missing auth token', requiredRole: role });
-      logAuditEvent({ action: 'auth_failed', path: req.path, reason: 'Missing auth token', requiredRole: role, timestamp: new Date().toISOString() }).catch(() => {});
+      logger.warn({
+        method: req.method,
+        path: req.path,
+        error: 'Missing auth token',
+        requiredRole: role,
+      });
+      logAuditEvent({
+        action: 'auth_failed',
+        path: req.path,
+        reason: 'Missing auth token',
+        requiredRole: role,
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
       incAuthFailure('missing_token');
       sendUnauthorized(res, 'Missing auth token');
       return;
@@ -234,29 +285,56 @@ export function requireRole(...allowedRoles: string[]) {
           requiredRole: role,
           providedRole: payload.role,
         });
-        logAuditEvent({ action: 'auth_forbidden', path: req.path, reason: 'Insufficient permissions', requiredRole: role, timestamp: new Date().toISOString() }).catch(() => {});
+        logAuditEvent({
+          action: 'auth_forbidden',
+          path: req.path,
+          reason: 'Insufficient permissions',
+          requiredRole: role,
+          timestamp: new Date().toISOString(),
+        }).catch(() => {});
         incAuthFailure('forbidden_role');
-        sendForbidden(res, 'Insufficient permissions', { requiredRole: role, providedRole: payload.role });
+        sendForbidden(res, 'Insufficient permissions', {
+          requiredRole: role,
+          providedRole: payload.role,
+        });
         return;
       }
 
-      isTokenRevoked(payload.jti).then(async (revoked) => {
-        if (revoked) {
-          logger.warn({ method: req.method, path: req.path, error: 'Token revoked', requiredRole: role });
-          incAuthFailure('revoked_token');
-          sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
-          return;
-        }
-        if (!(await enforceTokensValidAfter(req, res, payload))) return;
-        attachAuthState(req, payload);
-        next();
-      }).catch(() => {
-        attachAuthState(req, payload);
-        next();
-      });
+      isTokenRevoked(payload.jti)
+        .then(async (revoked) => {
+          if (revoked) {
+            logger.warn({
+              method: req.method,
+              path: req.path,
+              error: 'Token revoked',
+              requiredRole: role,
+            });
+            incAuthFailure('revoked_token');
+            sendUnauthorized(res, 'Token has been revoked', undefined, ErrorCode.TOKEN_INVALID);
+            return;
+          }
+          if (!(await enforceTokensValidAfter(req, res, payload))) return;
+          attachAuthState(req, payload);
+          next();
+        })
+        .catch(() => {
+          attachAuthState(req, payload);
+          next();
+        });
     } catch (err) {
-      logger.warn({ method: req.method, path: req.path, error: 'Invalid or expired token', requiredRole: role });
-      logAuditEvent({ action: 'auth_failed', path: req.path, reason: 'Invalid or expired token', requiredRole: role, timestamp: new Date().toISOString() }).catch(() => {});
+      logger.warn({
+        method: req.method,
+        path: req.path,
+        error: 'Invalid or expired token',
+        requiredRole: role,
+      });
+      logAuditEvent({
+        action: 'auth_failed',
+        path: req.path,
+        reason: 'Invalid or expired token',
+        requiredRole: role,
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
       incAuthFailure(err instanceof jwt.TokenExpiredError ? 'expired_token' : 'invalid_token');
       sendUnauthorized(res, 'Invalid or expired token', undefined, tokenErrorCode(err));
     }
@@ -276,7 +354,8 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction): 
       req.role = payload.role;
       req.jti = payload.jti;
       req.tokenExpiresAt = payload.exp;
-      req.clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
+      req.clientDomain =
+        typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
     } catch {
       // Invalid/expired token — treat the request as anonymous
     }
@@ -363,7 +442,8 @@ export function requireRoles(...roles: string[]) {
       req.role = payload.role;
       req.jti = payload.jti;
       req.tokenExpiresAt = payload.exp;
-      req.clientDomain = typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
+      req.clientDomain =
+        typeof payload.client_domain === 'string' ? payload.client_domain : undefined;
       next();
     } catch (err) {
       incAuthFailure(err instanceof jwt.TokenExpiredError ? 'expired_token' : 'invalid_token');

@@ -28,7 +28,13 @@ const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
 
 function parseRouteFile(absPath) {
   const text = fs.readFileSync(absPath, 'utf8');
-  const sourceFile = ts.createSourceFile(absPath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const sourceFile = ts.createSourceFile(
+    absPath,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
 
   const routerVarName = findRouterVarName(sourceFile) || 'router';
   const globalMiddleware = findGlobalMiddleware(sourceFile, routerVarName);
@@ -144,7 +150,10 @@ function unwrapChain(node, routerVarName) {
       objCallee.name.text === 'route'
     ) {
       // objectExpr is router.route(path) — the base of the chain
-      return { pathArg: objectExpr.arguments[0], calls: [{ method: methodName, args: node.arguments }] };
+      return {
+        pathArg: objectExpr.arguments[0],
+        calls: [{ method: methodName, args: node.arguments }],
+      };
     }
 
     const inner = unwrapChain(objectExpr, routerVarName);
@@ -176,10 +185,18 @@ function classifyMiddleware(argExpr, sourceFile, absPath) {
     const calleeName = ts.isIdentifier(callee) ? callee.text : undefined;
 
     if (calleeName === 'requireRole') {
-      return { kind: 'role', role: literalText(argExpr.arguments[0]), raw: argExpr.getText(sourceFile) };
+      return {
+        kind: 'role',
+        role: literalText(argExpr.arguments[0]),
+        raw: argExpr.getText(sourceFile),
+      };
     }
     if (calleeName === 'requireApiKeyScope') {
-      return { kind: 'apiKeyScope', scope: literalText(argExpr.arguments[0]), raw: argExpr.getText(sourceFile) };
+      return {
+        kind: 'apiKeyScope',
+        scope: literalText(argExpr.arguments[0]),
+        raw: argExpr.getText(sourceFile),
+      };
     }
     if (calleeName === 'requireWalletOwner') {
       return { kind: 'ownerCheck', raw: argExpr.getText(sourceFile) };

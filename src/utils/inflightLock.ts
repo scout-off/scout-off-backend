@@ -7,10 +7,10 @@ interface InFlightRequest<T> {
 
 /**
  * In-memory per-wallet lock to prevent concurrent subscription requests.
- * 
+ *
  * When multiple requests arrive for the same wallet simultaneously,
  * the second request waits for the first to complete and returns its result.
- * 
+ *
  * The lock automatically expires after REQUEST_TIMEOUT_MS to prevent
  * permanent locks in case of errors or crashes.
  */
@@ -34,7 +34,7 @@ class InFlightLock {
     if (existing) {
       // Wait for the existing request to complete
       try {
-        return await existing.promise as Promise<T>;
+        return (await existing.promise) as Promise<T>;
       } catch (error) {
         // If the existing request failed, remove the lock and retry
         this.locks.delete(key);

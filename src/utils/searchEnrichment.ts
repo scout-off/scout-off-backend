@@ -30,9 +30,7 @@ export interface EnrichedPlayerResult {
  *
  * @param progressLevel - The player's numeric progress tier (0–3).
  */
-export function enrichPlayerResult(
-  progressLevel: number | ProgressLevel,
-): EnrichedPlayerResult {
+export function enrichPlayerResult(progressLevel: number | ProgressLevel): EnrichedPlayerResult {
   const level = Number(progressLevel);
   return {
     progressLabel: PROGRESS_LABELS[level] ?? 'Unknown',

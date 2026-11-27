@@ -10,9 +10,7 @@ describe('JSON Payload Size Limit', () => {
       metadataUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
     };
 
-    const res = await request(app)
-      .post('/api/players/register')
-      .send(validPayload);
+    const res = await request(app).post('/api/players/register').send(validPayload);
 
     // Should not return 413
     expect(res.status).not.toBe(413);
@@ -24,9 +22,7 @@ describe('JSON Payload Size Limit', () => {
       data: 'x'.repeat(5 * 1024 * 1024),
     };
 
-    const res = await request(app)
-      .post('/api/players/register')
-      .send(payload);
+    const res = await request(app).post('/api/players/register').send(payload);
 
     expect(res.status).not.toBe(413);
   });
@@ -37,9 +33,7 @@ describe('JSON Payload Size Limit', () => {
       data: 'x'.repeat(5 * 1024 * 1024),
     };
 
-    const res = await request(app)
-      .post('/api/v2/players/register')
-      .send(payload);
+    const res = await request(app).post('/api/v2/players/register').send(payload);
 
     expect(res.status).not.toBe(413);
   });
@@ -51,9 +45,7 @@ describe('JSON Payload Size Limit', () => {
       description: 'x'.repeat(5 * 1024 * 1024),
     };
 
-    const res = await request(app)
-      .post('/api/v2/validators/milestone')
-      .send(payload);
+    const res = await request(app).post('/api/v2/validators/milestone').send(payload);
 
     expect(res.status).not.toBe(413);
   });

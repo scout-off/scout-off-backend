@@ -152,9 +152,7 @@ describe('#302 GET /api/admin/events — date filter uses created_at', () => {
 
   it('returns all events when no date filter is applied', async () => {
     const token = await getAdminToken();
-    const res = await request(app)
-      .get('/api/admin/events')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/admin/events').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(3);

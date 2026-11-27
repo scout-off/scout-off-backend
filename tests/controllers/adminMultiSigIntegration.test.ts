@@ -1,6 +1,6 @@
 /**
  * Integration tests for adminController multi-signature endpoints (#1017)
- * 
+ *
  * Tests the complete flow from HTTP request through multisig to execution
  */
 
@@ -47,17 +47,17 @@ describe('Admin Multi-Signature Controller Integration', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Set successful responses
     mockStellar.pauseContractOnChain.mockResolvedValue({ transactionId: 'tx_pause_123' });
     mockStellar.unpauseContractOnChain.mockResolvedValue({ transactionId: 'tx_unpause_123' });
     mockStellar.registerValidatorOnChain.mockResolvedValue({ transactionId: 'tx_register_123' });
     mockStellar.revokeValidatorOnChain.mockResolvedValue({ transactionId: 'tx_revoke_123' });
-    mockStellar.withdrawFees.mockResolvedValue({ 
+    mockStellar.withdrawFees.mockResolvedValue({
       transactionId: 'tx_withdraw_123',
       amount: 1000000,
       recipient: treasuryAddress,
-      token: 'XLM'
+      token: 'XLM',
     });
   });
 
@@ -82,7 +82,7 @@ describe('Admin Multi-Signature Controller Integration', () => {
 
       expect(approveResponse.body.success).toBe(true);
       expect(approveResponse.body.message).toMatch(/action executed/i);
-      
+
       // Verify stellar function was called
       expect(mockStellar.registerValidatorOnChain).toHaveBeenCalledWith(validatorWallet);
     });
@@ -233,7 +233,7 @@ describe('Admin Multi-Signature Controller Integration', () => {
 
     test('unauthorized admin returns 403', async () => {
       const unauthorizedWallet = 'GUNAUTHORIZED123456789012345678901234567890123456';
-      
+
       await request(app)
         .post('/api/admin/validators/register')
         .set('Authorization', `Bearer ${adminToken(unauthorizedWallet)}`)
@@ -310,7 +310,7 @@ describe('Admin Multi-Signature Controller Integration', () => {
     test('higher threshold requires more approvals', async () => {
       const originalThreshold = config.adminThreshold;
       const originalAdmins = [...config.adminWallets];
-      
+
       config.adminThreshold = 3;
       config.adminWallets = [adminWallet1, adminWallet2, 'GADMIN3XXXXXXXXX'];
 
@@ -332,7 +332,7 @@ describe('Admin Multi-Signature Controller Integration', () => {
         expect(approve1.body.message).toMatch(/more signature/);
         expect(mockStellar.pauseContractOnChain).not.toHaveBeenCalled();
 
-        // Second approval - should execute  
+        // Second approval - should execute
         const approve2 = await request(app)
           .post(`/api/admin/actions/${actionId}/approve`)
           .set('Authorization', `Bearer ${adminToken('GADMIN3XXXXXXXXX')}`)

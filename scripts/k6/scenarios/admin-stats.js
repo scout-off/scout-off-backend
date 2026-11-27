@@ -21,15 +21,13 @@ export const adminStatsOptions = {
   duration: '30s',
   thresholds: {
     http_req_duration: ['p(95)<300'],
-    http_req_failed:   ['rate<0.01'],
+    http_req_failed: ['rate<0.01'],
     admin_stats_errors: ['count<1'],
   },
 };
 
 export default function adminStatsVU() {
-  const headers = ADMIN_TOKEN
-    ? { Authorization: `Bearer ${ADMIN_TOKEN}` }
-    : {};
+  const headers = ADMIN_TOKEN ? { Authorization: `Bearer ${ADMIN_TOKEN}` } : {};
 
   const res = http.get(`${BASE_URL}/api/admin/stats`, {
     headers,

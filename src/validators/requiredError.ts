@@ -5,6 +5,8 @@
  *
  *   z.string(requiredError('name is required'))
  */
-export function requiredError(message: string): { error: (issue: { input?: unknown }) => string | undefined } {
+export function requiredError(message: string): {
+  error: (issue: { input?: unknown }) => string | undefined;
+} {
   return { error: (issue) => (issue.input === undefined ? message : undefined) };
 }

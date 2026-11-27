@@ -67,8 +67,7 @@ export async function getScoutNote(
   scoutWallet: string,
   playerId: string,
 ): Promise<ScoutPlayerNoteRow | null> {
-  const sql =
-    'SELECT * FROM scout_player_notes WHERE scout_wallet = ? AND player_id = ? LIMIT 1';
+  const sql = 'SELECT * FROM scout_player_notes WHERE scout_wallet = ? AND player_id = ? LIMIT 1';
   return timedQueryAsync(sql, async () => {
     const row = await getDriver().get<ScoutPlayerNoteRow>(sql, [scoutWallet, playerId]);
     return row ? mapScoutPlayerNoteRow(row) : null;
@@ -79,8 +78,7 @@ export async function getScoutNote(
  * List all private notes authored by a scout, ordered newest-first.
  */
 export async function getScoutNotes(scoutWallet: string): Promise<ScoutPlayerNoteRow[]> {
-  const sql =
-    'SELECT * FROM scout_player_notes WHERE scout_wallet = ? ORDER BY updated_at DESC';
+  const sql = 'SELECT * FROM scout_player_notes WHERE scout_wallet = ? ORDER BY updated_at DESC';
   return timedQueryAsync(sql, async () => {
     const rows = await getDriver().all<ScoutPlayerNoteRow>(sql, [scoutWallet]);
     return rows.map(mapScoutPlayerNoteRow);

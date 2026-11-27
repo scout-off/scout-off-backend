@@ -20,9 +20,11 @@ const mockGetReindexStatus = jest.fn().mockReturnValue({
 });
 const mockCancelReindex = jest.fn().mockReturnValue(true);
 
-const mockListWebhookDeadLetters = jest.fn().mockResolvedValue([
-  { id: 'dlq-1', event_type: 'player.registered', created_at: '2025-01-01', status: 'pending' },
-]);
+const mockListWebhookDeadLetters = jest
+  .fn()
+  .mockResolvedValue([
+    { id: 'dlq-1', event_type: 'player.registered', created_at: '2025-01-01', status: 'pending' },
+  ]);
 const mockGetWebhookDeadLetterById = jest.fn().mockResolvedValue({ id: 'dlq-1' });
 const mockMarkWebhookDeadLetterReplayed = jest.fn().mockResolvedValue(undefined);
 const mockPurgeOldWebhookDeadLetters = jest.fn().mockResolvedValue(3);
@@ -41,7 +43,9 @@ const mockGetDriver = jest.fn().mockReturnValue({});
 const mockRunMigrations = jest.fn().mockResolvedValue(undefined);
 const mockDiscoverMigrationFiles = jest.fn().mockReturnValue(['0001_init.sql']);
 const mockGetAppliedMigrations = jest.fn().mockReturnValue(new Map([['0001_init.sql', 1]]));
-const mockGenerateStatusReport = jest.fn().mockReturnValue({ applied: ['0001_init.sql'], pending: [] });
+const mockGenerateStatusReport = jest
+  .fn()
+  .mockReturnValue({ applied: ['0001_init.sql'], pending: [] });
 const mockFormatStatusReport = jest.fn().mockReturnValue('applied: 0001_init.sql\npending: none');
 
 const mockRunScheduledAuditChainVerification = jest.fn().mockResolvedValue(undefined);
@@ -128,14 +132,18 @@ async function runCli(args: string[]): Promise<RunResult> {
 
   let exitCode = 0;
   const origExit = process.exit.bind(process);
-  const mockExit = jest.spyOn(process, 'exit').mockImplementation((code?: number | string | null) => {
-    exitCode = typeof code === 'number' ? code : 0;
-    throw new Error(`process.exit(${exitCode})`);
-  });
+  const mockExit = jest
+    .spyOn(process, 'exit')
+    .mockImplementation((code?: number | string | null) => {
+      exitCode = typeof code === 'number' ? code : 0;
+      throw new Error(`process.exit(${exitCode})`);
+    });
 
   try {
     jest.resetModules();
-    const { main } = await import('../../src/cli/index.ts' as string).catch(() => ({ main: undefined }));
+    const { main } = await import('../../src/cli/index.ts' as string).catch(() => ({
+      main: undefined,
+    }));
     // Because CLI uses a top-level main() call, we re-import and call run() indirectly
     // by dynamically loading the module.  Since Jest caches modules we use isolateModules.
     await jest.isolateModulesAsync(async () => {
@@ -205,7 +213,9 @@ describe('CLI — reindex commands', () => {
 });
 
 describe('CLI — dlq commands', () => {
-  beforeEach(() => { jest.clearAllMocks(); });
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
   it('listWebhookDeadLetters is called with a limit', async () => {
     const { listWebhookDeadLetters } = await import('../../src/db');
@@ -229,7 +239,9 @@ describe('CLI — dlq commands', () => {
 });
 
 describe('CLI — tokens commands', () => {
-  beforeEach(() => { jest.clearAllMocks(); });
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
   it('revokeToken is called with jti and far-future expiry', async () => {
     const { revokeToken } = await import('../../src/services/tokenBlocklist');
@@ -244,7 +256,7 @@ describe('CLI — tokens commands', () => {
     // Simulate CLI logic: only revoke keys without revoked_at
     for (const key of keys) {
       if (!key.revoked_at) {
-        await revokeApiKeyById(key.id, 'alice');
+        await revokeApiKeyById(key.id, 'GWALLET123');
       }
     }
     expect(mockRevokeApiKeyById).toHaveBeenCalledTimes(1);
@@ -253,7 +265,9 @@ describe('CLI — tokens commands', () => {
 });
 
 describe('CLI — flags commands', () => {
-  beforeEach(() => { jest.clearAllMocks(); });
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
   it('setFeatureFlag is called with name and boolean value', async () => {
     const { setFeatureFlag } = await import('../../src/services/featureFlags');
@@ -271,17 +285,22 @@ describe('CLI — flags commands', () => {
 });
 
 describe('CLI — audit verify', () => {
-  beforeEach(() => { jest.clearAllMocks(); });
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
   it('runScheduledAuditChainVerification is invoked', async () => {
-    const { runScheduledAuditChainVerification } = await import('../../src/services/auditChainVerifier');
+    const { runScheduledAuditChainVerification } =
+      await import('../../src/services/auditChainVerifier');
     await runScheduledAuditChainVerification();
     expect(mockRunScheduledAuditChainVerification).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('CLI — audit logging on mutating commands', () => {
-  beforeEach(() => { jest.clearAllMocks(); });
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
   it('insertAuditLog is called after every mutating operation', async () => {
     const { insertAuditLog } = await import('../../src/db');

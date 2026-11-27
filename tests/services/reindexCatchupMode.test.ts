@@ -179,9 +179,7 @@ describe('zero delay in catch-up mode', () => {
 
     // In catch-up mode the delay is 0 — the implementation skips the await entirely
     // so setTimeout should not be called for inter-batch delays.
-    const batchDelayTimers = setTimeoutSpy.mock.calls.filter(
-      ([, delay]) => delay === 100,
-    );
+    const batchDelayTimers = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 100);
     expect(batchDelayTimers.length).toBe(0);
 
     setTimeoutSpy.mockRestore();
@@ -194,12 +192,14 @@ describe('zero delay in catch-up mode', () => {
 
     const delays: number[] = [];
     const realSetTimeout = global.setTimeout;
-    const spy = jest.spyOn(global, 'setTimeout').mockImplementation((fn: any, delay?: number, ...args: any[]) => {
-      if (typeof delay === 'number' && delay > 0) {
-        delays.push(delay);
-      }
-      return realSetTimeout(fn, 0, ...args); // execute immediately for test speed
-    });
+    const spy = jest
+      .spyOn(global, 'setTimeout')
+      .mockImplementation((fn: any, delay?: number, ...args: any[]) => {
+        if (typeof delay === 'number' && delay > 0) {
+          delays.push(delay);
+        }
+        return realSetTimeout(fn, 0, ...args); // execute immediately for test speed
+      });
 
     mockGetEvents.mockResolvedValue({ events: [] });
 
@@ -317,8 +317,8 @@ describe('mode transition logging', () => {
     startReindex(70_000, 70_299, 'GADMIN');
     await flushBackground();
 
-    const transitionLogs = infoSpy.mock.calls.filter(([msg]) =>
-      typeof msg === 'string' && msg.includes('mode transition'),
+    const transitionLogs = infoSpy.mock.calls.filter(
+      ([msg]) => typeof msg === 'string' && msg.includes('mode transition'),
     );
     // Should log at least one transition (catchup → steady as lag drops below threshold)
     expect(transitionLogs.length).toBeGreaterThanOrEqual(1);

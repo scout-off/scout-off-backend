@@ -71,7 +71,12 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -90,10 +95,10 @@ import {
 } from '../../src/db';
 import { WebhookSubscriptionLimitError } from '../../src/utils/scoutResourceLimits';
 
-const mockCreate   = createWebhookSubscription   as jest.Mock;
+const mockCreate = createWebhookSubscription as jest.Mock;
 const mockListByScout = getWebhookSubscriptionsByScout as jest.Mock;
-const mockGetById  = getWebhookSubscriptionById  as jest.Mock;
-const mockDelete   = deleteWebhookSubscription   as jest.Mock;
+const mockGetById = getWebhookSubscriptionById as jest.Mock;
+const mockDelete = deleteWebhookSubscription as jest.Mock;
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -109,10 +114,16 @@ const scoutAToken = makeToken(SCOUT_A);
 const scoutBToken = makeToken(SCOUT_B);
 
 /** A mock subscription row as returned by createWebhookSubscription */
-function mockSubscription(overrides: Partial<{
-  id: number; url: string; secret: string; scout_wallet: string;
-  event_types: string | null; created_at: string;
-}> = {}) {
+function mockSubscription(
+  overrides: Partial<{
+    id: number;
+    url: string;
+    secret: string;
+    scout_wallet: string;
+    event_types: string | null;
+    created_at: string;
+  }> = {},
+) {
   return {
     id: 1,
     url: WEBHOOK_URL,
@@ -125,10 +136,16 @@ function mockSubscription(overrides: Partial<{
 }
 
 /** A mock row as returned by getWebhookSubscriptionById — secret is encrypted */
-function mockSubscriptionRow(overrides: Partial<{
-  id: number; url: string; secret: string; scout_wallet: string;
-  event_types: string | null; created_at: string;
-}> = {}) {
+function mockSubscriptionRow(
+  overrides: Partial<{
+    id: number;
+    url: string;
+    secret: string;
+    scout_wallet: string;
+    event_types: string | null;
+    created_at: string;
+  }> = {},
+) {
   // Use a simple non-encrypted secret for the mock (decryptWebhookSecret is
   // a pass-through for values not starting with 'v1:')
   return {
@@ -163,12 +180,7 @@ describe('POST /api/scouts/:wallet/webhooks', () => {
     expect(res.body.data.secret).toBe(sub.secret); // plaintext returned once
     expect(typeof res.body.data.secret).toBe('string');
     expect(mockCreate).toHaveBeenCalledTimes(1);
-    expect(mockCreate).toHaveBeenCalledWith(
-      WEBHOOK_URL,
-      undefined,
-      SCOUT_A,
-      undefined,
-    );
+    expect(mockCreate).toHaveBeenCalledWith(WEBHOOK_URL, undefined, SCOUT_A, undefined);
   });
 
   it('registers a webhook with specific event types', async () => {
@@ -182,12 +194,10 @@ describe('POST /api/scouts/:wallet/webhooks', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.eventTypes).toEqual(['player_registered', 'milestone_approved']);
-    expect(mockCreate).toHaveBeenCalledWith(
-      WEBHOOK_URL,
-      undefined,
-      SCOUT_A,
-      ['player_registered', 'milestone_approved'],
-    );
+    expect(mockCreate).toHaveBeenCalledWith(WEBHOOK_URL, undefined, SCOUT_A, [
+      'player_registered',
+      'milestone_approved',
+    ]);
   });
 
   it('returns 409 when the scout has reached the subscription limit', async () => {
@@ -317,8 +327,7 @@ describe('GET /api/scouts/:wallet/webhooks', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .get(`/api/scouts/${SCOUT_A}/webhooks`);
+    const res = await request(app).get(`/api/scouts/${SCOUT_A}/webhooks`);
 
     expect(res.status).toBe(401);
   });
@@ -363,8 +372,7 @@ describe('DELETE /api/scouts/:wallet/webhooks/:id', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .delete(`/api/scouts/${SCOUT_A}/webhooks/1`);
+    const res = await request(app).delete(`/api/scouts/${SCOUT_A}/webhooks/1`);
 
     expect(res.status).toBe(401);
   });
@@ -465,8 +473,7 @@ describe('POST /api/scouts/:wallet/webhooks/:id/test', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .post(`/api/scouts/${SCOUT_A}/webhooks/1/test`);
+    const res = await request(app).post(`/api/scouts/${SCOUT_A}/webhooks/1/test`);
 
     expect(res.status).toBe(401);
   });

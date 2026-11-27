@@ -106,7 +106,10 @@ describe('sendForbidden', () => {
 
   it('includes reason when provided', () => {
     const res = makeRes();
-    sendForbidden(res, 'Insufficient permissions', { requiredRole: 'admin', providedRole: 'player' });
+    sendForbidden(res, 'Insufficient permissions', {
+      requiredRole: 'admin',
+      providedRole: 'player',
+    });
     expect(res.json).toHaveBeenCalledWith<[AuthErrorPayload]>({
       success: false,
       errorCode: 9,

@@ -4,10 +4,12 @@ import { requiredError } from '../validators/requiredError';
 import { setIpScore, getReputation } from '../services/ipReputation';
 import { isValidIpAddress } from '../utils/validators';
 
-export const setIpReputationSchema = z.object({
-  ip: z.string(requiredError('ip is required')).trim().min(1, 'ip is required'),
-  score: z.union([z.literal(0), z.literal(100)]),
-}).strict();
+export const setIpReputationSchema = z
+  .object({
+    ip: z.string(requiredError('ip is required')).trim().min(1, 'ip is required'),
+    score: z.union([z.literal(0), z.literal(100)]),
+  })
+  .strict();
 
 /**
  * POST /api/admin/ip-allowlist
@@ -23,6 +25,10 @@ export const setIpReputationSchema = z.object({
 export function setIpReputationController(req: Request, res: Response): void {
   const { ip, score } = req.body as { ip: string; score: number };
 
+  if (typeof ip !== 'string' || ip.trim() === '') {
+    res.status(400).json({ success: false, error: 'ip is required' });
+    return;
+  }
   if (!isValidIpAddress(ip)) {
     res.status(400).json({ success: false, error: 'ip must be a valid IPv4 or IPv6 address' });
     return;

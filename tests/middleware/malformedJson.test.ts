@@ -19,7 +19,9 @@ describe('Malformed JSON body guarding', () => {
   });
 
   it('returns 400 for valid JSON that fails validation (Zod) and includes correlationId', async () => {
-    const token = jwt.sign({ sub: 'G' + 'A'.repeat(55), role: 'player' }, SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ sub: 'G' + 'A'.repeat(55), role: 'player' }, SECRET, {
+      expiresIn: '1h',
+    });
     const res = await request(app)
       .post('/api/players/register')
       .set('Authorization', `Bearer ${token}`)
@@ -32,7 +34,9 @@ describe('Malformed JSON body guarding', () => {
   });
 
   it('returns 415 when a body is sent without an application/json Content-Type', async () => {
-    const token = jwt.sign({ sub: 'G' + 'A'.repeat(55), role: 'player' }, SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ sub: 'G' + 'A'.repeat(55), role: 'player' }, SECRET, {
+      expiresIn: '1h',
+    });
     const res = await request(app)
       .post('/api/players/register')
       .set('Authorization', `Bearer ${token}`)
@@ -48,13 +52,22 @@ describe('Malformed JSON body guarding', () => {
   });
 
   it('returns 415 for an incorrect Content-Type header on a JSON-body route', async () => {
-    const token = jwt.sign({ sub: 'G' + 'A'.repeat(55), role: 'player' }, SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ sub: 'G' + 'A'.repeat(55), role: 'player' }, SECRET, {
+      expiresIn: '1h',
+    });
     const res = await request(app)
       .post('/api/players/register')
       .set('Authorization', `Bearer ${token}`)
       .set('Content-Type', 'text/plain')
       .set('x-correlation-id', 'test-wrong-content-type-id')
-      .send(JSON.stringify({ wallet: 'G' + 'A'.repeat(55), position: 'Midfielder', region: 'West Africa', metadata: {} }));
+      .send(
+        JSON.stringify({
+          wallet: 'G' + 'A'.repeat(55),
+          position: 'Midfielder',
+          region: 'West Africa',
+          metadata: {},
+        }),
+      );
 
     expect(res.status).toBe(415);
     expect(res.body.success).toBe(false);

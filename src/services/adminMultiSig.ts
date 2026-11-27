@@ -113,7 +113,11 @@ async function runAdminActionInternal(
         // Accept either so quorum-reached execution works for both.
         const recipient = (payload.treasuryAddress ?? payload.recipient) as string | undefined;
         if (!recipient) {
-          return { success: false, error: 'Missing recipient in payload', errorCode: 'INVALID_PAYLOAD' };
+          return {
+            success: false,
+            error: 'Missing recipient in payload',
+            errorCode: 'INVALID_PAYLOAD',
+          };
         }
         const amountStroops = payload.amountStroops as string | undefined;
         const result: FeeWithdrawalResult =
@@ -149,7 +153,11 @@ async function runAdminActionInternal(
       case 'register_validator': {
         const validatorWallet = payload.validatorWallet as string;
         if (!validatorWallet) {
-          return { success: false, error: 'Missing validatorWallet in payload', errorCode: 'INVALID_PAYLOAD' };
+          return {
+            success: false,
+            error: 'Missing validatorWallet in payload',
+            errorCode: 'INVALID_PAYLOAD',
+          };
         }
         const result: ContractActionResult = await registerValidatorOnChain(validatorWallet);
 
@@ -162,7 +170,11 @@ async function runAdminActionInternal(
       case 'revoke_validator': {
         const validatorWallet = payload.validatorWallet as string;
         if (!validatorWallet) {
-          return { success: false, error: 'Missing validatorWallet in payload', errorCode: 'INVALID_PAYLOAD' };
+          return {
+            success: false,
+            error: 'Missing validatorWallet in payload',
+            errorCode: 'INVALID_PAYLOAD',
+          };
         }
         const result: ContractActionResult = await revokeValidatorOnChain(validatorWallet);
 
@@ -175,7 +187,11 @@ async function runAdminActionInternal(
       case 'bulk_validator_import': {
         const { wallet } = payload;
         if (!wallet) {
-          return { success: false, error: 'Missing wallet in payload', errorCode: 'INVALID_PAYLOAD' };
+          return {
+            success: false,
+            error: 'Missing wallet in payload',
+            errorCode: 'INVALID_PAYLOAD',
+          };
         }
         const result: ContractActionResult = await registerValidatorOnChain(wallet as string);
 
@@ -188,7 +204,11 @@ async function runAdminActionInternal(
       case 'update_platform_fee': {
         const newFeeBps = Number(payload.newFeeBps);
         if (!Number.isInteger(newFeeBps) || newFeeBps < 0 || newFeeBps > 10000) {
-          return { success: false, error: 'newFeeBps must be an integer between 0 and 10000', errorCode: 'INVALID_PAYLOAD' };
+          return {
+            success: false,
+            error: 'newFeeBps must be an integer between 0 and 10000',
+            errorCode: 'INVALID_PAYLOAD',
+          };
         }
         let result;
         try {
@@ -196,11 +216,15 @@ async function runAdminActionInternal(
         } catch (feeErr) {
           const code = (feeErr as { code?: string }).code ?? 'EXECUTION_FAILED';
           const mapped =
-            code === 'INVALID_INPUT' ? 'INVALID_PAYLOAD'
-            : code === 'UNAUTHORIZED' ? 'UNAUTHORIZED'
-            : code === 'CONTRACT_PAUSED' ? 'CONTRACT_PAUSED'
-            : code === 'NOT_INITIALIZED' ? 'CONTRACT_NOT_INITIALIZED'
-            : 'NETWORK_ERROR';
+            code === 'INVALID_INPUT'
+              ? 'INVALID_PAYLOAD'
+              : code === 'UNAUTHORIZED'
+                ? 'UNAUTHORIZED'
+                : code === 'CONTRACT_PAUSED'
+                  ? 'CONTRACT_PAUSED'
+                  : code === 'NOT_INITIALIZED'
+                    ? 'CONTRACT_NOT_INITIALIZED'
+                    : 'NETWORK_ERROR';
           return { success: false, error: (feeErr as Error).message, errorCode: mapped };
         }
         // Persist an audit row for the fee change so it appears in the fee_withdrawals-style log.
@@ -463,15 +487,15 @@ export async function proposeAction(
  *   `NETWORK_ERROR`, `CONTRACT_PAUSED`) — the on-chain operation failed after
  *   quorum; the action is reverted to `pending`.
  */
-export async function approveAction(
-  actionId: string,
-  signer: string,
-): Promise<ApprovalResult> {
+export async function approveAction(actionId: string, signer: string): Promise<ApprovalResult> {
   await expireStalePendingAdminActions();
 
   const action = await getPendingAdminActionById(actionId);
   if (!action) {
-    throw Object.assign(new Error('Pending action not found'), { code: 'ACTION_NOT_FOUND', status: 404 });
+    throw Object.assign(new Error('Pending action not found'), {
+      code: 'ACTION_NOT_FOUND',
+      status: 404,
+    });
   }
   if (action.status === 'expired') {
     throw Object.assign(new Error('Action proposal has expired'), {
@@ -494,11 +518,17 @@ export async function approveAction(
 
   if (Date.now() > action.expires_at) {
     await updatePendingAdminActionStatus(actionId, 'expired');
-    throw Object.assign(new Error('Action proposal has expired'), { code: ErrorCode.EXPIRED_ACTION, status: 410 });
+    throw Object.assign(new Error('Action proposal has expired'), {
+      code: ErrorCode.EXPIRED_ACTION,
+      status: 410,
+    });
   }
 
   if (!config.adminWallets.includes(signer)) {
-    throw Object.assign(new Error('Insufficient permissions'), { code: ErrorCode.FORBIDDEN, status: 403 });
+    throw Object.assign(new Error('Insufficient permissions'), {
+      code: ErrorCode.FORBIDDEN,
+      status: 403,
+    });
   }
 
   // Check for duplicate signer
@@ -516,7 +546,11 @@ export async function approveAction(
   // INSERT … ON CONFLICT DO NOTHING returns false when the signer already had a
   // row — the authoritative duplicate check for concurrent same-signer calls
   // that both passed the getAdminActionSignature() read above.
-  const inserted = await insertAdminActionSignature({ action_id: actionId, signer, signed_at: now });
+  const inserted = await insertAdminActionSignature({
+    action_id: actionId,
+    signer,
+    signed_at: now,
+  });
   if (!inserted) {
     return {
       actionId,
@@ -584,10 +618,10 @@ export async function approveAction(
       timestamp: new Date().toISOString(),
     });
 
-    throw Object.assign(
-      new Error(executionResult.error ?? 'Execution failed'),
-      { code: executionResult.errorCode ?? 'EXECUTION_FAILED', status: 500 },
-    );
+    throw Object.assign(new Error(executionResult.error ?? 'Execution failed'), {
+      code: executionResult.errorCode ?? 'EXECUTION_FAILED',
+      status: 500,
+    });
   }
 
   await logAuditEvent({

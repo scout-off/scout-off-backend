@@ -20,8 +20,8 @@ export const playerProfileOptions = {
   vus: 20,
   duration: '30s',
   thresholds: {
-    http_req_duration:   ['p(99)<100'],
-    http_req_failed:     ['rate<0.01'],
+    http_req_duration: ['p(99)<100'],
+    http_req_failed: ['rate<0.01'],
     player_profile_errors: ['count<1'],
   },
 };
@@ -34,7 +34,11 @@ export default function playerProfileVU() {
   const ok = check(res, {
     'profile status 200 or 404': (r) => r.status === 200 || r.status === 404,
     'profile has success flag': (r) => {
-      try { return typeof JSON.parse(r.body).success === 'boolean'; } catch { return false; }
+      try {
+        return typeof JSON.parse(r.body).success === 'boolean';
+      } catch {
+        return false;
+      }
     },
   });
 

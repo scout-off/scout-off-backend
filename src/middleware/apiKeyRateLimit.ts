@@ -31,14 +31,20 @@ const CONFIG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 async function getKeyConfig(keyId: number): Promise<ApiKeyRateLimitConfig> {
   const cached = configCache.get(keyId);
   if (cached && Date.now() - cached.cachedAt < CONFIG_CACHE_TTL_MS) {
-    return { rate_limit_per_minute: cached.rate_limit_per_minute, monthly_quota: cached.monthly_quota };
+    return {
+      rate_limit_per_minute: cached.rate_limit_per_minute,
+      monthly_quota: cached.monthly_quota,
+    };
   }
 
   try {
     const config = await getApiKeyRateLimits(keyId);
     if (config) {
       configCache.set(keyId, { ...config, cachedAt: Date.now() });
-      return { rate_limit_per_minute: config.rate_limit_per_minute, monthly_quota: config.monthly_quota };
+      return {
+        rate_limit_per_minute: config.rate_limit_per_minute,
+        monthly_quota: config.monthly_quota,
+      };
     }
   } catch (err) {
     logger.warn(`[apiKeyRateLimit] failed to fetch config for key ${keyId}:`, err);
@@ -56,7 +62,11 @@ function getCurrentMonthKey(): string {
  * Middleware for per-API-key rate limiting and quota enforcement.
  * Only activates if req.apiKeyId is set (by authenticateApiKey in auth.ts).
  */
-export async function apiKeyRateLimit(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function apiKeyRateLimit(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   if (!req.apiKeyId) {
     next();
     return;

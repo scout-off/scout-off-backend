@@ -47,32 +47,39 @@ async function issueKey(opts: { scopes?: string[] } = {}): Promise<{
 
 function seedScaleKey(): { id: number; key: string; lookupHash: string } {
   const { key, keyHash, lookupHash } = generateApiKey();
-  const info = db.getDb().prepare(`
+  const info = db
+    .getDb()
+    .prepare(
+      `
     INSERT INTO api_keys (key_hash, scout_wallet, label, created_at, lookup_hash)
     VALUES (?, ?, ?, ?, ?)
-  `).run(keyHash, SCALE_SCOUT, 'scale-fixture', Math.floor(Date.now() / 1000), lookupHash);
+  `,
+    )
+    .run(keyHash, SCALE_SCOUT, 'scale-fixture', Math.floor(Date.now() / 1000), lookupHash);
   return { id: Number(info.lastInsertRowid), key, lookupHash };
 }
 
 /** Read one row's stored lookup_hash directly, without listing the whole table. */
 function storedLookupHash(id: number): string | null {
-  const row = db
-    .getDb()
-    .prepare('SELECT lookup_hash FROM api_keys WHERE id = ?')
-    .get(id) as { lookup_hash: string | null } | undefined;
+  const row = db.getDb().prepare('SELECT lookup_hash FROM api_keys WHERE id = ?').get(id) as
+    { lookup_hash: string | null } | undefined;
   return row?.lookup_hash ?? null;
 }
 
 /** Count rows in api_keys without materialising them. */
 function apiKeyCount(wallet: string): number {
-  return (db.getDb()
-    .prepare('SELECT COUNT(*) AS n FROM api_keys WHERE scout_wallet = ?')
-    .get(wallet) as { n: number }).n;
+  return (
+    db.getDb().prepare('SELECT COUNT(*) AS n FROM api_keys WHERE scout_wallet = ?').get(wallet) as {
+      n: number;
+    }
+  ).n;
 }
 
 afterEach(async () => {
   jest.restoreAllMocks();
-  await db.getDriver().run('DELETE FROM api_keys WHERE scout_wallet IN (?, ?)', [SCOUT, SCALE_SCOUT]);
+  await db
+    .getDriver()
+    .run('DELETE FROM api_keys WHERE scout_wallet IN (?, ?)', [SCOUT, SCALE_SCOUT]);
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -107,18 +114,23 @@ describe('db/024_api_key_lookup_hash.sql', () => {
   });
 
   it('the lookup index is UNIQUE — one row per raw key', () => {
-    const unique = (migrated.pragma('index_list(api_keys)') as { name: string; unique: number }[])
-      .find((i) => i.name === 'idx_api_keys_lookup_hash');
+    const unique = (
+      migrated.pragma('index_list(api_keys)') as { name: string; unique: number }[]
+    ).find((i) => i.name === 'idx_api_keys_lookup_hash');
     expect(unique?.unique).toBe(1);
   });
 
   it('permits multiple NULL lookup_hash rows (pre-migration keys do not collide)', () => {
     expect(() => {
       migrated
-        .prepare(`INSERT INTO api_keys (key_hash, scout_wallet, label, created_at) VALUES (?, ?, '', 0)`)
+        .prepare(
+          `INSERT INTO api_keys (key_hash, scout_wallet, label, created_at) VALUES (?, ?, '', 0)`,
+        )
         .run('salt-a:hash-a', SCOUT);
       migrated
-        .prepare(`INSERT INTO api_keys (key_hash, scout_wallet, label, created_at) VALUES (?, ?, '', 0)`)
+        .prepare(
+          `INSERT INTO api_keys (key_hash, scout_wallet, label, created_at) VALUES (?, ?, '', 0)`,
+        )
         .run('salt-b:hash-b', SCOUT);
     }).not.toThrow();
   });

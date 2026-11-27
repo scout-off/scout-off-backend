@@ -14,6 +14,7 @@ For architecture and API documentation, see `docs/`.
 ## Files Created
 
 All files are ready to use:
+
 - Core implementation files
 - Example files showing integration patterns
 - Documentation files
@@ -40,35 +41,39 @@ All files are ready to use:
 ## Each Phase Takes ~30-60 Minutes
 
 **Phase 2 (Spectral):** 30 min
+
 - Install dependency
 - Run linter
 - Fix violations in openapi.yaml
 
 **Phase 3 (Request Signals):** 45 min
+
 - Wire signal through middleware
 - Update 5-6 services/controllers
 - Test end-to-end
 
 **Phase 4 (Cache):** 30 min
+
 - Copy new implementation
 - Delete old files
 - Run tests
 - Update config
 
 **Phase 5 (Docs Control):** 30 min
+
 - Add config and middleware
 - Update docs.ts with examples
 - Test each mode
 
 ## Quick Reference
 
-| Task | Status | Files | Time |
-|------|--------|-------|------|
-| OpenAPI Linting | Ready | 3 | 30m |
-| Request Signals | Ready | 2 | 45m |
-| Cache Store | Ready | 1 | 30m |
-| Docs Control | Ready | 2 | 30m |
-| **Total** | **Ready** | **9** | **2-3h** |
+| Task            | Status    | Files | Time     |
+| --------------- | --------- | ----- | -------- |
+| OpenAPI Linting | Ready     | 3     | 30m      |
+| Request Signals | Ready     | 2     | 45m      |
+| Cache Store     | Ready     | 1     | 30m      |
+| Docs Control    | Ready     | 2     | 30m      |
+| **Total**       | **Ready** | **9** | **2-3h** |
 
 ## Key Files to Review
 
@@ -80,6 +85,7 @@ All files are ready to use:
 ## Example Files Are Your Friends
 
 When integrating, refer to:
+
 - `src/controllers/exportController.example.ts` — Signal checks in loops
 - `src/routes/docs.example.ts` — Docs guard integration
 - `src/services/safeFetch.example.ts` — Signal propagation
@@ -171,6 +177,7 @@ The check compares each built `.wasm` against `contracts/wasm-size-budgets.json`
 ## Rollback Plan
 
 If anything breaks:
+
 - Each phase is independent (can roll back individually)
 - All changes are backward-compatible when disabled
 - See "Rollback Plan" in CHANGES.md
@@ -178,6 +185,7 @@ If anything breaks:
 ## Support
 
 All files are fully documented with:
+
 - Inline comments explaining the why
 - Example files showing integration patterns
 - Documentation files covering the what/when/how

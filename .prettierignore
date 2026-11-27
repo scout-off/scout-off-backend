@@ -6,3 +6,6 @@ src/openapi.json
 src/graphql/persisted-operations.registry.json
 clients/typescript/src/schema.ts
 contracts/target
+helm/**/templates
+# Barrel file: one destructured re-export per line keeps it under the 300-line cap (tests/db/repositorySplit.test.ts)
+src/db/index.ts

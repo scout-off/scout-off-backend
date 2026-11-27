@@ -28,9 +28,7 @@ describe('GET /api/players — HTTP caching (#1150)', () => {
     expect(first.status).toBe(200);
     const etag = first.headers.etag;
 
-    const revalidate = await request(app)
-      .get('/api/players')
-      .set('If-None-Match', etag);
+    const revalidate = await request(app).get('/api/players').set('If-None-Match', etag);
     expect(revalidate.status).toBe(304);
     expect(revalidate.body).toEqual({});
     expect(revalidate.headers.etag).toBe(etag);
@@ -60,9 +58,7 @@ describe('GET /api/players — HTTP caching (#1150)', () => {
       __setPlayerListLastModifiedForTests(before + 2000);
     }
 
-    const second = await request(app)
-      .get('/api/players')
-      .set('If-None-Match', oldEtag);
+    const second = await request(app).get('/api/players').set('If-None-Match', oldEtag);
     expect(second.status).toBe(200);
     expect(second.headers.etag).not.toBe(oldEtag);
     expect(second.headers['last-modified']).not.toBe(oldLm);
@@ -77,14 +73,14 @@ describe('GET /api/players — HTTP caching (#1150)', () => {
     expect(headRes.headers['last-modified']).toBe(getRes.headers['last-modified']);
     expect(headRes.headers.etag).toBe(getRes.headers.etag);
     // supertest exposes body as empty object / empty string for HEAD
-    expect(headRes.text === '' || headRes.text === undefined || Object.keys(headRes.body).length === 0).toBe(true);
+    expect(
+      headRes.text === '' || headRes.text === undefined || Object.keys(headRes.body).length === 0,
+    ).toBe(true);
   });
 
   it('HEAD returns 304 when validators match', async () => {
     const first = await request(app).get('/api/players');
-    const head = await request(app)
-      .head('/api/players')
-      .set('If-None-Match', first.headers.etag);
+    const head = await request(app).head('/api/players').set('If-None-Match', first.headers.etag);
     expect(head.status).toBe(304);
   });
 });

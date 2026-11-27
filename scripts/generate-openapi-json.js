@@ -103,7 +103,7 @@ function guessOperationId(route, openApiPath) {
   if (route.handlerName) return route.handlerName;
   const slug = openApiPath
     .replace(/[{}]/g, '')
-    .split('/')
+    .split(/[^A-Za-z0-9]+/)
     .filter(Boolean)
     .map((seg, i) => (i === 0 ? seg : seg[0].toUpperCase() + seg.slice(1)))
     .join('');
@@ -248,7 +248,9 @@ function disambiguateOperationIds(paths) {
         .filter(Boolean)
         .map((segment) => {
           const name = segment.replace(/[{}]/g, '');
-          const capitalized = name.replace(/(^|[^A-Za-z0-9])([A-Za-z0-9])/g, (_, __, char) => char.toUpperCase());
+          const capitalized = name.replace(/(^|[^A-Za-z0-9])([A-Za-z0-9])/g, (_, __, char) =>
+            char.toUpperCase(),
+          );
           return segment.startsWith('{') ? `By${capitalized}` : capitalized;
         })
         .join('');

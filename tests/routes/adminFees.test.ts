@@ -4,7 +4,10 @@ import { Keypair } from '@stellar/stellar-sdk';
 import app from '../../src/app';
 import { logAuditEvent } from '../../src/services/audit';
 import * as stellar from '../../src/services/stellar';
-import { resetWithdrawalLock, setWithdrawalLockForTesting } from '../../src/controllers/adminController';
+import {
+  resetWithdrawalLock,
+  setWithdrawalLockForTesting,
+} from '../../src/controllers/adminController';
 
 const SECRET = process.env.JWT_SECRET ?? 'test-secret';
 
@@ -53,9 +56,7 @@ beforeEach(() => {
 
 describe('POST /api/admin/fees — auth', () => {
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .post('/api/admin/fees')
-      .send({ recipient: VALID_RECIPIENT });
+    const res = await request(app).post('/api/admin/fees').send({ recipient: VALID_RECIPIENT });
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
   });
@@ -340,9 +341,7 @@ describe('POST /api/admin/fees — concurrent withdrawal (409)', () => {
     // releases it via the finally block). Explicitly reset for next request.
     resetWithdrawalLock();
 
-    mockWithdrawFees.mockRejectedValueOnce(
-      new stellar.FeeWithdrawalError('No fees', 'NO_FEES'),
-    );
+    mockWithdrawFees.mockRejectedValueOnce(new stellar.FeeWithdrawalError('No fees', 'NO_FEES'));
     const second = await request(app)
       .post('/api/admin/fees')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -380,9 +379,7 @@ describe('POST /api/admin/fees — concurrent withdrawal (409)', () => {
 
   it('releases the lock after a failed withdrawal', async () => {
     const adminToken = makeToken(ADMIN_WALLET, 'admin');
-    mockWithdrawFees.mockRejectedValueOnce(
-      new stellar.FeeWithdrawalError('No fees', 'NO_FEES'),
-    );
+    mockWithdrawFees.mockRejectedValueOnce(new stellar.FeeWithdrawalError('No fees', 'NO_FEES'));
 
     const first = await request(app)
       .post('/api/admin/fees')
@@ -391,9 +388,7 @@ describe('POST /api/admin/fees — concurrent withdrawal (409)', () => {
     expect(first.status).toBe(409);
 
     // Lock must be released — next request should reach the service.
-    mockWithdrawFees.mockRejectedValueOnce(
-      new stellar.FeeWithdrawalError('No fees', 'NO_FEES'),
-    );
+    mockWithdrawFees.mockRejectedValueOnce(new stellar.FeeWithdrawalError('No fees', 'NO_FEES'));
     const second = await request(app)
       .post('/api/admin/fees')
       .set('Authorization', `Bearer ${adminToken}`)

@@ -33,7 +33,7 @@ describe('errorHandler', () => {
     const req = makeReq('test-corr-id');
     const res = makeRes();
     errorHandler(new Error('something went wrong'), req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(500);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(500);
     const body = getBody(res);
     expect(body.correlationId).toBe('test-corr-id');
     expect(body.success).toBe(false);
@@ -56,7 +56,7 @@ describe('errorHandler', () => {
       { code: ZodIssueCode.custom, message: 'Invalid field', path: ['field'] },
     ]);
     errorHandler(zodErr, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(400);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(400);
     const body = getBody(res);
     expect(body.correlationId).toBe('zod-corr-id');
     expect(body.success).toBe(false);
@@ -65,9 +65,7 @@ describe('errorHandler', () => {
   it('returns 400 for ZodError without correlationId when req has none', () => {
     const req = makeReq(undefined);
     const res = makeRes();
-    const zodErr = new ZodError([
-      { code: ZodIssueCode.custom, message: 'Bad', path: [] },
-    ]);
+    const zodErr = new ZodError([{ code: ZodIssueCode.custom, message: 'Bad', path: [] }]);
     errorHandler(zodErr, req, res, next);
     const body = getBody(res);
     expect(body.correlationId).toBeUndefined();
@@ -79,10 +77,17 @@ describe('errorHandler', () => {
     const req = makeReq();
     const res = makeRes();
     const zodErr = new ZodError([
-      { code: ZodIssueCode.too_small, minimum: 1, type: 'string', inclusive: true, message: 'Too short', path: ['name'] },
+      {
+        code: ZodIssueCode.too_small,
+        minimum: 1,
+        type: 'string',
+        inclusive: true,
+        message: 'Too short',
+        path: ['name'],
+      },
     ]);
     errorHandler(zodErr, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(400);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(400);
     const body = getBody(res);
     expect(body.success).toBe(false);
     expect(typeof body.error).toBe('string');
@@ -104,7 +109,7 @@ describe('errorHandler', () => {
     const req = makeReq();
     const res = makeRes();
     errorHandler(new Error('unexpected boom'), req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(500);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(500);
     const body = getBody(res);
     expect(body.success).toBe(false);
     expect(body.error).toBe('Internal Server Error');
@@ -126,7 +131,7 @@ describe('errorHandler', () => {
     const req = makeReq();
     const res = makeRes();
     errorHandler(new TypeError('cannot read property of null'), req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(500);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(500);
   });
 
   // ── issue #46: stack hidden in production ─────────────────────────────────
@@ -166,7 +171,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Resource not found'), { status: 404 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(404);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(404);
     const body = getBody(res);
     expect(body.success).toBe(false);
     expect(body.error).toBe('Resource not found');
@@ -179,7 +184,7 @@ describe('errorHandler', () => {
     // Confirm no status property exists
     expect((err as unknown as Record<string, unknown>).status).toBeUndefined();
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(500);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(500);
     const body = getBody(res);
     expect(body.success).toBe(false);
   });
@@ -191,7 +196,7 @@ describe('errorHandler', () => {
     const err = new Error('');
     Object.defineProperty(err, 'message', { value: '' });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(500);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(500);
     const body = getBody(res);
     expect(body.success).toBe(false);
     expect(body.error).toBe('Internal Server Error');
@@ -202,7 +207,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const plainErr = { code: 'BROKEN' } as unknown as Error;
     expect(() => errorHandler(plainErr, req, res, next)).not.toThrow();
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(500);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(500);
     const body = getBody(res);
     expect(body.success).toBe(false);
   });
@@ -211,7 +216,7 @@ describe('errorHandler', () => {
     const req = makeReq();
     const res = makeRes();
     expect(() => errorHandler(null as unknown as Error, req, res, next)).not.toThrow();
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(500);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(500);
     const body = getBody(res);
     expect(body.success).toBe(false);
   });
@@ -221,7 +226,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('ok but wrong'), { status: 200 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(500);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(500);
     const body = getBody(res);
     expect(body.success).toBe(false);
   });
@@ -233,7 +238,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Invalid input'), { status: 400 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(400);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(400);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.VALIDATION_ERROR);
   });
@@ -243,7 +248,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Missing or invalid token'), { status: 401 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(401);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(401);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.UNAUTHORIZED);
   });
@@ -253,7 +258,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Access denied'), { status: 403 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(403);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(403);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.FORBIDDEN);
   });
@@ -263,7 +268,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Resource not found'), { status: 404 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(404);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(404);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.NOT_FOUND);
   });
@@ -273,7 +278,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Resource already exists'), { status: 409 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(409);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(409);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.CONFLICT);
   });
@@ -283,7 +288,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Database connection failed'), { status: 500 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(500);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(500);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.INTERNAL_SERVER_ERROR);
   });
@@ -296,7 +301,7 @@ describe('errorHandler', () => {
       code: ErrorCode.PLAYER_NOT_FOUND,
     });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(400);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(400);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.PLAYER_NOT_FOUND);
   });
@@ -309,7 +314,7 @@ describe('errorHandler', () => {
       code: ErrorCode.SUBSCRIPTION_REQUIRED,
     });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(403);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(403);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.SUBSCRIPTION_REQUIRED);
   });
@@ -319,7 +324,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Teapot'), { status: 418 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(418);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(418);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.INTERNAL_SERVER_ERROR);
   });
@@ -329,7 +334,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Payload too large'), { status: 413 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(413);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(413);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.PAYLOAD_TOO_LARGE);
   });
@@ -339,7 +344,7 @@ describe('errorHandler', () => {
     const res = makeRes();
     const err = Object.assign(new Error('Unsupported media type'), { status: 415 });
     errorHandler(err, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(415);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(415);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.UNSUPPORTED_MEDIA_TYPE);
   });
@@ -352,7 +357,7 @@ describe('errorHandler', () => {
     ]);
     Object.assign(zodErr, { code: ErrorCode.UNAUTHORIZED });
     errorHandler(zodErr, req, res, next);
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(400);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(400);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.VALIDATION_ERROR);
   });
@@ -360,13 +365,8 @@ describe('errorHandler', () => {
   it('maps a contract failure to its specific ErrorCode and HTTP status (#1530)', () => {
     const req = makeReq('corr-contract');
     const res = makeRes();
-    errorHandler(
-      new ContractExecutionError('HostError: Error(Contract, #16)'),
-      req,
-      res,
-      next,
-    );
-    expect((res.status as jest.Mock)).toHaveBeenCalledWith(409);
+    errorHandler(new ContractExecutionError('HostError: Error(Contract, #16)'), req, res, next);
+    expect(res.status as jest.Mock).toHaveBeenCalledWith(409);
     const body = getBody(res);
     expect(body.code).toBe(ErrorCode.MILESTONE_ALREADY_APPROVED);
     expect(body.error).toBe('Milestone is already approved');

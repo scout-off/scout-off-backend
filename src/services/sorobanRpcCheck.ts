@@ -35,8 +35,12 @@ let _networkMatchGauge: number = -1;
 /** Reported protocol version, or -1 when unknown. */
 let _protocolVersionGauge: number = -1;
 
-export function getStellarRpcNetworkMatchGauge(): number { return _networkMatchGauge; }
-export function getStellarRpcProtocolVersionGauge(): number { return _protocolVersionGauge; }
+export function getStellarRpcNetworkMatchGauge(): number {
+  return _networkMatchGauge;
+}
+export function getStellarRpcProtocolVersionGauge(): number {
+  return _protocolVersionGauge;
+}
 
 // ── Liveness tracking ─────────────────────────────────────────────────────────
 
@@ -88,7 +92,11 @@ export async function probeSorobanRpcCheck(): Promise<RpcCheckResult> {
   let passphraseDetail = '';
 
   try {
-    const network = await (rawServer as unknown as { getNetwork: () => Promise<{ passphrase: string; protocolVersion?: number }> }).getNetwork();
+    const network = await (
+      rawServer as unknown as {
+        getNetwork: () => Promise<{ passphrase: string; protocolVersion?: number }>;
+      }
+    ).getNetwork();
     const reported = network.passphrase ?? '';
     const expected = config.networkPassphrase;
 
@@ -154,9 +162,9 @@ export async function probeSorobanRpcCheck(): Promise<RpcCheckResult> {
       livenessDetail = `getLatestLedger failed: ${livenessErr instanceof Error ? livenessErr.message : String(livenessErr)}`;
     }
 
-    const severity = (s: RpcCheckSeverity): number => s === 'error' ? 2 : s === 'warning' ? 1 : 0;
+    const severity = (s: RpcCheckSeverity): number => (s === 'error' ? 2 : s === 'warning' ? 1 : 0);
     const worstSeverity = [passphraseSeverity, protocolSeverity, livenessSeverity].reduce(
-      (worst, s) => severity(s) > severity(worst) ? s : worst,
+      (worst, s) => (severity(s) > severity(worst) ? s : worst),
       'ok' as RpcCheckSeverity,
     );
 

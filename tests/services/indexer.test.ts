@@ -7,7 +7,11 @@ import {
   setPlayerOnChainId,
   queryPlayers,
 } from '../../src/db';
-import { normalizeEventId, normalizePayload, normalizeSorobanEvent } from '../../src/services/indexer';
+import {
+  normalizeEventId,
+  normalizePayload,
+  normalizeSorobanEvent,
+} from '../../src/services/indexer';
 import {
   countEvents,
   dbAll,
@@ -35,8 +39,18 @@ describe('indexer', () => {
     });
 
     it('handles mixed payloads, normalising only camelCase keys', () => {
-      const result = normalizePayload({ playerId: 'p1', region: 'EU', metadataUri: 'QmAbc', txHash: 'abc' });
-      expect(result).toEqual({ player_id: 'p1', region: 'EU', metadata_uri: 'QmAbc', tx_hash: 'abc' });
+      const result = normalizePayload({
+        playerId: 'p1',
+        region: 'EU',
+        metadataUri: 'QmAbc',
+        txHash: 'abc',
+      });
+      expect(result).toEqual({
+        player_id: 'p1',
+        region: 'EU',
+        metadata_uri: 'QmAbc',
+        tx_hash: 'abc',
+      });
     });
 
     it('returns empty object for empty input', () => {
@@ -72,10 +86,7 @@ describe('indexer', () => {
     it('extracts the indexed player ID from token events', () => {
       const { nativeToScVal } = require('@stellar/stellar-sdk');
       const event = normalizeSorobanEvent({
-        topic: [
-          nativeToScVal('tok_buy', { type: 'symbol' }),
-          nativeToScVal(7n, { type: 'u64' }),
-        ],
+        topic: [nativeToScVal('tok_buy', { type: 'symbol' }), nativeToScVal(7n, { type: 'u64' })],
         value: nativeToScVal([7n, 10]),
       });
 
@@ -149,7 +160,14 @@ describe('player table helpers', () => {
   const WALLET = 'GTEST' + 'A'.repeat(51);
 
   it('insertOrUpdatePlayer inserts a new player', async () => {
-    await insertOrUpdatePlayer({ player_id: PLAYER_ID, wallet: WALLET, position: 'striker', region: 'EU', metadata_uri: 'QmTest', created_at: 1000 });
+    await insertOrUpdatePlayer({
+      player_id: PLAYER_ID,
+      wallet: WALLET,
+      position: 'striker',
+      region: 'EU',
+      metadata_uri: 'QmTest',
+      created_at: 1000,
+    });
     const row = await getPlayerById(PLAYER_ID);
     expect(row).not.toBeNull();
     expect(row!.wallet).toBe(WALLET);
@@ -160,7 +178,12 @@ describe('player table helpers', () => {
   });
 
   it('insertOrUpdatePlayer updates an existing player', async () => {
-    await insertOrUpdatePlayer({ player_id: PLAYER_ID, wallet: WALLET, position: 'midfielder', region: 'NA' });
+    await insertOrUpdatePlayer({
+      player_id: PLAYER_ID,
+      wallet: WALLET,
+      position: 'midfielder',
+      region: 'NA',
+    });
     const row = await getPlayerById(PLAYER_ID);
     expect(row!.position).toBe('midfielder');
     expect(row!.region).toBe('NA');
@@ -192,7 +215,12 @@ describe('player table helpers', () => {
 
   it('queryPlayers returns players matching region filter', async () => {
     const id2 = 'test-player-db2-' + Math.random().toString(36).slice(2);
-    await insertOrUpdatePlayer({ player_id: id2, wallet: WALLET, position: 'goalkeeper', region: 'EU' });
+    await insertOrUpdatePlayer({
+      player_id: id2,
+      wallet: WALLET,
+      position: 'goalkeeper',
+      region: 'EU',
+    });
     const results = await queryPlayers({ region: 'EU' });
     expect(results.some((r) => r.player_id === id2)).toBe(true);
   });
@@ -324,7 +352,6 @@ describe('rollbackEventsFromLedger', () => {
     expect(remaining.map((r) => r.ledger)).toEqual([300]);
   });
 });
-
 
 describe('__indexerHooks: fault injection API', () => {
   // Needs a full indexEvents() harness (mocked RPC + DB) to drive the crash

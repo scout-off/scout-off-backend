@@ -48,7 +48,9 @@ jest.mock('../../src/services/audit', () => ({
 
 jest.mock('../../src/services/indexer', () => ({
   normalizePayload: jest.fn((p: Record<string, unknown>) => p),
-  normalizeEventId: jest.fn((_contractId: string, ledger: number, txHash: string) => `${ledger}:${txHash}`),
+  normalizeEventId: jest.fn(
+    (_contractId: string, ledger: number, txHash: string) => `${ledger}:${txHash}`,
+  ),
   normalizeSorobanEvent: jest.fn((raw: { topic: unknown[]; value: unknown }) => {
     const { scValToNative } = require('@stellar/stellar-sdk');
     return {
@@ -99,13 +101,15 @@ async function flushBackground(): Promise<void> {
 beforeEach(() => {
   jest.clearAllMocks();
   const indexerModule = require('../../src/services/indexer');
-  indexerModule.normalizeSorobanEvent.mockImplementation((raw: { topic: unknown[]; value: unknown }) => {
-    const { scValToNative } = require('@stellar/stellar-sdk');
-    return {
-      type: scValToNative(raw.topic[0]),
-      payload: scValToNative(raw.value),
-    };
-  });
+  indexerModule.normalizeSorobanEvent.mockImplementation(
+    (raw: { topic: unknown[]; value: unknown }) => {
+      const { scValToNative } = require('@stellar/stellar-sdk');
+      return {
+        type: scValToNative(raw.topic[0]),
+        payload: scValToNative(raw.value),
+      };
+    },
+  );
   jest.useFakeTimers();
   _resetReindexState();
 });
@@ -227,7 +231,12 @@ describe('successful reindex run', () => {
 
     mockGetEvents.mockResolvedValue({
       events: [
-        makeEvent('player_registered', { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) }, txHashA, 200),
+        makeEvent(
+          'player_registered',
+          { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) },
+          txHashA,
+          200,
+        ),
         makeEvent('milestone_approved', { player_id: 'P1' }, txHashB, 201),
       ],
     });
@@ -322,9 +331,7 @@ describe('batching behaviour', () => {
     await flushBackground();
 
     expect(mockGetEvents).toHaveBeenCalledTimes(1);
-    expect(mockGetEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ startLedger: 1000 }),
-    );
+    expect(mockGetEvents).toHaveBeenCalledWith(expect.objectContaining({ startLedger: 1000 }));
   });
 
   it('filters events by contract IDs from getIndexedContractIds', async () => {
@@ -345,15 +352,20 @@ describe('batching behaviour', () => {
   it('filters out events outside the current batch window', async () => {
     // Batch covers [100, 199]. Events at ledger 50 (before) and 200 (after)
     // should be filtered out; only ledger 150 should be inserted.
-    const txInRange  = 'innn' + '0'.repeat(60);
-    const txBefore   = 'bfff' + '0'.repeat(60);
-    const txAfter    = 'afff' + '0'.repeat(60);
+    const txInRange = 'innn' + '0'.repeat(60);
+    const txBefore = 'bfff' + '0'.repeat(60);
+    const txAfter = 'afff' + '0'.repeat(60);
 
     mockGetEvents.mockResolvedValue({
       events: [
         makeEvent('player_registered', { player_id: 'P_BEFORE' }, txBefore, 50),
-        makeEvent('player_registered', { player_id: 'P_IN',     wallet: 'G' + 'A'.repeat(55) }, txInRange, 150),
-        makeEvent('player_registered', { player_id: 'P_AFTER'  }, txAfter,  200),
+        makeEvent(
+          'player_registered',
+          { player_id: 'P_IN', wallet: 'G' + 'A'.repeat(55) },
+          txInRange,
+          150,
+        ),
+        makeEvent('player_registered', { player_id: 'P_AFTER' }, txAfter, 200),
       ],
     });
 
@@ -362,9 +374,9 @@ describe('batching behaviour', () => {
 
     const { getDb } = require('../../src/db');
     const db = getDb();
-    const rows = db.prepare(
-      'SELECT ledger FROM events WHERE tx_hash IN (?, ?, ?)',
-    ).all(txInRange, txBefore, txAfter);
+    const rows = db
+      .prepare('SELECT ledger FROM events WHERE tx_hash IN (?, ?, ?)')
+      .all(txInRange, txBefore, txAfter);
 
     const ledgers = rows.map((r: { ledger: number }) => r.ledger);
     expect(ledgers).toContain(150);
@@ -403,9 +415,7 @@ describe('batching behaviour', () => {
 describe('error handling', () => {
   it('continues to the next batch when a single batch RPC call fails', async () => {
     // Batch 1 fails, batch 2 succeeds → job should complete (not error)
-    mockGetEvents
-      .mockRejectedValueOnce(new Error('RPC timeout'))
-      .mockResolvedValue({ events: [] });
+    mockGetEvents.mockRejectedValueOnce(new Error('RPC timeout')).mockResolvedValue({ events: [] });
 
     startReindex(1, 200, 'GADMIN'); // 2 batches
     await flushBackground();
@@ -417,7 +427,8 @@ describe('error handling', () => {
   });
 
   it('logs a warning (not an error) when a batch RPC call fails', async () => {
-    const warnSpy = jest.spyOn(require('../../src/utils/logger').logger, 'warn')
+    const warnSpy = jest
+      .spyOn(require('../../src/utils/logger').logger, 'warn')
       .mockImplementation(() => {});
 
     mockGetEvents
@@ -427,9 +438,7 @@ describe('error handling', () => {
     startReindex(1, 100, 'GADMIN');
     await flushBackground();
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('connection refused'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('connection refused'));
     warnSpy.mockRestore();
   });
 
@@ -439,13 +448,20 @@ describe('error handling', () => {
     // inner per-batch RPC catch and hits the outer try/catch, setting
     // status: 'error'.
     const indexerModule = require('../../src/services/indexer');
-    const normalizeSpy = jest.spyOn(indexerModule, 'normalizeSorobanEvent')
-      .mockImplementation(() => { throw new Error('database is locked'); });
+    const normalizeSpy = jest
+      .spyOn(indexerModule, 'normalizeSorobanEvent')
+      .mockImplementation(() => {
+        throw new Error('database is locked');
+      });
 
     mockGetEvents.mockResolvedValue({
       events: [
-        makeEvent('player_registered', { player_id: 'X', wallet: 'G' + 'B'.repeat(55) },
-          'cccc' + '0'.repeat(60), 500),
+        makeEvent(
+          'player_registered',
+          { player_id: 'X', wallet: 'G' + 'B'.repeat(55) },
+          'cccc' + '0'.repeat(60),
+          500,
+        ),
       ],
     });
 
@@ -463,12 +479,21 @@ describe('error handling', () => {
   it('fires a reindex_error audit event when the job fails', async () => {
     const { logAuditEvent } = require('../../src/services/audit');
     const indexerModule = require('../../src/services/indexer');
-    const normalizeSpy = jest.spyOn(indexerModule, 'normalizeSorobanEvent')
-      .mockImplementation(() => { throw new Error('fatal db error'); });
+    const normalizeSpy = jest
+      .spyOn(indexerModule, 'normalizeSorobanEvent')
+      .mockImplementation(() => {
+        throw new Error('fatal db error');
+      });
 
     mockGetEvents.mockResolvedValue({
-      events: [makeEvent('scout_subscribed', { scout: 'G' + 'S'.repeat(55) },
-        'eeee' + '0'.repeat(60), 100)],
+      events: [
+        makeEvent(
+          'scout_subscribed',
+          { scout: 'G' + 'S'.repeat(55) },
+          'eeee' + '0'.repeat(60),
+          100,
+        ),
+      ],
     });
 
     startReindex(100, 100, 'GWALLET_ADMIN');
@@ -486,12 +511,16 @@ describe('error handling', () => {
 
   it('allows a new job to start after an errored job is reset', async () => {
     const indexerModule = require('../../src/services/indexer');
-    const normalizeSpy = jest.spyOn(indexerModule, 'normalizeSorobanEvent')
-      .mockImplementation(() => { throw new Error('disk full'); });
+    const normalizeSpy = jest
+      .spyOn(indexerModule, 'normalizeSorobanEvent')
+      .mockImplementation(() => {
+        throw new Error('disk full');
+      });
 
     mockGetEvents.mockResolvedValue({
-      events: [makeEvent('scout_subscribed', { scout: 'G' + 'S'.repeat(55) },
-        'ffff' + '0'.repeat(60), 1)],
+      events: [
+        makeEvent('scout_subscribed', { scout: 'G' + 'S'.repeat(55) }, 'ffff' + '0'.repeat(60), 1),
+      ],
     });
 
     startReindex(1, 1, 'GADMIN');
@@ -510,12 +539,16 @@ describe('error handling', () => {
     const dbModule = require('../../src/db');
     const persistSpy = jest.spyOn(dbModule, 'persistLastIndexedLedger');
     const indexerModule = require('../../src/services/indexer');
-    const normalizeSpy = jest.spyOn(indexerModule, 'normalizeSorobanEvent')
-      .mockImplementation(() => { throw new Error('crash'); });
+    const normalizeSpy = jest
+      .spyOn(indexerModule, 'normalizeSorobanEvent')
+      .mockImplementation(() => {
+        throw new Error('crash');
+      });
 
     mockGetEvents.mockResolvedValue({
-      events: [makeEvent('scout_subscribed', { scout: 'G' + 'S'.repeat(55) },
-        'gggg' + '0'.repeat(60), 1)],
+      events: [
+        makeEvent('scout_subscribed', { scout: 'G' + 'S'.repeat(55) }, 'gggg' + '0'.repeat(60), 1),
+      ],
     });
 
     startReindex(1, 1, 'GADMIN');

@@ -282,6 +282,11 @@ env:
   NETWORK_PASSPHRASE: "Public Global Stellar Network ; September 2015"
   HORIZON_URL: https://horizon.stellar.org
   SOROBAN_RPC_URL: https://soroban-rpc.mainnet.stellar.gateway.fm
+  SOROBAN_RPC_MIN_PROTOCOL_VERSION: "20"
+  SOROBAN_RPC_STRICT_PROTOCOL: "false"
+  SOROBAN_RPC_LEDGER_STUCK_MS: "60000"
+  SEP10_CLIENT_DOMAIN_REQUIRED: "false"
+  SEP10_CLIENT_DOMAIN_ALLOWLIST: ""
   LOG_LEVEL: info
   METRICS_ENABLED: "true"
   # Database driver: sqlite | postgres
@@ -334,6 +339,11 @@ env:
   # Webhook delivery (non-sensitive settings — URL and secrets live in the Secret)
   WEBHOOK_ENABLED: "false"
   WEBHOOK_TIMEOUT_MS: "10000"
+  WEBHOOK_MAX_RETRIES: "3"
+  WEBHOOK_RETRY_BASE_DELAY_MS: "500"
+  WEBHOOK_RETRY_MAX_DELAY_MS: "5000"
+  WEBHOOK_DISPATCH_CONCURRENCY: "10"
+  WEBHOOK_DISPATCH_MAX_QUEUE: "1000"
   # Slow-query warning threshold in ms. Default: 50.
   SLOW_QUERY_THRESHOLD_MS: "50"
   # Admin multi-sig action TTL in ms. Default: 3600000 (1 hour).
@@ -396,6 +406,8 @@ env:
   PLAYER_IMPORT_RATE_LIMIT_MAX: "5"
   # PLAYER_IMPORT_MAX_BATCH — Optional. Max rows accepted per bulk player import request (POST /api/admin/players/import).
   PLAYER_IMPORT_MAX_BATCH: "500"
+  # PLAYER_IMPORT_CONCURRENCY — Optional. Max concurrent IPFS pin calls while preparing a bulk player import batch (#1794).
+  PLAYER_IMPORT_CONCURRENCY: "3"
   # WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS — Optional. Rate limit for POST /api/scouts/:wallet/webhooks/:id/test, isolated from the shared default walletRateLimit() pool since each call makes the backend issue an outbound….
   WEBHOOK_TEST_RATE_LIMIT_WINDOW_MS: "60000"
   # WEBHOOK_TEST_RATE_LIMIT_MAX — Webhook test rate limit max.
@@ -412,6 +424,9 @@ env:
   DATABASE_POOL_SIZE: "10"
   # DATABASE_SSL — Optional. Controls TLS for the PostgreSQL connection. true — Enable SSL with full certificate verification (recommended for managed providers such as RDS, Heroku, Supabase,….
   DATABASE_SSL: ""
+  # Read replicas: DATABASE_READ_URLS lives in the Secret (contains credentials).
+  DATABASE_REPLICA_MAX_LAG_SECONDS: "5"
+  DATABASE_READ_AFTER_SECONDS: "10"
   # SQLITE_BUSY_TIMEOUT_MS — Database timeouts in ms (defaults shown).
   SQLITE_BUSY_TIMEOUT_MS: "5000"
   # DB_STATEMENT_TIMEOUT_MS — Db statement timeout ms.
@@ -571,9 +586,9 @@ env:
   # API_KEY_DEFAULT_TTL_DAYS — Optional. Default lifetime for issued API keys in days (#674). Keys issued without an explicit expiresInDays value expire after this many days.
   API_KEY_DEFAULT_TTL_DAYS: "90"
 
-# -----------------------------------------------------------------------------
-# Pod annotations
-# Useful for Prometheus scraping or Datadog APM injection.
+  # -----------------------------------------------------------------------------
+  # Pod annotations
+  # Useful for Prometheus scraping or Datadog APM injection.
 
   # ── Later features ──
   # Empty means "use the application default" (the key is left out of the ConfigMap).

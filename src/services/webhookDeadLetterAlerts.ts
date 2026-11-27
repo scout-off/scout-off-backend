@@ -57,8 +57,9 @@ export async function evaluateDeadLetterAlerts(
   }
 
   const windowStart = now - rateWindowMs;
-  const insertsInWindow = getWebhookDeadLetterInsertTimestamps().filter((t) => t >= windowStart)
-    .length;
+  const insertsInWindow = getWebhookDeadLetterInsertTimestamps().filter(
+    (t) => t >= windowStart,
+  ).length;
 
   const sizeExceeded = total > sizeThreshold;
   const rateExceeded = insertsInWindow > rateThreshold;

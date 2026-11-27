@@ -109,14 +109,22 @@ export function ipAllowlistMiddleware(req: Request, res: Response, next: NextFun
       clientIp: rawClientIp,
       error: 'IPv6 client IP is not supported by the admin IP allowlist; denying by default',
     });
-    res.status(403).json({ success: false, error: 'Forbidden: IPv6 addresses are not supported by the IP allowlist' });
+    res.status(403).json({
+      success: false,
+      error: 'Forbidden: IPv6 addresses are not supported by the IP allowlist',
+    });
     return;
   }
 
   const allowed = allowlist.some((entry) => ipInCidr(clientIp, entry));
 
   if (!allowed) {
-    logger.warn({ method: req.method, path: req.path, clientIp: rawClientIp, error: 'IP not in allowlist' });
+    logger.warn({
+      method: req.method,
+      path: req.path,
+      clientIp: rawClientIp,
+      error: 'IP not in allowlist',
+    });
     res.status(403).json({ success: false, error: 'Forbidden: IP not in allowlist' });
     return;
   }

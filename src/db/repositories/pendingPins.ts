@@ -44,7 +44,8 @@ export async function insertPendingPin(p: {
 }
 
 export async function getPendingPins(): Promise<PendingPinRow[]> {
-  const sql = "SELECT * FROM pending_pins WHERE status IS NULL OR status = 'pending' ORDER BY created_at ASC";
+  const sql =
+    "SELECT * FROM pending_pins WHERE status IS NULL OR status = 'pending' ORDER BY created_at ASC";
   return timedQueryAsync(sql, () => getDriver().all<PendingPinRow>(sql));
 }
 
@@ -59,7 +60,8 @@ export async function deletePendingPinByHash(hash: string): Promise<void> {
 }
 
 export async function isPendingPinByHash(hash: string): Promise<boolean> {
-  const sql = "SELECT 1 FROM pending_pins WHERE hash = ? AND (status IS NULL OR status = 'pending') LIMIT 1";
+  const sql =
+    "SELECT 1 FROM pending_pins WHERE hash = ? AND (status IS NULL OR status = 'pending') LIMIT 1";
   return timedQueryAsync(sql, async () => (await getDriver().get(sql, [hash])) !== undefined);
 }
 
@@ -87,14 +89,19 @@ export async function setPendingPinResolvedCid(hash: string, cid: string): Promi
  */
 export async function getResolvedCidByHash(hash: string): Promise<string | null> {
   const sql = 'SELECT resolved_cid FROM pending_pins WHERE hash = ? LIMIT 1';
-  const row = await timedQueryAsync(sql, () => getDriver().get<{ resolved_cid: string | null }>(sql, [hash]));
+  const row = await timedQueryAsync(sql, () =>
+    getDriver().get<{ resolved_cid: string | null }>(sql, [hash]),
+  );
   return row?.resolved_cid ?? null;
 }
 
 /**
  * Return pending pins created on or before olderThanIso that are pending/unresolved.
  */
-export async function getStalePendingPins(olderThanIso: string, limit = 50): Promise<PendingPinRow[]> {
+export async function getStalePendingPins(
+  olderThanIso: string,
+  limit = 50,
+): Promise<PendingPinRow[]> {
   const sql = `SELECT * FROM pending_pins WHERE (status IS NULL OR status = 'pending') AND created_at <= ? ORDER BY created_at ASC LIMIT ?`;
   return timedQueryAsync(sql, () => getDriver().all<PendingPinRow>(sql, [olderThanIso, limit]));
 }
@@ -112,7 +119,15 @@ export async function updatePendingPinReconciliation(p: {
 }): Promise<boolean> {
   const lastReconciled = p.lastReconciledAt ?? new Date().toISOString();
   const sql = `UPDATE pending_pins SET status = ?, expired_reason = ?, resolved_cid = COALESCE(?, resolved_cid), last_reconciled_at = ? WHERE id = ?`;
-  const res = await timedQueryAsync(sql, () => getDriver().run(sql, [p.status, p.expiredReason ?? null, p.resolvedCid ?? null, lastReconciled, p.id]));
+  const res = await timedQueryAsync(sql, () =>
+    getDriver().run(sql, [
+      p.status,
+      p.expiredReason ?? null,
+      p.resolvedCid ?? null,
+      lastReconciled,
+      p.id,
+    ]),
+  );
   return res.changes > 0;
 }
 
@@ -121,6 +136,8 @@ export async function updatePendingPinReconciliation(p: {
  */
 export async function countStuckPendingPins(olderThanIso: string): Promise<number> {
   const sql = `SELECT COUNT(*) as count FROM pending_pins WHERE (status IS NULL OR status = 'pending') AND created_at <= ?`;
-  const row = await timedQueryAsync(sql, () => getDriver().get<{ count: number | string }>(sql, [olderThanIso]));
+  const row = await timedQueryAsync(sql, () =>
+    getDriver().get<{ count: number | string }>(sql, [olderThanIso]),
+  );
   return Number(row?.count ?? 0);
 }

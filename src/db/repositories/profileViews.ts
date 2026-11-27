@@ -22,7 +22,9 @@ export async function recordProfileView(p: {
   created_at: number;
 }): Promise<void> {
   const sql = `INSERT INTO profile_views (scout_wallet, player_id, viewed_at, created_at) VALUES (?, ?, ?, ?)`;
-  await timedQueryAsync(sql, () => getDriver().run(sql, [p.scout_wallet, p.player_id, p.viewed_at, p.created_at]));
+  await timedQueryAsync(sql, () =>
+    getDriver().run(sql, [p.scout_wallet, p.player_id, p.viewed_at, p.created_at]),
+  );
 }
 
 /**
@@ -30,10 +32,13 @@ export async function recordProfileView(p: {
  * Returns the Unix timestamp of the most recent view, or null if no view exists.
  * Used by deduplication logic to check the 5-minute dedup window.
  */
-export async function getLastProfileView(scoutWallet: string, playerId: string): Promise<number | null> {
+export async function getLastProfileView(
+  scoutWallet: string,
+  playerId: string,
+): Promise<number | null> {
   const sql = `SELECT viewed_at FROM profile_views WHERE player_id = ? AND scout_wallet = ? ORDER BY viewed_at DESC LIMIT 1`;
   const row = await timedQueryAsync(sql, () =>
-    getDriver().get<{ viewed_at: number }>(sql, [playerId, scoutWallet])
+    getDriver().get<{ viewed_at: number }>(sql, [playerId, scoutWallet]),
   );
   return row?.viewed_at ?? null;
 }
@@ -47,7 +52,7 @@ export async function getProfileViewCount(playerId: string): Promise<number> {
   const sql = `SELECT (SELECT COUNT(*) FROM profile_views WHERE player_id = ?)
     + COALESCE((SELECT SUM(view_count) FROM profile_view_daily WHERE player_id = ?), 0) as count`;
   const row = await timedQueryAsync(sql, () =>
-    getDriver().transaction(tx => tx.get<{ count: number | string }>(sql, [playerId, playerId]))
+    getDriver().transaction((tx) => tx.get<{ count: number | string }>(sql, [playerId, playerId])),
   );
   return Number(row?.count ?? 0);
 }
@@ -63,7 +68,7 @@ export async function getUniqueViewerCount(playerId: string): Promise<number> {
     UNION SELECT scout_wallet FROM profile_view_daily WHERE player_id = ?
   ) AS viewers`;
   const row = await timedQueryAsync(sql, () =>
-    getDriver().transaction(tx => tx.get<{ count: number | string }>(sql, [playerId, playerId]))
+    getDriver().transaction((tx) => tx.get<{ count: number | string }>(sql, [playerId, playerId])),
   );
   return Number(row?.count ?? 0);
 }
@@ -76,7 +81,7 @@ export async function getUniqueViewerCount(playerId: string): Promise<number> {
 export async function getContactUnlockCount(playerId: string): Promise<number> {
   const sql = `SELECT COUNT(DISTINCT scout_wallet) as count FROM contact_unlocks WHERE player_id = ?`;
   const row = await timedQueryAsync(sql, () =>
-    getDriver().get<{ count: number | string }>(sql, [playerId])
+    getDriver().get<{ count: number | string }>(sql, [playerId]),
   );
   return Number(row?.count ?? 0);
 }

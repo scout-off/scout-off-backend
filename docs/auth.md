@@ -11,19 +11,19 @@ Values are verified against `src/services/sep10.ts`, `src/config.ts`,
 `src/middleware/authFailureLockout.ts` and `src/routes/auth.ts` — update this
 table in the same PR as any change to those constants.
 
-| Parameter | Env var | Default | Behaviour when exceeded |
-| --- | --- | --- | --- |
-| SEP-10 challenge TTL | — (constant `CHALLENGE_TTL_SECONDS` in `src/services/sep10.ts`) | 300 s (5 min) | `POST /auth/token` rejects the stale challenge with `401` (`INVALID_CHALLENGE`); the client must request a new challenge via `GET /auth/challenge` |
-| Access token TTL | `JWT_ACCESS_TTL_SECONDS` | 900 s (15 min) | Expired access tokens are rejected by `requireAuth` with `401` (`TOKEN_EXPIRED`); the client refreshes via `POST /auth/refresh` |
-| Refresh token TTL | — (constant `config.jwtRefreshTtlSeconds`) | 604800 s (7 days) | Expired refresh tokens are rejected by `POST /auth/refresh` with `401` (`TOKEN_EXPIRED`); the user must re-run the SEP-10 flow |
-| Auth rate-limit window | `AUTH_RATE_LIMIT_WINDOW_MS` | 60000 ms (1 min) | Window length for both the per-IP and per-account auth limits below |
-| Auth per-IP limit | `AUTH_RATE_LIMIT_IP_MAX` | 60 requests / window | `429` (`RATE_LIMITED`) with a `Retry-After` header (seconds until the window resets) on `GET /auth/challenge` and `POST /auth/token` |
-| Auth per-account limit | `AUTH_RATE_LIMIT_MAX` | 5 requests / window (1000 when `NODE_ENV=test`) | `429` (`RATE_LIMITED`) with a `Retry-After` header, keyed on the Stellar account in the query/transaction (or the refresh token's `sub`) |
-| Auth rate-limit store failure policy | `AUTH_RATE_LIMIT_ERROR_POLICY` | `closed` in production, `local` elsewhere | `closed`: requests fail with `503` when the shared store is unavailable; `local`: fall back to per-instance in-memory counters; `open`: allow the request |
-| Failed-exchange threshold | `AUTH_FAIL_THRESHOLD` | 5 consecutive failures | The account is locked out; further `POST /auth/token` attempts return `429` (`AUTH_LOCKED`) with a `Retry-After` header |
-| Failure counting window | `AUTH_FAIL_WINDOW_MS` | 900000 ms (15 min) | Failures older than the window no longer count toward the threshold |
-| Lockout base duration | `AUTH_LOCKOUT_BASE_MS` | 30000 ms (30 s) | First lockout lasts the base duration; each further failure doubles it |
-| Lockout maximum duration | `AUTH_LOCKOUT_MAX_MS` | 900000 ms (15 min) | Exponential backoff is capped at this value; `Retry-After` never exceeds it |
+| Parameter                            | Env var                                                         | Default                                         | Behaviour when exceeded                                                                                                                                   |
+| ------------------------------------ | --------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SEP-10 challenge TTL                 | — (constant `CHALLENGE_TTL_SECONDS` in `src/services/sep10.ts`) | 300 s (5 min)                                   | `POST /auth/token` rejects the stale challenge with `401` (`INVALID_CHALLENGE`); the client must request a new challenge via `GET /auth/challenge`        |
+| Access token TTL                     | `JWT_ACCESS_TTL_SECONDS`                                        | 900 s (15 min)                                  | Expired access tokens are rejected by `requireAuth` with `401` (`TOKEN_EXPIRED`); the client refreshes via `POST /auth/refresh`                           |
+| Refresh token TTL                    | — (constant `config.jwtRefreshTtlSeconds`)                      | 604800 s (7 days)                               | Expired refresh tokens are rejected by `POST /auth/refresh` with `401` (`TOKEN_EXPIRED`); the user must re-run the SEP-10 flow                            |
+| Auth rate-limit window               | `AUTH_RATE_LIMIT_WINDOW_MS`                                     | 60000 ms (1 min)                                | Window length for both the per-IP and per-account auth limits below                                                                                       |
+| Auth per-IP limit                    | `AUTH_RATE_LIMIT_IP_MAX`                                        | 60 requests / window                            | `429` (`RATE_LIMITED`) with a `Retry-After` header (seconds until the window resets) on `GET /auth/challenge` and `POST /auth/token`                      |
+| Auth per-account limit               | `AUTH_RATE_LIMIT_MAX`                                           | 5 requests / window (1000 when `NODE_ENV=test`) | `429` (`RATE_LIMITED`) with a `Retry-After` header, keyed on the Stellar account in the query/transaction (or the refresh token's `sub`)                  |
+| Auth rate-limit store failure policy | `AUTH_RATE_LIMIT_ERROR_POLICY`                                  | `closed` in production, `local` elsewhere       | `closed`: requests fail with `503` when the shared store is unavailable; `local`: fall back to per-instance in-memory counters; `open`: allow the request |
+| Failed-exchange threshold            | `AUTH_FAIL_THRESHOLD`                                           | 5 consecutive failures                          | The account is locked out; further `POST /auth/token` attempts return `429` (`AUTH_LOCKED`) with a `Retry-After` header                                   |
+| Failure counting window              | `AUTH_FAIL_WINDOW_MS`                                           | 900000 ms (15 min)                              | Failures older than the window no longer count toward the threshold                                                                                       |
+| Lockout base duration                | `AUTH_LOCKOUT_BASE_MS`                                          | 30000 ms (30 s)                                 | First lockout lasts the base duration; each further failure doubles it                                                                                    |
+| Lockout maximum duration             | `AUTH_LOCKOUT_MAX_MS`                                           | 900000 ms (15 min)                              | Exponential backoff is capped at this value; `Retry-After` never exceeds it                                                                               |
 
 Notes:
 
@@ -63,10 +63,10 @@ stellar keys generate sep10-server --network testnet
 # openssl rand -hex 32
 ```
 
-| Behaviour | Environment |
-|-----------|-------------|
-| Process refuses to start if unset | `production` |
-| Warning logged on startup if unset | `staging` |
+| Behaviour                                                       | Environment            |
+| --------------------------------------------------------------- | ---------------------- |
+| Process refuses to start if unset                               | `production`           |
+| Warning logged on startup if unset                              | `staging`              |
 | Ephemeral per-process key used (single-instance local dev only) | `development` / `test` |
 
 **The ephemeral fallback is intentionally unsafe for multi-instance deployments** — it exists only so developers can run the project locally without extra config.
@@ -89,7 +89,7 @@ verification accepts both it and `SEP10_SERVER_SECRET_PREVIOUS`.
    The previous slot has no automatic expiry.
 5. **Verify** — run a full SEP-10 auth flow end-to-end against the updated deployment.
 
-> ⚠️ **Security note**: `SEP10_SERVER_SECRET` is a Stellar secret key — treat it with the same care as `JWT_SECRET`.  Never commit it to source control.  Store it in a secrets manager (AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault, Kubernetes Secrets) and inject it as an environment variable at runtime.  See [docs/secrets-rotation.md](secrets-rotation.md) for the general rotation policy.
+> ⚠️ **Security note**: `SEP10_SERVER_SECRET` is a Stellar secret key — treat it with the same care as `JWT_SECRET`. Never commit it to source control. Store it in a secrets manager (AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault, Kubernetes Secrets) and inject it as an environment variable at runtime. See [docs/secrets-rotation.md](secrets-rotation.md) for the general rotation policy.
 
 ### 1. Request a SEP-10 challenge
 
@@ -196,20 +196,20 @@ using the SEP-10 `client_domain` flow (#1514):
    across `POST /auth/refresh`, and recorded in an `auth_token_issued` audit-log
    entry (`queryParams.clientDomain`).
 
-| Setting | Default | Effect |
-|---|---|---|
-| `SEP10_CLIENT_DOMAIN_REQUIRED` | `false` | When `true`, challenges without a verified `client_domain` are rejected at both `/auth/challenge` and `/auth/token`. |
-| `SEP10_CLIENT_DOMAIN_ALLOWLIST` | empty | Comma-separated hostnames. Empty means any public hostname is accepted. |
+| Setting                         | Default | Effect                                                                                                               |
+| ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| `SEP10_CLIENT_DOMAIN_REQUIRED`  | `false` | When `true`, challenges without a verified `client_domain` are rejected at both `/auth/challenge` and `/auth/token`. |
+| `SEP10_CLIENT_DOMAIN_ALLOWLIST` | empty   | Comma-separated hostnames. Empty means any public hostname is accepted.                                              |
 
 Errors specific to this flow:
 
-| Condition | HTTP | `code` |
-|---|---|---|
-| Malformed `client_domain` (or missing in required mode at `/auth/challenge`) | 400 | `VALIDATION_ERROR` |
-| Domain not on the allowlist | 403 | `FORBIDDEN` |
-| `stellar.toml` fetch failed (DNS, blocked IP, timeout, too large, non-2xx) | 502 | `CLIENT_DOMAIN_TOML_FETCH_FAILED` |
-| `stellar.toml` has no valid `SIGNING_KEY` | 502 | `CLIENT_DOMAIN_SIGNING_KEY_MISSING` |
-| Missing wallet co-signature, or no `client_domain` in required mode, at `/auth/token` | 401 | `TOKEN_INVALID` (server log carries `MISSING_CLIENT_DOMAIN_SIGNATURE` / `CLIENT_DOMAIN_REQUIRED`) |
+| Condition                                                                             | HTTP | `code`                                                                                            |
+| ------------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------- |
+| Malformed `client_domain` (or missing in required mode at `/auth/challenge`)          | 400  | `VALIDATION_ERROR`                                                                                |
+| Domain not on the allowlist                                                           | 403  | `FORBIDDEN`                                                                                       |
+| `stellar.toml` fetch failed (DNS, blocked IP, timeout, too large, non-2xx)            | 502  | `CLIENT_DOMAIN_TOML_FETCH_FAILED`                                                                 |
+| `stellar.toml` has no valid `SIGNING_KEY`                                             | 502  | `CLIENT_DOMAIN_SIGNING_KEY_MISSING`                                                               |
+| Missing wallet co-signature, or no `client_domain` in required mode, at `/auth/token` | 401  | `TOKEN_INVALID` (server log carries `MISSING_CLIENT_DOMAIN_SIGNATURE` / `CLIENT_DOMAIN_REQUIRED`) |
 
 ## JWT Claims Structure
 
@@ -245,7 +245,7 @@ The `role` may be assigned from the request or automatically elevated to `admin`
 - **`ADMIN_WALLET`** (singular) — a single Stellar address. This is the original, backward-compatible variable. It's **required in production** (the process refuses to start without it) and produces a startup warning in staging if unset.
 - **`ADMIN_WALLETS`** (plural, comma-separated) — one or more Stellar addresses, added to support the multi-sig admin-action feature (see below). If `ADMIN_WALLETS` is not set, it falls back to the value of `ADMIN_WALLET`, so a single-admin setup using only `ADMIN_WALLET` still works without extra configuration.
 
-**How they combine:** these are not a fallback pair where one overrides the other — an authenticating account is elevated to `admin` if it matches *either* `ADMIN_WALLET` **or** is present in the `ADMIN_WALLETS` list. If you configure both with different values, both are honored simultaneously.
+**How they combine:** these are not a fallback pair where one overrides the other — an authenticating account is elevated to `admin` if it matches _either_ `ADMIN_WALLET` **or** is present in the `ADMIN_WALLETS` list. If you configure both with different values, both are honored simultaneously.
 
 **Multi-sig admin actions:** `ADMIN_WALLETS` and `ADMIN_THRESHOLD` (default `1`) work together to gate high-value admin actions (contract pause/unpause, fee withdrawal). If `ADMIN_THRESHOLD` is `1`, an action from any wallet in `ADMIN_WALLETS` executes immediately. If it's greater than `1`, the action is proposed and held pending until enough distinct wallets from `ADMIN_WALLETS` co-sign it. See `src/services/adminMultiSig.ts` for the signing/approval logic.
 
@@ -311,10 +311,10 @@ Successful response (`200`):
 
 Error responses:
 
-| Status | Reason |
-|--------|--------|
-| `400` | `refreshToken` field missing from body |
-| `401` | Token is expired, has an invalid signature, is not a refresh token, or has been revoked (used twice) |
+| Status | Reason                                                                                               |
+| ------ | ---------------------------------------------------------------------------------------------------- |
+| `400`  | `refreshToken` field missing from body                                                               |
+| `401`  | Token is expired, has an invalid signature, is not a refresh token, or has been revoked (used twice) |
 
 ### Refresh token lifecycle
 
@@ -393,12 +393,12 @@ X-API-Key: <raw-key>
 
 ### How a key is stored and resolved (#1033)
 
-The raw key is returned once at issuance and never persisted. Two *derived*
+The raw key is returned once at issuance and never persisted. Two _derived_
 representations are stored per row, and they have deliberately different jobs:
 
-| Column | Construction | Job |
-|--------|--------------|-----|
-| `key_hash` | `salt:sha256(salt + raw_key)`, random per-row salt | **The authentication proof.** Compared timing-safely against the presented key. Salted, therefore not searchable. |
+| Column        | Construction                                              | Job                                                                                                                |
+| ------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `key_hash`    | `salt:sha256(salt + raw_key)`, random per-row salt        | **The authentication proof.** Compared timing-safely against the presented key. Salted, therefore not searchable.  |
 | `lookup_hash` | `v1:HMAC-SHA256(API_KEY_LOOKUP_SECRET, domain ‖ raw_key)` | **A locator only.** Deterministic, so it can carry a UNIQUE index and be matched with a single equality predicate. |
 
 Authentication is therefore two steps, and the first one never authenticates
@@ -437,7 +437,7 @@ scan cost while that drains. Do not rotate casually.
 **Keys issued before this change.** They have `lookup_hash IS NULL` and cannot
 be backfilled in SQL — only the one-way salted hash is stored. They keep
 working and heal themselves: when the indexed lookup misses, resolution checks
-*only* the not-yet-migrated rows (a partial index, so it costs nothing once
+_only_ the not-yet-migrated rows (a partial index, so it costs nothing once
 that set is empty) and writes the derived `lookup_hash` on the first
 successful authentication, moving the key onto the indexed path permanently.
 **No scout has to rotate a key.** This transitional path is not a general
@@ -450,38 +450,38 @@ through a single shared contract (`src/utils/apiKeyScopes.ts`) used by both
 REST middleware (`requireApiKeyScope`) and GraphQL context/resolvers — the two
 surfaces can never drift apart.
 
-| Key state | Behavior |
-|-----------|----------|
-| `scopes` is `NULL` / missing / empty | **Legacy key — unrestricted.** Keeps full scout-level access, exactly as before scope enforcement existed. |
+| Key state                                                                                                         | Behavior                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scopes` is `NULL` / missing / empty                                                                              | **Legacy key — unrestricted.** Keeps full scout-level access, exactly as before scope enforcement existed.                                                                                           |
 | `scopes` is the migration-default list (`read:players`, `read:milestones`, `write:contacts`, `read:subscription`) | **Legacy — unrestricted.** The `db/014_api_key_scopes.sql` column default was written into every pre-existing row, so it is treated as "predates scope enforcement" rather than as a restricted set. |
-| `scopes` is malformed JSON | **Legacy — unrestricted** (fail-open, logged). A corrupt row must never brick a valid key. |
-| `scopes` is any other JSON array | **Restricted.** Only operations covered by a granted scope are permitted; everything else returns `403` (REST) or a GraphQL `UNAUTHORIZED` error. |
+| `scopes` is malformed JSON                                                                                        | **Legacy — unrestricted** (fail-open, logged). A corrupt row must never brick a valid key.                                                                                                           |
+| `scopes` is any other JSON array                                                                                  | **Restricted.** Only operations covered by a granted scope are permitted; everything else returns `403` (REST) or a GraphQL `UNAUTHORIZED` error.                                                    |
 
 ### Scope vocabulary
 
-| Scope | Operations |
-|-------|------------|
-| `read:players` | Read player profiles (public data) |
-| `read:milestones` | Read player milestones and trial-offer history |
-| `read:subscription` | Read subscription status (`GET /scouts/:wallet/subscription`, GraphQL `scoutSubscription`) |
-| `read:contacts` | Read unlocked contact details |
-| `read:payments` | Read payment history |
-| `read:notes` | Read private scout notes |
-| `read:bookmarks` | Read bookmarks and bookmark folders |
-| `read:api_keys` | List API-key metadata |
-| `read:webhooks` | Read webhook configuration |
-| `read:saved_searches` | List or run saved searches |
-| `read:recommendations` | Read scout recommendations |
-| `read:dashboard` | Read the scout dashboard |
-| `write:contacts` | Unlock contacts |
-| `write:subscriptions` | Subscribe / renew / cancel subscriptions |
-| `write:trial_offers` | Create trial offers |
-| `write:webhooks` | Register / delete / test webhooks |
-| `write:api_keys` | Issue / revoke / rotate API keys |
-| `write:bookmarks` | Manage bookmarks and bookmark folders |
-| `write:notes` | Create / update / delete scout notes |
-| `write:saved_searches` | Create / update / delete saved searches |
-| `write:player_tokens` | Purchase player tokens |
+| Scope                  | Operations                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| `read:players`         | Read player profiles (public data)                                                         |
+| `read:milestones`      | Read player milestones and trial-offer history                                             |
+| `read:subscription`    | Read subscription status (`GET /scouts/:wallet/subscription`, GraphQL `scoutSubscription`) |
+| `read:contacts`        | Read unlocked contact details                                                              |
+| `read:payments`        | Read payment history                                                                       |
+| `read:notes`           | Read private scout notes                                                                   |
+| `read:bookmarks`       | Read bookmarks and bookmark folders                                                        |
+| `read:api_keys`        | List API-key metadata                                                                      |
+| `read:webhooks`        | Read webhook configuration                                                                 |
+| `read:saved_searches`  | List or run saved searches                                                                 |
+| `read:recommendations` | Read scout recommendations                                                                 |
+| `read:dashboard`       | Read the scout dashboard                                                                   |
+| `write:contacts`       | Unlock contacts                                                                            |
+| `write:subscriptions`  | Subscribe / renew / cancel subscriptions                                                   |
+| `write:trial_offers`   | Create trial offers                                                                        |
+| `write:webhooks`       | Register / delete / test webhooks                                                          |
+| `write:api_keys`       | Issue / revoke / rotate API keys                                                           |
+| `write:bookmarks`      | Manage bookmarks and bookmark folders                                                      |
+| `write:notes`          | Create / update / delete scout notes                                                       |
+| `write:saved_searches` | Create / update / delete saved searches                                                    |
+| `write:player_tokens`  | Purchase player tokens                                                                     |
 
 ### Issuing restricted keys
 
@@ -520,7 +520,13 @@ curl -X POST "http://localhost:3000/api/scouts/G.../api-keys/42/rotate" \
 {
   "success": true,
   "data": {
-    "newKey": { "id": 57, "key": "<64-char hex>", "label": "ci-bot", "created_at": 1234567890, "scopes": ["read:milestones"] },
+    "newKey": {
+      "id": 57,
+      "key": "<64-char hex>",
+      "label": "ci-bot",
+      "created_at": 1234567890,
+      "scopes": ["read:milestones"]
+    },
     "oldKey": { "id": 42, "revokesAt": 1234654290 }
   }
 }
@@ -542,7 +548,7 @@ curl -X POST "http://localhost:3000/api/scouts/G.../api-keys/42/rotate" \
   `newKey.key` to every system that uses the old one, then optionally call
   `DELETE .../api-keys/:oldId` once the rollout is confirmed complete instead
   of waiting out the full grace period. If the rollout isn't done in time,
-  call rotate again on the *new* key before its own eventual expiry — do not
+  call rotate again on the _new_ key before its own eventual expiry — do not
   rely on an indefinitely long `gracePeriodSeconds` as a substitute for
   finishing the rollout.
 - Rotating an already-revoked or unknown key id returns `404`. Rotating
@@ -606,7 +612,7 @@ JWT/anonymous requests are never scope-gated.
 ## SSE live revocation & wallet blocklisting (#1019)
 
 `GET /api/events/stream` authenticates when the connection is established, but
-an *established* connection is also monitored so revoked tokens and
+an _established_ connection is also monitored so revoked tokens and
 blocklisted wallets lose access immediately:
 
 - **Token revocation** — if the JWT used to open the stream is revoked (e.g.
@@ -622,10 +628,10 @@ blocklisted wallets lose access immediately:
 
 ### Detection bound
 
-| Scenario | Bound |
-|----------|-------|
-| Revocation/blocklist processed in the **same process** as the SSE connection | **Immediate** — delivered synchronously via in-process events. |
-| Revocation/blocklist persisted by **another instance** | **≤ `SSE_AUTH_SWEEP_INTERVAL_MS`** (default `30 000` ms). A single sweep query per process (never one per keep-alive tick) picks up cross-process changes. |
+| Scenario                                                                     | Bound                                                                                                                                                      |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revocation/blocklist processed in the **same process** as the SSE connection | **Immediate** — delivered synchronously via in-process events.                                                                                             |
+| Revocation/blocklist persisted by **another instance**                       | **≤ `SSE_AUTH_SWEEP_INTERVAL_MS`** (default `30 000` ms). A single sweep query per process (never one per keep-alive tick) picks up cross-process changes. |
 
 There is no database query per keep-alive tick — the keep-alive path stays
 O(1) regardless of how many connections are open.
@@ -636,7 +642,6 @@ The blocklist is persisted in `wallet_blocklist` (migration `022`). The
 service (`src/services/walletBlocklist.ts`) exposes `blocklistWallet`,
 `unblocklistWallet`, `isWalletBlocklisted`, and an in-process
 `onWalletBlocked` event.
-
 
 ## End-to-End Curl Walkthrough
 
@@ -805,7 +810,6 @@ echo ""
 
 echo "✅ Auth flow complete"
 ```
-
 
 ## Auth-related endpoints
 

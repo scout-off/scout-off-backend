@@ -36,7 +36,9 @@ jest.mock('../../src/services/audit', () => ({
 
 jest.mock('../../src/services/indexer', () => ({
   normalizePayload: jest.fn((p: Record<string, unknown>) => p),
-  normalizeEventId: jest.fn((_contractId: string, ledger: number, txHash: string) => `${ledger}:${txHash}`),
+  normalizeEventId: jest.fn(
+    (_contractId: string, ledger: number, txHash: string) => `${ledger}:${txHash}`,
+  ),
   normalizeSorobanEvent: jest.fn((raw: { topic: unknown[]; value: unknown }) => {
     const { scValToNative } = require('@stellar/stellar-sdk');
     return {
@@ -71,13 +73,15 @@ function makeEvent(
 beforeEach(() => {
   jest.clearAllMocks();
   const indexerModule = require('../../src/services/indexer');
-  indexerModule.normalizeSorobanEvent.mockImplementation((raw: { topic: unknown[]; value: unknown }) => {
-    const { scValToNative } = require('@stellar/stellar-sdk');
-    return {
-      type: scValToNative(raw.topic[0]),
-      payload: scValToNative(raw.value),
-    };
-  });
+  indexerModule.normalizeSorobanEvent.mockImplementation(
+    (raw: { topic: unknown[]; value: unknown }) => {
+      const { scValToNative } = require('@stellar/stellar-sdk');
+      return {
+        type: scValToNative(raw.topic[0]),
+        payload: scValToNative(raw.value),
+      };
+    },
+  );
 });
 
 // ── Basic functionality ───────────────────────────────────────────────────────
@@ -103,7 +107,12 @@ describe('basic functionality', () => {
     const txHash = 'aaaa' + '0'.repeat(60);
     mockGetEvents.mockResolvedValue({
       events: [
-        makeEvent('player_registered', { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) }, txHash, 200),
+        makeEvent(
+          'player_registered',
+          { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) },
+          txHash,
+          200,
+        ),
       ],
     });
 
@@ -218,12 +227,14 @@ describe('dynamic batch delay', () => {
 
     const delayCalls: number[] = [];
     const realSetTimeout = global.setTimeout;
-    jest.spyOn(global, 'setTimeout').mockImplementation((fn: any, delay?: number, ...args: any[]) => {
-      if (typeof delay === 'number') {
-        delayCalls.push(delay);
-      }
-      return realSetTimeout(fn, 0, ...args);
-    });
+    jest
+      .spyOn(global, 'setTimeout')
+      .mockImplementation((fn: any, delay?: number, ...args: any[]) => {
+        if (typeof delay === 'number') {
+          delayCalls.push(delay);
+        }
+        return realSetTimeout(fn, 0, ...args);
+      });
 
     await processEventBatches({
       fromLedger: 1,
@@ -331,9 +342,7 @@ describe('rate-limit backoff', () => {
   });
 
   it('continues to next batch on non-rate-limit error', async () => {
-    mockGetEvents
-      .mockRejectedValueOnce(new Error('RPC timeout'))
-      .mockResolvedValue({ events: [] });
+    mockGetEvents.mockRejectedValueOnce(new Error('RPC timeout')).mockResolvedValue({ events: [] });
 
     const result = await processEventBatches({
       fromLedger: 1,

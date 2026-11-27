@@ -5,14 +5,15 @@ This guide documents the process for migrating a Scout-Off backend deployment fr
 ## Overview
 
 Scout-Off supports two database drivers:
+
 - **SQLite** (default): Fast, simple, file-based. Suitable for single-instance deployments.
 - **PostgreSQL** (opt-in): Network-accessible, supports horizontal scaling, concurrent connections.
 
 The migration is reversible within a maintenance window.
 
 > **Schema migrations vs. this guide:** this document covers moving an existing
-> deployment's *data* from SQLite to PostgreSQL. For how the `db/` directory's
-> SQL *schema* migrations are named, paired across dialects, and ordered, see
+> deployment's _data_ from SQLite to PostgreSQL. For how the `db/` directory's
+> SQL _schema_ migrations are named, paired across dialects, and ordered, see
 > [db/README.md](../db/README.md).
 
 > **Helm chart default:** the `helm/scout-off-backend` chart ships with a
@@ -38,15 +39,15 @@ The migration is reversible within a maintenance window.
 
 Before starting the backend, configure these environment variables:
 
-| Variable | Accepted Values | Default | Purpose |
-|---|---|---|---|
-| `DB_DRIVER` | `sqlite` or `postgres` | `sqlite` | Which database system to use; typos cause startup failure (no silent fallback) |
-| `DATABASE_URL` | PostgreSQL connection string | (none) | **Required when `DB_DRIVER=postgres`**. Format: `postgresql://user:password@host:5432/dbname` |
-| `DATABASE_SSL` | `true`, `no-verify`, `false` | (disabled) | TLS/SSL mode for PostgreSQL connections. See [SSL / TLS Configuration](#ssl--tls-configuration) |
-| `DATABASE_POOL_SIZE` | Integer 1–100 | `10` | Maximum concurrent connections in the pool. Only used with `DB_DRIVER=postgres` |
-| `DB_STATEMENT_TIMEOUT_MS` | Positive integer (milliseconds) | `25000` | PostgreSQL server-side limit for each statement |
-| `DB_QUERY_TIMEOUT_MS` | Positive integer (milliseconds) | `30000` | Client-side query deadline; keep at or above the statement timeout |
-| `DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS` | Positive integer (milliseconds) | `60000` | PostgreSQL server-side limit for sessions idle inside a transaction |
+| Variable                                    | Accepted Values                 | Default    | Purpose                                                                                         |
+| ------------------------------------------- | ------------------------------- | ---------- | ----------------------------------------------------------------------------------------------- |
+| `DB_DRIVER`                                 | `sqlite` or `postgres`          | `sqlite`   | Which database system to use; typos cause startup failure (no silent fallback)                  |
+| `DATABASE_URL`                              | PostgreSQL connection string    | (none)     | **Required when `DB_DRIVER=postgres`**. Format: `postgresql://user:password@host:5432/dbname`   |
+| `DATABASE_SSL`                              | `true`, `no-verify`, `false`    | (disabled) | TLS/SSL mode for PostgreSQL connections. See [SSL / TLS Configuration](#ssl--tls-configuration) |
+| `DATABASE_POOL_SIZE`                        | Integer 1–100                   | `10`       | Maximum concurrent connections in the pool. Only used with `DB_DRIVER=postgres`                 |
+| `DB_STATEMENT_TIMEOUT_MS`                   | Positive integer (milliseconds) | `25000`    | PostgreSQL server-side limit for each statement                                                 |
+| `DB_QUERY_TIMEOUT_MS`                       | Positive integer (milliseconds) | `30000`    | Client-side query deadline; keep at or above the statement timeout                              |
+| `DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS` | Positive integer (milliseconds) | `60000`    | PostgreSQL server-side limit for sessions idle inside a transaction                             |
 
 The defaults bound normal statements before the application's 30-second request
 timeout. PostgreSQL also closes idle transaction sessions after one minute so a
@@ -63,8 +64,8 @@ The backend **requires an explicit, valid `DB_DRIVER` value**:
 - Any other value (typo, misspelling) → **server fails at startup** with an error message
 
 ```
-ERROR: DB_DRIVER="postgrez" is invalid. Must be one of: sqlite, postgres. 
-       Check for typos — an unrecognised value does NOT fall back to SQLite; 
+ERROR: DB_DRIVER="postgrez" is invalid. Must be one of: sqlite, postgres.
+       Check for typos — an unrecognised value does NOT fall back to SQLite;
        the server will not start.
 ```
 
@@ -79,6 +80,7 @@ postgresql://user:password@host:5432/dbname
 ```
 
 Breaking this down:
+
 - `user` — Database user (e.g., `scout_user`)
 - `password` — User password (keep secure; use secrets management)
 - `host` — PostgreSQL server hostname or IP
@@ -88,33 +90,37 @@ Breaking this down:
 **Examples:**
 
 Local development (Docker Compose):
+
 ```
 DATABASE_URL=postgresql://scout_user:password@postgres:5432/scout_off
 ```
 
 AWS RDS:
+
 ```
 DATABASE_URL=postgresql://scout_user:password@scout-off-db.abc123.us-east-1.rds.amazonaws.com:5432/scout_off
 ```
 
 Heroku Postgres:
+
 ```
 # Heroku sets DATABASE_URL automatically; it looks like:
 # postgresql://user:password@ec2-1-2-3-4.compute-1.amazonaws.com:5432/database
 ```
 
 Supabase:
+
 ```
 DATABASE_URL=postgresql://postgres:password@db.project-ref.supabase.co:5432/postgres
 ```
 
 ### `DATABASE_POOL_SIZE` guidance
 
-| Deployment | Recommended | Notes |
-|---|---|---|
-| Development (single instance) | 5–10 | Conservative; local testing doesn't stress the pool |
-| Staging (1–3 replicas) | 10–20 | Moderate load; balance pool size against PgBouncer if used |
-| Production (3+ replicas with HPA) | 20–50 | Higher concurrency; monitor pool exhaustion via application metrics |
+| Deployment                        | Recommended | Notes                                                               |
+| --------------------------------- | ----------- | ------------------------------------------------------------------- |
+| Development (single instance)     | 5–10        | Conservative; local testing doesn't stress the pool                 |
+| Staging (1–3 replicas)            | 10–20       | Moderate load; balance pool size against PgBouncer if used          |
+| Production (3+ replicas with HPA) | 20–50       | Higher concurrency; monitor pool exhaustion via application metrics |
 
 Each replica maintains its own pool, so a 3-replica deployment with `DATABASE_POOL_SIZE=20` opens up to 60 total connections to PostgreSQL. Ensure the PostgreSQL `max_connections` setting is at least `(replicas × pool_size) + 10` to account for admin and utility connections.
 
@@ -239,7 +245,7 @@ services:
   backend:
     environment:
       DB_DRIVER: postgres
-      DATABASE_URL: "postgresql://scout_user:${DB_PASSWORD}@postgres:5432/scout_off"
+      DATABASE_URL: 'postgresql://scout_user:${DB_PASSWORD}@postgres:5432/scout_off'
 ```
 
 ### Kubernetes / Other Orchestration
@@ -249,7 +255,7 @@ Set environment variables in your deployment manifest:
 ```yaml
 env:
   - name: DB_DRIVER
-    value: "postgres"
+    value: 'postgres'
   - name: DATABASE_URL
     valueFrom:
       secretKeyRef:
@@ -365,22 +371,22 @@ keys alongside the restored database.
 ## SSL / TLS Configuration
 
 Most managed PostgreSQL providers — including **AWS RDS**, **Heroku Postgres**, **Supabase**,
-**Neon**, and **Railway** — require or strongly recommend SSL for external connections.  The
+**Neon**, and **Railway** — require or strongly recommend SSL for external connections. The
 backend exposes the `DATABASE_SSL` environment variable to control TLS behaviour.
 
 ### DATABASE_SSL values
 
-| Value | Effect |
-|---|---|
-| `true` (or `1`, `yes`) | Enable SSL with full certificate verification (**recommended for production**) |
-| `no-verify` | Enable SSL transport but skip certificate verification (dev/staging with self-signed certs) |
-| `false` / unset | Disable SSL entirely (local or private-network Postgres without TLS) |
+| Value                  | Effect                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| `true` (or `1`, `yes`) | Enable SSL with full certificate verification (**recommended for production**)              |
+| `no-verify`            | Enable SSL transport but skip certificate verification (dev/staging with self-signed certs) |
+| `false` / unset        | Disable SSL entirely (local or private-network Postgres without TLS)                        |
 
 ### Provider-specific examples
 
 #### AWS RDS / Aurora
 
-RDS requires SSL and provides a CA bundle.  For simple setups, `DATABASE_SSL=true` is enough
+RDS requires SSL and provides a CA bundle. For simple setups, `DATABASE_SSL=true` is enough
 because the RDS CA is in the system trust store used by the `pg` library.
 
 ```bash
@@ -416,7 +422,7 @@ PGSSLROOTCERT=/path/to/heroku-server-ca.pem
 
 #### Supabase
 
-Supabase uses a valid certificate signed by a trusted CA.  `DATABASE_SSL=true` works out of the
+Supabase uses a valid certificate signed by a trusted CA. `DATABASE_SSL=true` works out of the
 box:
 
 ```bash
@@ -557,6 +563,7 @@ A: PostgreSQL streaming replication is outside the scope of this guide. Refer to
 **Q: How do I monitor PostgreSQL?**
 
 A: Use tools like:
+
 - `pg_stat_statements` (query performance)
 - `pgAdmin` (web UI)
 - `Prometheus + postgres_exporter` (metrics)
@@ -582,15 +589,15 @@ mocked — passes under `DB_DRIVER=postgres`). Remaining exclusions and the
 follow-ups needed for each (file a tracking issue per exclusion if one
 does not already exist; related work under #1014 / #1018):
 
-| Suite | Why excluded / follow-up |
-| --- | --- |
+| Suite                                                                                                                                             | Why excluded / follow-up                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `tests/services/indexer.test.ts`, `indexerDispatch.test.ts`, `tierPromotion.test.ts`, `tests/routes/reindex.test.ts`, `tests/db/backfill.test.ts` | Raw `getDb()` / SQLite SQL in indexer/reindex/tier/backfill paths |
-| `tests/services/webhooks.test.ts`, `tests/controllers/webhookAdminController.test.ts` | Sync `getDb()` in webhook delivery / admin |
-| `tests/routes/adminExport.test.ts`, `exportStreaming.test.ts`, `adminQuerySchema.test.ts` | `better-sqlite3` `.iterate()` / export streaming assumptions |
-| `tests/e2e/milestonePromotion.e2e.test.ts`, `scoutUnlock.e2e.test.ts` | E2E suites still SQLite-oriented |
-| `tests/db/sqlInjectionRegression.test.ts` | Driver-specific SQL regression harness |
-| `tests/routes/playerListFreshness.test.ts`, `trialOffers.test.ts` | Suites that call sync `getDb()` directly |
-| `tests/routes/adminAuditTrail.test.ts` | Audit-trail path still tied to SQLite assumptions |
+| `tests/services/webhooks.test.ts`, `tests/controllers/webhookAdminController.test.ts`                                                             | Sync `getDb()` in webhook delivery / admin                        |
+| `tests/routes/adminExport.test.ts`, `exportStreaming.test.ts`, `adminQuerySchema.test.ts`                                                         | `better-sqlite3` `.iterate()` / export streaming assumptions      |
+| `tests/e2e/milestonePromotion.e2e.test.ts`, `scoutUnlock.e2e.test.ts`                                                                             | E2E suites still SQLite-oriented                                  |
+| `tests/db/sqlInjectionRegression.test.ts`                                                                                                         | Driver-specific SQL regression harness                            |
+| `tests/routes/playerListFreshness.test.ts`, `trialOffers.test.ts`                                                                                 | Suites that call sync `getDb()` directly                          |
+| `tests/routes/adminAuditTrail.test.ts`                                                                                                            | Audit-trail path still tied to SQLite assumptions                 |
 
 Keep CI and `package.json` `test:postgres` ignore lists in sync when
 re-enabling a suite.

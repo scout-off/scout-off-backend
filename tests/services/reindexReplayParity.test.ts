@@ -16,11 +16,7 @@ import {
   getReindexStatus,
   _resetReindexState,
 } from '../../src/services/reindexService';
-import {
-  runReplay,
-  getReplayStatus,
-  _resetReplayState,
-} from '../../src/services/replayService';
+import { runReplay, getReplayStatus, _resetReplayState } from '../../src/services/replayService';
 import { getDb } from '../../src/db';
 
 // ── Mock external dependencies ────────────────────────────────────────────────
@@ -39,7 +35,9 @@ jest.mock('../../src/services/audit', () => ({
 
 jest.mock('../../src/services/indexer', () => ({
   normalizePayload: jest.fn((p: Record<string, unknown>) => p),
-  normalizeEventId: jest.fn((_contractId: string, ledger: number, txHash: string) => `${ledger}:${txHash}`),
+  normalizeEventId: jest.fn(
+    (_contractId: string, ledger: number, txHash: string) => `${ledger}:${txHash}`,
+  ),
   normalizeSorobanEvent: jest.fn((raw: { topic: unknown[]; value: unknown }) => {
     const { scValToNative } = require('@stellar/stellar-sdk');
     return {
@@ -99,9 +97,11 @@ function getAllEvents(): Array<{
   contract_id: string;
 }> {
   const db = getDb();
-  return db.prepare(
-    'SELECT type, ledger, tx_hash, payload, created_at, tx_application_order, event_index, contract_id FROM events ORDER BY ledger, tx_application_order, event_index, contract_id',
-  ).all() as any;
+  return db
+    .prepare(
+      'SELECT type, ledger, tx_hash, payload, created_at, tx_application_order, event_index, contract_id FROM events ORDER BY ledger, tx_application_order, event_index, contract_id',
+    )
+    .all() as any;
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -114,13 +114,15 @@ beforeEach(() => {
   clearEventsTable();
 
   const indexerModule = require('../../src/services/indexer');
-  indexerModule.normalizeSorobanEvent.mockImplementation((raw: { topic: unknown[]; value: unknown }) => {
-    const { scValToNative } = require('@stellar/stellar-sdk');
-    return {
-      type: scValToNative(raw.topic[0]),
-      payload: scValToNative(raw.value),
-    };
-  });
+  indexerModule.normalizeSorobanEvent.mockImplementation(
+    (raw: { topic: unknown[]; value: unknown }) => {
+      const { scValToNative } = require('@stellar/stellar-sdk');
+      return {
+        type: scValToNative(raw.topic[0]),
+        payload: scValToNative(raw.value),
+      };
+    },
+  );
 });
 
 afterEach(() => {
@@ -137,7 +139,12 @@ describe('reindex vs replay parity', () => {
     const txHashC = 'cccc' + '0'.repeat(60);
 
     const mockEvents = [
-      makeEvent('player_registered', { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) }, txHashA, 100),
+      makeEvent(
+        'player_registered',
+        { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) },
+        txHashA,
+        100,
+      ),
       makeEvent('milestone_approved', { player_id: 'P1' }, txHashB, 101),
       makeEvent('contact_unlocked', { scout: 'G' + 'S'.repeat(55), player_id: 'P2' }, txHashC, 102),
     ];
@@ -189,7 +196,12 @@ describe('reindex vs replay parity', () => {
     const txHash3 = '3333' + '0'.repeat(60);
 
     const mockEvents = [
-      makeEvent('player_registered', { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) }, txHash1, 200),
+      makeEvent(
+        'player_registered',
+        { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) },
+        txHash1,
+        200,
+      ),
       makeEvent('milestone_approved', { player_id: 'P1' }, txHash2, 201),
       makeEvent('contact_unlocked', { scout: 'G' + 'S'.repeat(55), player_id: 'P2' }, txHash3, 300),
     ];
@@ -259,7 +271,12 @@ describe('reindex vs replay parity', () => {
     // Events in reverse ledger order to test sorting
     const mockEvents = [
       makeEvent('milestone_approved', { player_id: 'P1' }, txHashB, 110),
-      makeEvent('player_registered', { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) }, txHashA, 100),
+      makeEvent(
+        'player_registered',
+        { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) },
+        txHashA,
+        100,
+      ),
     ];
 
     // ── Run reindex ─────────────────────────────────────────────────────────
@@ -293,7 +310,12 @@ describe('reindex vs replay parity', () => {
     const dupHash = 'dddd' + '0'.repeat(60);
 
     const mockEvents = [
-      makeEvent('player_registered', { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) }, dupHash, 400),
+      makeEvent(
+        'player_registered',
+        { player_id: 'P1', wallet: 'G' + 'A'.repeat(55) },
+        dupHash,
+        400,
+      ),
     ];
 
     // ── First reindex inserts the event ──────────────────────────────────────

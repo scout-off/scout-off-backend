@@ -48,26 +48,33 @@ describe('scout resource limits', () => {
 
   it('enforces the API key cap under concurrent issuance', async () => {
     const results = await Promise.allSettled(
-      Array.from({ length: MAX_API_KEYS_PER_SCOUT + 4 }, (_, i) => insertScoutApiKey(`parallel-${i}`)),
+      Array.from({ length: MAX_API_KEYS_PER_SCOUT + 4 }, (_, i) =>
+        insertScoutApiKey(`parallel-${i}`),
+      ),
     );
 
-    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(MAX_API_KEYS_PER_SCOUT);
-    expect(results.filter(
-      (result) => result.status === 'rejected' && result.reason instanceof ApiKeyLimitError,
-    )).toHaveLength(4);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(
+      MAX_API_KEYS_PER_SCOUT,
+    );
+    expect(
+      results.filter(
+        (result) => result.status === 'rejected' && result.reason instanceof ApiKeyLimitError,
+      ),
+    ).toHaveLength(4);
   });
 
   it('caps webhook subscriptions at 10 and frees capacity after deletion', () => {
-    const subscriptions = Array.from(
-      { length: MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT },
-      (_, i) => createWebhookSubscription(`https://example.com/${i}`, undefined, SCOUT),
+    const subscriptions = Array.from({ length: MAX_WEBHOOK_SUBSCRIPTIONS_PER_SCOUT }, (_, i) =>
+      createWebhookSubscription(`https://example.com/${i}`, undefined, SCOUT),
     );
 
-    expect(() => createWebhookSubscription('https://example.com/over-limit', undefined, SCOUT))
-      .toThrow(WebhookSubscriptionLimitError);
+    expect(() =>
+      createWebhookSubscription('https://example.com/over-limit', undefined, SCOUT),
+    ).toThrow(WebhookSubscriptionLimitError);
 
     expect(deleteWebhookSubscription(subscriptions[0].id, SCOUT)).toBe(true);
-    expect(() => createWebhookSubscription('https://example.com/replacement', undefined, SCOUT))
-      .not.toThrow();
+    expect(() =>
+      createWebhookSubscription('https://example.com/replacement', undefined, SCOUT),
+    ).not.toThrow();
   });
 });

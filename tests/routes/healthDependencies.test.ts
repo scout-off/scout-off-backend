@@ -15,8 +15,12 @@ jest.mock('../../src/utils/httpClient', () => ({
   httpGet: jest.fn(),
   httpHead: jest.fn(),
 }));
-const mockedHttpGet = httpClientModule.httpGet as jest.MockedFunction<typeof httpClientModule.httpGet>;
-const mockedHttpHead = httpClientModule.httpHead as jest.MockedFunction<typeof httpClientModule.httpHead>;
+const mockedHttpGet = httpClientModule.httpGet as jest.MockedFunction<
+  typeof httpClientModule.httpGet
+>;
+const mockedHttpHead = httpClientModule.httpHead as jest.MockedFunction<
+  typeof httpClientModule.httpHead
+>;
 
 jest.mock('../../src/services/stellar', () => {
   const actual = jest.requireActual('../../src/services/stellar');
@@ -25,7 +29,9 @@ jest.mock('../../src/services/stellar', () => {
     stellarHealth: jest.fn().mockResolvedValue(true),
     server: {
       getLatestLedger: jest.fn().mockResolvedValue({ sequence: 123456 }),
-      getNetwork: jest.fn().mockResolvedValue({ protocolVersion: 20, passphrase: 'Test SDF Network ; July 2015' }),
+      getNetwork: jest
+        .fn()
+        .mockResolvedValue({ protocolVersion: 20, passphrase: 'Test SDF Network ; July 2015' }),
     },
   };
 });

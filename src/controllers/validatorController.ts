@@ -3,7 +3,13 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { logger } from '../utils/logger';
 import { pinJson, pinFile, isPinataConfigured } from '../services/ipfs';
-import { getPendingMilestones as getPendingMilestonesFromDb, getDriver, removePendingMilestone, incrementValidatorApproved, queryEvents, getEventsCount, updatePlayerProgress, getValidatorStats } from '../db';
+import {
+  getPendingMilestones as getPendingMilestonesFromDb,
+  getDriver,
+  queryEvents,
+  getEventsCount,
+  getValidatorStats,
+} from '../db';
 import { invalidateMilestoneCache } from '../services/cache';
 import { recordAudit } from '../utils/audit';
 import { isValidMetadataUri, URI_VALIDATION_ERROR } from '../utils/uriValidator';
@@ -70,20 +76,28 @@ export async function downloadAndPinEvidence(url: string, budgetKey = 'unknown')
       logger.warn('[validator] Pinata not configured — returning local evidence stub CID');
       return pinJson({ evidenceUri: url, filename: stubFilename });
     }
-    throw new Error('IPFS service unavailable: PINATA_API_KEY and PINATA_SECRET must be set in staging and production');
+    throw new Error(
+      'IPFS service unavailable: PINATA_API_KEY and PINATA_SECRET must be set in staging and production',
+    );
   }
 
   // Per-validator byte budget (sliding hour window).
   if (!hasEvidenceBudget(budgetKey)) {
     recordEvidenceRejection('budget_exceeded');
-    const err = new Error('Evidence download budget exceeded for this validator; try again later') as Error & { status: number };
+    const err = new Error(
+      'Evidence download budget exceeded for this validator; try again later',
+    ) as Error & { status: number };
     err.status = 429;
     throw err;
   }
 
   let fetched: SafeFetchResult;
   try {
-    fetched = await safeFetch(url, { maxBytes: config.evidenceMaxBytes, timeoutMs: 30000, maxRedirects: 3 });
+    fetched = await safeFetch(url, {
+      maxBytes: config.evidenceMaxBytes,
+      timeoutMs: 30000,
+      maxRedirects: 3,
+    });
   } catch (fetchErr) {
     if (fetchErr instanceof SafeFetchError) {
       recordEvidenceRejection(fetchErr.reason);
@@ -101,13 +115,22 @@ export async function downloadAndPinEvidence(url: string, budgetKey = 'unknown')
   const sniffed = sniffContentType(buffer);
   if (declared && declared !== 'application/octet-stream' && !isAllowedContentType(declared)) {
     recordEvidenceRejection('unsupported_content');
-    const err = new Error(`Unsupported evidence content type: ${declared}. Accepted: video/*, image/*, application/pdf, text/plain`) as Error & { status: number };
+    const err = new Error(
+      `Unsupported evidence content type: ${declared}. Accepted: video/*, image/*, application/pdf, text/plain`,
+    ) as Error & { status: number };
     err.status = 422;
     throw err;
   }
-  if (!sniffed || (declared && declared !== 'application/octet-stream' && declared.split('/')[0] !== sniffed.split('/')[0])) {
+  if (
+    !sniffed ||
+    (declared &&
+      declared !== 'application/octet-stream' &&
+      declared.split('/')[0] !== sniffed.split('/')[0])
+  ) {
     recordEvidenceRejection('unsupported_content');
-    const err = new Error(`Evidence content does not match an accepted type (declared ${declared || 'none'}, detected ${sniffed ?? 'unknown'}). Accepted: video/*, image/*, application/pdf, text/plain`) as Error & { status: number };
+    const err = new Error(
+      `Evidence content does not match an accepted type (declared ${declared || 'none'}, detected ${sniffed ?? 'unknown'}). Accepted: video/*, image/*, application/pdf, text/plain`,
+    ) as Error & { status: number };
     err.status = 422;
     throw err;
   }
@@ -127,22 +150,30 @@ export async function downloadAndPinEvidence(url: string, budgetKey = 'unknown')
  */
 export const MAX_EVIDENCE_URI_LENGTH = 512;
 
-export const milestoneSchema = z.object({
-  playerId: z
-    .string()
-    .min(1)
-    .refine(isValidPlayerId, 'playerId must be 1-128 characters of letters, numbers, underscores, or hyphens'),
-  milestoneType: z.enum(['identity', 'performance', 'trial_offer']),
-  evidenceUri: z
-    .string()
-    .min(1)
-    .max(MAX_EVIDENCE_URI_LENGTH, `evidenceUri cannot exceed ${MAX_EVIDENCE_URI_LENGTH} characters`)
-    .refine(isValidMetadataUri, URI_VALIDATION_ERROR),
-  // Optional free-text fields (#29). Accepted and persisted with the audit
-  // record; not required for submission.
-  notes: z.string().max(2000).optional(),
-  validatorComment: z.string().max(2000).optional(),
-}).strict();
+export const milestoneSchema = z
+  .object({
+    playerId: z
+      .string()
+      .min(1)
+      .refine(
+        isValidPlayerId,
+        'playerId must be 1-128 characters of letters, numbers, underscores, or hyphens',
+      ),
+    milestoneType: z.enum(['identity', 'performance', 'trial_offer']),
+    evidenceUri: z
+      .string()
+      .min(1)
+      .max(
+        MAX_EVIDENCE_URI_LENGTH,
+        `evidenceUri cannot exceed ${MAX_EVIDENCE_URI_LENGTH} characters`,
+      )
+      .refine(isValidMetadataUri, URI_VALIDATION_ERROR),
+    // Optional free-text fields (#29). Accepted and persisted with the audit
+    // record; not required for submission.
+    notes: z.string().max(2000).optional(),
+    validatorComment: z.string().max(2000).optional(),
+  })
+  .strict();
 
 export const MAX_PAGE_SIZE = 100;
 
@@ -172,8 +203,12 @@ function getCorrelationId(req: Request): string {
   return String(req.headers?.['x-correlation-id'] ?? req.headers?.['correlation-id'] ?? 'none');
 }
 
-export async function submitMilestoneEvidence(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
+export async function submitMilestoneEvidence(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
     const { playerId, milestoneType, evidenceUri } = milestoneSchema.parse(req.body);
 
     let evidenceCid: string;
@@ -197,7 +232,9 @@ try {
     } else {
       // evidenceUri is an ipfs:// URI — strip the prefix to get the bare CID and
       // record the metadata envelope on IPFS so we have a stable audit record.
-      const cid = evidenceUri.startsWith('ipfs://') ? evidenceUri.slice('ipfs://'.length) : evidenceUri;
+      const cid = evidenceUri.startsWith('ipfs://')
+        ? evidenceUri.slice('ipfs://'.length)
+        : evidenceUri;
       evidenceCid = await pinJson({ playerId, milestoneType, evidenceUri: cid });
     }
     // Invalidate milestone + player cache so updated progress tier is reflected
@@ -206,10 +243,15 @@ try {
     const validatorWallet = req.account ?? 'unknown';
     const correlationId = getCorrelationId(req);
     logger.info(
-      `[validator] action=submit_milestone validator=${validatorWallet} playerId=${playerId} milestoneType=${milestoneType} evidenceCid=${evidenceCid} correlationId=${correlationId}`
+      `[validator] action=submit_milestone validator=${validatorWallet} playerId=${playerId} milestoneType=${milestoneType} evidenceCid=${evidenceCid} correlationId=${correlationId}`,
     );
 
-    await recordAudit(validatorWallet, 'milestone_submitted', { playerId, milestoneType, evidenceCid }, `correlationId=${correlationId}`);
+    await recordAudit(
+      validatorWallet,
+      'milestone_submitted',
+      { playerId, milestoneType, evidenceCid },
+      `correlationId=${correlationId}`,
+    );
 
     res.status(201).json({ success: true, data: { evidenceCid } });
   } catch (err) {
@@ -218,10 +260,14 @@ try {
 }
 
 /** GET /api/validators/milestones/pending or /api/validators/:wallet/milestones/pending */
-export async function getPendingMilestones(req: Request, res: Response, _next: NextFunction): Promise<void> {
+export async function getPendingMilestones(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
   const { region, position, playerId, submittedAfter, submittedBefore, page, pageSize } =
     pendingQuerySchema.parse(req.query);
-  const validatorWallet = req.params.wallet as string || req.account;
+  const validatorWallet = (req.params.wallet as string) || req.account;
   const { data, total } = await getPendingMilestonesFromDb({
     validatorWallet: validatorWallet,
     region,
@@ -245,14 +291,14 @@ export async function getPendingMilestones(req: Request, res: Response, _next: N
   const currentValidatorWallet = req.account ?? 'unknown';
   await recordAudit(
     currentValidatorWallet,
-    'pending_milestones_viewed', 
-    { 
-      region: region ?? null, 
+    'pending_milestones_viewed',
+    {
+      region: region ?? null,
       position: position ?? null,
       validatorWallet,
       pendingCount: total,
-    }, 
-    'pending milestones viewed'
+    },
+    'pending milestones viewed',
   );
 
   const effectivePage = page || 1;
@@ -267,63 +313,143 @@ export async function getPendingMilestones(req: Request, res: Response, _next: N
   });
 }
 
-export const bulkApproveSchema = z.object({
-  milestoneIds: z.array(z.string()).min(1),
-}).strict();
+/** Maximum milestone IDs accepted by one bulk-approval request. */
+export const BULK_APPROVE_MAX_IDS = 50;
 
-export async function approveBulkMilestones(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
+export const bulkApproveSchema = z
+  .object({
+    milestoneIds: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(200)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+      )
+      .min(1)
+      .max(BULK_APPROVE_MAX_IDS),
+  })
+  .strict();
+
+type BulkApproveResult = {
+  milestoneId: string;
+  status: 'approved' | 'invalid' | 'unauthorized' | 'already_processed' | 'error';
+  error?: string;
+  warning?: string;
+};
+
+/**
+ * Approve up to BULK_APPROVE_MAX_IDS milestones in one request. IDs are read in
+ * a single query; each approval commits in its own transaction so one failure
+ * does not roll back the others, and a concurrent/replayed approval (the
+ * pending row is already gone) is reported as `already_processed` without
+ * repeating side effects.
+ */
+export async function approveBulkMilestones(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
     const { milestoneIds } = bulkApproveSchema.parse(req.body);
     const validatorWallet = req.account ?? 'unknown';
     const correlationId = getCorrelationId(req);
-    
-    const results = [];
-    const driver = getDriver();
 
+    const driver = getDriver();
     const uniqueIds = Array.from(new Set(milestoneIds));
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = await driver.all<{
+      milestone_id: string;
+      player_id: string;
+      validator_wallet: string;
+    }>(
+      // sql-injection-ok: generated `?` placeholders only; IDs are bound values.
+      `SELECT milestone_id, player_id, validator_wallet FROM pending_milestones WHERE milestone_id IN (${placeholders})`,
+      uniqueIds,
+    );
+    const pendingById = new Map(rows.map((row) => [row.milestone_id, row]));
+    const results: BulkApproveResult[] = [];
 
     for (const milestoneId of uniqueIds) {
+      const row = pendingById.get(milestoneId);
+      if (!row) {
+        results.push({ milestoneId, status: 'invalid', error: 'Milestone not found' });
+        continue;
+      }
+      if (row.validator_wallet !== validatorWallet) {
+        results.push({
+          milestoneId,
+          status: 'unauthorized',
+          error: 'Not assigned to this validator',
+        });
+        continue;
+      }
+
       try {
-        const row = await driver.get<any>('SELECT * FROM pending_milestones WHERE milestone_id = ?', [milestoneId]);
-        if (!row) {
-          results.push({ milestoneId, status: 'invalid', error: 'Not found or already processed' });
-          continue;
-        }
-
-        if (row.validator_wallet !== validatorWallet) {
-          results.push({ milestoneId, status: 'unauthorized', error: 'Not assigned to this validator' });
-          continue;
-        }
-
-        const playerId = row.player_id;
-
-        await removePendingMilestone(milestoneId);
-        await incrementValidatorApproved(validatorWallet);
-
         const onChainApprovedCount = getEventsCount('milestone_approved', {
-          payloadFilter: { player_id: playerId },
+          payloadFilter: { player_id: row.player_id },
+        });
+        const newProgressLevel = tierForApprovedMilestones(onChainApprovedCount + 1);
+        const committed = await driver.transaction(async (tx) => {
+          const deletion = await tx.run(
+            'DELETE FROM pending_milestones WHERE milestone_id = ? AND validator_wallet = ?',
+            [milestoneId, validatorWallet],
+          );
+          if (deletion.changes === 0) return false;
+
+          await tx.run(
+            `INSERT INTO validator_stats (wallet, milestones_approved, milestones_rejected)
+             VALUES (?, 1, 0)
+             ON CONFLICT(wallet) DO UPDATE SET milestones_approved = milestones_approved + 1`,
+            [validatorWallet],
+          );
+          await tx.run('UPDATE players SET progress_level = ? WHERE player_id = ?', [
+            newProgressLevel,
+            row.player_id,
+          ]);
+          return true;
         });
 
-        // Count this new off-chain approval + existing ones
-        await updatePlayerProgress(playerId, tierForApprovedMilestones(onChainApprovedCount + 1));
+        if (!committed) {
+          results.push({ milestoneId, status: 'already_processed' });
+          continue;
+        }
 
-        await invalidateMilestoneCache(playerId);
-
-        await recordAudit(
-          validatorWallet,
-          'milestone_approved',
-          { milestoneId, playerId, bulk: true },
-          `correlationId=${correlationId}`
-        );
-        
-        results.push({ milestoneId, status: 'approved' });
+        const approval: BulkApproveResult = { milestoneId, status: 'approved' };
+        try {
+          await invalidateMilestoneCache(row.player_id);
+          await recordAudit(
+            validatorWallet,
+            'milestone_approved',
+            { milestoneId, playerId: row.player_id, bulk: true },
+            `correlationId=${correlationId}`,
+          );
+        } catch (err) {
+          logger.error(`[validator] post-approval processing failed for ${milestoneId}:`, err);
+          approval.warning = 'Approval committed, but cache invalidation or audit recording failed';
+        }
+        results.push(approval);
       } catch (err) {
         logger.error(`[validator] error approving milestone ${milestoneId}:`, err);
-        results.push({ milestoneId, status: 'error', error: String(err) });
+        results.push({ milestoneId, status: 'error', error: 'Approval could not be completed' });
       }
     }
 
-    res.json({ success: true, data: results });
+    const summary = {
+      approved: results.filter((r) => r.status === 'approved').length,
+      invalid: results.filter((r) => r.status === 'invalid').length,
+      unauthorized: results.filter((r) => r.status === 'unauthorized').length,
+      alreadyProcessed: results.filter((r) => r.status === 'already_processed').length,
+      errors: results.filter((r) => r.status === 'error').length,
+      warnings: results.filter((r) => r.warning !== undefined).length,
+    };
+    const hasFailures = summary.errors > 0 || summary.warnings > 0;
+    res.json({
+      success: !hasFailures,
+      partialFailure: hasFailures && summary.approved > 0,
+      summary,
+      data: results,
+    });
   } catch (err) {
     next(err);
   }

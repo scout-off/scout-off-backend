@@ -92,9 +92,7 @@ describe('Response compression', () => {
   });
 
   it('serves health check correctly without compression when not requested', async () => {
-    const res = await request(app)
-      .get('/health')
-      .set('Accept-Encoding', 'identity');
+    const res = await request(app).get('/health').set('Accept-Encoding', 'identity');
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');

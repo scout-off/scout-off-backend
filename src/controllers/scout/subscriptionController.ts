@@ -22,16 +22,22 @@ import { paymentErrorStatus, gracePeriodSeconds } from './helpers';
 
 // ─── Validation schemas ────────────────────────────────────────────────────────
 
-export const subscribeSchema = z.object({
-  tier: z.enum(['basic', 'premium']),
-  duration: z.number().int().min(1).max(365),
-}).strict();
+export const subscribeSchema = z
+  .object({
+    tier: z.enum(['basic', 'premium']),
+    duration: z.number().int().min(1).max(365),
+  })
+  .strict();
 
 // ─── GET /api/scouts/:wallet/subscription ─────────────────────────────────────
 
 /** GET /api/scouts/:wallet/subscription */
-export async function getSubscription(req: Request, res: Response, _next: NextFunction): Promise<void> {
-  const {wallet} = req.params as {wallet: string};
+export async function getSubscription(
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> {
+  const { wallet } = req.params as { wallet: string };
 
   const now = Math.floor(Date.now() / 1000);
   const graceSeconds = gracePeriodSeconds();
@@ -77,7 +83,13 @@ export async function getSubscription(req: Request, res: Response, _next: NextFu
   if (!latest) {
     res.json({
       success: true,
-      data: { active: false, tier: null, expiresAt: null, remainingDays: 0, gracePeriodActive: false },
+      data: {
+        active: false,
+        tier: null,
+        expiresAt: null,
+        remainingDays: 0,
+        gracePeriodActive: false,
+      },
     });
     return;
   }
@@ -101,8 +113,8 @@ export async function getSubscription(req: Request, res: Response, _next: NextFu
 
 /** POST /api/scouts/:wallet/subscribe — new subscription */
 export async function subscribe(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
-    const {wallet} = req.params as {wallet: string};
+  try {
+    const { wallet } = req.params as { wallet: string };
     // Ownership is enforced by requireWalletOwner() at the route level; the
     // shared guard is re-invoked here so direct callers (unit tests) get the
     // same protection without duplicating the comparison inline.
@@ -112,7 +124,9 @@ try {
 
     const parsed = subscribeSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request body' });
+      res
+        .status(400)
+        .json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request body' });
       return;
     }
     const { tier, duration } = parsed.data;
@@ -127,7 +141,9 @@ try {
       created_at: Math.floor(Date.now() / 1000),
     });
 
-    logger.info(`[scout] action=new_subscription scout=${wallet} tier=${tier} duration=${duration} expiry=${result.expiresAt}`);
+    logger.info(
+      `[scout] action=new_subscription scout=${wallet} tier=${tier} duration=${duration} expiry=${result.expiresAt}`,
+    );
 
     // Broadcast SSE event to any connected subscribers
     broadcaster.broadcast({
@@ -169,12 +185,18 @@ try {
  * If none exists, behaves like POST (creates new).
  * Returns 200 for renewal, 201 for new subscription.
  */
-export async function renewSubscription(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
-    const {wallet} = req.params as {wallet: string};
+export async function renewSubscription(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { wallet } = req.params as { wallet: string };
     const parsed = subscribeSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request body' });
+      res
+        .status(400)
+        .json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid request body' });
       return;
     }
     const { tier, duration } = parsed.data;
@@ -191,7 +213,9 @@ try {
         expires_at: result.expiresAt,
       });
 
-      logger.info(`[scout] action=renew_subscription scout=${wallet} tier=${tier} duration=${duration} newExpiry=${result.expiresAt}`);
+      logger.info(
+        `[scout] action=renew_subscription scout=${wallet} tier=${tier} duration=${duration} newExpiry=${result.expiresAt}`,
+      );
       res.status(200).json({ success: true, data: result });
     } else {
       // No subscription exists — create a new one (same as POST)
@@ -204,12 +228,16 @@ try {
         created_at: Math.floor(Date.now() / 1000),
       });
 
-      logger.info(`[scout] action=new_subscription_via_put scout=${wallet} tier=${tier} duration=${duration} expiry=${result.expiresAt}`);
+      logger.info(
+        `[scout] action=new_subscription_via_put scout=${wallet} tier=${tier} duration=${duration} expiry=${result.expiresAt}`,
+      );
       res.status(201).json({ success: true, data: result });
     }
   } catch (err) {
     if (err instanceof PaymentError) {
-      res.status(paymentErrorStatus(err.code)).json({ success: false, error: err.message, code: err.code });
+      res
+        .status(paymentErrorStatus(err.code))
+        .json({ success: false, error: err.message, code: err.code });
       return;
     }
     next(err);
@@ -224,9 +252,13 @@ try {
  * Returns 403 if the contract rejects the caller as unauthorized.
  * Records cancellation on-chain first; DB row is only updated after confirmation.
  */
-export async function cancelSubscription(req: Request, res: Response, next: NextFunction): Promise<void> {
-try {
-    const {wallet} = req.params as {wallet: string};
+export async function cancelSubscription(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { wallet } = req.params as { wallet: string };
 
     const existingSub = await getLatestSubscription(wallet);
     if (!existingSub) {
@@ -242,7 +274,9 @@ try {
     const now = Math.floor(Date.now() / 1000);
     await dbCancelSubscription({ id: existingSub.id, cancelled_at: now });
 
-    logger.info(`[scout] action=cancel_subscription scout=${wallet} subId=${existingSub.id} txId=${onChainResult.transactionId}`);
+    logger.info(
+      `[scout] action=cancel_subscription scout=${wallet} subId=${existingSub.id} txId=${onChainResult.transactionId}`,
+    );
 
     res.status(200).json({
       success: true,

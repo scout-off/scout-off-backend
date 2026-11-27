@@ -29,12 +29,26 @@ jest.mock('../../src/services/stellar', () => ({
   cancelSubscriptionOnChain: jest.fn(),
   logTrialOffer: jest.fn(),
   PaymentError: class PaymentError extends Error {
-    constructor(public message: string, public code: string) { super(message); }
+    constructor(
+      public message: string,
+      public code: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
-import { queryEvents, getPlayerById, getContactUnlocksByScout, hasContactUnlock } from '../../src/db';
-import { submitContactPayment, purchaseSubscription, isSubscribed } from '../../src/services/stellar';
+import {
+  queryEvents,
+  getPlayerById,
+  getContactUnlocksByScout,
+  hasContactUnlock,
+} from '../../src/db';
+import {
+  submitContactPayment,
+  purchaseSubscription,
+  isSubscribed,
+} from '../../src/services/stellar';
 const mockGetEvents = queryEvents as jest.Mock;
 const mockGetPlayerById = getPlayerById as jest.Mock;
 const mockGetContactUnlocksByScout = getContactUnlocksByScout as jest.Mock;
@@ -55,7 +69,7 @@ function makeValidatorToken(wallet: string): string {
 }
 
 const WALLET = 'GAAKO6EK5AIJWZH7ITXBFZTPASYKPY3YVMFVFVD5UDG2C6NUIXTT7BE3';
-const OTHER  = 'GAEZS7NMWCNTUFGDNXWVYVTKGGP47CESPEV5BVT5LNFHKXC5TGBZ4O5O';
+const OTHER = 'GAEZS7NMWCNTUFGDNXWVYVTKGGP47CESPEV5BVT5LNFHKXC5TGBZ4O5O';
 
 beforeEach(() => {
   mockGetEvents.mockReset();
@@ -123,7 +137,13 @@ describe('GET /api/scouts/:wallet/subscription', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.data).toEqual({ active: false, tier: null, expiresAt: null, remainingDays: 0, gracePeriodActive: false });
+    expect(res.body.data).toEqual({
+      active: false,
+      tier: null,
+      expiresAt: null,
+      remainingDays: 0,
+      gracePeriodActive: false,
+    });
   });
 
   it('returns active subscription with correct fields', async () => {
@@ -310,7 +330,12 @@ describe('GET /api/scouts/:wallet/contacts', () => {
     const unlockedAt = Math.floor(Date.now() / 1000) - 3600;
     mockGetContactUnlocksByScout.mockReturnValue([
       { scout_wallet: WALLET, player_id: 'player-42', tx_hash: 'tx-1', unlocked_at: unlockedAt },
-      { scout_wallet: WALLET, player_id: 'player-99', tx_hash: 'tx-2', unlocked_at: unlockedAt + 100 },
+      {
+        scout_wallet: WALLET,
+        player_id: 'player-99',
+        tx_hash: 'tx-2',
+        unlocked_at: unlockedAt + 100,
+      },
     ]);
     const token = makeToken(WALLET);
     const res = await request(app)
@@ -475,7 +500,9 @@ describe('POST /api/scouts/:wallet/subscribe', () => {
 
   it('returns 402 when purchaseSubscription throws INSUFFICIENT_FUNDS', async () => {
     const { PaymentError } = jest.requireMock('../../src/services/stellar');
-    mockPurchaseSubscription.mockRejectedValue(new PaymentError('Insufficient XLM balance', 'INSUFFICIENT_FUNDS'));
+    mockPurchaseSubscription.mockRejectedValue(
+      new PaymentError('Insufficient XLM balance', 'INSUFFICIENT_FUNDS'),
+    );
     const token = makeToken(WALLET);
     const res = await request(app)
       .post(`/api/scouts/${WALLET}/subscribe`)
@@ -591,4 +618,3 @@ describe('GET /api/scouts/:wallet/contacts/:playerId', () => {
     });
   });
 });
-

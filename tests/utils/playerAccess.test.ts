@@ -1,4 +1,8 @@
-import { canAccessPlayer, PlayerAccessRow, PlayerAccessContext } from '../../src/utils/playerAccess';
+import {
+  canAccessPlayer,
+  PlayerAccessRow,
+  PlayerAccessContext,
+} from '../../src/utils/playerAccess';
 
 function player(is_active: number | null | undefined): PlayerAccessRow {
   return { player_id: 'GPLAYER1', wallet: 'GWALLET1', is_active };

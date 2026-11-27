@@ -77,7 +77,9 @@ describe('extractClientIp — fail-safe for under-populated X-Forwarded-For', ()
     // TRUSTED_PROXY_COUNT=2 expects: [client, proxy1, proxy2] = 3 entries.
     // Only 1 entry provided — attacker-controlled leftmost value.
     const req = makeReqWithSocket('203.0.113.99');
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     // We call the module-level function which reads env at module load time,
     // so we re-import it after resetting modules.
     expect(fn(req)).not.toBe('203.0.113.99');
@@ -91,7 +93,9 @@ describe('extractClientIp — fail-safe for under-populated X-Forwarded-For', ()
     // Only 1 entry — should fall back.
     const attackerIp = '1.3.3.7';
     const req = makeReqWithSocket(attackerIp);
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     expect(fn(req)).not.toBe(attackerIp);
     expect(fn(req)).toBe(SOCKET_ADDR);
   });
@@ -101,7 +105,9 @@ describe('extractClientIp — fail-safe for under-populated X-Forwarded-For', ()
     jest.resetModules();
     // TRUSTED_PROXY_COUNT=2: expects [client, proxy1, proxy2] = 3 entries.
     const req = makeReqWithSocket('203.0.113.5, 10.0.0.1, 10.0.0.2');
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     expect(fn(req)).toBe('203.0.113.5');
   });
 
@@ -109,7 +115,9 @@ describe('extractClientIp — fail-safe for under-populated X-Forwarded-For', ()
     process.env.TRUSTED_PROXY_COUNT = '1';
     jest.resetModules();
     const req = makeReqWithSocket('');
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     // Empty string splits to [''] which has length 1 < TRUSTED_PROXY_COUNT+1=2
     expect(fn(req)).toBe(SOCKET_ADDR);
   });
@@ -121,7 +129,9 @@ describe('extractClientIp — fail-safe for under-populated X-Forwarded-For', ()
       headers: { 'x-forwarded-for': '1.2.3.4' },
       socket: { remoteAddress: undefined },
     } as unknown as Request;
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     expect(fn(req)).toBe('unknown');
   });
 });
@@ -148,7 +158,9 @@ describe('extractClientIp — proxy chain and IPv6 tests', () => {
       headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' },
       socket: { remoteAddress: '10.0.0.1' },
     } as unknown as Request;
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     expect(fn(req)).toBe('1.2.3.4');
   });
 
@@ -160,7 +172,9 @@ describe('extractClientIp — proxy chain and IPv6 tests', () => {
       headers: { 'x-forwarded-for': '1.2.3.4, 5.6.7.8' },
       socket: { remoteAddress: '10.0.0.1' },
     } as unknown as Request;
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     expect(fn(req)).toBe('1.2.3.4');
   });
 
@@ -172,7 +186,9 @@ describe('extractClientIp — proxy chain and IPv6 tests', () => {
       headers: { 'x-forwarded-for': '1.2.3.4, 5.6.7.8, 10.0.0.1' },
       socket: { remoteAddress: '10.0.0.2' },
     } as unknown as Request;
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     expect(fn(req)).toBe('1.2.3.4');
   });
 
@@ -184,7 +200,9 @@ describe('extractClientIp — proxy chain and IPv6 tests', () => {
       headers: { 'x-forwarded-for': '::1, 10.0.0.1' },
       socket: { remoteAddress: '10.0.0.1' },
     } as unknown as Request;
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     expect(fn(req)).toBe('::1');
   });
 
@@ -196,7 +214,9 @@ describe('extractClientIp — proxy chain and IPv6 tests', () => {
       headers: { 'x-forwarded-for': '::ffff:192.168.1.1, 10.0.0.1' },
       socket: { remoteAddress: '10.0.0.1' },
     } as unknown as Request;
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     expect(fn(req)).toBe('::ffff:192.168.1.1');
   });
 
@@ -208,7 +228,9 @@ describe('extractClientIp — proxy chain and IPv6 tests', () => {
       headers: {},
       socket: { remoteAddress: '203.0.113.42' },
     } as unknown as Request;
-    const { extractClientIp: fn } = jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    const { extractClientIp: fn } = jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
     expect(fn(req)).toBe('203.0.113.42');
   });
 });
@@ -228,7 +250,9 @@ describe('extractClientIp — trustedProxyCount 0, 1, 2 across XFF chain lengths
   function loadFn(count: string): typeof import('../../src/utils/ipExtractor') {
     process.env = { ...OLD_ENV, TRUSTED_PROXY_COUNT: count };
     jest.resetModules();
-    return jest.requireActual('../../src/utils/ipExtractor') as typeof import('../../src/utils/ipExtractor');
+    return jest.requireActual(
+      '../../src/utils/ipExtractor',
+    ) as typeof import('../../src/utils/ipExtractor');
   }
 
   afterEach(() => {
@@ -237,20 +261,66 @@ describe('extractClientIp — trustedProxyCount 0, 1, 2 across XFF chain lengths
   });
 
   it.each<{ count: string; xff: string | undefined; expected: string; label: string }>([
-    { count: '0', xff: undefined, expected: SOCKET_ADDR, label: 'count=0 shorter (no XFF) → socket fallback' },
-    { count: '0', xff: '1.0.0.1', expected: '1.0.0.1', label: 'count=0 equal (1 entry) → rightmost entry' },
-    { count: '0', xff: '1.0.0.1, 2.0.0.2', expected: '2.0.0.2', label: 'count=0 longer (2 entries) → rightmost entry' },
-    { count: '1', xff: '1.0.0.1', expected: SOCKET_ADDR, label: 'count=1 shorter (1 entry) → socket fallback' },
-    { count: '1', xff: '1.0.0.1, 2.0.0.2', expected: '1.0.0.1', label: 'count=1 equal (2 entries) → leftmost entry' },
-    { count: '1', xff: '1.0.0.1, 2.0.0.2, 3.0.0.3', expected: '2.0.0.2', label: 'count=1 longer (3 entries) → index length-2' },
-    { count: '2', xff: '1.0.0.1, 2.0.0.2', expected: SOCKET_ADDR, label: 'count=2 shorter (2 entries) → socket fallback' },
-    { count: '2', xff: '1.0.0.1, 2.0.0.2, 3.0.0.3', expected: '1.0.0.1', label: 'count=2 equal (3 entries) → leftmost entry' },
-    { count: '2', xff: '1.0.0.1, 2.0.0.2, 3.0.0.3, 4.0.0.4', expected: '2.0.0.2', label: 'count=2 longer (4 entries) → index length-3' },
+    {
+      count: '0',
+      xff: undefined,
+      expected: SOCKET_ADDR,
+      label: 'count=0 shorter (no XFF) → socket fallback',
+    },
+    {
+      count: '0',
+      xff: '1.0.0.1',
+      expected: '1.0.0.1',
+      label: 'count=0 equal (1 entry) → rightmost entry',
+    },
+    {
+      count: '0',
+      xff: '1.0.0.1, 2.0.0.2',
+      expected: '2.0.0.2',
+      label: 'count=0 longer (2 entries) → rightmost entry',
+    },
+    {
+      count: '1',
+      xff: '1.0.0.1',
+      expected: SOCKET_ADDR,
+      label: 'count=1 shorter (1 entry) → socket fallback',
+    },
+    {
+      count: '1',
+      xff: '1.0.0.1, 2.0.0.2',
+      expected: '1.0.0.1',
+      label: 'count=1 equal (2 entries) → leftmost entry',
+    },
+    {
+      count: '1',
+      xff: '1.0.0.1, 2.0.0.2, 3.0.0.3',
+      expected: '2.0.0.2',
+      label: 'count=1 longer (3 entries) → index length-2',
+    },
+    {
+      count: '2',
+      xff: '1.0.0.1, 2.0.0.2',
+      expected: SOCKET_ADDR,
+      label: 'count=2 shorter (2 entries) → socket fallback',
+    },
+    {
+      count: '2',
+      xff: '1.0.0.1, 2.0.0.2, 3.0.0.3',
+      expected: '1.0.0.1',
+      label: 'count=2 equal (3 entries) → leftmost entry',
+    },
+    {
+      count: '2',
+      xff: '1.0.0.1, 2.0.0.2, 3.0.0.3, 4.0.0.4',
+      expected: '2.0.0.2',
+      label: 'count=2 longer (4 entries) → index length-3',
+    },
   ])('$label', ({ count, xff, expected }) => {
     const { extractClientIp } = loadFn(count);
-    const req = xff === undefined
-      ? makeReq({}, SOCKET_ADDR)
-      : makeReq({ 'x-forwarded-for': xff }, SOCKET_ADDR);
+    const req =
+      xff === undefined
+        ? makeReq({}, SOCKET_ADDR)
+        : makeReq({ 'x-forwarded-for': xff }, SOCKET_ADDR);
     expect(extractClientIp(req)).toBe(expected);
   });
 });

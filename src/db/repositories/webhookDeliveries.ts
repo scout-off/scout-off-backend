@@ -69,9 +69,10 @@ export interface GetWebhookDeliveriesOptions {
 }
 
 /** Return paginated delivery records for a given subscription (newest first). */
-export function getWebhookDeliveries(
-  opts: GetWebhookDeliveriesOptions,
-): { data: WebhookDeliveryRow[]; total: number } {
+export function getWebhookDeliveries(opts: GetWebhookDeliveriesOptions): {
+  data: WebhookDeliveryRow[];
+  total: number;
+} {
   const db = getDb();
   const limit = opts.limit ?? 20;
   const offset = opts.offset ?? 0;
@@ -90,15 +91,18 @@ export function getWebhookDeliveries(
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?
     `;
-    const data = timedQuery(dataSql, () =>
-      db.prepare(dataSql).all(opts.subscriptionId, opts.status, limit, offset) as WebhookDeliveryRow[],
+    const data = timedQuery(
+      dataSql,
+      () =>
+        db
+          .prepare(dataSql)
+          .all(opts.subscriptionId, opts.status, limit, offset) as WebhookDeliveryRow[],
     );
 
     return { data, total };
   }
 
-  const countSql =
-    'SELECT COUNT(*) AS count FROM webhook_deliveries WHERE subscription_id = ?';
+  const countSql = 'SELECT COUNT(*) AS count FROM webhook_deliveries WHERE subscription_id = ?';
   const total = timedQuery(countSql, () => {
     const row = db.prepare(countSql).get(opts.subscriptionId) as { count: number };
     return row.count;
@@ -110,8 +114,9 @@ export function getWebhookDeliveries(
     ORDER BY created_at DESC
     LIMIT ? OFFSET ?
   `;
-  const data = timedQuery(dataSql, () =>
-    db.prepare(dataSql).all(opts.subscriptionId, limit, offset) as WebhookDeliveryRow[],
+  const data = timedQuery(
+    dataSql,
+    () => db.prepare(dataSql).all(opts.subscriptionId, limit, offset) as WebhookDeliveryRow[],
   );
 
   return { data, total };
@@ -146,13 +151,15 @@ export function getWebhookDeliverySummary(
     FROM webhook_deliveries
     WHERE subscription_id = ? AND created_at >= ?
   `;
-  const row = timedQuery(sql, () =>
-    db.prepare(sql).get(subscriptionId, since) as {
-      total: number;
-      successes: number;
-      failures: number;
-      last_success_at: number | null;
-    },
+  const row = timedQuery(
+    sql,
+    () =>
+      db.prepare(sql).get(subscriptionId, since) as {
+        total: number;
+        successes: number;
+        failures: number;
+        last_success_at: number | null;
+      },
   );
 
   const total = row.total ?? 0;

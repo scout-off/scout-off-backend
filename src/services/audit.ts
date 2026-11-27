@@ -42,15 +42,22 @@ export async function logAuditEvent(event: AuditEvent): Promise<void> {
     await insertAuditLog({
       action: event.contractAction ?? event.action,
       adminWallet: event.adminWallet,
-      queryParams: { ...event.queryParams, ...(event.contractAction ? { parentAction: event.action } : {}) },
+      queryParams: {
+        ...event.queryParams,
+        ...(event.contractAction ? { parentAction: event.action } : {}),
+      },
       createdAt: event.timestamp,
     });
   } catch (err) {
     // Also bypass redaction for critical errors
-    logWithoutRedaction('critical', '[audit] failed to persist audit event to DB — audit trail has a gap', {
-      event,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    logWithoutRedaction(
+      'critical',
+      '[audit] failed to persist audit event to DB — audit trail has a gap',
+      {
+        event,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    );
     throw err;
   }
 }

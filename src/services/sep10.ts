@@ -66,10 +66,10 @@ export enum Sep10ErrorCode {
 
 /**
  * Custom error class for SEP-10 authentication failures.
- * 
+ *
  * Usage:
  *   throw new Sep10Error(Sep10ErrorCode.CHALLENGE_EXPIRED, 'Challenge has expired');
- * 
+ *
  * The error code determines:
  *   - HTTP status (401 for auth failures, 400 for malformed input)
  *   - ErrorCode mapping (TOKEN_EXPIRED, TOKEN_INVALID, VALIDATION_ERROR, etc.)
@@ -173,7 +173,10 @@ export function normalizeClientDomain(raw: string): string {
   }
   const allowlist = config.sep10ClientDomainAllowlist;
   if (allowlist.length > 0 && !allowlist.includes(domain)) {
-    throw new Sep10Error(Sep10ErrorCode.CLIENT_DOMAIN_NOT_ALLOWED, `client_domain ${domain} is not allowed`);
+    throw new Sep10Error(
+      Sep10ErrorCode.CLIENT_DOMAIN_NOT_ALLOWED,
+      `client_domain ${domain} is not allowed`,
+    );
   }
   return domain;
 }
@@ -232,9 +235,10 @@ function signedBy(tx: Transaction, publicKey: string): boolean {
   const keypair = Keypair.fromPublicKey(publicKey);
   return tx.signatures.some((sig) => {
     try {
-      const sigBytes = sig.signature instanceof Uint8Array
-        ? sig.signature
-        : (sig.signature as unknown as { value: Uint8Array }).value;
+      const sigBytes =
+        sig.signature instanceof Uint8Array
+          ? sig.signature
+          : (sig.signature as unknown as { value: Uint8Array }).value;
       return keypair.verify(tx.hash(), sigBytes);
     } catch {
       return false;
@@ -254,7 +258,9 @@ export function buildChallenge(
   accountId: string,
   clientDomain?: { domain: string; signingKey: string },
 ): string {
-  const span = tracer.startSpan('sep10.buildChallenge', { attributes: { 'sep10.account': accountId } });
+  const span = tracer.startSpan('sep10.buildChallenge', {
+    attributes: { 'sep10.account': accountId },
+  });
   try {
     const serverAccount = new Account(SERVER_KEYPAIR.publicKey(), '-1');
     const txBuilder = new TransactionBuilder(serverAccount, {
@@ -268,7 +274,7 @@ export function buildChallenge(
         name: 'scoutoff auth',
         value: crypto.randomBytes(48).toString('base64'),
         source: accountId,
-      })
+      }),
     );
 
     // Optionally add web_auth_domain operation if configured
@@ -279,7 +285,7 @@ export function buildChallenge(
           name: 'web_auth_domain',
           value: Buffer.from(config.webAuthDomain),
           source: SERVER_KEYPAIR.publicKey(), // Server-sourced per SEP-10
-        })
+        }),
       );
     }
 
@@ -291,13 +297,11 @@ export function buildChallenge(
           name: CLIENT_DOMAIN_OP_NAME,
           value: Buffer.from(clientDomain.domain),
           source: clientDomain.signingKey,
-        })
+        }),
       );
     }
 
-    const tx = txBuilder
-      .setTimeout(CHALLENGE_TTL_SECONDS)
-      .build();
+    const tx = txBuilder.setTimeout(CHALLENGE_TTL_SECONDS).build();
 
     tx.sign(SERVER_KEYPAIR);
     return tx.toXdr();
@@ -351,7 +355,10 @@ export function verifyChallenge(xdr: string): { account: string; clientDomain?: 
 
     // 1. Verify transaction source account is the server account
     if (tx.source !== SERVER_KEYPAIR.publicKey()) {
-      throw new Sep10Error(Sep10ErrorCode.WRONG_SOURCE, 'Challenge source account is not the server account');
+      throw new Sep10Error(
+        Sep10ErrorCode.WRONG_SOURCE,
+        'Challenge source account is not the server account',
+      );
     }
 
     // 2. Verify sequence number is 0
@@ -390,7 +397,10 @@ export function verifyChallenge(xdr: string): { account: string; clientDomain?: 
     for (let i = 0; i < tx.operations.length; i++) {
       const op = tx.operations[i];
       if (op.type !== 'manageData') {
-        throw new Sep10Error(Sep10ErrorCode.WRONG_OPERATION_TYPE, `Invalid challenge: operation ${i} must be manageData`);
+        throw new Sep10Error(
+          Sep10ErrorCode.WRONG_OPERATION_TYPE,
+          `Invalid challenge: operation ${i} must be manageData`,
+        );
       }
     }
 
@@ -399,7 +409,10 @@ export function verifyChallenge(xdr: string): { account: string; clientDomain?: 
 
     // 6. Verify the operation name matches the expected server string
     if (manageDataOp.name !== 'scoutoff auth') {
-      throw new Sep10Error(Sep10ErrorCode.WRONG_OPERATION_NAME, 'Invalid challenge: wrong operation name');
+      throw new Sep10Error(
+        Sep10ErrorCode.WRONG_OPERATION_NAME,
+        'Invalid challenge: wrong operation name',
+      );
     }
 
     // 7. Verify the nonce value is present and properly formatted (64 bytes)
@@ -409,21 +422,28 @@ export function verifyChallenge(xdr: string): { account: string; clientDomain?: 
 
     // Validate the nonce is exactly 64 bytes by checking the raw buffer length
     if (manageDataOp.value.length !== 64) {
-      throw new Sep10Error(Sep10ErrorCode.INVALID_NONCE, 'Invalid challenge: nonce must be exactly 64 bytes');
+      throw new Sep10Error(
+        Sep10ErrorCode.INVALID_NONCE,
+        'Invalid challenge: nonce must be exactly 64 bytes',
+      );
     }
 
     // 8. Verify the first operation's source is the client account
     const clientAccountId = manageDataOp.source;
     if (!clientAccountId) {
-      throw new Sep10Error(Sep10ErrorCode.MISSING_SOURCE_ACCOUNT, 'Missing source account in challenge');
+      throw new Sep10Error(
+        Sep10ErrorCode.MISSING_SOURCE_ACCOUNT,
+        'Missing source account in challenge',
+      );
     }
 
     // 9. Verify the server signed the challenge (proves it was built by this server)
     const serverSigned = tx.signatures.some((sig) => {
       try {
-        const sigBytes = sig.signature instanceof Uint8Array
-          ? sig.signature
-          : (sig.signature as unknown as { value: Uint8Array }).value;
+        const sigBytes =
+          sig.signature instanceof Uint8Array
+            ? sig.signature
+            : (sig.signature as unknown as { value: Uint8Array }).value;
         return SERVER_KEYPAIR.verify(tx.hash(), sigBytes);
       } catch {
         return false;
@@ -456,9 +476,10 @@ export function verifyChallenge(xdr: string): { account: string; clientDomain?: 
     const clientKeypair = Keypair.fromPublicKey(clientAccountId);
     const clientSigned = tx.signatures.some((sig) => {
       try {
-        const sigBytes = sig.signature instanceof Uint8Array
-          ? sig.signature
-          : (sig.signature as unknown as { value: Uint8Array }).value;
+        const sigBytes =
+          sig.signature instanceof Uint8Array
+            ? sig.signature
+            : (sig.signature as unknown as { value: Uint8Array }).value;
         return clientKeypair.verify(tx.hash(), sigBytes);
       } catch {
         return false;
@@ -472,7 +493,10 @@ export function verifyChallenge(xdr: string): { account: string; clientDomain?: 
     let clientDomain: string | undefined;
     if (clientDomainOp) {
       if (!clientDomainOp.source || !clientDomainOp.value) {
-        throw new Sep10Error(Sep10ErrorCode.MISSING_SOURCE_ACCOUNT, 'client_domain operation is malformed');
+        throw new Sep10Error(
+          Sep10ErrorCode.MISSING_SOURCE_ACCOUNT,
+          'client_domain operation is malformed',
+        );
       }
       clientDomain = normalizeClientDomain(Buffer.from(clientDomainOp.value).toString('utf8'));
       if (!signedBy(tx, clientDomainOp.source)) {
@@ -493,7 +517,10 @@ export function verifyChallenge(xdr: string): { account: string; clientDomain?: 
     if (consumedChallengeNonces.has(nonceKey)) {
       throw new Sep10Error(Sep10ErrorCode.ALREADY_USED, 'Challenge has already been used');
     }
-    consumedChallengeNonces.set(nonceKey, maxTime > 0 ? maxTime : nowSeconds + CHALLENGE_TTL_SECONDS);
+    consumedChallengeNonces.set(
+      nonceKey,
+      maxTime > 0 ? maxTime : nowSeconds + CHALLENGE_TTL_SECONDS,
+    );
 
     span.setAttribute('sep10.account', clientAccountId);
     if (clientDomain) {
@@ -521,7 +548,7 @@ export function verifyChallenge(xdr: string): { account: string; clientDomain?: 
 
 /**
  * Map a Sep10ErrorCode to HTTP status and ErrorCode for the controller layer.
- * 
+ *
  * Usage in controllers:
  *   try { verifyChallenge(xdr); } catch (err) {
  *     if (err instanceof Sep10Error) {
@@ -577,16 +604,32 @@ export function getErrorMapping(code: Sep10ErrorCode): {
       };
 
     case Sep10ErrorCode.INVALID_CLIENT_DOMAIN:
-      return { httpStatus: 400, errorCode: 'VALIDATION_ERROR', clientMessage: 'Invalid client_domain' };
+      return {
+        httpStatus: 400,
+        errorCode: 'VALIDATION_ERROR',
+        clientMessage: 'Invalid client_domain',
+      };
 
     case Sep10ErrorCode.CLIENT_DOMAIN_NOT_ALLOWED:
-      return { httpStatus: 403, errorCode: 'FORBIDDEN', clientMessage: 'client_domain is not allowed' };
+      return {
+        httpStatus: 403,
+        errorCode: 'FORBIDDEN',
+        clientMessage: 'client_domain is not allowed',
+      };
 
     case Sep10ErrorCode.CLIENT_DOMAIN_TOML_FETCH_FAILED:
-      return { httpStatus: 502, errorCode: 'CLIENT_DOMAIN_TOML_FETCH_FAILED', clientMessage: 'Could not fetch stellar.toml for client_domain' };
+      return {
+        httpStatus: 502,
+        errorCode: 'CLIENT_DOMAIN_TOML_FETCH_FAILED',
+        clientMessage: 'Could not fetch stellar.toml for client_domain',
+      };
 
     case Sep10ErrorCode.CLIENT_DOMAIN_SIGNING_KEY_MISSING:
-      return { httpStatus: 502, errorCode: 'CLIENT_DOMAIN_SIGNING_KEY_MISSING', clientMessage: 'client_domain stellar.toml has no valid SIGNING_KEY' };
+      return {
+        httpStatus: 502,
+        errorCode: 'CLIENT_DOMAIN_SIGNING_KEY_MISSING',
+        clientMessage: 'client_domain stellar.toml has no valid SIGNING_KEY',
+      };
 
     default:
       // Fallback - this should never happen

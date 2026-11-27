@@ -18,7 +18,7 @@ function main() {
   if (clientPackage.version !== spec.info.version) {
     throw new Error(
       `Client version ${clientPackage.version} does not match OpenAPI version ${spec.info.version}. ` +
-      'Run: npm run build:client',
+        'Run: npm run build:client',
     );
   }
 
@@ -26,7 +26,9 @@ function main() {
   try {
     const generatedPath = path.join(tempDir, 'schema.d.ts');
     const cliPath = path.join(ROOT, 'node_modules', 'openapi-typescript', 'bin', 'cli.js');
-    execFileSync(process.execPath, [cliPath, specPath, '--output', generatedPath], { stdio: 'ignore' });
+    execFileSync(process.execPath, [cliPath, specPath, '--output', generatedPath], {
+      stdio: 'ignore',
+    });
 
     if (fs.readFileSync(schemaPath, 'utf8') !== fs.readFileSync(generatedPath, 'utf8')) {
       throw new Error(

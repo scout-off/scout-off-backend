@@ -12,6 +12,7 @@ import { logAuditEvent } from '../services/audit';
 import { ErrorCode } from '../utils/errorCodes';
 import { isValidCid } from '../utils/cidValidator';
 import config from '../config';
+import { withConcurrencyLimit } from '../utils/concurrency';
 
 /**
  * Envelope schema for the JSON body variant of POST /api/admin/players/import.
@@ -21,15 +22,17 @@ import config from '../config';
  * in processPlayerImportBatch, so one malformed row is reported per-row rather
  * than rejecting the whole batch.
  */
-export const importPlayersBodySchema = z.object({
-  players: z
-    .array(z.unknown())
-    .min(1, 'players array must contain at least one entry')
-    .max(
-      config.playerImport.maxBatchSize,
-      `players array exceeds maximum size of ${config.playerImport.maxBatchSize}`,
-    ),
-}).strict();
+export const importPlayersBodySchema = z
+  .object({
+    players: z
+      .array(z.unknown())
+      .min(1, 'players array must contain at least one entry')
+      .max(
+        config.playerImport.maxBatchSize,
+        `players array exceeds maximum size of ${config.playerImport.maxBatchSize}`,
+      ),
+  })
+  .strict();
 
 export type ImportPlayerResultStatus = 'success' | 'error';
 
@@ -91,55 +94,93 @@ interface FailedRow {
 
 type PhaseOneResult = PreparedRow | FailedRow;
 
-function isFailed(r: PhaseOneResult): r is FailedRow {
+function isFailed<T extends object>(r: T | FailedRow): r is FailedRow {
   return 'error' in r;
 }
 
-/**
- * Validate + resolve metadataUri for a single entry (outside any DB transaction).
- * IPFS deduplication: skips pinning when metadataUri is already a valid CID.
- */
-async function prepareEntry(
-  entry: unknown,
-  rowIndex: number,
-): Promise<PhaseOneResult> {
+interface ValidatedRow {
+  row: number;
+  wallet: string;
+  position: string;
+  region: string;
+  data: Record<string, unknown>;
+}
+
+/** Validate a single entry without any network I/O. */
+function validateEntry(entry: unknown, rowIndex: number): ValidatedRow | FailedRow {
   const row = rowIndex + 1;
   const parsed = registerSchema.safeParse(entry);
   if (!parsed.success) {
     const rawWallet =
       entry && typeof entry === 'object'
-        ? (entry as Record<string, unknown>).wallet as string | undefined
+        ? ((entry as Record<string, unknown>).wallet as string | undefined)
         : undefined;
     return { row, wallet: rawWallet, error: parsed.error.issues[0]?.message ?? 'Invalid entry' };
   }
+  return {
+    row,
+    wallet: parsed.data.wallet,
+    position: sanitizeInput(parsed.data.position),
+    region: sanitizeInput(parsed.data.region),
+    data: parsed.data as Record<string, unknown>,
+  };
+}
 
-  const { wallet } = parsed.data;
-  const position = sanitizeInput(parsed.data.position);
-  const region = sanitizeInput(parsed.data.region);
-
+/**
+ * Resolve metadataUri for a validated entry (outside any DB transaction).
+ * IPFS deduplication: skips pinning when metadataUri is already a valid CID.
+ */
+async function resolveMetadata(v: ValidatedRow): Promise<PhaseOneResult> {
+  const { row, wallet, position, region, data } = v;
   let metadataUri: string;
   try {
-    if ('metadataUri' in parsed.data) {
-      metadataUri = parsed.data.metadataUri;
+    const rawUri = data.metadataUri as string | undefined;
+    if ('metadataUri' in data || (rawUri && isValidCid(rawUri))) {
+      // Caller-supplied URI (or an existing CID): no pinning needed.
+      metadataUri = rawUri as string;
     } else {
-      // IPFS deduplication: if the raw value already is a CID, skip pinning.
-      const rawUri = (parsed.data as Record<string, unknown>).metadataUri as string | undefined;
-      if (rawUri && isValidCid(rawUri)) {
-        metadataUri = rawUri;
-      } else {
-        metadataUri = await pinJson({
-          wallet,
-          position,
-          region,
-          ...(parsed.data as Record<string, unknown>).metadata as object,
-        });
-      }
+      metadataUri = await pinJson({
+        wallet,
+        position,
+        region,
+        ...(data.metadata as object),
+      });
     }
   } catch (err) {
     return { row, wallet, error: (err as Error).message };
   }
-
   return { row, playerId: createId(), wallet, metadataUri, position, region };
+}
+
+/**
+ * Phase one: validate every row first, then pin metadata for valid rows with
+ * at most config.playerImport.concurrency IPFS calls in flight (#1794). In
+ * all-or-nothing mode an invalid row stops the batch before any pinning.
+ * Results keep the original row order.
+ */
+async function prepareEntries(
+  entries: unknown[],
+  allowPartial: boolean,
+): Promise<PhaseOneResult[]> {
+  const validated = entries.map((e, i) => validateEntry(e, i));
+  if (!allowPartial && validated.some(isFailed)) {
+    return validated.map((v) =>
+      isFailed(v)
+        ? v
+        : { row: v.row, wallet: v.wallet, error: 'Batch rolled back due to another row failure' },
+    );
+  }
+  const settled = await withConcurrencyLimit(
+    validated.map(
+      (v) => () => (isFailed(v) ? Promise.resolve<PhaseOneResult>(v) : resolveMetadata(v)),
+    ),
+    config.playerImport.concurrency,
+  );
+  return settled.map((r, i) =>
+    r.status === 'fulfilled'
+      ? (r.value as PhaseOneResult)
+      : { row: i + 1, error: (r.reason as Error)?.message ?? 'Failed to prepare entry' },
+  );
 }
 
 /**
@@ -165,9 +206,7 @@ export async function processPlayerImportBatch(
   const now = Math.floor(Date.now() / 1000);
 
   // ── Phase 1: validate + IPFS (outside DB transaction) ───────────────────
-  const phaseOne: PhaseOneResult[] = await Promise.all(
-    entries.map((e, i) => prepareEntry(e, i)),
-  );
+  const phaseOne = await prepareEntries(entries, allowPartial);
 
   // ── Phase 2: DB writes ────────────────────────────────────────────────────
   if (!allowPartial) {
@@ -179,7 +218,8 @@ export async function processPlayerImportBatch(
           return { row: p.row, status: 'error' as const, wallet: p.wallet, error: p.error };
         }
         return {
-          row: p.row, status: 'error' as const,
+          row: p.row,
+          status: 'error' as const,
           wallet: (p as PreparedRow).wallet,
           error: 'Batch rolled back due to another row failure',
         };
@@ -204,30 +244,46 @@ export async function processPlayerImportBatch(
              metadata_uri = excluded.metadata_uri`;
       await getDriver().transaction(async (tx) => {
         for (const p of goodRows) {
-          await tx.run(sql, [p.playerId, p.wallet, p.position ?? null, p.region ?? null, p.metadataUri ?? null, now, now]);
+          await tx.run(sql, [
+            p.playerId,
+            p.wallet,
+            p.position ?? null,
+            p.region ?? null,
+            p.metadataUri ?? null,
+            now,
+            now,
+          ]);
         }
       });
     } catch (err) {
       // DB error → report every row as failed.
       return goodRows.map((p) => ({
-        row: p.row, status: 'error' as const,
-        wallet: p.wallet, error: (err as Error).message,
+        row: p.row,
+        status: 'error' as const,
+        wallet: p.wallet,
+        error: (err as Error).message,
       }));
     }
 
     // Fire webhooks after the transaction commits.
     for (const p of goodRows) {
       dispatchEventWebhook('player_registered', {
-        player_id: p.playerId, wallet: p.wallet,
-        position: p.position, region: p.region, metadataUri: p.metadataUri,
+        player_id: p.playerId,
+        wallet: p.wallet,
+        position: p.position,
+        region: p.region,
+        metadataUri: p.metadataUri,
       }).catch((e: unknown) => {
         logger.warn(`[import] webhook failed player=${p.playerId}: ${(e as Error).message}`);
       });
     }
 
     return goodRows.map((p) => ({
-      row: p.row, status: 'success' as const,
-      playerId: p.playerId, wallet: p.wallet, metadataUri: p.metadataUri,
+      row: p.row,
+      status: 'success' as const,
+      playerId: p.playerId,
+      wallet: p.wallet,
+      metadataUri: p.metadataUri,
     }));
   }
 
@@ -240,19 +296,37 @@ export async function processPlayerImportBatch(
     }
     try {
       await insertOrUpdatePlayer({
-        player_id: p.playerId, wallet: p.wallet,
-        position: p.position, region: p.region,
-        metadata_uri: p.metadataUri, created_at: now, registered_at: now,
+        player_id: p.playerId,
+        wallet: p.wallet,
+        position: p.position,
+        region: p.region,
+        metadata_uri: p.metadataUri,
+        created_at: now,
+        registered_at: now,
       });
       dispatchEventWebhook('player_registered', {
-        player_id: p.playerId, wallet: p.wallet,
-        position: p.position, region: p.region, metadataUri: p.metadataUri,
+        player_id: p.playerId,
+        wallet: p.wallet,
+        position: p.position,
+        region: p.region,
+        metadataUri: p.metadataUri,
       }).catch((e: unknown) => {
         logger.warn(`[import] webhook failed player=${p.playerId}: ${(e as Error).message}`);
       });
-      results.push({ row: p.row, status: 'success', playerId: p.playerId, wallet: p.wallet, metadataUri: p.metadataUri });
+      results.push({
+        row: p.row,
+        status: 'success',
+        playerId: p.playerId,
+        wallet: p.wallet,
+        metadataUri: p.metadataUri,
+      });
     } catch (err) {
-      results.push({ row: p.row, status: 'error', wallet: p.wallet, error: (err as Error).message });
+      results.push({
+        row: p.row,
+        status: 'error',
+        wallet: p.wallet,
+        error: (err as Error).message,
+      });
     }
   }
   return results;
@@ -287,12 +361,18 @@ export async function importPlayers(req: Request, res: Response, _next: NextFunc
   if (contentType.includes('text/csv') || contentType.includes('text/plain')) {
     const rawBody = req.body as string;
     if (typeof rawBody !== 'string' || !rawBody.trim()) {
-      res.status(400).json({ success: false, error: 'CSV body is empty', code: ErrorCode.VALIDATION_ERROR });
+      res
+        .status(400)
+        .json({ success: false, error: 'CSV body is empty', code: ErrorCode.VALIDATION_ERROR });
       return;
     }
     entries = parsePlayerCsvBody(rawBody);
     if (entries.length === 0) {
-      res.status(400).json({ success: false, error: 'No player entries found in request', code: ErrorCode.VALIDATION_ERROR });
+      res.status(400).json({
+        success: false,
+        error: 'No player entries found in request',
+        code: ErrorCode.VALIDATION_ERROR,
+      });
       return;
     }
     if (entries.length > config.playerImport.maxBatchSize) {
@@ -308,7 +388,9 @@ export async function importPlayers(req: Request, res: Response, _next: NextFunc
     if (!parsed.success) {
       res.status(400).json({
         success: false,
-        error: parsed.error.issues[0]?.message ?? 'Request body must contain a "players" array or use Content-Type: text/csv',
+        error:
+          parsed.error.issues[0]?.message ??
+          'Request body must contain a "players" array or use Content-Type: text/csv',
         code: ErrorCode.VALIDATION_ERROR,
       });
       return;
@@ -317,7 +399,11 @@ export async function importPlayers(req: Request, res: Response, _next: NextFunc
   }
 
   if (entries.length === 0) {
-    res.status(400).json({ success: false, error: 'No player entries found in request', code: ErrorCode.VALIDATION_ERROR });
+    res.status(400).json({
+      success: false,
+      error: 'No player entries found in request',
+      code: ErrorCode.VALIDATION_ERROR,
+    });
     return;
   }
 
@@ -348,7 +434,12 @@ export async function importPlayers(req: Request, res: Response, _next: NextFunc
   await logAuditEvent({
     action: 'bulk_player_import',
     adminWallet,
-    queryParams: { rows_attempted: results.length, rows_inserted: succeeded, rows_failed: failed, allowPartial },
+    queryParams: {
+      rows_attempted: results.length,
+      rows_inserted: succeeded,
+      rows_failed: failed,
+      allowPartial,
+    },
     timestamp: new Date().toISOString(),
   }).catch(() => {});
 

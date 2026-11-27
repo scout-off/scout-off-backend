@@ -137,7 +137,13 @@ describe('RedisCacheStore deleteByPrefix (SCAN + DEL)', () => {
     await store.deleteByPrefix('players:list');
 
     expect(client.scan).toHaveBeenCalledTimes(1);
-    expect(client.scan).toHaveBeenCalledWith('0', 'MATCH', 'players:list*', 'COUNT', expect.any(Number));
+    expect(client.scan).toHaveBeenCalledWith(
+      '0',
+      'MATCH',
+      'players:list*',
+      'COUNT',
+      expect.any(Number),
+    );
     expect(pipelineDels).toEqual([['players:list:a', 'players:list:b', 'players:list:c']]);
   });
 
@@ -488,7 +494,7 @@ describe('cache namespace isolation (#672)', () => {
     jest.resetModules();
   });
 
-  it('two deployments with different namespaces sharing the same Redis store never read each other\'s keys', async () => {
+  it("two deployments with different namespaces sharing the same Redis store never read each other's keys", async () => {
     // Use a single shared RedisMock instance (same "server") to simulate
     // two deployments connected to the same Redis cluster.
     const sharedRedis = new RedisMock();
@@ -512,7 +518,7 @@ describe('cache namespace isolation (#672)', () => {
     expect(cache.namespacedKey('players:42')).toBe('myapp:players:42');
   });
 
-  it('invalidatePlayerCache() in one namespace does not affect the other namespace\'s keys', async () => {
+  it("invalidatePlayerCache() in one namespace does not affect the other namespace's keys", async () => {
     const sharedRedis = new RedisMock();
     await sharedRedis.flushall();
 

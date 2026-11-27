@@ -56,7 +56,10 @@ jest.mock('../../src/services/cache', () => ({
 }));
 
 jest.mock('../../src/services/stellar', () => ({
-  updateProfile: jest.fn().mockResolvedValue({ transactionId: 'stub-tx-abc123', metadataUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG' }),
+  updateProfile: jest.fn().mockResolvedValue({
+    transactionId: 'stub-tx-abc123',
+    metadataUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+  }),
   queryMilestones: jest.fn().mockResolvedValue([]),
 }));
 
@@ -98,9 +101,7 @@ async function currentEtag(): Promise<string> {
 
 describe('POST /api/players/register — role enforcement', () => {
   it('returns 401 when no token provided', async () => {
-    const res = await request(app)
-      .post('/api/players/register')
-      .send(validPayload);
+    const res = await request(app).post('/api/players/register').send(validPayload);
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
   });
@@ -250,9 +251,7 @@ describe('PUT /api/players/:playerId — owner-only enforcement', () => {
   const VALID_UPDATE = { metadataUri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG' };
 
   it('returns 401 when request is unauthenticated', async () => {
-    const res = await request(app)
-      .put(`/api/players/${OWNER_WALLET}`)
-      .send(VALID_UPDATE);
+    const res = await request(app).put(`/api/players/${OWNER_WALLET}`).send(VALID_UPDATE);
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
   });
@@ -270,7 +269,7 @@ describe('PUT /api/players/:playerId — owner-only enforcement', () => {
     expect(res.body.data).toBeDefined();
   });
 
-  it('returns 403 when an authenticated player updates a different player\'s profile', async () => {
+  it("returns 403 when an authenticated player updates a different player's profile", async () => {
     const token = makeToken(OTHER_WALLET, 'player');
     const res = await request(app)
       .put(`/api/players/${OWNER_WALLET}`)
@@ -327,28 +326,31 @@ describe('GET /api/players/:playerId — progress_tier_name field', () => {
 describe('GET /api/players — progress_tier_name field in list', () => {
   it('includes progress_tier_name for each player in the list response', async () => {
     const { searchPlayers, countPlayers } = require('../../src/db');
-    (searchPlayers as jest.Mock).mockReturnValue({ data: [
-      {
-        player_id: 'player-001',
-        wallet: PLAYER_WALLET,
-        position: 'Forward',
-        region: 'West Africa',
-        metadata_uri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
-        progress_level: 1,
-        created_at: 1700000000,
-        is_active: 1,
-      },
-      {
-        player_id: 'player-002',
-        wallet: 'G' + 'C'.repeat(55),
-        position: 'Midfielder',
-        region: 'Europe',
-        metadata_uri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
-        progress_level: 3,
-        created_at: 1700000000,
-        is_active: 1,
-      },
-    ], nextCursor: null });
+    (searchPlayers as jest.Mock).mockReturnValue({
+      data: [
+        {
+          player_id: 'player-001',
+          wallet: PLAYER_WALLET,
+          position: 'Forward',
+          region: 'West Africa',
+          metadata_uri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+          progress_level: 1,
+          created_at: 1700000000,
+          is_active: 1,
+        },
+        {
+          player_id: 'player-002',
+          wallet: 'G' + 'C'.repeat(55),
+          position: 'Midfielder',
+          region: 'Europe',
+          metadata_uri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+          progress_level: 3,
+          created_at: 1700000000,
+          is_active: 1,
+        },
+      ],
+      nextCursor: null,
+    });
     (countPlayers as jest.Mock).mockReturnValue(2);
 
     const res = await request(app).get('/api/players');
@@ -449,18 +451,21 @@ describe('GET /api/players/:playerId — offerCount field', () => {
 describe('GET /api/players — ?fields= query parameter', () => {
   beforeEach(() => {
     const { searchPlayers, countPlayers } = require('../../src/db');
-    (searchPlayers as jest.Mock).mockReturnValue({ data: [
-      {
-        player_id: 'player-fields-001',
-        wallet: PLAYER_WALLET,
-        position: 'Forward',
-        region: 'West Africa',
-        metadata_uri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
-        progress_level: 1,
-        created_at: 1700000000,
-        is_active: 1,
-      },
-    ], nextCursor: null });
+    (searchPlayers as jest.Mock).mockReturnValue({
+      data: [
+        {
+          player_id: 'player-fields-001',
+          wallet: PLAYER_WALLET,
+          position: 'Forward',
+          region: 'West Africa',
+          metadata_uri: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+          progress_level: 1,
+          created_at: 1700000000,
+          is_active: 1,
+        },
+      ],
+      nextCursor: null,
+    });
     (countPlayers as jest.Mock).mockReturnValue(1);
   });
 
@@ -485,19 +490,17 @@ describe('GET /api/players — ?fields= query parameter', () => {
     expect(res.body.data[0]).toHaveProperty('region');
   });
 
-  it('silently ignores unknown field names in ?fields=', async () => {
+  // Unknown field names are rejected with a 400 naming them (de991a7).
+  it('rejects unknown field names in ?fields= with a 400 naming them', async () => {
     const res = await request(app).get('/api/players?fields=player_id,nonexistent_field');
-    expect(res.status).toBe(200);
-    expect(res.body.data[0]).toHaveProperty('player_id');
-    // The unknown field is simply absent — not a 400
-    expect(res.body.data[0]).not.toHaveProperty('nonexistent_field');
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('Unknown field(s): nonexistent_field');
   });
 
-  it('returns an empty object per player when all requested fields are unknown', async () => {
+  it('rejects a ?fields= list made only of unknown fields', async () => {
     const res = await request(app).get('/api/players?fields=totally_unknown');
-    expect(res.status).toBe(200);
-    // No keys from the unknown field
-    expect(Object.keys(res.body.data[0])).not.toContain('totally_unknown');
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('totally_unknown');
   });
 });
 

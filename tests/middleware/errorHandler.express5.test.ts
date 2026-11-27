@@ -27,12 +27,12 @@ describe('errorHandler - Express 5 automatic promise rejection handling', () => 
   it('handles rejected promises from async handlers automatically', async () => {
     const req = makeReq('test-corr-id');
     const res = makeRes();
-    
+
     // Simulate an async handler that throws
     const asyncHandler = async (req: Request, res: Response, next: NextFunction) => {
       throw new Error('async error');
     };
-    
+
     // In Express 5, the error would be automatically passed to errorHandler
     // We simulate this by directly calling errorHandler with the thrown error
     try {
@@ -40,7 +40,7 @@ describe('errorHandler - Express 5 automatic promise rejection handling', () => 
     } catch (err) {
       errorHandler(err, req, res, next);
     }
-    
+
     expect(res.status).toHaveBeenCalledWith(500);
     const body = getBody(res);
     expect(body.success).toBe(false);
@@ -51,19 +51,19 @@ describe('errorHandler - Express 5 automatic promise rejection handling', () => 
   it('handles rejected promises from async handlers with custom status', async () => {
     const req = makeReq('test-corr-id');
     const res = makeRes();
-    
+
     const customError = Object.assign(new Error('Not found'), { status: 404 });
-    
+
     const asyncHandler = async (req: Request, res: Response, next: NextFunction) => {
       throw customError;
     };
-    
+
     try {
       await asyncHandler(req, res, next);
     } catch (err) {
       errorHandler(err, req, res, next);
     }
-    
+
     expect(res.status).toHaveBeenCalledWith(404);
     const body = getBody(res);
     expect(body.success).toBe(false);
@@ -75,19 +75,19 @@ describe('errorHandler - Express 5 automatic promise rejection handling', () => 
     const req = makeReq('zod-corr-id');
     const res = makeRes();
     const { ZodError, ZodIssueCode } = require('zod');
-    
+
     const asyncHandler = async (req: Request, res: Response, next: NextFunction) => {
       throw new ZodError([
         { code: ZodIssueCode.custom, message: 'Invalid field', path: ['field'] },
       ]);
     };
-    
+
     try {
       await asyncHandler(req, res, next);
     } catch (err) {
       errorHandler(err, req, res, next);
     }
-    
+
     expect(res.status).toHaveBeenCalledWith(400);
     const body = getBody(res);
     expect(body.success).toBe(false);
@@ -102,11 +102,11 @@ describe('errorHandler - Express 5 automatic promise rejection handling', () => 
     // In practice, the manual next(err) pattern should be removed from all handlers.
     const req = makeReq('test-corr-id');
     const res = makeRes();
-    
+
     const err = new Error('test error');
     errorHandler(err, req, res, next);
     errorHandler(err, req, res, next); // Simulating double invocation
-    
+
     // The error handler is idempotent - calling it twice with the same error
     // should produce the same result (though in real Express 5, this wouldn't happen)
     expect(res.status).toHaveBeenCalledWith(500);

@@ -74,9 +74,6 @@ export function tryVerifyJwt(token: string, nowMs: number = Date.now()): JwtVeri
 }
 
 /** Sign a payload with the current JWT secret only. */
-export function signJwt(
-  payload: string | Buffer | object,
-  options?: jwt.SignOptions,
-): string {
+export function signJwt(payload: string | Buffer | object, options?: jwt.SignOptions): string {
   return jwt.sign(payload, config.jwtSecret, options);
 }

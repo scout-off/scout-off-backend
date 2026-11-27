@@ -5,6 +5,7 @@
 The admin multi-sig system governs all high-value operations in the ScoutOff backend via M-of-N approval workflows. Every admin action (pause contract, withdraw fees, update configuration) requires a configured threshold of distinct admin signatures before execution.
 
 **Configuration:**
+
 - `ADMIN_WALLETS`: Comma-separated list of admin Stellar addresses (e.g., `GABC...,GDEF...`)
 - `ADMIN_THRESHOLD`: Minimum number of distinct signatures required (default: 1)
 - `ADMIN_ACTION_TTL_MS`: How long pending approvals remain valid (default: 1 hour = 3600000 ms)
@@ -17,12 +18,12 @@ The admin multi-sig system governs all high-value operations in the ScoutOff bac
 
 Each admin action is identified by a type string. The following action types are currently supported:
 
-| Action Type | Purpose | Used By |
-|---|---|---|
-| `pause_contract` | Pause the main Soroban contract | `POST /api/admin/contract/pause` |
-| `unpause_contract` | Unpause the main Soroban contract | `POST /api/admin/contract/unpause` |
-| `withdraw_fees` | Withdraw accumulated platform fees | `POST /api/admin/fees` (withdraw endpoint) |
-| `update_platform_fee` | Modify the platform fee percentage (invokes `set_platform_fee_bps` on the **subscription** contract — the single authoritative source for the fee) | `POST /api/admin/fees/config` |
+| Action Type           | Purpose                                                                                                                                            | Used By                                    |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `pause_contract`      | Pause the main Soroban contract                                                                                                                    | `POST /api/admin/contract/pause`           |
+| `unpause_contract`    | Unpause the main Soroban contract                                                                                                                  | `POST /api/admin/contract/unpause`         |
+| `withdraw_fees`       | Withdraw accumulated platform fees                                                                                                                 | `POST /api/admin/fees` (withdraw endpoint) |
+| `update_platform_fee` | Modify the platform fee percentage (invokes `set_platform_fee_bps` on the **subscription** contract — the single authoritative source for the fee) | `POST /api/admin/fees/config`              |
 
 Additional action types may be added as new high-value operations are implemented. The enum is defined in `src/services/adminMultiSig.ts` as `AdminActionType`.
 
@@ -96,9 +97,11 @@ All endpoints require Bearer JWT authentication with `admin` role.
 Initiates a new admin action. If `ADMIN_THRESHOLD=1`, executes immediately.
 
 **Path Parameters:**
+
 - `action`: One of the [supported action types](#admin-action-types) (e.g., `pause_contract`)
 
 **Request Body:**
+
 ```json
 {
   "payload": {
@@ -110,6 +113,7 @@ Initiates a new admin action. If `ADMIN_THRESHOLD=1`, executes immediately.
 Payload shape depends on the action type; some actions may require no payload.
 
 **Response (Immediate Execution, threshold=1):**
+
 ```json
 {
   "success": true,
@@ -121,6 +125,7 @@ Payload shape depends on the action type; some actions may require no payload.
 ```
 
 **Response (Multi-Sig Pending, threshold>1):**
+
 ```json
 {
   "success": true,
@@ -134,6 +139,7 @@ Payload shape depends on the action type; some actions may require no payload.
 The `actionId` is a unique identifier used in subsequent approve calls.
 
 **Errors:**
+
 - `400`: Invalid payload schema
 - `403`: Insufficient admin role
 - `500`: Database or system error
@@ -143,9 +149,11 @@ The `actionId` is a unique identifier used in subsequent approve calls.
 Co-signs an existing pending action with the authenticated admin wallet.
 
 **Path Parameters:**
+
 - `actionId`: The unique ID returned by propose
 
 **Request Body:**
+
 ```json
 {}
 ```
@@ -153,6 +161,7 @@ Co-signs an existing pending action with the authenticated admin wallet.
 An empty body is acceptable; no additional payload is needed for approval.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -166,6 +175,7 @@ An empty body is acceptable; no additional payload is needed for approval.
 ```
 
 Fields:
+
 - `collected`: Number of distinct signatures collected so far
 - `required`: Threshold (from `ADMIN_THRESHOLD`)
 - `status`: One of:
@@ -175,6 +185,7 @@ Fields:
   - `expired`: Action has expired; cannot sign
 
 **Errors:**
+
 - `400`: Invalid action ID format or request body
 - `403`: Signer wallet not in `ADMIN_WALLETS`
 - `404`: Action not found
@@ -188,6 +199,7 @@ Lists all pending (not yet expired or executed) admin actions.
 **Request Body:** None
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -216,9 +228,11 @@ Only returns actions with `status="pending"` (expired and executed actions are o
 Retrieves detailed information about a specific action, including all signatures collected so far.
 
 **Path Parameters:**
+
 - `actionId`: The unique ID
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -253,6 +267,7 @@ Retrieves detailed information about a specific action, including all signatures
 Returns both action metadata and a list of signers with timestamps.
 
 **Errors:**
+
 - `404`: Action not found
 
 ## Threshold & TTL Configuration
@@ -264,17 +279,21 @@ The minimum number of distinct admin signatures required for high-value operatio
 **Default:** `1` (single admin can execute immediately)
 
 **Example (2-of-3 multi-sig):**
+
 ```env
 ADMIN_WALLETS=GABC...,GDEF...,GHIJ...
 ADMIN_THRESHOLD=2
 ```
+
 With 3 admins and a threshold of 2, any 2 distinct admins can approve an action.
 
 **Example (3-of-3 multi-sig, strict):**
+
 ```env
 ADMIN_WALLETS=GABC...,GDEF...,GHIJ...
 ADMIN_THRESHOLD=3
 ```
+
 All 3 admins must sign. If one is unavailable, operations are blocked until the action expires or the config is changed.
 
 ### ADMIN_ACTION_TTL_MS
@@ -327,6 +346,7 @@ ADMIN_THRESHOLD=2
 A single admin proposes, and at least one additional admin must co-sign:
 
 **Step 1: Propose**
+
 ```bash
 curl -X POST https://backend.example.com/api/admin/contract/pause \
   -H "Authorization: Bearer $ADMIN1_JWT" \
@@ -344,6 +364,7 @@ curl -X POST https://backend.example.com/api/admin/contract/pause \
 ```
 
 **Step 2: Check pending actions**
+
 ```bash
 curl https://backend.example.com/api/admin/actions/pending \
   -H "Authorization: Bearer $ADMIN2_JWT"
@@ -352,6 +373,7 @@ curl https://backend.example.com/api/admin/actions/pending \
 ```
 
 **Step 3: Co-sign**
+
 ```bash
 curl -X POST https://backend.example.com/api/admin/actions/ckt9p4q0000001a6y8z8h7p8/approve \
   -H "Authorization: Bearer $ADMIN2_JWT"
@@ -412,6 +434,7 @@ The `UNIQUE(action_id, signer)` constraint ensures idempotency: if the same wall
 Every admin action is logged in the `audit_log` table with action-specific entries:
 
 ### Propose Entry
+
 ```json
 {
   "action": "{actionType}_proposed",
@@ -427,6 +450,7 @@ Every admin action is logged in the `audit_log` table with action-specific entri
 ```
 
 ### Approve Entry
+
 ```json
 {
   "action": "{actionType}_approved",
@@ -443,6 +467,7 @@ Every admin action is logged in the `audit_log` table with action-specific entri
 ```
 
 Use audit logs to:
+
 - Trace who proposed and approved each action
 - Verify the full chain of signatures
 - Detect unusual approval patterns or attacks
@@ -450,6 +475,7 @@ Use audit logs to:
 ## Error Responses
 
 ### Action Not Found (404)
+
 ```json
 {
   "success": false,
@@ -459,6 +485,7 @@ Use audit logs to:
 ```
 
 ### Action Expired (410)
+
 ```json
 {
   "success": false,
@@ -468,6 +495,7 @@ Use audit logs to:
 ```
 
 ### Action Already Executed (409)
+
 ```json
 {
   "success": false,
@@ -477,6 +505,7 @@ Use audit logs to:
 ```
 
 ### Duplicate Signature (200 OK, but status: 'duplicate')
+
 ```json
 {
   "success": true,
@@ -492,6 +521,7 @@ Use audit logs to:
 Idempotent — the same admin can safely re-sign without side effects.
 
 ### Insufficient Permissions (403)
+
 ```json
 {
   "success": false,
@@ -550,14 +580,14 @@ Each deployed contract stores its own memberships in `scout_off_shared::access`.
 single-admin workflows. Possessing a role still requires Soroban authorization
 from that address; a backend JWT role is a separate access layer.
 
-| Role | Authorized operations |
-| --- | --- |
-| `DEFAULT_ADMIN` | Grant/revoke roles, configure role administrators, upgrade WASM, issue player tokens, administrative connection operations |
-| `PAUSER` | Pause/unpause |
-| `FEE_MANAGER` | Set platform fee, withdraw fees, distribute player-token fees |
-| `VALIDATOR_MANAGER` | Register/revoke progress validators |
-| `UPDATER_MANAGER` | Add/remove authorized register updater contracts |
-| `MIGRATOR` | Migrate player records and legacy token holder pages |
+| Role                | Authorized operations                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `DEFAULT_ADMIN`     | Grant/revoke roles, configure role administrators, upgrade WASM, issue player tokens, administrative connection operations |
+| `PAUSER`            | Pause/unpause                                                                                                              |
+| `FEE_MANAGER`       | Set platform fee, withdraw fees, distribute player-token fees                                                              |
+| `VALIDATOR_MANAGER` | Register/revoke progress validators                                                                                        |
+| `UPDATER_MANAGER`   | Add/remove authorized register updater contracts                                                                           |
+| `MIGRATOR`          | Migrate player records and legacy token holder pages                                                                       |
 
 Every role is initially administered by `DEFAULT_ADMIN`. `set_role_admin` can
 assign another operational role to administer a role. The root role always

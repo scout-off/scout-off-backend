@@ -21,6 +21,8 @@ function fakeRequest(overrides: Partial<Request> = {}): Request {
     originalUrl: '/api/admin/audit/trail?token=should-not-be-logged',
     path: '/api/admin/audit/trail',
     ip: '203.0.113.5',
+    headers: {},
+    socket: { remoteAddress: '203.0.113.5' },
     params: {},
     ...overrides,
   } as unknown as Request;
@@ -87,14 +89,11 @@ describe('auditRead middleware (#1531)', () => {
     expect(JSON.stringify(event)).not.toContain('should-not-be-logged');
   });
 
-  it.each([400, 401, 403, 404, 500])(
-    'does not record a %i response',
-    async (status) => {
-      runMiddleware(fakeRequest(), auditRead('admin_audit_trail'), status);
-      await flush();
-      expect(mockLogAuditEvent).not.toHaveBeenCalled();
-    },
-  );
+  it.each([400, 401, 403, 404, 500])('does not record a %i response', async (status) => {
+    runMiddleware(fakeRequest(), auditRead('admin_audit_trail'), status);
+    await flush();
+    expect(mockLogAuditEvent).not.toHaveBeenCalled();
+  });
 
   it('does nothing when AUDIT_READS_ENABLED is off', async () => {
     config.auditReads.enabled = false;

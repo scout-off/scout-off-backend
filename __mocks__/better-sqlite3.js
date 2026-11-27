@@ -32,7 +32,7 @@ function MockDatabase(dbPath, options) {
       get: () => {
         if (sql.includes('sqlite_version')) return { version: '3.39.5' };
         if (sql.includes('version()')) return { version: 'PostgreSQL 14.5' };
-        if (sql.includes('SELECT 1')) return { '1': 1 };
+        if (sql.includes('SELECT 1')) return { 1: 1 };
         return { version: '3.39.5' };
       },
       all: () => [],

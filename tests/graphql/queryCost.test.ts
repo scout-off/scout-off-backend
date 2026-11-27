@@ -137,11 +137,9 @@ describe('GraphQL query-cost — alias abuse rejected', () => {
   });
 
   it('allows a normal legitimate query (single player + a few fields)', async () => {
-    const res = await request(app)
-      .post('/graphql')
-      .send({
-        query: `{ player(id: "p1") { player_id wallet position region progress_level } }`,
-      });
+    const res = await request(app).post('/graphql').send({
+      query: `{ player(id: "p1") { player_id wallet position region progress_level } }`,
+    });
 
     expect(res.body.errors).toBeUndefined();
     expect(res.body.data.player.player_id).toBe('p0');
@@ -197,11 +195,9 @@ describe('GraphQL query-cost — depth protection still applies', () => {
   it('still rejects queries deeper than the depth limit', async () => {
     // A shallow but wide query is fine; a deep nesting is rejected by the
     // depth rule even though its cost is small.
-    const res = await request(app)
-      .post('/graphql')
-      .send({
-        query: `{ players { nodes { milestones { milestoneId } } pageInfo { total page pageSize pages } } }`,
-      });
+    const res = await request(app).post('/graphql').send({
+      query: `{ players { nodes { milestones { milestoneId } } pageInfo { total page pageSize pages } } }`,
+    });
 
     // Depth 4 — passes validation (no depth error).
     const hasDepthError = (res.body.errors ?? []).some(

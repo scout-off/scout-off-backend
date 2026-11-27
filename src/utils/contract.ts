@@ -105,7 +105,9 @@ export async function invokeContract(
 
   while (getResult.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
     if (Date.now() >= deadline) {
-      throw new ContractTimeoutError(`Transaction ${sendResult.hash} not confirmed within ${timeoutMs}ms`);
+      throw new ContractTimeoutError(
+        `Transaction ${sendResult.hash} not confirmed within ${timeoutMs}ms`,
+      );
     }
     await new Promise((r) => setTimeout(r, 1000));
     getResult = await server.getTransaction(sendResult.hash);

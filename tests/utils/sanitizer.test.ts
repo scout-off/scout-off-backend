@@ -42,38 +42,48 @@ describe('sanitizeInput', () => {
 
     it('encodes script tags', () => {
       const input = '<script>alert("xss")</script>';
-      expect(escapeHtml(sanitizeInput(input))).toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+      expect(escapeHtml(sanitizeInput(input))).toBe(
+        '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
+      );
     });
 
     it('encodes iframe tags', () => {
       const input = '<iframe src="evil.com"></iframe>';
-      expect(escapeHtml(sanitizeInput(input))).toBe('&lt;iframe src=&quot;evil.com&quot;&gt;&lt;/iframe&gt;');
+      expect(escapeHtml(sanitizeInput(input))).toBe(
+        '&lt;iframe src=&quot;evil.com&quot;&gt;&lt;/iframe&gt;',
+      );
     });
 
     it('encodes img tags with event handlers', () => {
       const input = '<img src="x" onerror="alert(1)">';
-      expect(escapeHtml(sanitizeInput(input))).toBe('&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;');
+      expect(escapeHtml(sanitizeInput(input))).toBe(
+        '&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;',
+      );
     });
 
     it('encodes on* event attributes', () => {
       const input = 'onclick="bad()" onload="worse()"';
-      expect(escapeHtml(sanitizeInput(input))).toBe('onclick=&quot;bad()&quot; onload=&quot;worse()&quot;');
+      expect(escapeHtml(sanitizeInput(input))).toBe(
+        'onclick=&quot;bad()&quot; onload=&quot;worse()&quot;',
+      );
     });
 
     it('encodes style tags', () => {
       const input = '<style>body { color: red; }</style>';
-      expect(escapeHtml(sanitizeInput(input))).toBe('&lt;style&gt;body { color: red; }&lt;/style&gt;');
+      expect(escapeHtml(sanitizeInput(input))).toBe(
+        '&lt;style&gt;body { color: red; }&lt;/style&gt;',
+      );
     });
   });
 
   describe('SQL metacharacters', () => {
     it('stores quotes verbatim', () => {
-      expect(sanitizeInput("It's \"quoted\"")).toBe("It's \"quoted\"");
+      expect(sanitizeInput('It\'s "quoted"')).toBe('It\'s "quoted"');
     });
 
     it('HTML-escapes single quotes (still HTML-encoded for XSS safety)', () => {
       const input = "It's a player's profile";
-      expect(escapeHtml(sanitizeInput(input))).toBe("It&#x27;s a player&#x27;s profile");
+      expect(escapeHtml(sanitizeInput(input))).toBe('It&#x27;s a player&#x27;s profile');
     });
 
     it('HTML-escapes double quotes (still HTML-encoded for XSS safety)', () => {
@@ -83,7 +93,9 @@ describe('sanitizeInput', () => {
 
     it('passes through non-quote SQL metacharacters while escaping quotes', () => {
       const input = "SELECT * FROM players WHERE id = '123';";
-      expect(escapeHtml(sanitizeInput(input))).toBe("SELECT * FROM players WHERE id = &#x27;123&#x27;;");
+      expect(escapeHtml(sanitizeInput(input))).toBe(
+        'SELECT * FROM players WHERE id = &#x27;123&#x27;;',
+      );
     });
 
     it('passes through semicolons', () => {
@@ -258,7 +270,9 @@ describe('sanitizeInput', () => {
     it('handles HTML with control characters', () => {
       const input = '<script>\x00alert("xss")\n</script>';
       expect(sanitizeInput(input)).toBe('<script>alert("xss")</script>');
-      expect(escapeHtml(sanitizeInput(input))).toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+      expect(escapeHtml(sanitizeInput(input))).toBe(
+        '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
+      );
     });
 
     it('handles whitespace, control chars, and Unicode', () => {
@@ -272,7 +286,6 @@ describe('sanitizeInput', () => {
     });
   });
 });
-
 
 describe('sanitizeObject', () => {
   it('normalizes strings in objects without HTML-encoding them', () => {

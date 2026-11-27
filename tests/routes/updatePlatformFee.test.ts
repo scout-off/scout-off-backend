@@ -15,7 +15,9 @@ import { executeAdminAction } from '../../src/services/adminMultiSig';
 const mockExecute = executeAdminAction as jest.Mock;
 
 function makeToken(role: string) {
-  return jwt.sign({ sub: 'GADMIN1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', role }, SECRET, { expiresIn: '1h' });
+  return jwt.sign({ sub: 'GADMIN1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', role }, SECRET, {
+    expiresIn: '1h',
+  });
 }
 
 const ADMIN_TOKEN = makeToken('admin');

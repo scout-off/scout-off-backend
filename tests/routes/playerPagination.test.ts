@@ -121,9 +121,7 @@ describe('GET /api/players — pagination', () => {
     expect(res.body.data[0].player_id).toBe('player-10');
     expect(res.body.page).toBe(2);
     expect(res.body.pages).toBe(3);
-    expect(mockSearchPlayers).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 10 }),
-    );
+    expect(mockSearchPlayers).toHaveBeenCalledWith(expect.objectContaining({ limit: 10 }));
   });
 
   it('returns last partial page correctly', async () => {
@@ -181,18 +179,14 @@ describe('GET /api/players — pagination', () => {
     mockCountPlayers.mockReturnValue(0);
 
     const token = makeToken(WALLET);
-    const res = await request(app)
-      .get('/api/players')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/players').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.page).toBe(1);
     expect(res.body.pageSize).toBe(20);
     expect(res.body.pages).toBe(0);
     expect(res.body.total).toBe(0);
-    expect(mockSearchPlayers).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 20 }),
-    );
+    expect(mockSearchPlayers).toHaveBeenCalledWith(expect.objectContaining({ limit: 20 }));
   });
 
   it('passes correct limit for different pageSize combos', async () => {
@@ -204,9 +198,7 @@ describe('GET /api/players — pagination', () => {
       .get('/api/players?page=4&pageSize=5')
       .set('Authorization', `Bearer ${token}`);
 
-    expect(mockSearchPlayers).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 5 }),
-    );
+    expect(mockSearchPlayers).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }));
   });
 
   it('calculates pages correctly for exact division', async () => {
@@ -254,9 +246,7 @@ describe('GET /api/players — pagination', () => {
     expect(mockSearchPlayers).toHaveBeenCalledWith(
       expect.objectContaining({ region: 'europe', limit: 10 }),
     );
-    expect(mockCountPlayers).toHaveBeenCalledWith(
-      expect.objectContaining({ region: 'europe' }),
-    );
+    expect(mockCountPlayers).toHaveBeenCalledWith(expect.objectContaining({ region: 'europe' }));
   });
 
   it('honours sortBy=tier&sortOrder=desc', async () => {

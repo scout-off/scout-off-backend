@@ -60,13 +60,14 @@ describe('Environment variable documentation completeness', () => {
     const lines = configContent.split('\n');
 
     // Pattern to match process.env.VARIABLE, process.env['VARIABLE'], or the
-    // config.ts `required('VARIABLE')` helper (which reads process.env[name]
-    // internally via a bracket access the simpler pattern can't see).
+    // config.ts `required('VARIABLE')` / `readSecret('VARIABLE')` helpers (which
+    // read through the secrets provider, invisible to the simpler pattern).
     const envPattern =
-      /process\.env\.([A-Z_][A-Z0-9_]*)|process\.env\[['"`]([A-Z_][A-Z0-9_]*)['"`]\]|\brequired\(\s*['"`]([A-Z_][A-Z0-9_]*)['"`]\s*\)/g;
+      /process\.env\.([A-Z_][A-Z0-9_]*)|process\.env\[['"`]([A-Z_][A-Z0-9_]*)['"`]\]|\b(?:required|readSecret)\(\s*['"`]([A-Z_][A-Z0-9_]*)['"`]\s*\)/g;
 
     // Pattern to match parseNumericEnv calls to extract min/max/default
-    const parseNumericPattern = /parseNumericEnv\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*process\.env\.\1\s*,\s*([\d.]+)\s*,\s*(\{[^}]*\})/g;
+    const parseNumericPattern =
+      /parseNumericEnv\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*process\.env\.\1\s*,\s*([\d.]+)\s*,\s*(\{[^}]*\})/g;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -78,7 +79,7 @@ describe('Environment variable documentation completeness', () => {
         const varName = m[1];
         const defaultValue = parseFloat(m[2]);
         const optionsStr = m[3];
-        
+
         // Parse min/max from options
         let min: number | undefined;
         let max: number | undefined;
@@ -109,7 +110,7 @@ describe('Environment variable documentation completeness', () => {
         // Check if this line has a default value (simple heuristic)
         const hasDefault = line.includes('??') || line.includes('||');
         let defaultValue: number | string | undefined;
-        
+
         if (hasDefault) {
           // Try to extract the default value
           const defaultMatch = line.match(/\?\?\s*([^,}\n]+)/) || line.match(/\|\|\s*([^,}\n]+)/);
@@ -202,28 +203,30 @@ describe('Environment variable documentation completeness', () => {
 
   it('every env var in config.ts appears in .env.example', () => {
     const missingVars: string[] = [];
-    
+
     for (const [varName, usage] of configUsage) {
       // Skip platform vars
       if (PLATFORM_VARS.has(varName)) continue;
-      
+
       if (!envExampleEntries.has(varName)) {
         missingVars.push(varName);
       }
     }
 
     if (missingVars.length > 0) {
-      const details = missingVars.map(v => {
-        const usage = configUsage.get(v)!;
-        return `  - ${v} (line ${usage.line})`;
-      }).join('\n');
+      const details = missingVars
+        .map((v) => {
+          const usage = configUsage.get(v)!;
+          return `  - ${v} (line ${usage.line})`;
+        })
+        .join('\n');
       fail(`Environment variables in config.ts but missing from .env.example:\n${details}`);
     }
   });
 
   it('every key in .env.example is referenced in config.ts', () => {
     const staleVars: string[] = [];
-    
+
     for (const [key, entry] of envExampleEntries) {
       if (!configUsage.has(key)) {
         staleVars.push(key);
@@ -231,17 +234,19 @@ describe('Environment variable documentation completeness', () => {
     }
 
     if (staleVars.length > 0) {
-      const details = staleVars.map(v => {
-        const entry = envExampleEntries.get(v)!;
-        return `  - ${v} (line ${entry.line})`;
-      }).join('\n');
+      const details = staleVars
+        .map((v) => {
+          const entry = envExampleEntries.get(v)!;
+          return `  - ${v} (line ${entry.line})`;
+        })
+        .join('\n');
       fail(`Environment variables in .env.example but not referenced in config.ts:\n${details}`);
     }
   });
 
   it('every key in .env.example has a descriptive comment', () => {
     const uncommentedVars: string[] = [];
-    
+
     for (const [key, entry] of envExampleEntries) {
       if (!entry.hasComment) {
         uncommentedVars.push(key);
@@ -249,75 +254,81 @@ describe('Environment variable documentation completeness', () => {
     }
 
     if (uncommentedVars.length > 0) {
-      const details = uncommentedVars.map(v => {
-        const entry = envExampleEntries.get(v)!;
-        return `  - ${v} (line ${entry.line})`;
-      }).join('\n');
+      const details = uncommentedVars
+        .map((v) => {
+          const entry = envExampleEntries.get(v)!;
+          return `  - ${v} (line ${entry.line})`;
+        })
+        .join('\n');
       fail(`Environment variables in .env.example without comments:\n${details}`);
     }
   });
 
   it('numeric defaults in config.ts satisfy their declared min/max', () => {
     const violations: string[] = [];
-    
+
     for (const [varName, usage] of configUsage) {
       if (!usage.isNumeric || !usage.hasDefault) continue;
       if (usage.min === undefined && usage.max === undefined) continue;
-      
+
       const defaultValue = usage.defaultValue as number;
-      
+
       if (usage.min !== undefined && defaultValue < usage.min) {
         violations.push(
-          `${varName}: default ${defaultValue} is below min ${usage.min} (line ${usage.line})`
+          `${varName}: default ${defaultValue} is below min ${usage.min} (line ${usage.line})`,
         );
       }
-      
+
       if (usage.max !== undefined && defaultValue > usage.max) {
         violations.push(
-          `${varName}: default ${defaultValue} exceeds max ${usage.max} (line ${usage.line})`
+          `${varName}: default ${defaultValue} exceeds max ${usage.max} (line ${usage.line})`,
         );
       }
     }
 
     if (violations.length > 0) {
-      fail(`Numeric defaults that violate their min/max constraints:\n${violations.map(v => `  - ${v}`).join('\n')}`);
+      fail(
+        `Numeric defaults that violate their min/max constraints:\n${violations.map((v) => `  - ${v}`).join('\n')}`,
+      );
     }
   });
 
   it('numeric defaults in .env.example satisfy their documented range', () => {
     const violations: string[] = [];
-    
+
     for (const [key, entry] of envExampleEntries) {
       const usage = configUsage.get(key);
       if (!usage || !usage.isNumeric) continue;
-      
+
       // Extract the default value from .env.example
       const line = envExampleContent.split('\n')[entry.line! - 1];
       const eqIndex = line.indexOf('=');
       if (eqIndex < 0) continue;
-      
+
       const valueStr = line.substring(eqIndex + 1).trim();
       if (!valueStr) continue; // Empty value
-      
+
       const value = parseFloat(valueStr);
       if (isNaN(value)) continue; // Not a numeric value
-      
+
       // Check against min/max from config.ts
       if (usage.min !== undefined && value < usage.min) {
         violations.push(
-          `${key}: .env.example value ${value} is below min ${usage.min} (line ${entry.line})`
+          `${key}: .env.example value ${value} is below min ${usage.min} (line ${entry.line})`,
         );
       }
-      
+
       if (usage.max !== undefined && value > usage.max) {
         violations.push(
-          `${key}: .env.example value ${value} exceeds max ${usage.max} (line ${entry.line})`
+          `${key}: .env.example value ${value} exceeds max ${usage.max} (line ${entry.line})`,
         );
       }
     }
 
     if (violations.length > 0) {
-      fail(`Numeric values in .env.example that violate their documented range:\n${violations.map(v => `  - ${v}`).join('\n')}`);
+      fail(
+        `Numeric values in .env.example that violate their documented range:\n${violations.map((v) => `  - ${v}`).join('\n')}`,
+      );
     }
   });
 });

@@ -54,17 +54,13 @@ describe('apiVersion middleware — unit', () => {
 
       apiVersion(req, res, next);
 
-      expect((res.setHeader as jest.Mock)).toHaveBeenCalledWith('API-Version', '1');
-      expect((res.setHeader as jest.Mock)).toHaveBeenCalledWith('X-API-Version', '1');
+      expect(res.setHeader as jest.Mock).toHaveBeenCalledWith('API-Version', '1');
+      expect(res.setHeader as jest.Mock).toHaveBeenCalledWith('X-API-Version', '1');
     });
   });
 
   describe('version "2" paths', () => {
-    const v2Paths = [
-      '/api/v2/players',
-      '/api/v2/scouts',
-      '/api/v2/versioning/demo',
-    ];
+    const v2Paths = ['/api/v2/players', '/api/v2/scouts', '/api/v2/versioning/demo'];
 
     it.each(v2Paths)('sets both headers to "2" for %s', (path) => {
       const req = makeReq({ originalUrl: path });
@@ -73,8 +69,8 @@ describe('apiVersion middleware — unit', () => {
 
       apiVersion(req, res, next);
 
-      expect((res.setHeader as jest.Mock)).toHaveBeenCalledWith('API-Version', '2');
-      expect((res.setHeader as jest.Mock)).toHaveBeenCalledWith('X-API-Version', '2');
+      expect(res.setHeader as jest.Mock).toHaveBeenCalledWith('API-Version', '2');
+      expect(res.setHeader as jest.Mock).toHaveBeenCalledWith('X-API-Version', '2');
     });
   });
 
@@ -86,8 +82,8 @@ describe('apiVersion middleware — unit', () => {
 
       apiVersion(req, res, next);
 
-      expect((res.setHeader as jest.Mock)).toHaveBeenCalledWith('API-Version', '2');
-      expect((res.setHeader as jest.Mock)).toHaveBeenCalledWith('X-API-Version', '2');
+      expect(res.setHeader as jest.Mock).toHaveBeenCalledWith('API-Version', '2');
+      expect(res.setHeader as jest.Mock).toHaveBeenCalledWith('X-API-Version', '2');
     });
 
     it('override=1 on /api path still resolves to "1"', () => {
@@ -97,8 +93,8 @@ describe('apiVersion middleware — unit', () => {
 
       apiVersion(req, res, next);
 
-      expect((res.setHeader as jest.Mock)).toHaveBeenCalledWith('API-Version', '1');
-      expect((res.setHeader as jest.Mock)).toHaveBeenCalledWith('X-API-Version', '1');
+      expect(res.setHeader as jest.Mock).toHaveBeenCalledWith('API-Version', '1');
+      expect(res.setHeader as jest.Mock).toHaveBeenCalledWith('X-API-Version', '1');
     });
   });
 
@@ -145,7 +141,7 @@ describe('apiVersion middleware — unit', () => {
 
     apiVersion(req, res, next);
 
-    expect((res.setHeader as jest.Mock)).toHaveBeenCalledTimes(2);
+    expect(res.setHeader as jest.Mock).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -200,12 +196,7 @@ describe('apiVersion middleware — integration', () => {
   });
 
   describe('always-in-sync invariant on real responses', () => {
-    const routes = [
-      '/api/players',
-      '/api/v1/players',
-      '/api/v2/players',
-      '/health',
-    ];
+    const routes = ['/api/players', '/api/v1/players', '/api/v2/players', '/health'];
 
     it.each(routes)('API-Version equals X-API-Version on %s', async (route) => {
       const res = await request(app).get(route);
@@ -213,9 +204,7 @@ describe('apiVersion middleware — integration', () => {
     });
 
     it('API-Version: 2 request header on /api path → both response headers report "2"', async () => {
-      const res = await request(app)
-        .get('/api/players')
-        .set('API-Version', '2');
+      const res = await request(app).get('/api/players').set('API-Version', '2');
       expect(res.headers['api-version']).toBe('2');
       expect(res.headers['x-api-version']).toBe('2');
       // Canonical and alias agree

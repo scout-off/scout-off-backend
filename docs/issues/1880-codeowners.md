@@ -2,13 +2,13 @@
 
 `.github/CODEOWNERS` now exists and maps the critical paths:
 
-| Path | Owner group |
-| --- | --- |
-| `*` (default) | `@scout-off/maintainers` |
-| `contracts/` | `@scout-off/contracts` |
-| `src/services/`, `src/utils/`, `src/middleware/`, `src/auth/`, auth/crypto controllers, `src/config*`, `src/tracing.ts` | `@scout-off/security` |
-| `src/db/`, migration scripts | `@scout-off/database` |
-| `.github/`, `.husky/`, `Dockerfile`, `docker-compose.yml`, `helm/`, deploy/backup scripts | `@scout-off/infrastructure` |
+| Path                                                                                                                    | Owner group                 |
+| ----------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `*` (default)                                                                                                           | `@scout-off/maintainers`    |
+| `contracts/`                                                                                                            | `@scout-off/contracts`      |
+| `src/services/`, `src/utils/`, `src/middleware/`, `src/auth/`, auth/crypto controllers, `src/config*`, `src/tracing.ts` | `@scout-off/security`       |
+| `src/db/`, migration scripts                                                                                            | `@scout-off/database`       |
+| `.github/`, `.husky/`, `Dockerfile`, `docker-compose.yml`, `helm/`, deploy/backup scripts                               | `@scout-off/infrastructure` |
 
 ## Remaining work (maintainers)
 

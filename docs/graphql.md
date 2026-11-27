@@ -139,10 +139,10 @@ and clamps `pageSize` to 1 through 100.
 
 GraphQL uses the same credentials as REST:
 
-| Credential | Header | GraphQL context |
-| --- | --- | --- |
-| JWT | `Authorization: Bearer <jwt>` | Uses the JWT subject as the account and preserves its role (`player`, `scout`, or `admin`). |
-| API key | `X-API-Key: <key>` | Resolves to the key's scout wallet and the `scout` role. |
+| Credential | Header                        | GraphQL context                                                                             |
+| ---------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| JWT        | `Authorization: Bearer <jwt>` | Uses the JWT subject as the account and preserves its role (`player`, `scout`, or `admin`). |
+| API key    | `X-API-Key: <key>`            | Resolves to the key's scout wallet and the `scout` role.                                    |
 
 When both headers are present, the API key is tried first, matching REST.
 Invalid, expired, or revoked credentials are treated as anonymous for
@@ -154,13 +154,13 @@ JWT requests and legacy/unrestricted API keys are not scope-limited. A
 missing required scope returns `UNAUTHORIZED` and includes
 `extensions.requiredScope`.
 
-| Operation or field | Authentication | Restricted API-key scope |
-| --- | --- | --- |
-| `Query.player` | Public for active players | None |
-| `Query.players` | Public | None |
-| `Query.milestones` | Public for active players; owner or admin may access deactivated players | `read:milestones` |
-| `Query.player.milestones` | Public for active players; owner or admin may access deactivated players | `read:milestones` |
-| `Query.scoutSubscription` | Required; a scout may query only its own wallet, an admin may query any wallet | `read:subscription` |
+| Operation or field        | Authentication                                                                 | Restricted API-key scope |
+| ------------------------- | ------------------------------------------------------------------------------ | ------------------------ |
+| `Query.player`            | Public for active players                                                      | None                     |
+| `Query.players`           | Public                                                                         | None                     |
+| `Query.milestones`        | Public for active players; owner or admin may access deactivated players       | `read:milestones`        |
+| `Query.player.milestones` | Public for active players; owner or admin may access deactivated players       | `read:milestones`        |
+| `Query.scoutSubscription` | Required; a scout may query only its own wallet, an admin may query any wallet | `read:subscription`      |
 
 The milestone access decision matches REST: an inaccessible deactivated
 player produces `NOT_FOUND` for the root `milestones` query, and is hidden by
@@ -246,9 +246,18 @@ This fails: 20 aliases cost $20 \\times (5 + 2) = 140$, which is at least 135.
 
 ```graphql
 query {
-  m01: milestones(playerId: "player-01") { milestoneId playerId }
-  m02: milestones(playerId: "player-02") { milestoneId playerId }
-  m03: milestones(playerId: "player-03") { milestoneId playerId }
+  m01: milestones(playerId: "player-01") {
+    milestoneId
+    playerId
+  }
+  m02: milestones(playerId: "player-02") {
+    milestoneId
+    playerId
+  }
+  m03: milestones(playerId: "player-03") {
+    milestoneId
+    playerId
+  }
   # Repeat through m20.
 }
 ```
@@ -268,13 +277,13 @@ GraphQL responses use HTTP 200 for many application and validation errors;
 clients must inspect the response's `errors[].extensions.code` value. The
 codes exposed by this surface are:
 
-| Code | Meaning |
-| --- | --- |
-| `UNAUTHENTICATED` | The operation requires a valid JWT or API key, but the request has no valid authenticated context. |
-| `UNAUTHORIZED` | The caller is authenticated but lacks the required role, wallet ownership, or restricted API-key scope. |
-| `NOT_FOUND` | The requested player does not exist or is intentionally hidden because it is deactivated and inaccessible. |
-| `QUERY_COST_EXCEEDED` | The calculated operation cost is 135 or greater. |
-| `INTROSPECTION_DISABLED` | Production rejected a `__schema` or `__type` introspection field. |
+| Code                     | Meaning                                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `UNAUTHENTICATED`        | The operation requires a valid JWT or API key, but the request has no valid authenticated context.         |
+| `UNAUTHORIZED`           | The caller is authenticated but lacks the required role, wallet ownership, or restricted API-key scope.    |
+| `NOT_FOUND`              | The requested player does not exist or is intentionally hidden because it is deactivated and inaccessible. |
+| `QUERY_COST_EXCEEDED`    | The calculated operation cost is 135 or greater.                                                           |
+| `INTROSPECTION_DISABLED` | Production rejected a `__schema` or `__type` introspection field.                                          |
 
 Other standard GraphQL parse and validation errors can also be returned for
 malformed queries or invalid field selections.
