@@ -281,7 +281,10 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction): 
  * Returns 403 with `reason.requiredScope` + `reason.providedScopes` on denial.
  */
 export function requireApiKeyScope(scope: ApiKeyScope) {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  // Named (rather than anonymous) so route-stack introspection — e.g. the
+  // regression test asserting every scout/player write route is scope-gated —
+  // can recognise this middleware via `fn.name`.
+  const apiKeyScopeGuard = (req: Request, res: Response, next: NextFunction): void => {
     if (req.apiKeyScopes === undefined || req.apiKeyScopes === null) {
       // JWT-authenticated or legacy/unrestricted API key — no scope gate.
       next();
@@ -311,6 +314,7 @@ export function requireApiKeyScope(scope: ApiKeyScope) {
       providedScopes: req.apiKeyScopes,
     });
   };
+  return apiKeyScopeGuard;
 }
 
 /**

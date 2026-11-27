@@ -34,6 +34,20 @@ const YAML_PATH =
 const JSON_PATH =
   process.env.OPENAPI_JSON_PATH ||
   path.join(__dirname, '..', 'src', 'openapi.json');
+const PACKAGE_JSON_PATH =
+  process.env.PACKAGE_JSON_PATH ||
+  path.join(__dirname, '..', 'package.json');
+
+/**
+ * Read the canonical version from package.json (overridable for tests).
+ */
+function readPackageVersion() {
+  const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
+  if (!pkg.version || typeof pkg.version !== 'string') {
+    throw new Error(`package.json has no valid "version" field (${PACKAGE_JSON_PATH})`);
+  }
+  return pkg.version;
+}
 
 let yaml;
 try {
@@ -81,7 +95,7 @@ function specsAreEqual(a, b) {
   return JSON.stringify(canonicalise(a)) === JSON.stringify(canonicalise(b));
 }
 
-module.exports = { canonicalise, specsAreEqual };
+module.exports = { canonicalise, specsAreEqual, readPackageVersion };
 
 function main() {
   // ── Step 1: Parse YAML ────────────────────────────────────────────────────
@@ -115,6 +129,20 @@ function main() {
 
   if (!spec.info.title) {
     console.error('[validate-openapi] info.title is required');
+    process.exit(1);
+  }
+
+  // ── Step 2b: info.version must match package.json ─────────────────────────
+  // The spec version is derived from package.json at generation time; this
+  // assertion fails CI with a clear message when a version bump was not
+  // followed by `npm run build:openapi` (issue #1888).
+  const packageVersion = readPackageVersion();  if (spec.info.version !== packageVersion) {
+    console.error(
+      `[validate-openapi] info.version (${spec.info.version}) does not match ` +
+      `package.json version (${packageVersion}).\n` +
+      'The OpenAPI spec version is derived from package.json.\n' +
+      'Run: npm run build:openapi   then commit the updated openapi.yaml/openapi.json',
+    );
     process.exit(1);
   }
 

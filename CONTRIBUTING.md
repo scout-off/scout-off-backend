@@ -8,6 +8,7 @@ Welcome! This guide covers contribution workflows, code standards, and critical 
 - [Seeding the Database](#seeding-the-database)
 - [Choosing an Issue](#choosing-an-issue)
 - [Contribution Workflow](#contribution-workflow)
+- [Adding a Route](#adding-a-route)
 - [Code Quality Standards](#code-quality-standards)
 - [Security & Dependency Review](#security--dependency-review)
 - [GitHub Labels and Priority Levels](#github-labels-and-priority-levels)
@@ -302,6 +303,89 @@ Fixes #123
 - Respond to reviewer feedback in new commits (don't force-push)
 - Ensure CI/CD checks pass
 - Once approved, maintainers merge to `main`
+
+## Adding a Route
+
+Every route in `src/routes/*.ts` (and `src/routes/v2/*.ts`) must register its
+middleware in the **canonical order** below. The order is not cosmetic: each
+step depends on the state the previous one established, and the API docs
+pipeline reads the real middleware chain to derive `security` in the generated
+OpenAPI spec — so a reordered chain silently changes the published contract.
+
+### Canonical middleware order
+
+1. **`requireRole(...)`** — authenticate and authorise the caller's role first.
+   Everything downstream assumes `req.auth` exists; running it first means
+   unauthenticated requests never touch the database or the rate limiter.
+2. **`requireWalletOwner(...)`** — verify the `:wallet` path parameter belongs
+   to the authenticated account. Runs right after role checks so a valid role
+   with the wrong wallet is rejected before any per-wallet work.
+3. **`requireApiKeyScope(...)`** — enforce the API-key scope for the operation.
+   Placed after identity/ownership so scope errors are only reported to callers
+   who are already known to be allowed to act on that wallet.
+4. **`requireFeatureFlag(...)`** — gate the route behind a feature flag. After
+   auth so flags are never evaluated (or leaked) for anonymous traffic.
+5. **Rate limiter** (e.g. `walletRateLimit()`) — count the request only once it
+   is known to be a legitimate, authorised call, so abusive anonymous traffic
+   cannot exhaust a real user's budget.
+6. **`idempotency`** — replay protection for mutating routes. Runs before
+   validation so a replayed request returns the stored response instead of
+   re-validating and re-executing the handler.
+7. **`validateBody(...)` / `validateQuery(...)`** — Zod validation of the
+   request payload. Last before the handler so the handler can trust its input;
+   see [docs/mutating-route-validation.md](docs/mutating-route-validation.md)
+   for the `.strict()` schema requirement on every `POST`/`PUT`/`PATCH`.
+8. **Handler** — the controller function.
+9. **`.all(methodNotAllowed([...]))`** — return `405` for unsupported methods
+   instead of falling through to a generic `404`.
+
+### Copy-pasteable snippet
+
+Modelled on the existing scout subscription route in
+[`src/routes/scout.ts`](src/routes/scout.ts):
+
+```ts
+/**
+ * POST /api/scouts/:wallet/subscribe
+ *
+ * Subscribe the scout to a plan. Records the subscription on-chain and locally.
+ *
+ * @param wallet {string} - Scout's Stellar public key
+ * @body { plan: 'basic' | 'premium', durationDays: number }
+ * @response 200 { success: true, data: { transactionId, wallet, expiresAt } }
+ * @response 400 { success: false, error: string } - Invalid body
+ * @response 401 { success: false, error: string } - Missing token
+ * @response 403 { success: false, error: string } - Scout role required or wallet mismatch
+ * @auth Bearer (scout role required)
+ */
+router.route('/:wallet/subscribe')
+  .post(
+    requireRole('scout'),
+    requireWalletOwner({ validateAddress: false }),
+    requireApiKeyScope('write:subscriptions'),
+    requireFeatureFlag('subscriptions'),
+    walletRateLimit(),
+    idempotency,
+    validateBody(subscribeSchema),
+    subscribe,
+  )
+  .all(methodNotAllowed(['POST']));
+```
+
+### Checklist for a new route
+
+- [ ] Middleware registered in the canonical order above
+- [ ] `.all(methodNotAllowed([...]))` returns `405` for unsupported methods
+- [ ] JSDoc block above the route with `@param` / `@query` / `@body` and a
+      `@response` tag for **every** status the route can return
+- [ ] OpenAPI regenerated (`npm run openapi:generate`) and the diff reviewed —
+      see [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)
+- [ ] TypeScript client regenerated (`npm run client:generate`) if the request
+      or response shape changed
+- [ ] Mutating routes use a `.strict()` Zod schema via `validateBody` /
+      `validateQuery` — see
+      [docs/mutating-route-validation.md](docs/mutating-route-validation.md)
+- [ ] Unit tests for new logic and an integration test for the endpoint
 
 ## Code Quality Standards
 
