@@ -6728,10 +6728,21 @@
         ],
         "summary": "Approve a batch of milestones assigned to the authenticated validator in one call.",
         "operationId": "approveBulkMilestones",
-        "description": "Approve a batch of milestones assigned to the authenticated validator in\none call. Each ID is processed independently — a failure on one does not\nabort the batch; per-ID outcomes are returned in `data`.",
+        "description": "Approve a batch of milestones assigned to the authenticated validator in\none call. Up to 50 unique IDs are accepted; IDs use a bounded, URL-safe\nopaque format. Each item commits independently, so a failed item does not\nroll back successful approvals. A repeated approval is reported as\n`already_processed` and does not repeat its database side effects. Supplying\nan Idempotency-Key also replays the original response for safe HTTP retries.\n`success` is false for operational errors or post-commit warnings;\n`partialFailure` is true when at least one approval committed alongside one\nof those failures. Missing and unauthorized IDs remain item-level outcomes.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional. Replays the original response for retries"
+          }
+        ],
         "requestBody": {
           "required": true,
-          "description": "{ milestoneIds: string[] } - At least one ID required",
+          "description": "{ milestoneIds: string[] } - 1–50 IDs, each 1–200 characters",
           "content": {
             "application/json": {
               "schema": {
@@ -6740,9 +6751,13 @@
                   "milestoneIds": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
                     },
-                    "minItems": 1
+                    "minItems": 1,
+                    "maxItems": 50
                   }
                 },
                 "required": [
@@ -6755,10 +6770,13 @@
         },
         "responses": {
           "200": {
-            "description": "{ success: true, data: Array<{ milestoneId, status: 'approved'|'invalid'|'unauthorized'|'error', error? }> }"
+            "description": "{ success, partialFailure, summary, data: Array<{ milestoneId, status: 'approved'|'invalid'|'unauthorized'|'already_processed'|'error', error?, warning? }> }"
           },
           "400": {
-            "description": "{ success: false, error: string } - Empty milestoneIds"
+            "description": "{ success: false, error: string } - Invalid IDs or batch size"
+          },
+          "409": {
+            "description": "{ success: false, error: string } - Idempotency key reused for a different request"
           }
         },
         "security": [

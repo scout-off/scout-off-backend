@@ -32,6 +32,26 @@ describe('webhookSecretCipher (#686)', () => {
     expect(decryptWebhookSecret(b)).toBe('same-secret');
   });
 
+  it('decrypts with the previous key during an encryption-key rotation window', () => {
+    const originalCurrent = process.env.WEBHOOK_SECRET_ENCRYPTION_KEY;
+    const originalPrevious = process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS;
+    const oldKey = 'a'.repeat(64);
+    process.env.WEBHOOK_SECRET_ENCRYPTION_KEY = oldKey;
+    delete process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS;
+
+    try {
+      const encrypted = encryptWebhookSecret('rotation-test');
+      process.env.WEBHOOK_SECRET_ENCRYPTION_KEY = 'b'.repeat(64);
+      process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS = oldKey;
+      expect(decryptWebhookSecret(encrypted)).toBe('rotation-test');
+    } finally {
+      if (originalCurrent === undefined) delete process.env.WEBHOOK_SECRET_ENCRYPTION_KEY;
+      else process.env.WEBHOOK_SECRET_ENCRYPTION_KEY = originalCurrent;
+      if (originalPrevious === undefined) delete process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS;
+      else process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS = originalPrevious;
+    }
+  });
+
   it('treats unrecognised (legacy plaintext) values as already-plaintext', () => {
     const legacyPlaintext = 'a-legacy-plaintext-secret-written-before-encryption-shipped';
     expect(isEncryptedWebhookSecret(legacyPlaintext)).toBe(false);

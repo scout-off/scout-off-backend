@@ -2,8 +2,8 @@
  * Pluggable secrets provider (#1115).
  *
  * Long-lived secrets are resolved through this interface instead of reading
- * `process.env` ad hoc. The default implementation is env-var based; Vault /
- * cloud KMS providers cache remote values and can refresh without a restart.
+ * `process.env` ad hoc. Environment variables are the default; mounted secret
+ * files can be selected for Docker/Kubernetes deployments.
  */
 
 /** Logical secret names the backend understands. */
@@ -14,6 +14,10 @@ export const SECRET_NAMES = [
   'SEP10_SERVER_SECRET_PREVIOUS',
   'API_KEY_LOOKUP_SECRET',
   'API_KEY_LOOKUP_SECRET_PREVIOUS',
+  'DATABASE_URL',
+  'REDIS_URL',
+  'SCOUTOFF_WEBHOOK_SECRET',
+  'WEBHOOK_SECRET',
   'WEBHOOK_SECRET_ENCRYPTION_KEY',
   'WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS',
   'NOTES_ENCRYPTION_KEY',
@@ -22,6 +26,7 @@ export const SECRET_NAMES = [
   'WEBHOOK_SECRET_ENCRYPTION_KEYS',
   'PLATFORM_SECRET_KEY',
   'PLATFORM_SECRET',
+  'STELLAR_SECRET_KEY',
   'PINATA_API_KEY',
   'PINATA_SECRET',
 ] as const;
@@ -45,8 +50,12 @@ export const SECRET_ROTATION_CLASS: Readonly<Record<SecretName, RotationClass>> 
   JWT_SECRET_PREVIOUS: 'dual-window',
   SEP10_SERVER_SECRET: 'dual-window',
   SEP10_SERVER_SECRET_PREVIOUS: 'dual-window',
-  API_KEY_LOOKUP_SECRET: 'dual-window',
-  API_KEY_LOOKUP_SECRET_PREVIOUS: 'dual-window',
+  API_KEY_LOOKUP_SECRET: 'migration-required',
+  API_KEY_LOOKUP_SECRET_PREVIOUS: 'migration-required',
+  DATABASE_URL: 'migration-required',
+  REDIS_URL: 'migration-required',
+  SCOUTOFF_WEBHOOK_SECRET: 'hot',
+  WEBHOOK_SECRET: 'hot',
   WEBHOOK_SECRET_ENCRYPTION_KEY: 'migration-required',
   WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS: 'migration-required',
   NOTES_ENCRYPTION_KEY: 'migration-required',
@@ -55,13 +64,14 @@ export const SECRET_ROTATION_CLASS: Readonly<Record<SecretName, RotationClass>> 
   WEBHOOK_SECRET_ENCRYPTION_KEYS: 'migration-required',
   PLATFORM_SECRET_KEY: 'hot',
   PLATFORM_SECRET: 'hot',
+  STELLAR_SECRET_KEY: 'hot',
   PINATA_API_KEY: 'hot',
   PINATA_SECRET: 'hot',
 };
 
 export interface SecretsProvider {
-  /** Provider kind selected by `SECRETS_PROVIDER` (env | vault | kms). */
-  readonly kind: 'env' | 'vault' | 'kms';
+  /** Provider kind selected by `SECRETS_PROVIDER`. */
+  readonly kind: 'env' | 'file' | 'vault' | 'kms';
 
   /**
    * Resolve a secret by name. Never logs the value.
@@ -71,7 +81,7 @@ export interface SecretsProvider {
 
   /**
    * Refresh cached secrets from the backing store. Env provider is a no-op
-   * (values are always read live from process.env). Vault/KMS re-fetch.
+   * (values are always read live from process.env).
    */
   refresh?(name?: string): Promise<void>;
 
@@ -80,6 +90,9 @@ export interface SecretsProvider {
    * Returns an unsubscribe function. Optional — env provider may omit.
    */
   watch?(onChange: (name: string, value: string | undefined) => void): () => void;
+
+  /** Stop provider-owned watchers and timers. */
+  close?(): void;
 }
 
 export type SecretsProviderKind = SecretsProvider['kind'];

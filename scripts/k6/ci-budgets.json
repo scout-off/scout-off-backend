@@ -1,0 +1,25 @@
+{
+  "maxP95RegressionPercent": 25,
+  "maxP95RegressionMs": 15,
+  "maxErrorRateIncrease": 0.005,
+  "maxBaselineErrorRate": 0.01,
+  "maxScenarioErrors": 0,
+  "scenarios": {
+    "auth_flow": {
+      "errorCounter": "auth_errors"
+    },
+    "player_list": {
+      "errorCounter": "player_list_errors"
+    },
+    "player_profile": {
+      "errorCounter": "player_profile_errors"
+    },
+    "sse_stream": {
+      "errorCounter": "sse_connect_errors",
+      "requiredCounter": "sse_keepalive_received"
+    },
+    "admin_stats": {
+      "errorCounter": "admin_stats_errors"
+    }
+  }
+}

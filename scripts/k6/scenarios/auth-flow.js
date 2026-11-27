@@ -75,6 +75,7 @@ export default function authFlowVU() {
     JSON.stringify({ transaction: testXdr, role: 'scout' }),
     {
       headers: { 'Content-Type': 'application/json' },
+      responseCallback: http.expectedStatuses(200, 400, 401),
       tags: { scenario: 'auth_flow', step: 'token' },
     },
   );

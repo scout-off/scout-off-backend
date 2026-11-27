@@ -13,6 +13,7 @@ import { requireWalletOwner } from '../middleware/requireOwner';
 import { validateBody, validateQuery } from '../middleware/validate';
 import { rateLimit, playerRateLimit } from '../middleware/rateLimit';
 import { methodNotAllowed } from '../middleware/methodNotAllowed';
+import { idempotency } from '../middleware/idempotency';
 
 const router = Router();
 
@@ -94,16 +95,31 @@ router.route('/:wallet/milestones/pending')
  * POST /api/validators/milestones/approve-bulk
  *
  * Approve a batch of milestones assigned to the authenticated validator in
- * one call. Each ID is processed independently — a failure on one does not
- * abort the batch; per-ID outcomes are returned in `data`.
+ * one call. Up to 50 unique IDs are accepted; IDs use a bounded, URL-safe
+ * opaque format. Each item commits independently, so a failed item does not
+ * roll back successful approvals. A repeated approval is reported as
+ * `already_processed` and does not repeat its database side effects. Supplying
+ * an Idempotency-Key also replays the original response for safe HTTP retries.
+ * `success` is false for operational errors or post-commit warnings;
+ * `partialFailure` is true when at least one approval committed alongside one
+ * of those failures. Missing and unauthorized IDs remain item-level outcomes.
  *
- * @body { milestoneIds: string[] } - At least one ID required
- * @response 200 { success: true, data: Array<{ milestoneId, status: 'approved'|'invalid'|'unauthorized'|'error', error? }> }
- * @response 400 { success: false, error: string } - Empty milestoneIds
+ * @body { milestoneIds: string[] } - 1–50 IDs, each 1–200 characters
+ * @header Idempotency-Key {string} - Optional. Replays the original response for retries
+ * @response 200 { success, partialFailure, summary, data: Array<{ milestoneId, status: 'approved'|'invalid'|'unauthorized'|'already_processed'|'error', error?, warning? }> }
+ * @response 400 { success: false, error: string } - Invalid IDs or batch size
+ * @response 409 { success: false, error: string } - Idempotency key reused for a different request
  * @auth Bearer (validator role required)
  */
 router.route('/milestones/approve-bulk')
-  .post(requireRole('validator'), validateBody(bulkApproveSchema), approveBulkMilestones)
+  .post(
+    requireRole('validator'),
+    validateBody(bulkApproveSchema),
+    idempotency({
+      requestFingerprint: (req) => `${req.account ?? 'unknown'}:${JSON.stringify(req.body)}`,
+    }),
+    approveBulkMilestones,
+  )
   .all(methodNotAllowed(['POST']));
 
 /**
