@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
+import { methodNotAllowed } from '../middleware/methodNotAllowed';
 import {
   broadcaster,
   SseSubscriber,
@@ -380,7 +381,7 @@ export function isAcceptingSseSessions(): boolean { return _acceptingSseSessions
  * @response 429 { success: false, error: string } — per-wallet connection limit reached
  * @response 503 { success: false, error: string, code: 'SSE_CAPACITY' } — global connection limit reached (sets Retry-After)
  */
-router.get('/stream', requireAuth, async (req: Request, res: Response) => {
+const streamHandler = async (req: Request, res: Response) => {
   const wallet = req.account!;
 
   // ── Draining guard: reject new SSE connections during shutdown ────────────
@@ -616,6 +617,10 @@ router.get('/stream', requireAuth, async (req: Request, res: Response) => {
     }, getAuthSweepIntervalMs());
     authSweepTimer.unref();
   }
-});
+};
+
+router.route('/stream')
+  .get(requireAuth, streamHandler)
+  .all(methodNotAllowed(['GET']));
 
 export default router;

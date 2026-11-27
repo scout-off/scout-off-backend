@@ -28,6 +28,8 @@ import config from '../../src/config';
 
 const app = express();
 app.use('/api/events', eventsRouter);
+app.use('/api/v1/events', eventsRouter);
+app.use('/api/v2/events', eventsRouter);
 
 const WALLET_A = 'GAWALLETAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const WALLET_B = 'GAWALLETBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
@@ -109,5 +111,34 @@ describe('GET /api/events/stream session limits', () => {
     expect(response.text).toContain('event: session_ended');
     expect(response.text).toContain('"reason":"token_expired"');
     expect(broadcaster.subscriberCount).toBe(0);
+  });
+});
+
+describe('GET /api/events/stream — 405 Method Not Allowed for unsupported methods', () => {
+  const unsupportedMethods = [
+    (p: string) => request(app).post(p),
+    (p: string) => request(app).put(p),
+    (p: string) => request(app).delete(p),
+    (p: string) => request(app).patch(p),
+  ];
+
+  it.each([
+    '/api/events/stream',
+    '/api/v1/events/stream',
+    '/api/v2/events/stream',
+  ])('returns 405 JSON with Allow: GET for non-GET methods on %s', async (path) => {
+    for (const send of unsupportedMethods) {
+      const res = await send(path);
+      expect(res.status).toBe(405);
+      expect(res.headers['allow']).toBe('GET');
+      // The 405 must be JSON, not an SSE text/event-stream response.
+      expect(res.headers['content-type']).toMatch(/application\/json/);
+      expect(res.body).toEqual({
+        success: false,
+        error: 'Method Not Allowed',
+        code: 'METHOD_NOT_ALLOWED',
+        allowedMethods: ['GET'],
+      });
+    }
   });
 });
