@@ -1,0 +1,70 @@
+name: Contract interface compatibility
+on:
+  pull_request:
+    paths:
+      - 'contracts/**'
+      - 'scripts/contract-spec-compat.cjs'
+      - '.github/workflows/contract-interface-compat.yml'
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  spec-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.81.0
+          targets: wasm32-unknown-unknown
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target
+          key: contract-abi-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock') }}
+      - uses: stellar/stellar-cli@v23.0.1
+      - name: Run ABI classifier tests
+        run: node --test scripts/tests/contract-spec-compat.test.cjs
+      - name: Extract proposed contract interfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path contracts/Cargo.toml --target wasm32-unknown-unknown --release
+          mkdir -p /tmp/proposed-spec
+          for wasm in contracts/target/wasm32-unknown-unknown/release/scout_off_*.wasm; do
+            [ -f "$wasm" ] || continue
+            stellar contract info interface --wasm "$wasm" --output json > "/tmp/proposed-spec/$(basename "$wasm" .wasm).json"
+          done
+          test "$(find /tmp/proposed-spec -name '*.json' | wc -l)" -ge 5
+      - name: Extract base-branch contract interfaces
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/contract-base "$BASE_SHA"
+          cd /tmp/contract-base
+          cargo build --manifest-path contracts/Cargo.toml --target wasm32-unknown-unknown --release
+          mkdir -p /tmp/base-spec
+          for wasm in contracts/target/wasm32-unknown-unknown/release/scout_off_*.wasm; do
+            [ -f "$wasm" ] || continue
+            stellar contract info interface --wasm "$wasm" --output json > "/tmp/base-spec/$(basename "$wasm" .wasm).json"
+          done
+          test "$(find /tmp/base-spec -name '*.json' | wc -l)" -ge 5
+      - name: Compare shared numeric error codes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CONTRACT_BREAKING_CHANGE_ACKNOWLEDGED: ${{ contains(github.event.pull_request.labels.*.name, 'contract-breaking-change') }}
+        shell: bash
+        run: |
+          git show "$BASE_SHA:contracts/shared/src/errors.rs" > /tmp/base-contract-errors.rs
+          node scripts/check-contract-error-codes.cjs /tmp/base-contract-errors.rs contracts/shared/src/errors.rs
+      - name: Compare contract interfaces
+        env:
+          CONTRACT_BREAKING_CHANGE_ACKNOWLEDGED: ${{ contains(github.event.pull_request.labels.*.name, 'contract-breaking-change') }}
+        run: node scripts/contract-spec-compat.cjs /tmp/base-spec /tmp/proposed-spec
