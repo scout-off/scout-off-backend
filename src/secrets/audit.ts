@@ -4,9 +4,12 @@
  * IMPORTANT: never include secret values in audit payloads. Only the secret
  * name, action, provider kind, and whether a value was found are recorded.
  *
- * Uses console directly to avoid a circular import with `logger` → `config`
- * → `secrets` → `logger`.
+ * Emitted through the shared logger so audit lines carry the standard level
+ * prefix, redaction and correlation ID.
  */
+
+import { logger } from '../utils/logger';
+import { getCorrelationId } from '../utils/requestContext';
 
 export type SecretsAuditAction = 'get' | 'refresh' | 'watch' | 'apply';
 
@@ -21,9 +24,15 @@ export interface SecretsAuditEvent {
 }
 
 export function auditSecretAccess(event: SecretsAuditEvent): void {
-  const payload = {
-    ...event,
-    ts: new Date().toISOString(),
+  const payload: Record<string, unknown> = {
+    event: 'secrets_audit',
+    action: event.action,
+    name: event.name,
+    provider: event.provider,
+    found: event.found,
   };
-  console.info('[secrets-audit]', JSON.stringify(payload));
+  if (event.detail !== undefined) payload.detail = event.detail;
+  const correlationId = getCorrelationId();
+  if (correlationId) payload.correlationId = correlationId;
+  logger.info(payload);
 }
