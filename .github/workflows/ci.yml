@@ -82,6 +82,9 @@ jobs:
       - name: Validate OpenAPI spec is in sync with route sources
         run: npm run validate:openapi
 
+      - name: Lint OpenAPI spec with Spectral
+        run: npm run lint:openapi
+
       - name: Validate generated TypeScript client
         run: npm run validate:client
 

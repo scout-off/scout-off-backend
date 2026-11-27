@@ -67,12 +67,13 @@ Tags:
 ```bash
 npm run build:openapi     # regenerate src/openapi.yaml + src/openapi.json from route sources
 npm run validate:openapi  # fail if the committed spec is stale relative to the routes
+npm run lint:openapi      # lint the OpenAPI spec with Spectral (rules in .spectral.yaml)
 npm run build:client      # regenerate the versioned TypeScript client from the OpenAPI spec
 npm run validate:client   # fail if generated client types/version are stale
 npm run docs:check        # fail if any route lacks a summary + at least one @response tag
 ```
 
-All documentation and client checks run in CI (`.github/workflows/ci.yml`) on every push and PR — a route added without documentation, a stale spec, or stale generated client types fails the build.
+All documentation and client checks run in CI (`.github/workflows/ci.yml`) on every push and PR — a route added without documentation, a stale spec, stale generated client types, or Spectral errors fails the build.
 
 ## TypeScript client
 

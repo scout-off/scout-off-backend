@@ -60,6 +60,7 @@
     "typecheck:client": "tsc --noEmit --project clients/typescript/tsconfig.json",
     "validate:client": "node scripts/validate-client.js",
     "validate:openapi": "node scripts/validate-openapi.js",
+    "lint:openapi": "node scripts/lint-openapi.js",
     "docs:check": "node scripts/check-route-docs.js",
     "check:sql-injection": "node scripts/check-sql-injection.js",
     "loadtest": "ts-node --project tsconfig.scripts.json scripts/loadtest.ts",
@@ -113,6 +114,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@stoplight/spectral-cli": "6.14.2",
     "@opentelemetry/core": "2.10.0",
     "@opentelemetry/sdk-trace-base": "2.10.0",
     "@opentelemetry/sdk-trace-node": "2.10.0",
