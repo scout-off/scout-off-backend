@@ -6873,28 +6873,6 @@
         ],
         "x-owner-only": true
       }
-    },
-    "/versioning/demo": {
-      "servers": [
-        {
-          "url": "/api/v2",
-          "description": "API v2 only — not available on /api or /api/v1"
-        }
-      ],
-      "get": {
-        "tags": [
-          "v2"
-        ],
-        "summary": "Deliberate v2-only example endpoint used to demonstrate intentional divergence and exercise the parity allowlist/test.",
-        "operationId": "getVersioningDemo",
-        "description": "Deliberate v2-only example endpoint used to demonstrate intentional\ndivergence and exercise the parity allowlist/test. Not mounted under\n/api or /api/v1.",
-        "responses": {
-          "200": {
-            "description": "{ version: 2, demo: true }"
-          }
-        },
-        "security": []
-      }
     }
   }
 }
