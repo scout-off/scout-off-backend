@@ -146,9 +146,17 @@ export const milestoneSchema = z.object({
 
 export const MAX_PAGE_SIZE = 100;
 
+/** Max length for free-text filter values (region, position), issue #1849. */
+export const MAX_FILTER_TEXT_LENGTH = 64;
+
+const filterTextSchema = z
+  .string()
+  .max(MAX_FILTER_TEXT_LENGTH, `must be ${MAX_FILTER_TEXT_LENGTH} characters or fewer`)
+  .transform((s) => s.trim());
+
 export const pendingQuerySchema = z.object({
-  region: z.string().optional(),
-  position: z.string().optional(),
+  region: filterTextSchema.optional(),
+  position: filterTextSchema.optional(),
   playerId: z.string().optional(),
   // Inclusive bounds on submitted_at (Unix seconds), issue #1135.
   submittedAfter: z.coerce.number().int().optional(),

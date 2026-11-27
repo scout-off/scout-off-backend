@@ -59,6 +59,28 @@ export function getAuditChainBreaksTotal(): number {
   return _auditChainBreaksTotal;
 }
 
+// ── Profile view recording failures (#1854) ──────────────────────────────────
+//
+// Profile-view recording is best-effort: a DB failure must not fail the request,
+// but it should be observable. The counter is exported as
+// `profile_view_record_failures_total`.
+
+let _profileViewRecordFailuresTotal = 0;
+
+/** Increments `profile_view_record_failures_total`. */
+export function recordProfileViewRecordFailure(): void {
+  _profileViewRecordFailuresTotal += 1;
+}
+
+export function getProfileViewRecordFailuresTotal(): number {
+  return _profileViewRecordFailuresTotal;
+}
+
+/** Resets the profile view failure counter (used in tests). */
+export function resetProfileViewRecordFailures(): void {
+  _profileViewRecordFailuresTotal = 0;
+}
+
 export interface RouteMetric {
   count: number;
   totalLatencyMs: number;
@@ -1053,6 +1075,13 @@ export function serializeMetrics(extras: SerializeMetricsExtras = {}): string {
     const toState = key.slice(colonIdx + 1);
     lines.push(`scout_off_circuit_breaker_transitions_total{breaker="${escapeLabelValue(breakerName)}",to="${escapeLabelValue(toState)}"} ${count}`);
   }
+
+  // Profile view recording failures (#1854) — non-fatal DB errors while
+  // recording a scout's profile view. A sustained non-zero rate means views
+  // are being silently dropped.
+  lines.push('# HELP profile_view_record_failures_total Total number of profile view recording failures');
+  lines.push('# TYPE profile_view_record_failures_total counter');
+  lines.push(`profile_view_record_failures_total ${getProfileViewRecordFailuresTotal()}`);
 
   lines.push(...retentionMetrics());
   // ─── Runtime metrics (process CPU, RSS, heap, event-loop lag, GC, handles) ────
