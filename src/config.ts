@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import net from 'net';
 import { parseRetentionPolicies } from './retentionPolicy';
 import { parseKeyring } from './utils/keyring';
 import envConstants from './config/env-constants.json';
@@ -74,6 +75,50 @@ function parseNumericEnv(
   }
 
   return value;
+}
+
+/**
+ * Parse a comma-separated list of IPv4 addresses and/or CIDR ranges from an
+ * environment variable, validating every entry at startup.
+ *
+ * - Unset or whitespace-only → `defaultValue` (so the feature is opt-in).
+ * - Each entry is trimmed; empty entries are ignored.
+ * - Any entry that is not a valid IPv4 address or IPv4 CIDR range throws a
+ *   clear startup error naming the variable and the offending entry, so a
+ *   malformed value cannot silently lock admins out or let everyone in.
+ *
+ * @param name         Environment variable name (for error messages)
+ * @param raw          The raw string value from process.env[name]
+ * @param defaultValue Fallback (usually `[]`) when raw is unset/empty
+ */
+function parseIpAllowlist(name: string, raw: string | undefined, defaultValue: string[]): string[] {
+  if (raw === undefined || raw.trim() === '') return defaultValue;
+
+  const entries: string[] = [];
+  for (const part of raw.split(',')) {
+    const entry = part.trim();
+    if (entry === '') continue;
+    if (!isValidIpOrCidr(entry)) {
+      throw new Error(
+        `Invalid ${name}: "${entry}" is not a valid IPv4 address or CIDR range. ` +
+        `Remove it or correct it to a valid IPv4/CIDR value.`,
+      );
+    }
+    entries.push(entry);
+  }
+  return entries;
+}
+
+/** Whether `entry` is a valid IPv4 address or an IPv4 CIDR range (e.g. "10.0.0.0/8"). */
+function isValidIpOrCidr(entry: string): boolean {
+  if (entry.includes('/')) {
+    const [network, prefixStr] = entry.split('/');
+    if (net.isIP(network) !== 4) return false;
+    const prefix = parseInt(prefixStr, 10);
+    if (Number.isNaN(prefix) || prefix < 0 || prefix > 32) return false;
+    return true;
+  }
+  return net.isIP(entry) === 4;
 }
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -575,6 +620,19 @@ const config = {
   adminWallet: process.env.ADMIN_WALLET ?? '',
   adminWallets: (process.env.ADMIN_WALLETS ?? process.env.ADMIN_WALLET ?? '').split(',').map(w => w.trim()).filter(w => w.length > 0),
   adminThreshold: parseNumericEnv('ADMIN_THRESHOLD', process.env.ADMIN_THRESHOLD, 1, { min: 1, integer: true }),
+
+  // ── Admin IP allowlist ─────────────────────────────────────────────────
+  /**
+   * Comma-separated list of IPv4 addresses/CIDRs allowed on admin endpoints
+   * (e.g. "192.168.1.0/24,10.0.0.1"). Empty (the default) disables the
+   * allowlist and all IPs pass through. Each entry is validated as an IPv4
+   * address or CIDR range at startup; a malformed entry fails config
+   * validation instead of being silently ignored.
+   */
+  admin: {
+    ipAllowlist: parseIpAllowlist('ADMIN_IP_ALLOWLIST', process.env.ADMIN_IP_ALLOWLIST, []),
+  },
+
   securityHeaders: {
     hsts: process.env.SECURITY_HSTS ?? 'max-age=31536000; includeSubDomains',
     xContentTypeOptions: process.env.SECURITY_X_CONTENT_TYPE_OPTIONS ?? 'nosniff',
