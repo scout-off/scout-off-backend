@@ -981,7 +981,7 @@ const config = {
 
   // ── Proxy settings ────────────────────────────────────────────────────
   /** Number of trusted reverse-proxy hops in front of this server (for IP resolution). */
-  trustedProxyCount: parseNumericEnv('TRUSTED_PROXY_COUNT', process.env.TRUSTED_PROXY_COUNT, 1, { min: 1, integer: true }),
+  trustedProxyCount: parseNumericEnv('TRUSTED_PROXY_COUNT', process.env.TRUSTED_PROXY_COUNT, 1, { min: 0, integer: true }),
 
   // ── Database query monitoring ─────────────────────────────────────────
   /** Log queries slower than this threshold (ms). */
