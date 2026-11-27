@@ -1,10 +1,10 @@
-# Quick Start: Four Backend Improvements
+# Quick Start
 
-This guide gets you started immediately. For details, see the accompanying documentation.
+See `README.md` for setup and development instructions.
 
-## What You're Implementing
+For environment variables, see `.env.example`.
 
-Four independent improvements to the backend:
+For architecture and API documentation, see `docs/`.
 
 1. **OpenAPI Linting** — Automatic quality checks on API specs
 2. **Request Timeouts** — Clean cancellation of expensive operations
@@ -212,3 +212,4 @@ All files are fully documented with:
 **Estimated total time:** 2-3 hours
 
 **Status:** All files created and ready ✓
+For historical PR summaries and design decisions, see `docs/history/`.

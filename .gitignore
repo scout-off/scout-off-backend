@@ -41,3 +41,14 @@ __snapshots__/
 # TypeScript incremental-build info and lint caches.
 *.tsbuildinfo
 .eslintcache
+# Test snapshots
+**/__snapshots__/
+*.snap
+
+# Patch files
+*.patch
+
+# Editor and OS files
+.DS_Store
+*.swp
+*.swo

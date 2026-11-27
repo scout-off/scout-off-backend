@@ -1,20 +1,23 @@
-# 🚀 START HERE
+# START HERE
 
-All files for the four backend improvements have been created and are ready for integration.
+This repository is the Scout-Off backend. The primary documentation lives in `docs/`.
 
-**Total Time to Read Documentation:** 5-10 minutes  
-**Total Time to Implement:** 2-3 hours
+## Key documentation
 
----
+| Document | Purpose |
+|----------|---------|
+| `README.md` | Project overview, setup, and development workflow |
+| `DEPLOYMENT.md` | Deployment guide |
+| `CONTRIBUTING.md` | Contribution guidelines |
+| `.env.example` | All supported environment variables with descriptions |
+| `docs/` | Architecture, API, and runbook documentation |
+| `docs/history/` | Past PR summaries and design decisions |
 
-## What Was Done
+## Quickstart
 
-I've created **18 files** implementing four backend improvements:
+See `README.md` for setup instructions. For environment variables, see `.env.example`.
 
-1. **OpenAPI Linting with Spectral** — Automated quality checks on API specs
-2. **Request Timeout with AbortController** — Clean cancellation of expensive operations
-3. **Unified Cache Store** — Consolidate three implementations into one
-4. **API Docs Visibility Control** — Public/admin/disabled modes with auth
+## Historical context
 
 All files are fully documented, tested, and ready to use.
 
@@ -260,3 +263,4 @@ START_HERE.md (you are here)
 ---
 
 **Everything is ready. Let's build this! 🎯**
+Design decisions and PR summaries from past work are archived in `docs/history/`.

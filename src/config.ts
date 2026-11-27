@@ -1060,10 +1060,6 @@ const config = {
     walletBlocklistTtlMs: parseNumericEnv('WALLET_BLOCKLIST_CACHE_TTL_MS', process.env.WALLET_BLOCKLIST_CACHE_TTL_MS, 30000, { min: 0, integer: true }),
   },
 
-  // ── GraphQL DataLoader concurrency ────────────────────────────────────
-  /** Max in-flight RPC calls for the milestone GraphQL DataLoader. */
-  milestoneLoaderConcurrency: parseNumericEnv('MILESTONE_LOADER_CONCURRENCY', process.env.MILESTONE_LOADER_CONCURRENCY, 8, { min: 1, integer: true }),
-
   // ── Reindexing / catch-up mode ────────────────────────────────────────
   // Batch sizes are capped at 10 000 ledgers, the maximum reindex range
   // (MAX_REINDEX_RANGE in src/services/reindexService.ts).
@@ -1191,6 +1187,21 @@ const config = {
     if (policy) return policy as typeof valid[number];
     return nodeEnv === 'production' ? 'closed' : 'local';
   })(),
+
+  graphql: {
+    /**
+     * Maximum number of simultaneous Soroban RPC calls the MilestonesLoader
+     * may issue within a single DataLoader batch. Without a cap, a
+     * `players(pageSize: 100) { milestones }` query fires 100 concurrent RPC
+     * calls. Default: 8. Minimum: 1.
+     */
+    milestoneLoaderConcurrency: parseNumericEnv(
+      'MILESTONE_LOADER_CONCURRENCY',
+      process.env.MILESTONE_LOADER_CONCURRENCY,
+      8,
+      { min: 1, integer: true },
+    ),
+  },
 
   /** Only accept registered persisted GraphQL operations (GRAPHQL_PERSISTED_ONLY=true). */
   graphqlPersistedOnly: process.env.GRAPHQL_PERSISTED_ONLY === 'true',
