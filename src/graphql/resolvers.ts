@@ -23,7 +23,7 @@ import {
 import { getTierMeta, tierName } from '../utils/tier';
 import { canAccessPlayer } from '../utils/playerAccess';
 import { hasApiKeyScope } from '../utils/apiKeyScopes';
-import { MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE } from '../utils/pagination';
+import { clampPageSize } from '../utils/pagination';
 import { type GraphQLContext } from './context';
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ const Query = {
     _ctx: GraphQLContext,
   ) {
     const page = Math.max(1, args.page ?? 1);
-    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, args.pageSize ?? DEFAULT_PAGE_SIZE));
+    const pageSize = clampPageSize(args.pageSize ?? undefined);
     const offset = (page - 1) * pageSize;
 
     const opts = {
