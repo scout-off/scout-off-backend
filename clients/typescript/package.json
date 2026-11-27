@@ -3,6 +3,22 @@
   "version": "1.0.0",
   "description": "Versioned TypeScript client for the ScoutOff API",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scout-off/scout-off-backend.git",
+    "directory": "clients/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/scout-off/scout-off-backend/issues"
+  },
+  "homepage": "https://github.com/scout-off/scout-off-backend/tree/main/clients/typescript#readme",
+  "keywords": [
+    "scoutoff",
+    "api-client",
+    "typescript",
+    "openapi",
+    "stellar"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
