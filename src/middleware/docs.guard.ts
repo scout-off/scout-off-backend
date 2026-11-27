@@ -9,11 +9,11 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { apiDocsConfig } from '../config.apiDocs';
+import config from '../config';
 import { requireRole } from './auth';
 
 export function guardApiDocs(req: Request, res: Response, next: NextFunction): void {
-  const { mode } = apiDocsConfig;
+  const { mode } = config.apiDocs;
 
   if (mode === 'disabled') {
     res.status(404).json({ success: false, error: 'Not found' });
@@ -47,7 +47,7 @@ export function isAdminPath(path: string): boolean {
  * Without this, public-mode deployments expose admin endpoint shapes and parameters.
  */
 export function filterAdminPathsFromSpec(spec: Record<string, unknown>): Record<string, unknown> {
-  const { mode, hideAdminPaths } = apiDocsConfig;
+  const { mode, hideAdminPaths } = config.apiDocs;
 
   if (mode !== 'public' || !hideAdminPaths) {
     return spec;

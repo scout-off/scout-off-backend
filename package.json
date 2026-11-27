@@ -64,6 +64,7 @@
     "docs:check": "node scripts/check-route-docs.js",
     "check:sql-injection": "node scripts/check-sql-injection.js",
     "loadtest": "ts-node --project tsconfig.scripts.json scripts/loadtest.ts",
+    "bench:metrics": "ts-node --project tsconfig.scripts.json scripts/benchmark-metrics.ts",
     "backfill": "node scripts/backfill.js",
     "backfill:player-on-chain-ids": "ts-node --project tsconfig.scripts.json scripts/backfill-player-on-chain-ids.ts",
     "reencrypt-webhook-secrets": "node scripts/reencrypt-webhook-secrets.js",

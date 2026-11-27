@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import config from '../../src/config';
 import {
   metricsMiddleware,
   metricsStore,
@@ -31,8 +32,8 @@ beforeEach(() => {
   Object.keys(metricsStore).forEach((k) => delete metricsStore[k]);
   errorCountsStore['4xx'] = 0;
   errorCountsStore['5xx'] = 0;
-  delete process.env.METRICS_ENABLED;
-  delete process.env.METRICS_LEGACY_MS;
+  config.metrics.enabled = true;
+  config.metrics.legacyMs = true;
   resetMetrics();
 });
 
@@ -60,7 +61,7 @@ describe('metricsMiddleware', () => {
   });
 
   it('skips collection when METRICS_ENABLED=false', () => {
-    process.env.METRICS_ENABLED = 'false';
+    config.metrics.enabled = false;
     const { req, res, next, emit } = makeReqRes('/api/players');
     metricsMiddleware(req, res, next);
     emit('finish');
@@ -91,7 +92,7 @@ describe('isMetricsEnabled', () => {
   });
 
   it('returns false when METRICS_ENABLED=false', () => {
-    process.env.METRICS_ENABLED = 'false';
+    config.metrics.enabled = false;
     expect(isMetricsEnabled()).toBe(false);
   });
 });
@@ -147,7 +148,7 @@ describe('http_errors_total counter', () => {
 describe('metricsMiddleware — unmatched route bucketing', () => {
   beforeEach(() => {
     Object.keys(metricsStore).forEach((k) => delete metricsStore[k]);
-    delete process.env.METRICS_ENABLED;
+    config.metrics.enabled = true;
   });
 
   it('aggregates distinct unmatched paths under a single key', () => {
@@ -255,9 +256,9 @@ describe('isLegacyMsMetricEnabled', () => {
   });
 
   it('returns false when METRICS_LEGACY_MS=false', () => {
-    process.env.METRICS_LEGACY_MS = 'false';
+    config.metrics.legacyMs = false;
     expect(isLegacyMsMetricEnabled()).toBe(false);
-    delete process.env.METRICS_LEGACY_MS;
+    config.metrics.legacyMs = true;
   });
 });
 

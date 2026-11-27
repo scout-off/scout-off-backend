@@ -197,7 +197,13 @@ function fetchOnce(url: URL, pinned: ResolvedAddress, opts: Required<Omit<SafeFe
   });
 }
 
-/** Fetch a caller-supplied https:// URL with SSRF protections and a hard size cap. */
+/**
+ * Download an untrusted HTTPS URL with SSRF protection, pinned DNS and a body-size cap.
+ * Example: await safeFetch('https://example.org/evidence.pdf', { maxBytes: 5_000_000 });
+ * Use a finite timeoutMs for requests that could block a route; redirects are validated.
+ * This utility does not accept an AbortSignal from the request context. Avoid
+ * treating request cancellation as proof an outbound request was aborted.
+ */
 export async function safeFetch(rawUrl: string, options: SafeFetchOptions): Promise<SafeFetchResult> {
   const opts = {
     maxBytes: options.maxBytes,

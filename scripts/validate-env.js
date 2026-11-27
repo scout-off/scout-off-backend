@@ -35,6 +35,24 @@ const VALID_NETWORKS = envConstants.networks;
 // Valid DB_DRIVER values; defaults to 'sqlite' when unset.
 const VALID_DB_DRIVERS = envConstants.dbDrivers;
 
+/** Validate the optional config fields centralized in config.ts (#1832, #1834). */
+function validateOptionalConfigEnv(env) {
+  const errors = [];
+  const rawMode = (env.API_DOCS_MODE ?? '').trim().toLowerCase();
+  const allowedModes = envConstants.apiDocsModes;
+  if (rawMode && !allowedModes.includes(rawMode)) {
+    errors.push(`API_DOCS_MODE="${env.API_DOCS_MODE}" is invalid. Must be one of: ${allowedModes.join(', ')}.`);
+  }
+  for (const key of ['METRICS_ENABLED', 'METRICS_LEGACY_MS', 'API_DOCS_HIDE_ADMIN']) {
+    const raw = env[key];
+    if (raw === undefined || raw.trim() === '') continue;
+    if (!['true', 'false', '1', '0', 'yes', 'no'].includes(raw.trim().toLowerCase())) {
+      errors.push(`${key}="${raw}" is invalid. Must be true or false (also accepts 1/0 or yes/no).`);
+    }
+  }
+  return errors;
+}
+
 function validateRuntimeEnv(env = process.env) {
   const errors = [];
 
@@ -50,6 +68,7 @@ function validateRuntimeEnv(env = process.env) {
     errors.push(`NETWORK="${network}" is invalid. Must be one of: ${VALID_NETWORKS.join(', ')}`);
   }
 
+  errors.push(...validateOptionalConfigEnv(env));
   // Validate required vars
   for (const key of REQUIRED_RUNTIME_VARS) {
     if (!env[key]) {
@@ -198,6 +217,11 @@ if (require.main === module) {
     console.warn('These may be stale or read via a dynamic pattern not detected by static analysis.');
   }
 
+  const optionalErrors = validateOptionalConfigEnv(process.env);
+  if (optionalErrors.length) {
+    optionalErrors.forEach((error) => console.error(`[env] ERROR: ${error}`));
+    process.exit(1);
+  }
   console.log('Environment validation passed ✓');
 }
 
@@ -207,5 +231,6 @@ module.exports = {
   VALID_NETWORKS,
   VALID_DB_DRIVERS,
   validateRuntimeEnv,
+  validateOptionalConfigEnv,
   findStaleExampleKeys,
 };
