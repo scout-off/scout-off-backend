@@ -7,6 +7,7 @@
  * Driver status: fully on `getDriver()` (async) — works on both SQLite and PostgreSQL.
  */
 import { getDriver, timedQueryAsync } from '../query';
+import config from '../../config';
 
 // ─── Player table helpers ─────────────────────────────────────────────────────
 
@@ -140,6 +141,194 @@ export async function getValidatorStats(wallet: string): Promise<ValidatorStatsR
   return timedQueryAsync(sql, async () =>
     (await getDriver().get<ValidatorStatsRow>(sql, [wallet])) ?? null
   );
+}
+
+// ─── Validator stats summary (admin + self-service) ───────────────────────────
+
+export interface ValidatorStatsSummaryOptions {
+  /** Inclusive lower bound (epoch ms) on the `created_at` of counted events. */
+  fromMs?: number;
+  /** Inclusive upper bound (epoch ms) on the `created_at` of counted events. */
+  toMs?: number;
+}
+
+export interface ValidatorStatsSummary {
+  /** Approvals in range, or the lifetime `validator_stats` total when no range is given. */
+  milestones_approved: number;
+  /** Rejections in range, or the lifetime `validator_stats` total when no range is given. */
+  milestones_rejected: number;
+  /** Milestones currently awaiting this validator's decision. */
+  pending_assigned: number;
+  /** Median submission→approval latency in whole seconds, or `null` when unknown. */
+  median_approval_seconds: number | null;
+  /** Epoch ms of the most recent approval/rejection event, or `null` when none. */
+  last_action_at: number | null;
+}
+
+/**
+ * Restricts a JSON field name to a plain identifier so it can be safely
+ * interpolated into a SQL expression (values are still bound as parameters).
+ */
+function assertSafePayloadField(field: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(field)) {
+    throw new Error(`Invalid event payload field: ${field}`);
+  }
+}
+
+/**
+ * Dialect-portable expression that extracts a scalar JSON field from an
+ * `events.payload` TEXT column — SQLite uses `json_extract` (JSON1), Postgres
+ * uses the `->>` operator.
+ */
+function eventPayloadFieldExpr(column: string, field: string): string {
+  assertSafePayloadField(field);
+  return config.dbDriver === 'postgres'
+    ? `${column}::json ->> '${field}'`
+    : `json_extract(${column}, '$."${field}"')`;
+}
+
+/**
+ * `(validator = ? OR validator_wallet = ?)` — matches how approvals and
+ * rejections tag the acting validator in their event payloads.
+ */
+function validatorPayloadMatch(column: string): string {
+  return `(${eventPayloadFieldExpr(column, 'validator')} = ? OR ${eventPayloadFieldExpr(column, 'validator_wallet')} = ?)`;
+}
+
+/** Builds an optional `AND <column> >= ?` / `<= ?` clause plus its bound params. */
+function buildCreatedAtRange(
+  column: string,
+  fromMs?: number,
+  toMs?: number,
+): { sql: string; params: number[] } {
+  const clauses: string[] = [];
+  const params: number[] = [];
+  if (fromMs !== undefined) {
+    clauses.push(`${column} >= ?`);
+    params.push(fromMs);
+  }
+  if (toMs !== undefined) {
+    clauses.push(`${column} <= ?`);
+    params.push(toMs);
+  }
+  return { sql: clauses.length ? ` AND ${clauses.join(' AND ')}` : '', params };
+}
+
+/**
+ * Aggregated statistics for a single validator, shared by the admin
+ * `GET /api/admin/validators/:wallet/stats` endpoint and the validator
+ * self-service dashboard.
+ *
+ * Every metric is computed in SQL — there is no per-row iteration in JS — and
+ * each query is portable across the SQLite and PostgreSQL drivers
+ * (`json_extract` / `->>` and window functions are available on both).
+ *
+ * - `pending_assigned` counts rows currently in `pending_milestones`.
+ * - `median_approval_seconds` pairs each `milestone_approved` event with the
+ *   earliest matching `milestone_submitted` event (joined on `milestone_id`)
+ *   and takes the SQL median of the per-approval latencies.  Duplicate
+ *   submissions for the same milestone are collapsed to the earliest one so
+ *   they cannot skew the median.
+ *
+ * When `fromMs`/`toMs` are supplied, the approval/rejection counts, the median
+ * and `last_action_at` are restricted to events whose `created_at` falls in the
+ * range; when they are omitted the lifetime counters in `validator_stats` are
+ * used for the approval/rejection totals.
+ */
+export async function getValidatorStatsSummary(
+  wallet: string,
+  options: ValidatorStatsSummaryOptions = {},
+): Promise<ValidatorStatsSummary> {
+  const driver = getDriver();
+  const { fromMs, toMs } = options;
+  const hasRange = fromMs !== undefined || toMs !== undefined;
+
+  const pendingSql =
+    'SELECT COUNT(*) AS count FROM pending_milestones WHERE validator_wallet = ?';
+  const pendingRow = await timedQueryAsync(pendingSql, () =>
+    driver.get<{ count: number | string }>(pendingSql, [wallet]),
+  );
+  const pending_assigned = Number(pendingRow?.count ?? 0);
+
+  const range = buildCreatedAtRange('created_at', fromMs, toMs);
+  const actionTypes = "type IN ('milestone_approved', 'milestone_rejected')";
+
+  let milestones_approved = 0;
+  let milestones_rejected = 0;
+
+  if (hasRange) {
+    // sql-injection-check-ignore: action types are hardcoded, JSON field names are identifier-validated, and values are bound via params.
+    const countSql = `SELECT type, COUNT(*) AS count FROM events
+                      WHERE ${actionTypes} AND ${validatorPayloadMatch('payload')}${range.sql}
+                      GROUP BY type`;
+    const rows = await timedQueryAsync(countSql, () =>
+      driver.all<{ type: string; count: number | string }>(countSql, [wallet, wallet, ...range.params]),
+    );
+    for (const row of rows) {
+      if (row.type === 'milestone_approved') milestones_approved = Number(row.count);
+      else if (row.type === 'milestone_rejected') milestones_rejected = Number(row.count);
+    }
+  } else {
+    const stats = await getValidatorStats(wallet);
+    milestones_approved = Number(stats?.milestones_approved ?? 0);
+    milestones_rejected = Number(stats?.milestones_rejected ?? 0);
+  }
+
+  // sql-injection-check-ignore: action types are hardcoded, JSON field names are identifier-validated, and values are bound via params.
+  const lastSql = `SELECT MAX(created_at) AS last_at FROM events
+                   WHERE ${actionTypes} AND ${validatorPayloadMatch('payload')}${range.sql}`;
+  const lastRow = await timedQueryAsync(lastSql, () =>
+    driver.get<{ last_at: number | string | null }>(lastSql, [wallet, wallet, ...range.params]),
+  );
+  const last_action_at = lastRow?.last_at != null ? Number(lastRow.last_at) : null;
+
+  // Median submission→approval latency, computed entirely in SQL.  The
+  // `submitted` CTE collapses duplicate submissions for the same milestone to
+  // the earliest `created_at`; the `ranked` CTE numbers each latency so a
+  // single AVG selects the middle row (odd count) or the mean of the two
+  // middle rows (even count).
+  const submittedKey = eventPayloadFieldExpr('payload', 'milestone_id');
+  const approvedKey = eventPayloadFieldExpr('a.payload', 'milestone_id');
+  const approvedRange = buildCreatedAtRange('a.created_at', fromMs, toMs);
+  // sql-injection-check-ignore: JSON field names are identifier-validated and all values are bound via params.
+  const medianSql = `
+    WITH submitted AS (
+      SELECT ${submittedKey} AS milestone_id, MIN(created_at) AS submitted_at
+      FROM events
+      WHERE type = 'milestone_submitted' AND created_at IS NOT NULL
+      GROUP BY ${submittedKey}
+    ),
+    latencies AS (
+      SELECT (a.created_at - submitted.submitted_at) / 1000.0 AS latency
+      FROM events a
+      JOIN submitted ON submitted.milestone_id = ${approvedKey}
+      WHERE a.type = 'milestone_approved'
+        AND a.created_at IS NOT NULL
+        AND a.created_at >= submitted.submitted_at
+        AND ${validatorPayloadMatch('a.payload')}${approvedRange.sql}
+    ),
+    ranked AS (
+      SELECT latency,
+             ROW_NUMBER() OVER (ORDER BY latency) AS rn,
+             COUNT(*) OVER () AS cnt
+      FROM latencies
+    )
+    SELECT AVG(latency) AS median
+    FROM ranked
+    WHERE rn IN ((cnt + 1) / 2, (cnt + 2) / 2)`;
+  const medianRow = await timedQueryAsync(medianSql, () =>
+    driver.get<{ median: number | string | null }>(medianSql, [wallet, wallet, ...approvedRange.params]),
+  );
+  const median_approval_seconds =
+    medianRow?.median != null ? Math.round(Number(medianRow.median)) : null;
+
+  return {
+    milestones_approved,
+    milestones_rejected,
+    pending_assigned,
+    median_approval_seconds,
+    last_action_at,
+  };
 }
 
 export interface PendingMilestoneRow {

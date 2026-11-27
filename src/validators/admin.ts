@@ -85,6 +85,41 @@ export const walletAddressSchema = z.object({
   wallet: z.string().regex(STELLAR_ADDRESS_RE, 'Invalid Stellar address'),
 });
 
+/** Maximum width of a validator-stats time range, in days. */
+export const VALIDATOR_STATS_MAX_RANGE_DAYS = 366;
+
+/**
+ * ISO 8601 date *string* (kept as a string, not coerced to `Date`, because
+ * `validateQuery` runs the parsed object through `sanitizeObject`, which would
+ * turn a `Date` into `{}`).
+ */
+const isoDateQueryParam = z
+  .string()
+  .refine((v) => !isNaN(Date.parse(v)), { message: 'Must be a valid ISO 8601 date string' });
+
+/**
+ * Schema for the optional `from`/`to` time-range on validator stats.
+ * Used by: GET /api/admin/validators/:wallet/stats
+ *
+ * Rejects unknown query parameters, a `from` later than `to`, and a range
+ * wider than {@link VALIDATOR_STATS_MAX_RANGE_DAYS} days.
+ */
+export const validatorStatsRangeSchema = z
+  .object({
+    from: isoDateQueryParam.optional(),
+    to: isoDateQueryParam.optional(),
+  })
+  .strict()
+  .refine((d) => !(d.from && d.to) || Date.parse(d.from) <= Date.parse(d.to), {
+    message: 'from must not be after to',
+  })
+  .refine(
+    (d) =>
+      !(d.from && d.to) ||
+      Date.parse(d.to) - Date.parse(d.from) <= VALIDATOR_STATS_MAX_RANGE_DAYS * 24 * 60 * 60 * 1000,
+    { message: `Time range must not exceed ${VALIDATOR_STATS_MAX_RANGE_DAYS} days` },
+  );
+
 /**
  * Schema for reindex request body
  * Used by: POST /api/admin/indexer/reindex
