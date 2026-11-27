@@ -28,7 +28,7 @@ import {
   upsertNoteSchema,
   noteContentSchema,
 } from '../controllers/scoutNotesController';
-import { issueApiKey, listApiKeys, revokeApiKey, rotateApiKey, issueKeySchema, rotateKeySchema } from '../controllers/apiKeyController';
+import { issueApiKey, listApiKeys, revokeApiKey, rotateApiKey, updateApiKey, issueKeySchema, rotateKeySchema, updateKeySchema } from '../controllers/apiKeyController';
 import {
   addBookmark,
   removeBookmark,
@@ -521,6 +521,19 @@ router.route('/:wallet/api-keys')
   .all(methodNotAllowed(['POST', 'GET', 'HEAD']));
 
 /**
+ * PATCH /api/scouts/:wallet/api-keys/:id
+ * Update an API key's label and/or scopes in place. The secret is not
+ * rotated, so there is nothing to redeploy. Scope changes may only narrow the
+ * key's existing privileges: every requested scope must already be held.
+ *
+ * @param wallet {string} - Scout's Stellar public key
+ * @param id {integer} - API key row ID
+ * @body { label?: string, scopes?: string[] } - Omitted fields are left unchanged
+ * @response 200 { success: true, data: { id, label, scopes } }
+ * @response 400 { success: false, error: string } - Invalid body, unknown scope, or a scope that would widen access
+ * @response 404 { success: false, error: string } - API key not found
+ * @auth Bearer (scout role required; wallet must match authenticated account)
+ *
  * DELETE /api/scouts/:wallet/api-keys/:id
  * Revoke an existing API key by its row id. Revoked keys are rejected by the
  * auth middleware on subsequent requests.
@@ -533,8 +546,9 @@ router.route('/:wallet/api-keys')
  * @auth Bearer (scout role required; wallet must match authenticated account)
  */
 router.route('/:wallet/api-keys/:id')
+  .patch(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:api_keys'), validateBody(updateKeySchema), updateApiKey)
   .delete(requireRole('scout'), requireWalletOwner(), requireApiKeyScope('write:api_keys'), revokeApiKey)
-  .all(methodNotAllowed(['DELETE']));
+  .all(methodNotAllowed(['PATCH', 'DELETE']));
 
 /**
  * POST /api/scouts/:wallet/api-keys/:id/rotate

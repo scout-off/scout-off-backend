@@ -1666,7 +1666,13 @@ export interface paths {
         delete: operations["revokeApiKey"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update an API key's label and/or scopes in place.
+         * @description Update an API key's label and/or scopes in place. The secret is not
+         *     rotated, so there is nothing to redeploy. Scope changes may only narrow the
+         *     key's existing privileges: every requested scope must already be held.
+         */
+        patch: operations["updateApiKey"];
         trace?: never;
     };
     "/scouts/{wallet}/api-keys/{id}/rotate": {
@@ -5387,6 +5393,51 @@ export interface operations {
                 content?: never;
             };
             /** @description { success: false, error: string } - Invalid id */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - API key not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateApiKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scout's Stellar public key */
+                wallet: string;
+                /** @description API key row ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description { label?: string, scopes?: string[] } - Omitted fields are left unchanged */
+        requestBody: {
+            content: {
+                "application/json": {
+                    label?: string;
+                    scopes?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description { success: true, data: { id, label, scopes } } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - Invalid body, unknown scope, or a scope that would widen access */
             400: {
                 headers: {
                     [name: string]: unknown;
