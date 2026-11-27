@@ -37,9 +37,27 @@ export interface CircuitBreakerOptions {
   name?: string;
 }
 
-export class CircuitBreakerOpenError extends Error {
-  constructor(name: string) {
-    super(`Circuit breaker open: ${name} is temporarily unavailable`);
+/**
+ * Common base class for every "breaker is open" error (#1860), so callers can
+ * catch a single type regardless of which breaker implementation threw.
+ */
+export class CircuitOpenError extends Error {
+  /** Name of the breaker that is open. */
+  readonly breakerName: string;
+  /** Optional hint (ms) for how long the caller should wait before retrying. */
+  readonly retryAfterMs?: number;
+
+  constructor(breakerName: string, message?: string, retryAfterMs?: number) {
+    super(message ?? `Circuit breaker open: ${breakerName} is temporarily unavailable`);
+    this.name = 'CircuitOpenError';
+    this.breakerName = breakerName;
+    if (retryAfterMs !== undefined) this.retryAfterMs = retryAfterMs;
+  }
+}
+
+export class CircuitBreakerOpenError extends CircuitOpenError {
+  constructor(name: string, retryAfterMs?: number) {
+    super(name, `Circuit breaker open: ${name} is temporarily unavailable`, retryAfterMs);
     this.name = 'CircuitBreakerOpenError';
   }
 }
@@ -76,7 +94,12 @@ export class CircuitBreaker {
     const state = this.getState();
 
     if (state === 'open') {
-      throw new CircuitBreakerOpenError(this.name);
+      throw new CircuitBreakerOpenError(
+        this.name,
+        this.lastOpenedAt !== null
+          ? Math.max(0, this.resetTimeoutMs - (Date.now() - this.lastOpenedAt))
+          : this.resetTimeoutMs
+      );
     }
 
     try {
@@ -128,9 +151,9 @@ export class CircuitBreaker {
 
 export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
-export class CircuitBreakerError extends Error {
-  constructor(message: string) {
-    super(message);
+export class CircuitBreakerError extends CircuitOpenError {
+  constructor(message: string, breakerName = 'stellar-rpc', retryAfterMs?: number) {
+    super(breakerName, message, retryAfterMs);
     this.name = 'CircuitBreakerError';
   }
 }
@@ -179,7 +202,11 @@ export class RetryingCircuitBreaker {
         this.state = 'HALF_OPEN';
         this.onStateChange?.(prev, 'HALF_OPEN');
       } else {
-        throw new CircuitBreakerError('ServiceUnavailable: Circuit breaker is OPEN');
+        throw new CircuitBreakerError(
+          'ServiceUnavailable: Circuit breaker is OPEN',
+          this.name,
+          Math.max(0, this.nextAttemptAt - Date.now())
+        );
       }
     }
 

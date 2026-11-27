@@ -101,6 +101,12 @@ pass "default replicaCount renders as 1"
 grep -q 'DB_DRIVER: "sqlite"' <<<"${out}" || fail "default DB_DRIVER is not sqlite"
 pass "default DB_DRIVER renders as sqlite"
 
+# The default image must match where CI publishes (ghcr.io/<owner>/<repo>).
+default_image=$(grep -m1 'image:' <<<"${out}" | awk '{print $2}' | tr -d '"')
+[[ "${default_image}" == ghcr.io/scout-off/* ]] \
+  || fail "default image repository is '${default_image}', expected it to start with ghcr.io/scout-off/"
+pass "default image repository starts with ghcr.io/scout-off/"
+
 grep -q 'kind: NetworkPolicy' <<<"${out}" || fail "default NetworkPolicy is not rendered"
 grep -q 'readOnlyRootFilesystem: true' <<<"${out}" \
   || fail "container root filesystem is not read-only"

@@ -13,7 +13,7 @@
 # -----------------------------------------------------------------------------
 image:
   # Container registry + image name
-  repository: ghcr.io/scoutoff/scout-off-backend
+  repository: ghcr.io/scout-off/scout-off-backend
   # Image tag to deploy. Defaults to the chart's appVersion when set to "".
   tag: ""
   # Pull policy: Always | IfNotPresent | Never
