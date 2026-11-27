@@ -3,6 +3,7 @@ import config from '../config';
 import { logAuditEvent } from '../services/audit';
 import { logger } from '../utils/logger';
 import { getCorrelationId } from '../utils/requestContext';
+import { extractClientIp } from '../utils/ipExtractor';
 
 /**
  * Audit-log reads of sensitive data (#1531).
@@ -43,7 +44,7 @@ export function auditRead(
     const targetValue = target ? target(req) : undefined;
     const method = req.method;
     const path = req.originalUrl.split('?')[0];
-    const ip = req.ip;
+    const ip = extractClientIp(req);
 
     res.once('finish', () => {
       if (res.statusCode < 200 || res.statusCode >= 300) return;

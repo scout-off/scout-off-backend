@@ -3,6 +3,20 @@
 # When a dependency fails, each route group must respond as specified below.
 # The chaos harness asserts these contracts.
 
+## How it is verified
+
+The contracts above are asserted by the chaos suite in `tests/chaos/`
+(`degradation.chaos.test.ts`, `degradationHarness.test.ts`) using the fault
+injection helpers in `tests/helpers/chaosHarness.ts`. The suite is a dedicated
+Jest project (`jest.chaos.config.js`) and is **not** part of `npm test`.
+
+- **Locally:** `npm run test:chaos` (runs Jest with `jest.chaos.config.js`,
+  `--runInBand`, no external services required — faults are injected via
+  `CHAOS_*` env flags and module spies).
+- **CI:** the `chaos` job in `.github/workflows/ci.yml` runs
+  `npm run test:chaos` on every pull request and on a nightly schedule, with
+  `timeout-minutes: 15`.
+
 ## Dependencies
 - **redis** — rate limit / cache / token blocklist
 - **db** — primary datastore (sqlite or postgres)

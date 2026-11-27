@@ -39,6 +39,7 @@
     "test:contracts": "npm run test:contracts:unit && npm run test:contracts:invariants",
     "test:contracts:unit": "cd contracts && cargo test --workspace --lib --target x86_64-unknown-linux-gnu",
     "test:contracts:invariants": "cd contracts && PROPTEST_CASES=256 cargo test --workspace --tests --target x86_64-unknown-linux-gnu -- invariants",
+    "test:chaos": "node node_modules/jest/bin/jest.js --config jest.chaos.config.js --runInBand",
     "test:coverage": "node --expose-gc node_modules/jest/bin/jest.js --runInBand --coverage",
     "test:postgres": "node scripts/run-postgres-tests.js",
     "test:watch": "node node_modules/jest/bin/jest.js --watch",
