@@ -426,6 +426,8 @@ const ALLOWLIST: Record<string, string> = {
   "DELETE /scouts/{wallet}/trial-offers/{offerId}": "write op; requires scout JWT + offer state",
   "GET /scouts/{wallet}/webhooks": "requires scout JWT + webhook fixtures",
   "POST /scouts/{wallet}/webhooks": "write op; requires scout JWT",
+  "GET /scouts/{wallet}/webhooks/{id}": "read op; requires scout JWT + webhook fixtures",
+  "PATCH /scouts/{wallet}/webhooks/{id}": "write op; requires scout JWT + webhook fixtures",
   "DELETE /scouts/{wallet}/webhooks/{id}": "write op; requires scout JWT",
   "POST /scouts/{wallet}/webhooks/{id}/reactivate": "write op; requires scout JWT + suspended webhook (webhookHealth.test.ts)",
   "POST /scouts/{wallet}/webhooks/{id}/test": "write op; issues outbound HTTP request",

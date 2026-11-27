@@ -194,6 +194,78 @@ export function clearWebhookSubscriptionPreviousSecret(id: number): void {
   timedQuery(sql, () => getDb().prepare(sql).run(id));
 }
 
+/**
+ * Update a subscription's URL and/or event filter, and optionally rotate its
+ * signing secret.
+ *
+ * Scoped to the owning scout wallet so a scout can never modify another
+ * scout's hook (mirrors {@link deleteWebhookSubscription}).
+ *
+ * When `changes.rotateSecret` is set, a fresh secret is generated and the
+ * current one is moved to `previous_secret` until
+ * `changes.previousSecretExpiresAt`, so deliveries signed with the old secret
+ * keep verifying during the rotation window (#686). The new plaintext secret
+ * is returned once, for the API response.
+ *
+ * Returns the updated row (secret still encrypted, like
+ * {@link getWebhookSubscriptionById}) plus the new plaintext secret when
+ * rotated, or undefined when no such row belongs to `scoutWallet`.
+ */
+export function updateWebhookSubscription(
+  id: number,
+  scoutWallet: string,
+  changes: {
+    url?: string;
+    eventTypes?: string[] | null;
+    rotateSecret?: boolean;
+    previousSecretExpiresAt?: string;
+  },
+): { row: WebhookSubscription; plaintextSecret?: string } | undefined {
+  return timedQuery('webhook_subscriptions update', () => {
+    const tx = getDb().transaction(() => {
+      const db = getDb();
+      const current = db
+        .prepare('SELECT * FROM webhook_subscriptions WHERE id = ? AND scout_wallet = ?')
+        .get(id, scoutWallet) as WebhookSubscription | undefined;
+      if (!current) return undefined;
+
+      let plaintextSecret: string | undefined;
+      let secret = current.secret;
+      let previousSecret = current.previous_secret ?? null;
+      let previousSecretExpiresAt = current.previous_secret_expires_at ?? null;
+
+      if (changes.rotateSecret) {
+        plaintextSecret = crypto.randomBytes(32).toString('hex');
+        secret = encryptWebhookSecret(plaintextSecret);
+        // Keep the old (already-encrypted) secret valid while the window is open.
+        previousSecret = current.secret;
+        previousSecretExpiresAt = changes.previousSecretExpiresAt ?? null;
+      }
+
+      const url = changes.url ?? current.url;
+      let eventTypesJson: string | null = current.event_types;
+      if (changes.eventTypes !== undefined) {
+        eventTypesJson =
+          changes.eventTypes && changes.eventTypes.length > 0
+            ? JSON.stringify(changes.eventTypes)
+            : null;
+      }
+
+      db.prepare(
+        `UPDATE webhook_subscriptions
+         SET url = ?, event_types = ?, secret = ?, previous_secret = ?, previous_secret_expires_at = ?
+         WHERE id = ? AND scout_wallet = ?`,
+      ).run(url, eventTypesJson, secret, previousSecret, previousSecretExpiresAt, id, scoutWallet);
+
+      const row = db
+        .prepare('SELECT * FROM webhook_subscriptions WHERE id = ?')
+        .get(id) as WebhookSubscription;
+      return { row, plaintextSecret };
+    });
+    return tx();
+  });
+}
+
 
 // ─── Endpoint health (#1512) ─────────────────────────────────────────────────
 

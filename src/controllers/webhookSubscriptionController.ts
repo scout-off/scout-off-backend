@@ -14,17 +14,22 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import fetch from 'node-fetch';
+import net from 'net';
 import {
   createWebhookSubscription,
   getWebhookSubscriptionsByScout,
   getWebhookSubscriptionById,
   deleteWebhookSubscription,
+  updateWebhookSubscription,
 } from '../db';
 import { decryptWebhookSecret } from '../utils/webhookSecretCipher';
 import { signWebhookPayload, buildSignatureHeader } from '../services/webhooks';
 import { reactivateAfterPing } from '../services/webhookHealth';
+import { logAuditEvent } from '../services/audit';
+import { isBlockedIp } from '../utils/safeFetch';
 import { sendForbidden } from '../utils/authError';
 import { logger } from '../utils/logger';
+import config from '../config';
 import type { ContractEventType } from '../types';
 import { WebhookSubscriptionLimitError } from '../utils/scoutResourceLimits';
 
@@ -59,7 +64,69 @@ export const registerWebhookSchema = z.object({
 
 export type RegisterWebhookRequest = z.infer<typeof registerWebhookSchema>;
 
+/**
+ * Strict partial of {@link registerWebhookSchema} for PATCH: the URL and event
+ * filter are optional, and `rotateSecret` opts into issuing a fresh signing
+ * secret (returned in plaintext exactly once).
+ */
+export const updateWebhookSchema = z.object({
+  url: z
+    .string()
+    .url('url must be a valid HTTP/HTTPS URL')
+    .refine((u) => u.startsWith('http://') || u.startsWith('https://'), {
+      message: 'url must use http or https protocol',
+    })
+    .optional(),
+  eventTypes: z
+    .array(z.enum(KNOWN_EVENT_TYPES as [ContractEventType, ...ContractEventType[]]))
+    .min(1, 'eventTypes must contain at least one event type')
+    .optional(),
+  rotateSecret: z.boolean().optional(),
+}).strict();
+
+export type UpdateWebhookRequest = z.infer<typeof updateWebhookSchema>;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * How long the pre-rotation signing secret keeps verifying deliveries after a
+ * rotation (#686) — long enough for a subscriber to swap in the new secret.
+ */
+const WEBHOOK_SECRET_ROTATION_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * SSRF guard for a caller-supplied webhook URL, mirroring the rules the
+ * delivery path's SSRF-safe fetcher (utils/safeFetch.ts) enforces: HTTPS-only
+ * in production, no embedded credentials, no path traversal, and no
+ * loopback/private/reserved IP literals.
+ *
+ * Returns a human-readable rejection reason, or null when the URL is allowed.
+ */
+function webhookUrlRejectionReason(rawUrl: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return 'url must be a valid HTTP/HTTPS URL';
+  }
+  if (config.nodeEnv === 'production' && parsed.protocol !== 'https:') {
+    return 'url must use https in production';
+  }
+  if (parsed.username || parsed.password) {
+    return 'url must not include credentials';
+  }
+  if (rawUrl.includes('..')) {
+    return 'url must not contain path traversal sequences';
+  }
+  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    return 'url must not point to a loopback host';
+  }
+  if (net.isIP(host) && isBlockedIp(host)) {
+    return 'url must not point to a private or reserved IP address';
+  }
+  return null;
+}
 
 /** Mask a plaintext secret for safe display in list responses. */
 function maskSecret(plaintext: string): string {
@@ -80,13 +147,15 @@ function serializeSubscription(
     suspended_at?: number | null;
     suspended_reason?: string | null;
   },
-  opts: { revealSecret?: boolean } = {},
+  opts: { revealSecret?: boolean; omitSecret?: boolean } = {},
 ) {
   const plaintext = decryptWebhookSecret(row.secret);
   return {
     id: row.id,
     url: row.url,
-    secret: opts.revealSecret ? plaintext : maskSecret(plaintext),
+    ...(opts.omitSecret
+      ? {}
+      : { secret: opts.revealSecret ? plaintext : maskSecret(plaintext) }),
     eventTypes: row.event_types ? (JSON.parse(row.event_types) as string[]) : null,
     createdAt: row.created_at,
     status: row.status ?? 'active',
@@ -187,6 +256,152 @@ export async function listWebhooks(
     success: true,
     data: rows.map((row) => serializeSubscription(row)),
   });
+}
+
+/**
+ * GET /api/scouts/:wallet/webhooks/:id
+ *
+ * Fetch a single subscription. The signing secret is never returned — only
+ * the non-sensitive fields plus the endpoint health recorded by migration 038
+ * (status, consecutive failures, last success/failure and suspension detail).
+ *
+ * @response 200 { success: true, data: { id, url, eventTypes, createdAt, status, consecutiveFailures, lastFailureAt, lastSuccessAt, suspendedAt, suspendedReason } }
+ * @response 400 { success: false, error: string } - Invalid subscription id
+ * @response 403 { success: false, error: string } - Wallet mismatch or subscription belongs to another scout
+ * @response 404 { success: false, error: string } - Subscription not found
+ * @auth Bearer (scout role required; wallet must match authenticated account)
+ */
+export async function getWebhook(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ success: false, error: 'Invalid subscription id' });
+      return;
+    }
+
+    const row = getWebhookSubscriptionById(id);
+    if (!row) {
+      res.status(404).json({ success: false, error: 'Webhook subscription not found' });
+      return;
+    }
+
+    // Ownership check: the subscription must belong to this scout
+    if (row.scout_wallet !== req.params.wallet as string) {
+      sendForbidden(res, 'Forbidden: subscription belongs to another scout');
+      return;
+    }
+
+    res.json({ success: true, data: serializeSubscription(row, { omitSecret: true }) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PATCH /api/scouts/:wallet/webhooks/:id
+ *
+ * Update a subscription's URL and/or event filter (`eventTypes`). A
+ * replacement URL is re-validated against the same SSRF rules the delivery
+ * path enforces (HTTPS-only in production, no private/reserved IPs). Pass
+ * `rotateSecret: true` to also issue a fresh HMAC signing secret, returned in
+ * plaintext exactly once; the previous secret keeps verifying deliveries until
+ * the rotation window closes.
+ *
+ * @body { url?: string, eventTypes?: ContractEventType[], rotateSecret?: boolean }
+ * @response 200 { success: true, data: { id, url, eventTypes, createdAt, status, consecutiveFailures, lastFailureAt, lastSuccessAt, suspendedAt, suspendedReason, secret? } }
+ * @response 400 { success: false, error: string } - Invalid id, invalid body, or disallowed URL
+ * @response 403 { success: false, error: string } - Wallet mismatch or subscription belongs to another scout
+ * @response 404 { success: false, error: string } - Subscription not found
+ * @auth Bearer (scout role required; wallet must match authenticated account)
+ */
+export async function updateWebhook(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ success: false, error: 'Invalid subscription id' });
+      return;
+    }
+
+    const parsed = updateWebhookSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: parsed.error.issues[0]?.message ?? 'Invalid request body',
+      });
+      return;
+    }
+
+    const wallet = req.params.wallet as string;
+    const row = getWebhookSubscriptionById(id);
+    if (!row) {
+      res.status(404).json({ success: false, error: 'Webhook subscription not found' });
+      return;
+    }
+
+    // Ownership check: the subscription must belong to this scout
+    if (row.scout_wallet !== wallet) {
+      sendForbidden(res, 'Forbidden: subscription belongs to another scout');
+      return;
+    }
+
+    const { url, eventTypes, rotateSecret } = parsed.data;
+
+    // A replacement URL must pass the same SSRF guard the delivery path applies.
+    if (url !== undefined) {
+      const reason = webhookUrlRejectionReason(url);
+      if (reason) {
+        res.status(400).json({ success: false, error: reason });
+        return;
+      }
+    }
+
+    const updated = updateWebhookSubscription(id, wallet, {
+      url,
+      eventTypes,
+      rotateSecret,
+      previousSecretExpiresAt: rotateSecret
+        ? String(Date.now() + WEBHOOK_SECRET_ROTATION_WINDOW_MS)
+        : undefined,
+    });
+    if (!updated) {
+      res.status(404).json({ success: false, error: 'Webhook subscription not found' });
+      return;
+    }
+
+    if (url !== undefined && url !== row.url) {
+      await logAuditEvent({
+        action: 'webhook_url_updated',
+        wallet,
+        queryParams: { subscriptionId: id, previousUrl: row.url, newUrl: url },
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
+    logger.info({
+      scout: wallet,
+      subscriptionId: id,
+      url: updated.row.url,
+      action: 'webhook_updated',
+    });
+
+    const data: Record<string, unknown> = {
+      ...serializeSubscription(updated.row, { omitSecret: true }),
+    };
+    if (updated.plaintextSecret) {
+      data.secret = updated.plaintextSecret; // plaintext — returned only on rotation
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**
