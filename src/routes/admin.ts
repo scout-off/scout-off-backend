@@ -950,7 +950,9 @@ router.route('/fees/config')
  * Preview retention candidate counts without deleting rows or writing archives.
  * @response 200 { success: true, dryRun: true, data: RetentionResult[] }
  */
-router.get('/retention/dry-run', requireRole('admin'), getRetentionDryRun);
+router.route('/retention/dry-run')
+  .get(requireRole('admin'), getRetentionDryRun)
+  .all(methodNotAllowed(['GET']));
 
 /**
  * GET /api/admin/encryption/status
@@ -959,6 +961,8 @@ router.get('/retention/dry-run', requireRole('admin'), getRetentionDryRun);
  * @response 200 { success: true, data: { notes, webhook } }
  * @auth Bearer (admin role required)
  */
-router.get('/encryption/status', requireRole('admin'), getEncryptionStatusEndpoint);
+router.route('/encryption/status')
+  .get(requireRole('admin'), getEncryptionStatusEndpoint)
+  .all(methodNotAllowed(['GET']));
 
 export default router;

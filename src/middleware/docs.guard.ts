@@ -67,8 +67,66 @@ export function filterAdminPathsFromSpec(spec: Record<string, unknown>): Record<
     }
   }
 
-  // Remove admin-only components (TODO: parse component names from tags or x-admin marker)
-  // For now, this is a placeholder; implementation depends on your component naming convention
+  // Collect reachable $refs from remaining paths
+  const reachable = new Set<string>();
+  function walk(obj: unknown) {
+    if (!obj || typeof obj !== 'object') return;
+    if (Array.isArray(obj)) { obj.forEach(walk); return; }
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      if (k === '$ref' && typeof v === 'string') {
+        reachable.add(v);
+      } else {
+        walk(v);
+      }
+    }
+  }
+  walk(filtered.paths);
+  // expand refs recursively through components
+  const components = filtered.components as Record<string, Record<string, unknown>> | undefined;
+  if (components) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const type of Object.keys(components)) {
+        if (type === 'securitySchemes') continue;
+        const bucket = components[type] as Record<string, unknown>;
+        for (const name of Object.keys(bucket)) {
+          const ref = `#/components/${type}/${name}`;
+          if (reachable.has(ref)) {
+            // walk its contents to add nested refs
+            const before = reachable.size;
+            walk(bucket[name]);
+            if (reachable.size > before) changed = true;
+          }
+        }
+      }
+    }
+    for (const type of Object.keys(components)) {
+      if (type === 'securitySchemes') continue;
+      const bucket = components[type] as Record<string, unknown>;
+      for (const name of Object.keys(bucket)) {
+        const ref = `#/components/${type}/${name}`;
+        if (!reachable.has(ref)) delete bucket[name];
+      }
+    }
+  }
+
+  // Filter tags with no operations
+  const usedTags = new Set<string>();
+  if (paths) {
+    for (const p of Object.values(paths)) {
+      if (p && typeof p === 'object') {
+        for (const op of Object.values(p as Record<string, unknown>)) {
+          if (op && typeof op === 'object' && Array.isArray((op as any).tags)) {
+            (op as any).tags.forEach((t: string) => usedTags.add(t));
+          }
+        }
+      }
+    }
+  }
+  if (Array.isArray(filtered.tags)) {
+    filtered.tags = (filtered.tags as any[]).filter((t: any) => usedTags.has(t.name));
+  }
 
   return filtered;
 }
