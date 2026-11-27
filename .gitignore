@@ -30,3 +30,12 @@ apiKeyScopes.txt
 CHANGES-1542-1545.md
 CHANGES_SUMMARY.md
 .github/ISSUE_1517-1518-1519-1520.md
+
+# ── Test snapshot output & local tooling caches (keep generated artifacts out of VCS) ──
+# Broaden the contracts/ snapshot exclusion to any package that emits test_snapshots/.
+**/test_snapshots/
+# Jest snapshot directories (none tracked today; keep generated ones out).
+__snapshots__/
+# TypeScript incremental-build info and lint caches.
+*.tsbuildinfo
+.eslintcache

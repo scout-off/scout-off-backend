@@ -361,6 +361,7 @@ describe('parseNumericEnv validation', () => {
     'EVIDENCE_MAX_BYTES',
     'ADMIN_ACTION_TTL_MS',
     'COMPRESSION_THRESHOLD',
+    'SLOW_QUERY_THRESHOLD_MS',
   ];
 
   beforeEach(() => {
@@ -648,6 +649,41 @@ describe('parseNumericEnv validation', () => {
     const cfg = await loadConfig();
     expect(cfg.compressionThresholdBytes).toBe(512);
     delete process.env.COMPRESSION_THRESHOLD_BYTES;
+  });
+
+  // ── SLOW_QUERY_THRESHOLD_MS (#1828) ─────────────────────────────────────────
+  //
+  // The threshold is read once into config.slowQueryThresholdMs (src/config.ts)
+  // and src/db/query.ts uses that value for slow-query logging instead of
+  // reading the env var directly. These cover the default, an override, the
+  // min boundary, and that bad values fail validation with a clear message.
+
+  it('SLOW_QUERY_THRESHOLD_MS: default is 50 when unset', async () => {
+    delete process.env.SLOW_QUERY_THRESHOLD_MS;
+    const cfg = await loadConfig();
+    expect(cfg.slowQueryThresholdMs).toBe(50);
+  });
+
+  it('SLOW_QUERY_THRESHOLD_MS: valid value 100 loads without error', async () => {
+    process.env.SLOW_QUERY_THRESHOLD_MS = '100';
+    const cfg = await loadConfig();
+    expect(cfg.slowQueryThresholdMs).toBe(100);
+  });
+
+  it('SLOW_QUERY_THRESHOLD_MS: 0 is valid (min is 0, logs every query)', async () => {
+    process.env.SLOW_QUERY_THRESHOLD_MS = '0';
+    const cfg = await loadConfig();
+    expect(cfg.slowQueryThresholdMs).toBe(0);
+  });
+
+  it('SLOW_QUERY_THRESHOLD_MS: non-numeric string throws naming SLOW_QUERY_THRESHOLD_MS', async () => {
+    process.env.SLOW_QUERY_THRESHOLD_MS = 'not-a-number';
+    await expectThrowsContaining('SLOW_QUERY_THRESHOLD_MS');
+  });
+
+  it('SLOW_QUERY_THRESHOLD_MS: -1 is below min (0) and throws naming SLOW_QUERY_THRESHOLD_MS', async () => {
+    process.env.SLOW_QUERY_THRESHOLD_MS = '-1';
+    await expectThrowsContaining('SLOW_QUERY_THRESHOLD_MS');
   });
 });
 
