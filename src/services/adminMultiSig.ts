@@ -1,3 +1,14 @@
+/**
+ * Multi-signature approval workflow for privileged admin actions.
+ *
+ * Proposals are persisted in `pending_admin_actions` and co-signed by distinct
+ * wallets from `ADMIN_WALLETS` until `ADMIN_THRESHOLD` is reached, at which
+ * point the on-chain operation runs exactly once. Pending actions expire after
+ * `ADMIN_ACTION_TTL_MS`.
+ *
+ * See {@link ../../docs/admin-multisig.md} for the full workflow, endpoints,
+ * configuration and error catalogue.
+ */
 import { createId } from '@paralleldrive/cuid2';
 import config from '../config';
 import {
@@ -237,6 +248,36 @@ async function runAdminActionInternal(
 // operation runs immediately; the caller-supplied actionId is echoed back for
 // audit correlation and, for bulk imports, a per-wallet manifest is returned so
 // a partial failure can be retried for exactly the wallets that failed.
+
+/**
+ * Propose *and* execute a privileged admin action in a single call, bypassing
+ * the multi-signature quorum. Used by admin endpoints that run the operation
+ * immediately (bulk validator import, update platform fee).
+ *
+ * The caller-supplied `actionId` is echoed back for audit correlation. For
+ * `bulk_validator_import`, each wallet in `payload.wallets` is processed
+ * independently and a per-wallet manifest is returned so a partial failure can
+ * be retried for exactly the wallets that failed.
+ *
+ * Status transitions: no pending row is created; the action is executed
+ * directly and an audit event (`{type}_proposed` then `{type}_executed` or
+ * `{type}_execution_failed`) is recorded.
+ *
+ * @param actionId Caller-supplied identifier used for audit correlation.
+ * @param actionType One of the supported {@link AdminActionType} values.
+ * @param payload Action-specific payload (e.g. `{ wallets }` for
+ *   `bulk_validator_import`, `{ newFeeBps }` for `update_platform_fee`).
+ * @param proposer Admin wallet performing the action.
+ * @returns The action id, type, success flag, optional `transactionId` /
+ *   `newFeeBps`, and — for bulk imports — the per-wallet `manifest` plus an
+ *   `error` summary when any wallet failed.
+ * @throws Never throws for execution failures: on-chain and payload errors are
+ *   reported in the returned `success: false` / `error` fields (error codes
+ *   such as `INVALID_PAYLOAD`, `INVALID_ACTION_TYPE`, `UNAUTHORIZED`,
+ *   `CONTRACT_PAUSED`, `CONTRACT_NOT_INITIALIZED`, `NETWORK_ERROR`,
+ *   `EXECUTION_FAILED`). Only unexpected errors from the audit-log path
+ *   propagate.
+ */
 export async function executeAdminAction(
   actionId: string,
   actionType: AdminActionType,
@@ -307,6 +348,26 @@ export async function executeAdminAction(
 // If threshold is 1, executes immediately (returns 'immediate').
 // Otherwise persists a pending action for co-signing.
 
+/**
+ * Propose a high-value admin action.
+ *
+ * If `ADMIN_THRESHOLD <= 1` the action is not persisted and the caller is
+ * expected to execute it immediately (`status: 'immediate'`, empty
+ * `actionId`). Otherwise a pending action is created with the proposer as the
+ * first signature and `status: 'proposed'`.
+ *
+ * Status transitions: `(none)` → `pending` (persisted proposal, 1 signature
+ * collected) or `(none)` → `immediate` (threshold 1). Stale pending actions are
+ * swept to `expired` before the new proposal is created.
+ *
+ * @param actionType One of the supported {@link AdminActionType} values.
+ * @param payload Action-specific payload, serialised as JSON in the DB.
+ * @param proposer Admin wallet proposing the action; counted as first signer.
+ * @returns `{ actionId, status }` where `status` is `'proposed'` or
+ *   `'immediate'`.
+ * @throws {Error} `500` with the underlying database error code if the pending
+ *   action or its first signature cannot be persisted.
+ */
 export async function proposeAction(
   actionType: AdminActionType,
   payload: Record<string, unknown>,
@@ -373,6 +434,35 @@ export async function proposeAction(
 // Idempotency: the 'executed' status check at the top ensures that a retried
 // call after successful quorum does not re-trigger execution.
 
+/**
+ * Co-sign an existing pending admin action.
+ *
+ * Each signer must be a distinct wallet from `config.adminWallets`; the same
+ * wallet cannot count twice. Expired proposals are rejected. Once the threshold
+ * is reached the action is marked `executed` and the privileged on-chain
+ * operation runs exactly once; if that operation fails the status is reverted
+ * to `pending` so an operator can retry.
+ *
+ * Status transitions: `pending` → `pending` (threshold not yet met),
+ * `pending` → `executed` (threshold met and operation succeeded),
+ * `pending` → `expired` (TTL elapsed), `pending` → `pending` (execution failed,
+ * reverted). A duplicate signature is a no-op returning `status: 'duplicate'`.
+ *
+ * @param actionId Identifier of the pending action to co-sign.
+ * @param signer Admin wallet co-signing the action.
+ * @returns `{ actionId, collected, required, status }` where `status` is
+ *   `'approved'` (threshold met and executed), `'pending'`, `'expired'` or
+ *   `'duplicate'`.
+ * @throws {Error} `404` `ACTION_NOT_FOUND` — no pending action with that id.
+ * @throws {Error} `410` `EXPIRED_ACTION` — the action is expired or its TTL
+ *   elapsed (the row is marked `expired`).
+ * @throws {Error} `409` `ACTION_EXECUTED` — the action was already executed.
+ * @throws {Error} `400` `CONFLICT` — the action is not in a pending state.
+ * @throws {Error} `403` `FORBIDDEN` — the signer is not in `ADMIN_WALLETS`.
+ * @throws {Error} `500` with the execution error code (e.g. `EXECUTION_FAILED`,
+ *   `NETWORK_ERROR`, `CONTRACT_PAUSED`) — the on-chain operation failed after
+ *   quorum; the action is reverted to `pending`.
+ */
 export async function approveAction(
   actionId: string,
   signer: string,

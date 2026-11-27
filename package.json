@@ -28,6 +28,8 @@
     "lint": "eslint 'src/**/*.ts' 'tests/**/*.ts' 'scripts/*.ts' --ext .ts",
     "env:check": "node scripts/validate-env.js",
     "lint:fix": "eslint 'src/**/*.ts' 'tests/**/*.ts' 'scripts/*.ts' --ext .ts --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "seed": "ts-node --project tsconfig.scripts.json scripts/seed.ts",
     "db:migrate": "ts-node --project tsconfig.scripts.json scripts/migrate.ts up",
     "db:migrate:status": "ts-node --project tsconfig.scripts.json scripts/migrate.ts status",
@@ -53,10 +55,15 @@
   },
   "lint-staged": {
     "src/**/*.ts": [
-      "eslint --fix --ext .ts"
+      "eslint --fix --ext .ts",
+      "prettier --write"
     ],
     "tests/**/*.ts": [
-      "eslint --fix --ext .ts"
+      "eslint --fix --ext .ts",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
     ]
   },
   "dependencies": {
@@ -118,6 +125,7 @@
     "multiformats": "^14.0.5",
     "openapi-fetch": "^0.14.1",
     "openapi-typescript": "^7.13.0",
+    "prettier": "^3.4.2",
     "supertest": "7.0.0",
     "ts-jest": "^29.4.12",
     "ts-node-dev": "2.0.0",
