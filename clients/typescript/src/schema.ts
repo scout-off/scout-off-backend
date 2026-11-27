@@ -4277,6 +4277,8 @@ export interface operations {
             query?: {
                 /** @description Stellar public key (G...) to build the challenge for */
                 account?: string;
+                /** @description Optional SEP-10 wallet domain; adds a client_domain op sourced by its stellar.toml SIGNING_KEY */
+                client_domain?: string;
             };
             header?: never;
             path?: never;
@@ -4291,8 +4293,22 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description { success: false, error: string } - Missing/invalid account */
+            /** @description { success: false, error: string } - Missing/invalid account or client_domain */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - client_domain not on SEP10_CLIENT_DOMAIN_ALLOWLIST */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description { success: false, error: string } - client_domain stellar.toml unreachable or has no SIGNING_KEY */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

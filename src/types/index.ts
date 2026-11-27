@@ -174,6 +174,8 @@ declare global {
       jti?: string;
       /** JWT expiry as a Unix timestamp in seconds (set by auth middleware). */
       tokenExpiresAt?: number;
+      /** Wallet domain verified via SEP-10 client_domain at token issuance (#1514), if any. */
+      clientDomain?: string;
       /**
        * Parsed API-key scopes when the request was authenticated via
        * X-API-Key. `null` = legacy/unrestricted key; `undefined` = the

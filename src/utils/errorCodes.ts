@@ -104,6 +104,18 @@ export const ErrorCode = {
    */
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
 
+  /**
+   * HTTP 502 — The SEP-10 client_domain's stellar.toml could not be fetched (#1514).
+   * Client should: Check the wallet domain serves /.well-known/stellar.toml over HTTPS.
+   */
+  CLIENT_DOMAIN_TOML_FETCH_FAILED: 'CLIENT_DOMAIN_TOML_FETCH_FAILED',
+
+  /**
+   * HTTP 502 — The SEP-10 client_domain's stellar.toml has no valid SIGNING_KEY (#1514).
+   * Client should: Publish a SIGNING_KEY (G... strkey) in the wallet's stellar.toml.
+   */
+  CLIENT_DOMAIN_SIGNING_KEY_MISSING: 'CLIENT_DOMAIN_SIGNING_KEY_MISSING',
+
   // ── Payment (preserve existing PaymentError codes) ────────────────────────
   /**
    * HTTP 402 / 400 — Account balance is insufficient to complete the payment.
