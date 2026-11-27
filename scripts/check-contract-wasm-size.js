@@ -15,9 +15,13 @@
  *
  * Usage:
  *   node scripts/check-contract-wasm-size.js [--base-summary path/to/base-summary.txt]
+ *     [--budgets path/to/wasm-size-budgets.json] [--wasm-dir path/to/wasm/dir]
  *
  * --base-summary: Optional path to a previous step-summary for delta calculation on PRs.
  *                 If provided, the script will print size deltas vs. the base.
+ * --budgets:      Optional path to the budgets JSON (default: contracts/wasm-size-budgets.json).
+ * --wasm-dir:     Optional directory containing the built .wasm files
+ *                 (default: contracts/target/wasm32-unknown-unknown/release).
  */
 
 const fs = require('fs');
@@ -96,23 +100,29 @@ function formatDelta(current, base) {
 function main() {
   // Parse CLI args
   let baseSummaryPath = null;
+  let budgetsFile = BUDGETS_FILE;
+  let wasmDir = WASM_DIR;
   for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i] === '--base-summary' && i + 1 < process.argv.length) {
       baseSummaryPath = process.argv[++i];
+    } else if (process.argv[i] === '--budgets' && i + 1 < process.argv.length) {
+      budgetsFile = process.argv[++i];
+    } else if (process.argv[i] === '--wasm-dir' && i + 1 < process.argv.length) {
+      wasmDir = process.argv[++i];
     }
   }
 
   // Load budgets
-  if (!fs.existsSync(BUDGETS_FILE)) {
-    console.error(`[error] Budgets file not found: ${BUDGETS_FILE}`);
+  if (!fs.existsSync(budgetsFile)) {
+    console.error(`[error] Budgets file not found: ${budgetsFile}`);
     process.exit(1);
   }
 
   let budgets;
   try {
-    budgets = JSON.parse(fs.readFileSync(BUDGETS_FILE, 'utf-8'));
+    budgets = JSON.parse(fs.readFileSync(budgetsFile, 'utf-8'));
   } catch (err) {
-    console.error(`[error] Failed to parse ${BUDGETS_FILE}:`, err.message);
+    console.error(`[error] Failed to parse ${budgetsFile}:`, err.message);
     process.exit(1);
   }
 
@@ -124,9 +134,9 @@ function main() {
   let wasmFiles;
   try {
     // No npm install in the contract CI job, so avoid the `glob` dependency.
-    wasmFiles = fs.readdirSync(WASM_DIR)
+    wasmFiles = fs.readdirSync(wasmDir)
       .filter((f) => f.endsWith('.wasm'))
-      .map((f) => path.join(WASM_DIR, f))
+      .map((f) => path.join(wasmDir, f))
       .sort();
   } catch (err) {
     console.error(`[error] Failed to list WASM files:`, err.message);
@@ -134,7 +144,7 @@ function main() {
   }
 
   if (wasmFiles.length === 0) {
-    console.error(`[error] No optimized WASM contracts found in ${WASM_DIR}`);
+    console.error(`[error] No optimized WASM contracts found in ${wasmDir}`);
     process.exit(1);
   }
 
@@ -229,4 +239,15 @@ function main() {
   process.exit(0);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  main,
+  parseSummaryLine,
+  loadBaseSizes,
+  formatBytes,
+  statusIndicator,
+  formatDelta,
+};
