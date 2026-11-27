@@ -21,6 +21,33 @@ DATABASE_URL=postgresql://user:password@host:5432/scoutoff
 
 This mismatch will be enforced by a startup check in a future release; for now it is a critical configuration trap that every operator must be aware of.
 
+## ⚠️ `RETENTION_ARCHIVE_DIR` must be on persistent, shared storage
+
+Audit retention (`RETENTION_ENABLED=true` with an `audit_log` policy) prunes rows from the `audit_log` table and writes them to JSON archive files in `RETENTION_ARCHIVE_DIR` (default `./data/audit-archives`). Each archive is referenced by filename from a signed row in `audit_checkpoints`, and `verifyCheckpointArchive` re-reads that file to prove the pruned chain segment is intact.
+
+**The archive directory is therefore the only remaining copy of pruned audit rows.** It must live on storage that is:
+
+- **Persistent** — surviving pod/container restarts and redeploys. An `emptyDir` (the Helm chart's default `dataVolume`) is wiped on every pod restart, which permanently destroys audit evidence and leaves checkpoints pointing at missing files.
+- **Shared** — visible to every replica that may run retention or verify a checkpoint. With per-pod volumes, replica A writes an archive that replica B cannot read, so verification fails and archives are silently split across pods.
+
+### Consequences of getting this wrong
+
+- **Lost audit evidence**: archives on ephemeral storage disappear on restart; the pruned rows are gone from the database too, so the history is unrecoverable.
+- **Failed verification**: `verifyCheckpointArchive` throws `Audit checkpoint archive is missing or corrupt`, and audit chain verification cannot resume from the checkpoint boundary.
+- **Compliance exposure**: SOC 2 / GDPR / regulatory investigations require a complete, verifiable timeline; a missing archive breaks that guarantee.
+
+### Configuration
+
+```env
+RETENTION_ARCHIVE_DIR=/data/audit-archives
+```
+
+- **Helm**: the chart sets `RETENTION_ARCHIVE_DIR=/data/audit-archives`, a path on the `dataVolume` mount (`/data`). For multi-replica deployments, point `dataVolume.persistentVolumeClaim` at a **ReadWriteMany** PVC so all replicas share the archives. The chart's `NOTES.txt` prints a warning when `replicaCount > 1` (or the HPA can scale beyond one replica).
+- **Bare metal / Docker**: mount a durable volume (e.g. a host path or named Docker volume) at the configured directory and back it up together with the database.
+- The directory is created with mode `0700` and archive files with `0600`; run the process as a user that owns the volume.
+
+See [docs/audit-log.md](docs/audit-log.md) for the retention/archival contract.
+
 
 ## Database Migrations
 

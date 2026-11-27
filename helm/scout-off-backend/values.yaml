@@ -591,7 +591,11 @@ env:
   METRICS_LEGACY_MS: ""
   NOTES_ENCRYPTION_ACTIVE_KEY_ID: ""
   READINESS_CRITICAL: ""
-  RETENTION_ARCHIVE_DIR: ""
+  # RETENTION_ARCHIVE_DIR — Directory for audit retention archives. Must live on
+  # persistent, shared storage: archives are the only copy of pruned audit rows
+  # and the checkpoint references them by filename. Defaults to a path on the
+  # data volume (dataVolume.mountPath) so archives survive pod restarts.
+  RETENTION_ARCHIVE_DIR: "/data/audit-archives"
   RETENTION_BATCH_SIZE: ""
   RETENTION_ENABLED: ""
   RETENTION_INTERVAL_MS: ""

@@ -328,6 +328,17 @@ archive boundary (`audit_verify_last_id` + `audit_verify_last_hash`) so
 verification resumes at the first live row instead of genesis. Until then a
 full run expects the entire chain to be present.
 
+## Retention and archival storage
+
+When audit retention is enabled (`RETENTION_ENABLED=true` with an `audit_log` policy), rows are pruned from `audit_log` and written to JSON archive files in `RETENTION_ARCHIVE_DIR` (default `./data/audit-archives`). Each archive is recorded in `audit_checkpoints` by filename and re-read by `verifyCheckpointArchive` to prove the pruned segment of the hash chain is intact.
+
+**`RETENTION_ARCHIVE_DIR` must be on persistent, shared storage.**
+
+- **Persistent**: the archive is the only remaining copy of the pruned rows. Ephemeral storage (a container filesystem, an `emptyDir` volume) loses it on restart, permanently destroying audit evidence.
+- **Shared**: every replica that runs retention or verifies a checkpoint must see the same directory. With per-pod volumes, archives written by one replica are invisible to the others, so verification fails with `Audit checkpoint archive is missing or corrupt` and archives are split across pods.
+
+The Helm chart sets `RETENTION_ARCHIVE_DIR=/data/audit-archives` on the `dataVolume` mount; for multi-replica deployments use a ReadWriteMany PVC for `dataVolume.persistentVolumeClaim`. The chart's `NOTES.txt` warns when more than one replica can run. See [DEPLOYMENT.md](../DEPLOYMENT.md) for the full requirement.
+
 ## Integration with horizontal scaling
 
 When running multiple backend replicas connected to a shared PostgreSQL database, the audit log hash chain remains provably unbroken:

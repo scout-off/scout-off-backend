@@ -1,0 +1,56 @@
+# CODEOWNERS — ScoutOff Backend
+#
+# Syntax: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# Rules are evaluated bottom-up: the last matching pattern wins.
+# Replace the placeholder handles below with the confirmed maintainer
+# teams/users before merging (see docs/issues/1880-codeowners.md).
+
+# Default: every change needs a review from the core maintainers.
+*                                   @scout-off/maintainers
+
+# Smart contracts (Rust / Soroban) — highest-risk surface.
+/contracts/                         @scout-off/maintainers @scout-off/contracts
+
+# Security-sensitive services, utilities and middleware.
+/src/services/                      @scout-off/maintainers @scout-off/security
+/src/utils/                         @scout-off/maintainers @scout-off/security
+/src/middleware/                    @scout-off/maintainers @scout-off/security
+/src/auth/                          @scout-off/maintainers @scout-off/security
+/src/controllers/authController.ts  @scout-off/maintainers @scout-off/security
+/src/controllers/apiKeyController.ts @scout-off/maintainers @scout-off/security
+/src/controllers/encryptionController.ts @scout-off/maintainers @scout-off/security
+/src/controllers/playerAnonymizationController.ts @scout-off/maintainers @scout-off/security
+/src/controllers/dataExportController.ts @scout-off/maintainers @scout-off/security
+/src/db/apiKeyHelpers.ts            @scout-off/maintainers @scout-off/security
+/src/config.ts                      @scout-off/maintainers @scout-off/security
+/src/config/                        @scout-off/maintainers @scout-off/security
+/src/tracing.ts                     @scout-off/maintainers @scout-off/security
+
+# Database layer, drivers, repositories and migrations.
+/src/db/                            @scout-off/maintainers @scout-off/database
+/src/db/repositories/               @scout-off/maintainers @scout-off/database
+/src/db/migrate.ts                  @scout-off/maintainers @scout-off/database
+/src/db/migration-files.ts          @scout-off/maintainers @scout-off/database
+/scripts/migrate.ts                 @scout-off/maintainers @scout-off/database
+/scripts/migrate-sqlite-to-postgres.ts @scout-off/maintainers @scout-off/database
+/scripts/backfill.js                @scout-off/maintainers @scout-off/database
+
+# CI/CD workflows and repository automation.
+/.github/                           @scout-off/maintainers @scout-off/infrastructure
+/.github/workflows/                 @scout-off/maintainers @scout-off/infrastructure
+/.husky/                            @scout-off/maintainers @scout-off/infrastructure
+
+# Infrastructure: container image, orchestration, deployment and Helm chart.
+/Dockerfile                         @scout-off/maintainers @scout-off/infrastructure
+/.dockerignore                      @scout-off/maintainers @scout-off/infrastructure
+/docker-compose.yml                 @scout-off/maintainers @scout-off/infrastructure
+/helm/                              @scout-off/maintainers @scout-off/infrastructure
+/scripts/deploy-staging.sh          @scout-off/maintainers @scout-off/infrastructure
+/scripts/backup-db.sh               @scout-off/maintainers @scout-off/infrastructure
+/scripts/verify-backup.sh           @scout-off/maintainers @scout-off/infrastructure
+/scripts/backup-restore-smoke-test.sh @scout-off/maintainers @scout-off/infrastructure
+/DEPLOYMENT.md                      @scout-off/maintainers @scout-off/infrastructure
+
+# Dependency manifests and lockfiles.
+/package.json                       @scout-off/maintainers @scout-off/infrastructure
+/package-lock.json                  @scout-off/maintainers @scout-off/infrastructure
