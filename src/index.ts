@@ -84,6 +84,18 @@ async function start() {
 
   startRetentionJob();
   startFieldReencryptionJob();
+
+  // Run Soroban RPC startup checks (#1824): passphrase match, protocol version.
+  // A passphrase mismatch in production throws here and aborts startup.
+  // In non-production environments the error is logged but startup continues.
+  try {
+    const { runSorobanRpcStartupCheck } = await import('./services/sorobanRpcCheck');
+    await runSorobanRpcStartupCheck();
+  } catch (err) {
+    logger.error('[soroban-check] Startup check failed — aborting:', err);
+    process.exit(1);
+  }
+
   await startServer();
 }
 

@@ -30,27 +30,15 @@ import { extractAccount } from '../services/sep10';
 import { insertAuditLog } from '../db';
 
 // ─── Configuration ─────────────────────────────────────────────────────────────
+// Values are sourced from src/config.ts (config.authLockout) so they are
+// validated once at startup via parseNumericEnv, can be overridden in tests
+// through config mocks, and are documented in .env.example (#1830).
 
-export const AUTH_FAIL_THRESHOLD = (() => {
-  const v = parseInt(process.env.AUTH_FAIL_THRESHOLD ?? '', 10);
-  return Number.isFinite(v) && v > 0 ? v : 5;
-})();
-
-export const AUTH_LOCKOUT_BASE_MS = (() => {
-  const v = parseInt(process.env.AUTH_LOCKOUT_BASE_MS ?? '', 10);
-  return Number.isFinite(v) && v > 0 ? v : 30_000; // 30 s
-})();
-
-export const AUTH_LOCKOUT_MAX_MS = (() => {
-  const v = parseInt(process.env.AUTH_LOCKOUT_MAX_MS ?? '', 10);
-  return Number.isFinite(v) && v > 0 ? v : 15 * 60 * 1000; // 15 min
-})();
-
-/** Sliding window in which failures are counted (default 15 min). */
-export const AUTH_FAIL_WINDOW_MS = (() => {
-  const v = parseInt(process.env.AUTH_FAIL_WINDOW_MS ?? '', 10);
-  return Number.isFinite(v) && v > 0 ? v : 15 * 60 * 1000; // 15 min
-})();
+export const AUTH_FAIL_THRESHOLD  = config.authLockout.threshold;
+export const AUTH_LOCKOUT_BASE_MS = config.authLockout.baseMs;
+export const AUTH_LOCKOUT_MAX_MS  = config.authLockout.maxMs;
+/** Sliding window in which failures are counted. */
+export const AUTH_FAIL_WINDOW_MS  = config.authLockout.windowMs;
 
 const LOCKOUT_KEY_PREFIX = 'auth:fail';
 const LOCKOUT_STATE_PREFIX = 'auth:locked';

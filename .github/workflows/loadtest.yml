@@ -88,8 +88,6 @@ jobs:
             --env K6_PLAYER_ID="${K6_PLAYER_ID}" \
             --out json=k6-results.json \
             scripts/k6/suite.js
-
-      # k6 exits with code 99 on threshold breach — the step above will fail
       # automatically, marking the workflow as failed.
 
       # ── Upload results artefact ───────────────────────────────────────────

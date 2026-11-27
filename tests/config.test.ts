@@ -1074,3 +1074,83 @@ describe('config.graphql.milestoneLoaderConcurrency', () => {
     await expect(import('../src/config')).rejects.toThrow(VAR);
   });
 });
+
+describe('config.authLockout validation', () => {
+  const vars = [
+    'AUTH_FAIL_THRESHOLD',
+    'AUTH_FAIL_WINDOW_MS',
+    'AUTH_LOCKOUT_BASE_MS',
+    'AUTH_LOCKOUT_MAX_MS',
+  ];
+  const savedEnv: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const key of vars) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.JWT_SECRET = 'test-secret';
+  });
+
+  afterEach(() => {
+    for (const key of vars) {
+      if (savedEnv[key] !== undefined) {
+        process.env[key] = savedEnv[key];
+      } else {
+        delete process.env[key];
+      }
+    }
+    jest.resetModules();
+  });
+
+  async function loadConfig() {
+    jest.resetModules();
+    return (await import('../src/config')).default;
+  }
+
+  it('uses correct defaults when unset', async () => {
+    const cfg = await loadConfig();
+    expect(cfg.authLockout).toEqual({
+      threshold: 5,
+      windowMs: 15 * 60 * 1000,
+      baseMs: 30_000,
+      maxMs: 15 * 60 * 1000,
+    });
+  });
+
+  it('reads valid overrides from the environment', async () => {
+    process.env.AUTH_FAIL_THRESHOLD  = '10';
+    process.env.AUTH_FAIL_WINDOW_MS  = '60000';
+    process.env.AUTH_LOCKOUT_BASE_MS = '5000';
+    process.env.AUTH_LOCKOUT_MAX_MS  = '300000';
+    const cfg = await loadConfig();
+    expect(cfg.authLockout).toEqual({
+      threshold: 10,
+      windowMs: 60000,
+      baseMs: 5000,
+      maxMs: 300000,
+    });
+  });
+
+  it.each([
+    ['AUTH_FAIL_THRESHOLD',  '0'],
+    ['AUTH_FAIL_THRESHOLD',  'abc'],
+    ['AUTH_FAIL_WINDOW_MS',  '0'],
+    ['AUTH_FAIL_WINDOW_MS',  'xyz'],
+    ['AUTH_LOCKOUT_BASE_MS', '0'],
+    ['AUTH_LOCKOUT_BASE_MS', 'nan'],
+    ['AUTH_LOCKOUT_MAX_MS',  '0'],
+    ['AUTH_LOCKOUT_MAX_MS',  'nan'],
+  ])('%s=%s fails validation at startup', async (name, value) => {
+    process.env[name] = value;
+    jest.resetModules();
+    await expect(import('../src/config')).rejects.toThrow(name);
+  });
+
+  it('fails when AUTH_LOCKOUT_BASE_MS > AUTH_LOCKOUT_MAX_MS', async () => {
+    process.env.AUTH_LOCKOUT_BASE_MS = '60000';
+    process.env.AUTH_LOCKOUT_MAX_MS  = '30000';
+    jest.resetModules();
+    await expect(import('../src/config')).rejects.toThrow('AUTH_LOCKOUT_BASE_MS');
+  });
+});
