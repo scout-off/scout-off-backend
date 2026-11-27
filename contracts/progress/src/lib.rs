@@ -466,17 +466,20 @@ impl ProgressContract {
         Ok(())
     }
 
-    /// Return the complete, tamper-proof milestone history for a player.
+    /// Return the milestone history for a player.
     ///
     /// Includes both approved and pending milestones in submission order.
     /// This is a read-only function; it requires no authorization and does not modify state.
+    /// The result is bounded to the first [`MAX_PAGE_SIZE`] milestones so the read stays
+    /// within Soroban's budget; use [`get_milestones_page`] to page through larger histories.
     ///
     /// # Arguments
     /// * `env` - The Soroban environment.
     /// * `player_id` - The unique player identifier whose milestones to retrieve.
     ///
     /// # Returns
-    /// A `Vec<MilestoneData>` of all milestones for the player (may be empty). Never errors.
+    /// A `Vec<MilestoneData>` of up to [`MAX_PAGE_SIZE`] milestones for the player (may be empty).
+    /// Never errors.
     pub fn get_milestones(env: Env, player_id: u64) -> Vec<MilestoneData> {
         let milestone_ids: Vec<u64> = env
             .storage()
@@ -485,7 +488,7 @@ impl ProgressContract {
             .unwrap_or_else(|| Vec::new(&env));
 
         let mut results = Vec::new(&env);
-        let len = milestone_ids.len();
+        let len = milestone_ids.len().min(MAX_PAGE_SIZE);
         for i in 0..len {
             let mid = milestone_ids.get_unchecked(i);
             if let Some(data) = env
